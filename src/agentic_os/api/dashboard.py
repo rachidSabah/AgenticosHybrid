@@ -18,17 +18,39 @@ from agentic_os.ports.event_bus import EventBus
 
 log = get_logger("api.dashboard")
 
+# Every operational topic is forwarded to live dashboards so Mission Control
+# visualizes the real EventBus. Broadening this set is additive — existing
+# subscribers still receive their events; no public interface changes.
 _DASHBOARD_TOPICS = [
+    # Task / agent lifecycle
     Topic.TASK_CREATED,
     Topic.TASK_PLANNED,
     Topic.TASK_DISPATCHED,
+    Topic.TASK_ASSIGNED,
     Topic.AGENT_STARTED,
     Topic.AGENT_COMPLETED,
     Topic.AGENT_FAILED,
     Topic.AGENT_RECOVERED,
+    # Supervision
     Topic.HEALTH_CHECK,
     Topic.HEALTH_DEGRADED,
     Topic.RECOVERY_TRIGGERED,
+    # Provider management
+    Topic.PROVIDER_HEALTH,
+    Topic.PROVIDER_REGISTERED,
+    Topic.PROVIDER_FAILED,
+    Topic.PROVIDER_FAILOVER,
+    Topic.COST_RECORDED,
+    # Memory
+    Topic.MEMORY_WRITTEN,
+    Topic.MEMORY_EVICTED,
+    # Capability
+    Topic.AGENT_COMPOSED,
+    # Security
+    Topic.APPROVAL_REQUESTED,
+    Topic.APPROVAL_DECIDED,
+    Topic.AUDIT,
+    Topic.TOOL_DENIED,
 ]
 
 

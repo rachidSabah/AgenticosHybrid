@@ -16,14 +16,26 @@ phase lands production-ready, fully tested, and documented.
 - Frozen public interfaces (ADRs 0006–0009).
 - REST control plane + live integration tests.
 
-## 🔜 Phase 3 — Extensibility & Control Plane
+## 🚧 Phase 3 — Mission Control Platform (v0.3.0, 3A shipped)
 
+**3A — UI framework (done):**
+- **Mission Control** — Next.js 15 + React 19 immersive OS UI: glassmorphism,
+  dark/light, command palette, keyboard shortcuts, 120Hz motion.
+- **AI Brain centerpiece** — reacts to real EventBus pulses; idle state rendered
+  honestly (no fake animation).
+- **Agent Constellation** + **Execution Graph** — live `reactflow` topologies
+  from real agent/task events.
+- **Provider Control Center**, **System Monitor**, **Task Timeline**,
+  **Memory Explorer**, **Plugin Marketplace**, **MCP Manager**, **Workspace
+  Explorer** — all over existing REST + `/ws/dashboard`.
+- **Workflow Studio** + **Pipeline Builder** — interactive local editors.
+
+**3B — remaining:**
 - **MCP Framework** — Model Context Protocol server/client adapters so external
   tools and data sources plug into agents behind a port.
-- **Mission Control dashboard** — unified web UI replacing the minimal provider
-  page; real-time control over agents, providers, memory, and security.
-- **Workflow Engine** — compose multi-agent workflows with orchestration,
-  branching, and human checkpoints.
+- **Workflow Engine persistence** — save/load pipelines to the backend engine.
+- **Deeper Memory / Plugin stores** — backend plugin registry + semantic recall
+  wired into the UI.
 
 ## 🔮 Phase 4+ — Ecosystem
 

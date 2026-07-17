@@ -40,3 +40,43 @@ jobs:
           python-version: "3.13"
       - run: uv sync
       - run: uv run pytest -v --tb=short
+
+  mission-control:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mission-control
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mission-control/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  ci-gate:
+    name: CI
+    needs: [ruff-format, ruff-check, ty, pytest, mission-control]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          echo "${{ needs.ruff-format.result }}"
+          echo "${{ needs.ruff-check.result }}"
+          echo "${{ needs.ty.result }}"
+          echo "${{ needs.pytest.result }}"
+          echo "${{ needs.mission-control.result }}"
+          if [[ "${{ needs.ruff-format.result }}" != "success" ]] ||
+             [[ "${{ needs.ruff-check.result }}" != "success" ]] ||
+             [[ "${{ needs.ty.result }}" != "success" ]] ||
+             [[ "${{ needs.pytest.result }}" != "success" ]] ||
+             [[ "${{ needs.mission-control.result }}" != "success" ]]; then
+            echo "One or more required jobs failed"
+            exit 1
+          fi
