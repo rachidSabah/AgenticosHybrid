@@ -1,0 +1,52 @@
+# Agentic OS — local-first, fully containerized orchestration.
+# Boots with the in-process bus by default (zero infra). Set BUS_TYPE to use Redis/NATS.
+services:
+  agentic-os:
+    build: .
+    command: ["python", "-m", "agentic_os", "serve"]
+    environment:
+      BUS_TYPE: ${BUS_TYPE:-local}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PROVIDER_DEFAULT: ${PROVIDER_DEFAULT:-mock}
+      CLAUDE_CODE_BIN: ${CLAUDE_CODE_BIN:-claude}
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+      nats:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # Default production bus adapter. Enable via BUS_TYPE=redis.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Alternate production bus adapter. Enable via BUS_TYPE=nats.
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis_data:

@@ -1,0 +1,25 @@
+# Normalize line endings to LF across the repository.
+* text=auto eol=lf
+
+# Explicit language/format hints.
+*.py text diff=python
+*.md text diff=markdown
+*.toml text
+*.json text
+*.yml text
+*.yaml text
+
+# Binary files (never diffed / never normalized).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary

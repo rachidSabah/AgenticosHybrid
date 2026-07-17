@@ -1,0 +1,71 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+*.egg
+
+# ── uv ──
+.uv/
+
+# ── pytest / coverage ──
+.pytest_cache/
+.ruff_cache/
+.ty/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ── Node.js / Next.js / Tauri ──
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+next/
+.next/
+out/
+.nuxt/
+dist-ssr/
+.turbo/
+tauri/
+src-tauri/target/
+
+# ── Docker ──
+data/
+postgres_data/
+redis_data/
+*.volume
+
+# ── Editor / IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Env / secrets ──
+.env
+.env.*
+!.env.example
+
+# ── Logs / cache / tmp ──
+logs/
+*.log
+cache/
+tmp/
+temp/
+*.tmp
+
+# ── Databases (SQLite) ──
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Temporary / OS files ──
+.DS_Store
+Thumbs.db
+desktop.ini
