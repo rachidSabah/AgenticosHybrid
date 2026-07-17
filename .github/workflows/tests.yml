@@ -58,3 +58,25 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+
+  ci-gate:
+    name: CI
+    needs: [ruff-format, ruff-check, ty, pytest, mission-control]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          echo "${{ needs.ruff-format.result }}"
+          echo "${{ needs.ruff-check.result }}"
+          echo "${{ needs.ty.result }}"
+          echo "${{ needs.pytest.result }}"
+          echo "${{ needs.mission-control.result }}"
+          if [[ "${{ needs.ruff-format.result }}" != "success" ]] ||
+             [[ "${{ needs.ruff-check.result }}" != "success" ]] ||
+             [[ "${{ needs.ty.result }}" != "success" ]] ||
+             [[ "${{ needs.pytest.result }}" != "success" ]] ||
+             [[ "${{ needs.mission-control.result }}" != "success" ]]; then
+            echo "One or more required jobs failed"
+            exit 1
+          fi
