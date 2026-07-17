@@ -29,4 +29,17 @@ should_run check  && run_cmd $RUN ruff check
 should_run ty     && run_cmd $RUN ty check
 should_run test   && run_cmd $RUN pytest -v --tb=short
 
+should_run frontend && {
+  echo "▶ frontend: typecheck / lint / test / build"
+  if [[ -z "$DRY" ]]; then
+    cd apps/mission-control
+    npm ci --legacy-peer-deps
+    npm run typecheck
+    npm run lint
+    npm run test
+    npm run build
+    cd - >/dev/null
+  fi
+}
+
 echo "CI sequence complete."

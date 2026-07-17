@@ -4,13 +4,16 @@ A **local-first, event-bus-driven AI Agent Operating System**. Runs on Windows v
 WSL2, fully containerized, modular, and plugin-based. Every component communicates
 through an abstract **Event Bus** and is replaceable behind a port interface.
 
-> Status: **Phase 2 — Core 4 Subsystems (v0.2.0)**. This release extends the
-> Phase 1 kernel into a true extensible Agentic Operating System with four
-> production-ready, fully integrated subsystems — Provider Management, Memory
-> System, Capability Engine, and Security Framework — behind frozen public
-> interfaces (see `docs/adr/`). MCP and the unified Mission Control dashboard
-> are deferred to Phase 3. One polished, test-covered slice per subsystem proves
-> the architecture end to end.
+> Status: **Phase 3 — Mission Control Platform, part 3A (v0.3.0)**. Phase 1–2
+> delivered a headless, hexagonal backend (kernel, EventBus, Provider Management,
+> Capability Engine, Memory System, Security Framework). Phase 3 upgrades
+> AgenticOS into an immersive **AI Operating System** with a premium Mission
+> Control interface. **3A** ships the UI framework, live WebSocket integration, the
+> AI Brain centerpiece, Agent Constellation, Provider Control Center, System
+> Monitor, Task Timeline, Memory Explorer, and interactive Workflow/Pipeline
+> editors. Workflow/pipeline persistence and the deeper MCP/Memory plugin store
+> are **3B**. All UI data is derived strictly from real EventBus events and the
+> existing REST control plane — no fabrication, no duplicated backend logic.
 
 ## Project Vision
 
@@ -40,13 +43,20 @@ production-ready, fully tested vertical slice before expanding scope.
 - **Security Framework** — RBAC (deny-by-default), workspace isolation, approval
   gate, append-only audit log.
 - **Live dashboard** — WebSocket event stream; REST control plane.
-- **Quality gates** — ruff, `ty` (strict), and pytest enforced in CI.
+- **Mission Control (Phase 3)** — Next.js + React 19 immersive OS UI: AI Brain,
+  Agent Constellation, Execution Graph, Provider Control Center, Memory Explorer,
+  Workflow/Pipeline studios, command palette, dark/light, 120Hz motion.
+- **Quality gates** — ruff, `ty` (strict), pytest, **and** Next.js
+  typecheck/lint/test/build enforced in CI.
 
 ## Technology Stack
 
 Python 3.13+ · FastAPI · asyncio / AnyIO · Pydantic v2 · pydantic-settings ·
 structlog · Prometheus client · httpx · `cryptography` (Fernet) · uv ·
 Docker / WSL2.
+
+**Mission Control frontend:** Next.js 15 (App Router) · React 19 · TypeScript ·
+TailwindCSS · Framer Motion · React Flow · Zustand · Monaco Editor · Vitest.
 
 ## Architecture (hexagonal / clean)
 
@@ -147,6 +157,25 @@ Trigger the slice:
 curl -X POST http://localhost:8000/api/tasks \
   -H 'content-type: application/json' \
   -d '{"title":"Write a hello-world function","role":"coding"}'
+```
+
+### Mission Control (frontend)
+
+```bash
+# backend (control plane + /ws/dashboard)
+uv run agentic-os serve
+
+# in another terminal
+cd apps/mission-control
+npm install --legacy-peer-deps
+npm run dev        # http://localhost:3000
+```
+
+The UI connects to the backend via `NEXT_PUBLIC_API_BASE` (default
+`http://localhost:8000`) and renders live EventBus data. Quality gate:
+
+```bash
+npm run typecheck && npm run lint && npm run test && npm run build
 ```
 
 ## Repository Structure

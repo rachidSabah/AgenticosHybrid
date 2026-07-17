@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Light theme */
+  --bg: 244 246 251;
+  --surface: 255 255 255;
+  --elevated: 248 250 254;
+  --border: 214 220 230;
+  --text: 17 24 39;
+  --muted: 90 100 120;
+  --faint: 140 150 170;
+  --accent: 79 108 255;
+  --accent-soft: 226 232 255;
+  --ok: 34 170 110;
+  --warn: 214 150 40;
+  --danger: 224 70 70;
+  --info: 70 150 224;
+
+  --glass-bg: 255 255 255;
+  --glass-alpha: 0.62;
+}
+
+.dark {
+  /* Deep space — premium dark */
+  --bg: 8 10 16;
+  --surface: 16 19 28;
+  --elevated: 22 26 38;
+  --border: 38 44 60;
+  --text: 232 236 245;
+  --muted: 150 160 180;
+  --faint: 96 104 124;
+  --accent: 110 140 255;
+  --accent-soft: 30 38 70;
+  --ok: 56 200 130;
+  --warn: 240 176 60;
+  --danger: 248 96 96;
+  --info: 96 170 240;
+
+  --glass-bg: 20 24 36;
+  --glass-alpha: 0.55;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden; /* OS shell manages its own scroll regions */
+}
+
+/* Ambient backdrop — subtle radial depth, GPU-friendly */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 800px at 12% -8%, rgb(var(--accent) / 0.10), transparent 60%),
+    radial-gradient(1000px 700px at 100% 0%, rgb(var(--info) / 0.08), transparent 55%),
+    radial-gradient(900px 900px at 50% 120%, rgb(var(--ok) / 0.06), transparent 60%);
+}
+
+@layer components {
+  .glass {
+    background: rgb(var(--glass-bg) / var(--glass-alpha));
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgb(var(--border) / 0.7);
+  }
+
+  .glass-strong {
+    background: rgb(var(--glass-bg) / 0.82);
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    border: 1px solid rgb(var(--border) / 0.8);
+  }
+
+  .panel {
+    @apply glass rounded-2xl shadow-depth;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+
+  .focus-ring {
+    @apply outline-none ring-2 ring-accent/60 ring-offset-2 ring-offset-bg;
+  }
+
+  .hairline {
+    @apply border-b border-border/70;
+  }
+}
+
+/* Custom scrollbars — thin, unobtrusive */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--faint));
+}
+
+/* Animated grid texture for topology canvases */
+.grid-texture {
+  background-image:
+    linear-gradient(rgb(var(--border) / 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--border) / 0.35) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

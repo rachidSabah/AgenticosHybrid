@@ -4,6 +4,37 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-07-17
+
+### Added — Phase 3 Mission Control (3A)
+
+- **Mission Control frontend** (`apps/mission-control`) — Next.js 15 App Router +
+  React 19 + TypeScript premium OS interface. Glassmorphism, dark/light theming,
+  command palette (⌘K), single-key navigation, smooth 120Hz motion.
+- **Live WebSocket integration** — Zustand store consumes `/ws/dashboard` and
+  derives all view state from real EventBus envelopes. Restricted to the
+  existing, frozen broadcaster (additive topic coverage only).
+- **AI Brain centerpiece** — orbiting agents and pulse rings driven strictly by
+  real event arrivals; honest idle state. In-view agent composition routed
+  through the Capability Engine (`/api/agents/compose`).
+- **Agent Constellation** + **Execution Graph** — live React Flow topologies
+  from real agent/task maps (supervisor links, task stages).
+- **Provider Control Center**, **System Monitor**, **Task Timeline**,
+  **Memory Explorer**, **Plugin Marketplace**, **MCP Manager**, **Workspace
+  Explorer** — all read-only over existing REST endpoints.
+- **Workflow Studio** + **Pipeline Builder** — interactive graph editors
+  (provider-seeded), exportable as canonical JSON (persistence is Phase 3B).
+- **ADR 0010** — Mission Control UI architecture and constraints.
+- **Frontend CI** — typecheck, lint, Vitest tests, and `next build` gated in
+  GitHub Actions (`mission-control` job) and `scripts/ci.sh --only=frontend`.
+
+### Notes
+
+- Backend public interfaces remain frozen; the dashboard WebSocket broadcaster
+  topic set was **extended** (additive) to feed the UI, not changed.
+- Workflow/pipeline persistence and the deeper MCP/Memory plugin store are
+  deferred to Phase 3B.
+
 ## [0.2.0] — 2026-07-17
 
 ### Added — Phase 2 Core 4 Subsystems
