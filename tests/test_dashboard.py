@@ -42,9 +42,7 @@ async def test_forwards_phase2_topics(bus):
             Topic.APPROVAL_REQUESTED,
             Topic.COST_RECORDED,
         ):
-            await bus.publish(
-                EventEnvelope(type="t", source="test", topic=topic.value, payload={})
-            )
+            await bus.publish(EventEnvelope(type="t", source="test", topic=topic.value, payload={}))
         await asyncio.sleep(0.1)
         task.cancel()
 
@@ -71,9 +69,7 @@ async def test_legacy_task_topics_still_forwarded(bus):
 
         task = asyncio.create_task(pump())
         await bus.publish(
-            EventEnvelope(
-                type="t", source="test", topic=Topic.TASK_CREATED.value, payload={}
-            )
+            EventEnvelope(type="t", source="test", topic=Topic.TASK_CREATED.value, payload={})
         )
         await asyncio.sleep(0.1)
         task.cancel()
