@@ -444,6 +444,17 @@ class MCPRegistryImpl(MCPRegistryPort):
                 log.error(f"Error stopping MCP server {server_id}: {e}")
                 raise
 
+    async def restart_server(self, server_id: str) -> MCPServerDetail:
+        """Restart an MCP server (stop then start)."""
+        detail = self._registry.get_server(server_id)
+        if not detail:
+            raise KeyError(f"Server not found: {server_id}")
+
+        if detail.status in (MCPServerStatus.RUNNING, MCPServerStatus.STARTING):
+            await self.stop_server(server_id)
+
+        return await self.start_server(server_id)
+
     async def reload_server(self, server_id: str) -> MCPServerDetail:
         """Hot reload an MCP server (restart and refresh tools)."""
         detail = self._registry.get_server(server_id)
