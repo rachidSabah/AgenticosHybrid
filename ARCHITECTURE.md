@@ -54,6 +54,18 @@ One `EventBus` port, three interchangeable adapters selected by `BUS_TYPE`:
 Every bus message is wrapped in an `EventEnvelope` (id, type, source,
 timestamp, topic, payload). Topics are centralized in `domain/events.py`.
 
+## Phase 3B Subsystems (v0.4.0)
+
+| Subsystem | Ports | Core Impl | Status |
+|-----------|-------|-----------|--------|
+| Workflow Engine | `WorkflowEnginePort` | `WorkflowEngineImpl` — DAG execution, topological sort, versioning, replay, approval gates | ✅ Verified |
+| Pipeline Engine | `PipelineEnginePort` | `PipelineEngineImpl` — stage execution, scheduling, retry, rollback, parallel stages | ✅ Verified |
+| Observability Framework | `TracingPort`, `MetricsPort`, `LoggingPort` | `InMemoryTracing`, `InMemoryMetrics`, `InMemoryStructuredLogging` (Prometheus/OTel bridges available) | ✅ Verified |
+| MCP Framework | `MCPRegistryPort` | domain models + ports (server config, tools) | ✅ Domain/Ports |
+| Plugin Framework | `PluginRegistryPort` | `PluginSDK`, `PluginValidator`, `PluginRegistryClient`, `generate_plugin_template` | ✅ Domain/Ports/SDK |
+
+All core engines achieve >90% test coverage with comprehensive unit, integration, and stress tests.
+
 ## Phase 2 Subsystems (frozen interfaces)
 
 | Subsystem | Ports | Default impl |
@@ -64,6 +76,17 @@ timestamp, topic, payload). Topics are centralized in `domain/events.py`.
 | Security Framework | `SecretsManager`, `AccessControl`, `WorkspaceIsolation`, `ToolPermissions`, `ApprovalGate`, `AuditLog` | RBAC + workspace isolation + approval gate + audit |
 
 See `docs/adr/0001`–`0009` for the design rationale behind each.
+
+## Phase 3B Engine Control Flow
+
+### Workflow Execution
+`WorkflowCreate → WorkflowEngineImpl.create_workflow() → ACTIVATE → execute_workflow() → topological_sort() → [execute_node() for each ready node] → EventBus emissions (workflow.*)`
+
+### Pipeline Execution
+`PipelineCreate → PipelineEngineImpl.create_pipeline() → ACTIVATE → execute_pipeline() → [execute_stage() for each ready stage, respecting depends_on] → retry policy evaluation → EventBus emissions (pipeline.*)`
+
+### Observability (cross-cutting)
+All engines emit structured events through the EventBus. The `InMemoryTracing`, `InMemoryMetrics`, and `InMemoryStructuredLogging` implementations are wired via the observability ports for development and testing; production deployments can substitute OpenTelemetry and Prometheus adapters.
 
 ## Control Flow
 

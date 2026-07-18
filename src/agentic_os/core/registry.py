@@ -39,10 +39,12 @@ class AgentRegistry:
     def agents(self) -> list[Agent]:
         return list(self._agents.values())
 
-    def spawn(self, role: str, provider: str, name: str = "") -> Agent:
+    def spawn(self, role: str, provider: str, model: str = "", name: str = "") -> Agent:
         if role not in self._roles:
             raise KeyError(f"unknown role: {role}")
-        agent = Agent(role=role, provider=provider, name=name or f"{role}-{len(self._agents)}")
+        agent = Agent(
+            role=role, provider=provider, model=model, name=name or f"{role}-{len(self._agents)}"
+        )
         return self.register_agent(agent)
 
     # ── tasks ──

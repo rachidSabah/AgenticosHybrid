@@ -4,6 +4,59 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-07-18
+
+### Added — Phase 3 Mission Control (3B) Backend Engines
+
+- **Workflow Engine** (`src/agentic_os/core/workflow/engine.py`) — DAG-based
+  execution with topological sort, versioning, replay, approval gates, and full
+  CRUD. Supports START/END/AGENT/TOOL/LLM/CONDITION/PARALLEL/APPROVAL/SUBWORKFLOW
+  node types. In-memory persistence with EventBus emissions for all lifecycle
+  transitions (`workflow.*` topics).
+- **Pipeline Engine** (`src/agentic_os/core/pipeline/engine.py`) — Stage-based
+  execution with scheduling (cron-like), retry policies, rollback, and parallel
+  stage execution. Supports AGENT/WORKFLOW/TOOL/LLM/CONDITION/PARALLEL/APPROVAL
+  stage types. In-memory persistence with EventBus emissions (`pipeline.*` topics).
+- **Observability Framework** (`src/agentic_os/core/observability/`) — Three
+  in-memory implementations:
+  - `InMemoryTracing`: W3C TraceContext propagation, span hierarchies, trace
+    export, OpenTelemetry-compatible API.
+  - `InMemoryMetrics`: counters, gauges, histograms, Prometheus export format.
+  - `InMemoryStructuredLogging`: structured log entries with correlation context,
+    levels (DEBUG–CRITICAL), context binding.
+  - `TraceContextPropagator`: W3C `traceparent`/`tracestate` header inject/extract.
+- **MCP Framework** — Domain models (`MCPServerConfig`, `MCPTool`) and ports
+  (`MCPRegistryPort`) for Model Context Protocol server lifecycle and tool
+  discovery. Ready for adapter implementation in Phase 4.
+- **Plugin SDK** (`src/agentic_os/core/plugin/sdk.py`) — TypeScript/Python plugin
+  base classes: `PluginBase`, `AgentPlugin`, `ToolPlugin`, `ProviderPlugin`,
+  `MCPServerPlugin`, `WorkflowNodePlugin`, `PipelineStagePlugin`. Includes
+  `PluginValidator`, `PluginEventBus`, manifest helpers, template generator,
+  and `PluginRegistryClient` for marketplace integration.
+- **Domain Models** — Workflow, Pipeline, and Observability domain entities
+  (frozen dataclasses with slot-based immutability): `Workflow`, `WorkflowNode`,
+  `WorkflowEdge`, `WorkflowExecution`, `Pipeline`, `PipelineStage`,
+  `PipelineExecution`, `Span`, `Trace`, `Metric`, `LogEntry`, `CorrelationContext`.
+- **Port Interfaces** — `WorkflowEnginePort`, `PipelineEnginePort`, `TracingPort`,
+  `MetricsPort`, `LoggingPort`, `MCPRegistryPort`, `PluginRegistryPort`.
+- **Test Suite** — 30 stress/benchmark tests covering concurrency (5/10/25),
+  large workflows (50-node chain), large pipelines (50-stage chain), observability
+  load (5000 spans, 1000 metrics, 1000 logs), mixed engine + observability
+  scenarios, rapid create/execute/delete cycles.
+- **Documentation** — `ARCHITECTURE.md` updated with Phase 3B subsystem table
+  and control flow; `README.md` status line updated to v0.4.0; `ROADMAP.md`
+  Phase 3 marked complete.
+
+### Fixed
+
+- `PipelineExecution.complete_stage()` no longer leaves retried stages in
+  `failed_stages`, which previously caused pipeline failure during finalization
+  even after a retried stage succeeded.
+- Workflow cancel tests now use approval-gated workflows to avoid auto-completion
+  race conditions.
+- `otel.py` frozen dataclass assignment issue documented (known regression;
+  `tracing.py` is the canonical OTel implementation).
+
 ## [0.3.0] — 2026-07-17
 
 ### Added — Phase 3 Mission Control (3A)

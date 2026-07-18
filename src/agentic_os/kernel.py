@@ -20,6 +20,7 @@ from agentic_os.core.capability.engine import CapabilityEngine
 from agentic_os.core.health import HealthMonitorImpl
 from agentic_os.core.memory.manager import MemoryManagerImpl
 from agentic_os.core.orchestrator import Orchestrator
+from agentic_os.core.pipeline.engine import PipelineEngineImpl
 from agentic_os.core.providers.health import ProviderHealthMonitorImpl
 from agentic_os.core.providers.manager import ModelManagerImpl, ProviderManagerImpl
 from agentic_os.core.providers.router import ProviderRouter
@@ -29,6 +30,7 @@ from agentic_os.core.recovery import RecoveryManagerImpl
 from agentic_os.core.registry import AgentRegistry, ProviderRegistry
 from agentic_os.core.scheduler import Scheduler
 from agentic_os.core.security.framework import SecurityFramework
+from agentic_os.core.workflow.engine import WorkflowEngineImpl
 from agentic_os.infrastructure.logging import configure_logging, get_logger
 
 log = get_logger("kernel")
@@ -58,6 +60,9 @@ class Platform:
     memory: MemoryManagerImpl | None = None
     capability: CapabilityEngine | None = None
     security: SecurityFramework | None = None
+    # Phase 3B: Workflow and Pipeline engines
+    workflow: WorkflowEngineImpl | None = None
+    pipeline: PipelineEngineImpl | None = None
 
 
 class Kernel:
@@ -103,6 +108,10 @@ class Kernel:
             self.rate,
             policy=settings.routing_policy,
         )
+
+        # Workflow & Pipeline engines (Phase 3B)
+        self.workflow = WorkflowEngineImpl(self.bus, self.router, self.registry)
+        self.pipeline = PipelineEngineImpl(self.bus, self.router, self.registry)
 
         # Orchestrator + supervision
         self.orchestrator = Orchestrator(self.bus, self.registry, self.providers, settings)
@@ -184,6 +193,8 @@ class Kernel:
             memory=self.memory,
             capability=self.capability,
             security=self.security,
+            workflow=self.workflow,
+            pipeline=self.pipeline,
         )
 
 

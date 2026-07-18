@@ -11,6 +11,7 @@ providers in-browser (the unified Mission Control dashboard lands in Phase 3).
 
 from __future__ import annotations
 
+import dataclasses
 import time
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -18,7 +19,19 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.domain.agent import Task
+from agentic_os.domain.pipeline import (
+    PipelineEdge,
+    PipelineExecutionStatus,
+    PipelineStage,
+    PipelineStatus,
+)
 from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
+from agentic_os.domain.workflow import (
+    WorkflowEdge,
+    WorkflowExecutionStatus,
+    WorkflowNode,
+    WorkflowStatus,
+)
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.infrastructure.metrics import metrics_payload, observe
 from agentic_os.kernel import Platform
@@ -45,6 +58,14 @@ def create_app(platform: Platform) -> FastAPI:
     security = platform.security
     if security is None:
         raise RuntimeError("SecurityFramework is required but was not initialised on the Platform")
+
+    workflow_engine = platform.workflow
+    pipeline_engine = platform.pipeline
+
+    if workflow_engine is None:
+        raise RuntimeError("WorkflowEngine is required but was not initialised on the Platform")
+    if pipeline_engine is None:
+        raise RuntimeError("PipelineEngine is required but was not initialised on the Platform")
 
     @app.middleware("http")
     async def _metrics(request, call_next):
@@ -293,6 +314,304 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/security/workspace/{agent_id}")
     async def workspace_for(agent_id: str) -> dict:
         return {"agent_id": agent_id, "workspace": security.workspace_for(agent_id)}
+
+    # ── Workflow Engine API (Phase 3B) ──
+    workflow_engine = platform.workflow
+    pipeline_engine = platform.pipeline
+
+    if workflow_engine is None:
+        raise RuntimeError("WorkflowEngine is required but was not initialised on the Platform")
+    if pipeline_engine is None:
+        raise RuntimeError("PipelineEngine is required but was not initialised on the Platform")
+
+    @app.get("/api/workflows")
+    async def list_workflows(
+        status: WorkflowStatus | None = None, limit: int = 50, offset: int = 0
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(w)
+            for w in await workflow_engine.list_workflows(status, limit, offset)
+        ]
+
+    @app.get("/api/workflows/{workflow_id}")
+    async def get_workflow(workflow_id: str) -> dict:
+        workflow = await workflow_engine.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        return dataclasses.asdict(workflow)
+
+    @app.post("/api/workflows")
+    async def create_workflow(body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowCreate
+
+        data = WorkflowCreate(
+            name=body["name"],
+            description=body.get("description", ""),
+            nodes=[WorkflowNode(**n) for n in body.get("nodes", [])],
+            edges=[WorkflowEdge(**e) for e in body.get("edges", [])],
+            template_id=body.get("template_id"),
+            created_by=body.get("created_by", "system"),
+        )
+        workflow = await workflow_engine.create_workflow(data)
+        return dataclasses.asdict(workflow)
+
+    @app.put("/api/workflows/{workflow_id}")
+    async def update_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowUpdate
+
+        data = WorkflowUpdate(
+            name=body.get("name"),
+            description=body.get("description"),
+            nodes=[WorkflowNode(**n) for n in body["nodes"]] if "nodes" in body else None,
+            edges=[WorkflowEdge(**e) for e in body["edges"]] if "edges" in body else None,
+            updated_by=body.get("updated_by", "system"),
+        )
+        workflow = await workflow_engine.update_workflow(workflow_id, data)
+        return dataclasses.asdict(workflow)
+
+    @app.delete("/api/workflows/{workflow_id}")
+    async def delete_workflow(workflow_id: str) -> dict:
+        ok = await workflow_engine.delete_workflow(workflow_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        return {"deleted": workflow_id}
+
+    @app.get("/api/workflows/{workflow_id}/versions")
+    async def get_workflow_versions(workflow_id: str) -> list[dict]:
+        return [
+            dataclasses.asdict(v) for v in await workflow_engine.get_workflow_versions(workflow_id)
+        ]
+
+    @app.get("/api/workflows/{workflow_id}/versions/{version}")
+    async def get_workflow_version(workflow_id: str, version: int) -> dict:
+        workflow = await workflow_engine.get_workflow_version(workflow_id, version)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow version not found")
+        return dataclasses.asdict(workflow)
+
+    @app.post("/api/workflows/{workflow_id}/execute")
+    async def execute_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowExecute
+
+        data = WorkflowExecute(inputs=body.get("inputs", {}), version=body.get("version"))
+        execution = await workflow_engine.execute_workflow(workflow_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/{workflow_id}/replay")
+    async def replay_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowReplay
+
+        data = WorkflowReplay(
+            inputs=body.get("inputs", {}),
+            version=body.get("version"),
+            from_node=body.get("from_node"),
+            parent_execution_id=body.get("parent_execution_id"),
+        )
+        execution = await workflow_engine.replay_workflow(workflow_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/{workflow_id}/approve")
+    async def approve_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowApproval
+
+        data = WorkflowApproval(
+            node_id=body["node_id"],
+            approved=body["approved"],
+            decided_by=body["decided_by"],
+            reason=body.get("reason"),
+        )
+        execution = await workflow_engine.approve_workflow(workflow_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/workflows/{workflow_id}/executions")
+    async def get_workflow_executions(
+        workflow_id: str,
+        status: WorkflowExecutionStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(e)
+            for e in await workflow_engine.get_workflow_executions(
+                workflow_id, status, limit, offset
+            )
+        ]
+
+    @app.get("/api/workflows/executions/running")
+    async def get_running_workflow_executions() -> list[dict]:
+        return [dataclasses.asdict(e) for e in await workflow_engine.get_running_executions()]
+
+    @app.post("/api/workflows/executions/{execution_id}/cancel")
+    async def cancel_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.cancel_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/executions/{execution_id}/pause")
+    async def pause_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.pause_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/executions/{execution_id}/resume")
+    async def resume_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.resume_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/workflows/executions/{execution_id}")
+    async def get_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.get_execution(execution_id)
+        if not execution:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        return dataclasses.asdict(execution)
+
+    # ── Pipeline Engine API (Phase 3B) ──
+    @app.get("/api/pipelines")
+    async def list_pipelines(
+        status: PipelineStatus | None = None, limit: int = 50, offset: int = 0
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(p)
+            for p in await pipeline_engine.list_pipelines(status, limit, offset)
+        ]
+
+    @app.get("/api/pipelines/{pipeline_id}")
+    async def get_pipeline(pipeline_id: str) -> dict:
+        pipeline = await pipeline_engine.get_pipeline(pipeline_id)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="Pipeline not found")
+        return dataclasses.asdict(pipeline)
+
+    @app.post("/api/pipelines")
+    async def create_pipeline(body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineCreate
+
+        data = PipelineCreate(
+            name=body["name"],
+            description=body.get("description", ""),
+            stages=[PipelineStage(**s) for s in body.get("stages", [])],
+            edges=[PipelineEdge(**e) for e in body.get("edges", [])],
+            schedule_cron=body.get("schedule_cron"),
+            schedule_timezone=body.get("schedule_timezone", "UTC"),
+            created_by=body.get("created_by", "system"),
+        )
+        pipeline = await pipeline_engine.create_pipeline(data)
+        return dataclasses.asdict(pipeline)
+
+    @app.put("/api/pipelines/{pipeline_id}")
+    async def update_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineUpdate
+
+        data = PipelineUpdate(
+            name=body.get("name"),
+            description=body.get("description"),
+            stages=[PipelineStage(**s) for s in body["stages"]] if "stages" in body else None,
+            edges=[PipelineEdge(**e) for e in body["edges"]] if "edges" in body else None,
+            schedule_cron=body.get("schedule_cron"),
+            schedule_timezone=body.get("schedule_timezone"),
+            status=PipelineStatus(body["status"]) if "status" in body else None,
+            updated_by=body.get("updated_by", "system"),
+        )
+        pipeline = await pipeline_engine.update_pipeline(pipeline_id, data)
+        return dataclasses.asdict(pipeline)
+
+    @app.delete("/api/pipelines/{pipeline_id}")
+    async def delete_pipeline(pipeline_id: str) -> dict:
+        ok = await pipeline_engine.delete_pipeline(pipeline_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Pipeline not found")
+        return {"deleted": pipeline_id}
+
+    @app.get("/api/pipelines/{pipeline_id}/versions")
+    async def get_pipeline_versions(pipeline_id: str) -> list[dict]:
+        return [
+            dataclasses.asdict(v) for v in await pipeline_engine.get_pipeline_versions(pipeline_id)
+        ]
+
+    @app.get("/api/pipelines/{pipeline_id}/versions/{version}")
+    async def get_pipeline_version(pipeline_id: str, version: int) -> dict:
+        pipeline = await pipeline_engine.get_pipeline_version(pipeline_id, version)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="Pipeline version not found")
+        return dataclasses.asdict(pipeline)
+
+    @app.post("/api/pipelines/{pipeline_id}/execute")
+    async def execute_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineExecute
+
+        data = PipelineExecute(inputs=body.get("inputs", {}))
+        execution = await pipeline_engine.execute_pipeline(pipeline_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/pipelines/{pipeline_id}/schedule")
+    async def schedule_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineScheduleRequest
+
+        data = PipelineScheduleRequest(cron=body["cron"], timezone=body.get("timezone", "UTC"))
+        schedule = await pipeline_engine.schedule_pipeline(pipeline_id, data)
+        return dataclasses.asdict(schedule)
+
+    @app.delete("/api/pipelines/{pipeline_id}/schedule")
+    async def unschedule_pipeline(pipeline_id: str) -> dict:
+        await pipeline_engine.unschedule_pipeline(pipeline_id)
+        return {"unscheduled": pipeline_id}
+
+    @app.get("/api/pipelines/{pipeline_id}/schedule")
+    async def get_pipeline_schedule(pipeline_id: str) -> dict:
+        schedule = await pipeline_engine.get_pipeline_schedule(pipeline_id)
+        if not schedule:
+            raise HTTPException(status_code=404, detail="No schedule found")
+        return dataclasses.asdict(schedule)
+
+    @app.post("/api/pipelines/{pipeline_id}/rollback")
+    async def rollback_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineRollback
+
+        data = PipelineRollback(to_execution_id=body["to_execution_id"])
+        execution = await pipeline_engine.rollback_pipeline(pipeline_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/pipelines/{pipeline_id}/executions")
+    async def get_pipeline_executions(
+        pipeline_id: str,
+        status: PipelineExecutionStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(e)
+            for e in await pipeline_engine.get_pipeline_executions(
+                pipeline_id, status, limit, offset
+            )
+        ]
+
+    @app.get("/api/pipelines/executions/running")
+    async def get_running_pipeline_executions() -> list[dict]:
+        return [dataclasses.asdict(e) for e in await pipeline_engine.get_running_executions()]
+
+    @app.get("/api/pipelines/executions/scheduled")
+    async def get_scheduled_pipeline_executions() -> list[dict]:
+        return [dataclasses.asdict(e) for e in await pipeline_engine.get_scheduled_executions()]
+
+    @app.post("/api/pipelines/executions/{execution_id}/cancel")
+    async def cancel_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.cancel_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/pipelines/executions/{execution_id}/pause")
+    async def pause_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.pause_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/pipelines/executions/{execution_id}/resume")
+    async def resume_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.resume_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/pipelines/executions/{execution_id}")
+    async def get_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.get_execution(execution_id)
+        if not execution:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        return dataclasses.asdict(execution)
 
     # ── Minimal provider management UI page (Phase 3 builds Mission Control) ──
     @app.get("/providers", response_class=HTMLResponse)

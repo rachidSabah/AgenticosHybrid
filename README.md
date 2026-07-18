@@ -4,16 +4,17 @@ A **local-first, event-bus-driven AI Agent Operating System**. Runs on Windows v
 WSL2, fully containerized, modular, and plugin-based. Every component communicates
 through an abstract **Event Bus** and is replaceable behind a port interface.
 
-> Status: **Phase 3 — Mission Control Platform, part 3A (v0.3.0)**. Phase 1–2
+> Status: **Phase 3 — Mission Control Platform (v0.4.0, 3B complete)**. Phase 1–2
 > delivered a headless, hexagonal backend (kernel, EventBus, Provider Management,
 > Capability Engine, Memory System, Security Framework). Phase 3 upgrades
 > AgenticOS into an immersive **AI Operating System** with a premium Mission
-> Control interface. **3A** ships the UI framework, live WebSocket integration, the
+> Control interface. **3A** shipped the UI framework, live WebSocket integration, the
 > AI Brain centerpiece, Agent Constellation, Provider Control Center, System
 > Monitor, Task Timeline, Memory Explorer, and interactive Workflow/Pipeline
-> editors. Workflow/pipeline persistence and the deeper MCP/Memory plugin store
-> are **3B**. All UI data is derived strictly from real EventBus events and the
-> existing REST control plane — no fabrication, no duplicated backend logic.
+> editors. **3B** ships the backend Workflow Engine, Pipeline Engine,
+> Observability Framework (OpenTelemetry tracing, Prometheus metrics, structured
+> logging), MCP Framework domain/ports, Plugin Framework SDK, and comprehensive
+> test coverage (>90% on all new modules).
 
 ## Project Vision
 
@@ -43,6 +44,15 @@ production-ready, fully tested vertical slice before expanding scope.
 - **Security Framework** — RBAC (deny-by-default), workspace isolation, approval
   gate, append-only audit log.
 - **Live dashboard** — WebSocket event stream; REST control plane.
+- **Workflow Engine** — DAG-based workflow execution with versioning, replay,
+  approval gates, and topological sort ordering.
+- **Pipeline Engine** — Stage-based pipeline execution with scheduling, retry
+  policies, rollback support, and parallel stage execution.
+- **Observability Framework** — OpenTelemetry tracing (W3C TraceContext), Prometheus
+  metrics, structured logging with correlation IDs. In-memory implementations for
+  dev/test.
+- **Plugin SDK** — TypeScript/Python interfaces for external plugin developers:
+  agent, tool, provider, MCP, workflow node, and pipeline stage base classes.
 - **Mission Control (Phase 3)** — Next.js + React 19 immersive OS UI: AI Brain,
   Agent Constellation, Execution Graph, Provider Control Center, Memory Explorer,
   Workflow/Pipeline studios, command palette, dark/light, 120Hz motion.

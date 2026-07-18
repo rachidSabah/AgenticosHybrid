@@ -1,18 +1,35 @@
 # Mission Control Spec
 
-Status: **Phase 3 — 3A shipped (v0.3.0).** The minimal provider-management HTML
+Status: **Phase 3 — 3B complete (v0.4.0).** The minimal provider-management HTML
 page is replaced by the immersive Mission Control SPA under `apps/mission-control`.
 See `docs/adr/0010-mission-control.md` for the architecture decision.
 
-## Goals (delivered in 3A)
+## Goals (3A delivered)
 
 - Single real-time OS surface over agents, providers, memory, and security.
 - WebSocket event stream (`/ws/dashboard`) drives every view — no fabricated
   data, no duplicated backend logic.
 - Operator controls: compose agents (Capability Engine), inspect providers/
   models, browse memory, review audit log, manage providers, explore workspaces.
-- Backed strictly by the existing REST surface and `/ws/dashboard` — no new
-  backend ports.
+- Backed strictly by the existing REST surface and `/ws/dashboard`.
+
+## Goals (3B delivered)
+
+- **Workflow Engine**: Backend DAG execution with topological sort, versioning,
+  replay, and approval gates. Previously-local Workflow Studio now backed by a
+  real engine via `WorkflowEnginePort`.
+- **Pipeline Engine**: Stage-based DAG execution with scheduling, retry, rollback,
+  and parallel stages. Previously-local Pipeline Builder now backed by a real
+  engine via `PipelineEnginePort`.
+- **Observability Framework**: OpenTelemetry tracing (W3C TraceContext),
+  Prometheus metrics, structured logging. In-memory implementations for dev/test.
+- **Plugin SDK**: TypeScript/Python base classes (Agent, Tool, Provider, MCP,
+  WorkflowNode, PipelineStage plugins) with manifest generation, validation,
+  and template generation.
+- **MCP Framework**: Domain models and ports for server configuration, tool
+  discovery, and lifecycle management.
+- **>90% test coverage**: Comprehensive unit, integration, and stress tests for
+  all new modules.
 
 ## Layout
 
