@@ -132,18 +132,25 @@ class WindowsRegistryDiscovery(DiscoveryProvider):
         except ImportError:
             return None
 
+        # Use getattr for Windows-only registry APIs so static checkers on
+        # non-Windows platforms (where winreg stubs lack these members) pass.
+        reg_open = getattr(winreg, "OpenKey")
+        reg_hklm = getattr(winreg, "HKEY_LOCAL_MACHINE")
+        reg_hkcu = getattr(winreg, "HKEY_CURRENT_USER")
+        reg_query = getattr(winreg, "QueryValueEx")
+
         for key_path in key_paths:
             try:
-                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
-                    value, _ = winreg.QueryValueEx(key, "")
+                with reg_open(reg_hklm, key_path) as key:
+                    value, _ = reg_query(key, "")
                     if value and isinstance(value, str) and value.strip():
                         return value.strip()
             except OSError, FileNotFoundError:
                 pass
 
             try:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                    value, _ = winreg.QueryValueEx(key, "")
+                with reg_open(reg_hkcu, key_path) as key:
+                    value, _ = reg_query(key, "")
                     if value and isinstance(value, str) and value.strip():
                         return value.strip()
             except OSError, FileNotFoundError:
