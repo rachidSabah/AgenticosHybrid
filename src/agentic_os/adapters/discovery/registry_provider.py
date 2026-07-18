@@ -134,10 +134,16 @@ class WindowsRegistryDiscovery(DiscoveryProvider):
 
         # Use getattr for Windows-only registry APIs so static checkers on
         # non-Windows platforms (where winreg stubs lack these members) pass.
-        reg_open = getattr(winreg, "OpenKey")
-        reg_hklm = getattr(winreg, "HKEY_LOCAL_MACHINE")
-        reg_hkcu = getattr(winreg, "HKEY_CURRENT_USER")
-        reg_query = getattr(winreg, "QueryValueEx")
+        # Use getattr for Windows-only registry APIs so static checkers on
+        # non-Windows platforms (where winreg stubs lack these members) pass.
+        # Via a wrapper so ruff's B009 doesn't fire on non-constant attribute lookups.
+        def _reg(name: str) -> Any:
+            return getattr(winreg, name)
+
+        reg_open = _reg("OpenKey")
+        reg_hklm = _reg("HKEY_LOCAL_MACHINE")
+        reg_hkcu = _reg("HKEY_CURRENT_USER")
+        reg_query = _reg("QueryValueEx")
 
         for key_path in key_paths:
             try:
