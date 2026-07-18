@@ -48,7 +48,78 @@ phase lands production-ready, fully tested, and documented.
 - **Documentation** — `ARCHITECTURE.md` updated with Phase 3B subsystem table,
   `README.md` updated, `CHANGELOG.md` updated.
 
-## 🔮 Phase 4+ — Ecosystem
+## ✅ Phase 4 — Universal Execution Framework (v0.5.0, Milestone 1)
+
+**Phase 4 transforms AgenticOS into a universal execution platform capable of
+discovering, binding, orchestrating, supervising and optimizing ANY AI execution
+engine. The kernel never depends on a specific AI coding assistant.**
+
+**Milestone 1 — Universal Execution Engine Framework (done):**
+- **Domain models** (`domain/execution.py`) — 10+ frozen dataclass entities
+  (ExecutionEngine, ExecutionSession, ExecutionResult, etc.), 6 StrEnums
+  (EngineType, EngineStatus, EngineCapability, etc.).
+- **Port interfaces** (`ports/execution.py`) — `ExecutionEnginePort` (~22 method
+  universal interface), `RuntimeManagerPort` (high-level orchestration),
+  `DiscoveryProvider` (engine scanning).
+- **Core engine base** (`core/runtime/engine.py`) — `ExecutionEngineBase` with
+  default implementations, `CompositeEngine` for multi-engine routing.
+- **Capability negotiator** (`core/runtime/capabilities.py`) — scored matching:
+  required capabilities weighted 10x, confidence-based filtering, TTL cache.
+- **Runtime registry** (`core/runtime/registry.py`) — in-memory engine CRUD,
+  health caching, session tracking, capability search, event emission.
+- **Discovery engine** (`core/runtime/discovery.py`) — multi-provider
+  orchestration, deduplication by name (highest confidence wins), confidence
+  scoring by provider type.
+- **Runtime manager** (`core/runtime/manager.py`) — high-level subsystem
+  composing registry + discovery + negotiator + adapters. Full lifecycle
+  management, execution routing, health checks.
+- **Generic reference adapter** (`adapters/engines/generic.py`) — in-process
+  engine demonstrating the port contract with echo/ping/sleep/info/fail actions.
+- **PATH discovery** (`adapters/discovery/path.py`) — scans system PATH for
+  known AI executables (claude, docker, wsl, aider, code, etc.).
+- **Kernel wiring** (`kernel.py`, `config.py`, `api/app.py`) — RuntimeManager
+  composed at startup, 12 REST API endpoints, 4 new config knobs.
+- **Tests** — 195 new tests across 7 test files, all passing with zero
+  regressions (672 total).
+
+## ✅ Phase 4 — Universal Execution Framework (v0.5.1, Milestone 2)
+
+**Milestone 2 — Automatic Runtime Discovery & Binding (done):**
+- **Discovery domain models** (`domain/discovery.py`) — 7 frozen dataclass entities
+  (DiscoveryProviderConfig, DiscoveryProfile, DiscoveryRule, DiscoveryCacheEntry,
+  DiscoveryTelemetryEntry, ValidationResult, ProfileResult) with factory methods,
+  builder patterns, and serialization.
+- **Discovery Framework core** (`core/discovery/`) — 9 modules: DiscoveryFramework
+  (main orchestrator wrapping M1 DiscoveryEngine), DiscoveryRegistry (provider
+  registry + profiles), DiscoveryCache (TTL-based dedup), DiscoveryScheduler
+  (periodic scanning), DiscoveryTelemetry (scan metrics + history),
+  DiscoveryConfiguration (profiles + rules), ValidationPipeline (6 validators:
+  ExecutableExists, VersionDetect, HealthCheck, CapabilityMatch, Permission,
+  Integrity), ProfilingEngine (auto-generates ExecutionProfile), and
+  DiscoveryEventPublisher (EventBus lifecycle events).
+- **10 discovery providers** (`adapters/discovery/`) — PathDiscovery,
+  WindowsRegistryDiscovery, WslDiscovery, DockerDiscovery, FilesystemDiscovery,
+  KnownInstallDirDiscovery, ConfigFileDiscovery, EnvVarDiscovery,
+  VSCodeDiscovery, JetBrainsDiscovery. Each implements the M1 DiscoveryProvider
+  Protocol with platform guards.
+- **Kernel wiring** — DiscoveryFramework composed at startup with all 10
+  providers, 4 validators, profiling engine, scheduler, and hot-reload lifecycle
+  (start/stop in kernel start/shutdown).
+- **REST API** — 18 new endpoints on the FastAPI control plane: provider
+  management, scan triggers, cache control, history, stats, profiles CRUD,
+  validation, profiling, hot-reload control.
+- **Mission Control UI** — Tabbed Discovery page (Dashboard, History, Profiles,
+  Validation) registered in the navigation sidebar.
+- **EventBus integration** — 16 new `discovery.*`, 3 `validation.*`, and 2
+  `profiling.*` EventBus topics.
+- **Event topics** — 21 new topics on the EventBus (`discovery.*`,
+  `validation.*`, `profiling.*`).
+- **Config** — 8 new discovery settings for cache TTL, max entries, hot-reload
+  interval, validation/profiling toggles.
+- **Tests** — 453 new tests across 11 test files, all passing with zero
+  regressions (1121 total).
+
+## 🔮 Phase 5+ — Ecosystem
 
 - **Plugin Marketplace** — discoverable, signed community plugins.
 - **Provider Framework SDKs** — `PROVIDER_SDK.md`, `CAPABILITY_SDK.md`,

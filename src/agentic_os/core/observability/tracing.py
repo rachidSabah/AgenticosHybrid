@@ -103,9 +103,7 @@ class OTelTracing(TracingPort):
             trace_id=format(otel_context.trace_id, "032x"),
             span_id=format(otel_context.span_id, "016x"),
             trace_flags=otel_context.trace_flags,
-            trace_state=(
-                str(otel_context.trace_state) if otel_context.trace_state else None
-            ),
+            trace_state=(str(otel_context.trace_state) if otel_context.trace_state else None),
         )
 
     def _to_otel_context(self, context: SpanContext) -> OtelSpanContext:
@@ -150,18 +148,13 @@ class OTelTracing(TracingPort):
             kind=self._map_kind(kind),
             context=otel_parent,
             attributes=attributes or {},
-            links=[
-                trace.Link(self._to_otel_context(ctx), attrs)
-                for ctx, attrs in (links or [])
-            ],
+            links=[trace.Link(self._to_otel_context(ctx), attrs) for ctx, attrs in (links or [])],
         )
 
         # Create domain span
         domain_context = self._to_domain_context(otel_span.get_span_context())
         parent_context = (
-            self._to_domain_context(
-                trace.get_current_span(otel_parent).get_span_context()
-            )
+            self._to_domain_context(trace.get_current_span(otel_parent).get_span_context())
             if otel_parent
             else None
         )
@@ -194,9 +187,7 @@ class OTelTracing(TracingPort):
         )
         return span
 
-    def end_span(
-        self, span: Span, status: str = "ok", message: str | None = None
-    ) -> None:
+    def end_span(self, span: Span, status: str = "ok", message: str | None = None) -> None:
         """End a span."""
         otel_span = self._otel_spans.pop(span.context.span_id, None)
         if otel_span and isinstance(otel_span, OtelSpan):

@@ -26,9 +26,7 @@ from agentic_os.ports.pipeline import (
     PipelineRollback,
     PipelineScheduleRequest,
     PipelineUpdate,
-    ValidationResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -64,10 +62,12 @@ def engine(bus, mock_provider_router, mock_agent_registry):
 @pytest.fixture
 def sample_stages():
     return [
-        PipelineStage(id="stage1", type=StageType.AGENT, label="Stage 1",
-                      config={"agent_id": "test-agent"}),
-        PipelineStage(id="stage2", type=StageType.AGENT, label="Stage 2",
-                      config={"agent_id": "test-agent"}),
+        PipelineStage(
+            id="stage1", type=StageType.AGENT, label="Stage 1", config={"agent_id": "test-agent"}
+        ),
+        PipelineStage(
+            id="stage2", type=StageType.AGENT, label="Stage 2", config={"agent_id": "test-agent"}
+        ),
     ]
 
 
@@ -160,8 +160,9 @@ class TestCRUD:
 
     async def test_update_pipeline_new_version(self, engine, sample_pipeline_create):
         created = await engine.create_pipeline(sample_pipeline_create)
-        new_stage = PipelineStage(id="stage3", type=StageType.LLM, label="LLM",
-                                  config={"prompt": "Hello"})
+        new_stage = PipelineStage(
+            id="stage3", type=StageType.LLM, label="LLM", config={"prompt": "Hello"}
+        )
         updated = await engine.update_pipeline(
             created.id,
             PipelineUpdate(stages=[*created.stages, new_stage], updated_by="tester"),
@@ -184,8 +185,14 @@ class TestCRUD:
         assert result is False
 
     async def test_delete_pipeline_with_schedule(self, engine, sample_stages):
-        data = PipelineCreate(name="Sched", description="", stages=sample_stages,
-                              edges=[], schedule_cron="0 9 * * *", created_by="t")
+        data = PipelineCreate(
+            name="Sched",
+            description="",
+            stages=sample_stages,
+            edges=[],
+            schedule_cron="0 9 * * *",
+            created_by="t",
+        )
         created = await engine.create_pipeline(data)
         schedule = await engine.get_pipeline_schedule(created.id)
         assert schedule is not None
@@ -203,8 +210,9 @@ class TestValidation:
 
     async def test_validate_valid(self, engine):
         stages = [
-            PipelineStage(id="s1", type=StageType.AGENT, label="S1",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="s1", type=StageType.AGENT, label="S1", config={"agent_id": "test-agent"}
+            ),
             PipelineStage(id="s2", type=StageType.LLM, label="S2", config={"prompt": "Hi"}),
         ]
         edges = []  # No edges = no constraints = valid
@@ -213,8 +221,9 @@ class TestValidation:
 
     async def test_validate_duplicate_stage_ids(self, engine):
         stages = [
-            PipelineStage(id="same", type=StageType.AGENT, label="A",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="same", type=StageType.AGENT, label="A", config={"agent_id": "test-agent"}
+            ),
             PipelineStage(id="same", type=StageType.LLM, label="B", config={"prompt": "Hi"}),
         ]
         result = await engine.validate_pipeline(stages, [])
@@ -222,10 +231,12 @@ class TestValidation:
 
     async def test_validate_edge_source_not_found(self, engine):
         stages = [
-            PipelineStage(id="s1", type=StageType.AGENT, label="S1",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="s1", type=StageType.AGENT, label="S1", config={"agent_id": "test-agent"}
+            ),
         ]
         from agentic_os.domain.pipeline import PipelineEdge
+
         edges = [PipelineEdge(id="e1", from_stage="missing", to_stage="s1")]
         result = await engine.validate_pipeline(stages, edges)
         assert result.valid is False
@@ -233,10 +244,12 @@ class TestValidation:
 
     async def test_validate_edge_target_not_found(self, engine):
         stages = [
-            PipelineStage(id="s1", type=StageType.AGENT, label="S1",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="s1", type=StageType.AGENT, label="S1", config={"agent_id": "test-agent"}
+            ),
         ]
         from agentic_os.domain.pipeline import PipelineEdge
+
         edges = [PipelineEdge(id="e1", from_stage="s1", to_stage="missing")]
         result = await engine.validate_pipeline(stages, edges)
         assert result.valid is False
@@ -244,12 +257,15 @@ class TestValidation:
 
     async def test_validate_cycle_detected(self, engine):
         stages = [
-            PipelineStage(id="a", type=StageType.AGENT, label="A",
-                          config={"agent_id": "test-agent"}),
-            PipelineStage(id="b", type=StageType.AGENT, label="B",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="a", type=StageType.AGENT, label="A", config={"agent_id": "test-agent"}
+            ),
+            PipelineStage(
+                id="b", type=StageType.AGENT, label="B", config={"agent_id": "test-agent"}
+            ),
         ]
         from agentic_os.domain.pipeline import PipelineEdge
+
         edges = [
             PipelineEdge(id="e1", from_stage="a", to_stage="b"),
             PipelineEdge(id="e2", from_stage="b", to_stage="a"),
@@ -313,8 +329,8 @@ class TestExecution:
         created = await engine.create_pipeline(sample_pipeline_create)
         engine._pipelines[created.id] = engine._pipelines[created.id].activate()
 
-        e1 = await engine.execute_pipeline(created.id, PipelineExecute())
-        e2 = await engine.execute_pipeline(created.id, PipelineExecute())
+        e1 = await engine.execute_pipeline(created.id, PipelineExecute())  # noqa: F841
+        e2 = await engine.execute_pipeline(created.id, PipelineExecute())  # noqa: F841
         await anyio.sleep(0.5)
 
         executions = await engine.get_pipeline_executions(created.id)
@@ -338,8 +354,9 @@ class TestStageExecution:
     """Test individual stage type execution."""
 
     async def test_agent_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.AGENT, label="Agent",
-                              config={"agent_id": "test-agent"})
+        stage = PipelineStage(
+            id="s1", type=StageType.AGENT, label="Agent", config={"agent_id": "test-agent"}
+        )
         execution = MagicMock()
         execution.inputs = {}
         execution.stage_outputs = {}
@@ -355,8 +372,9 @@ class TestStageExecution:
             await engine._execute_stage(stage, MagicMock(), MagicMock())
 
     async def test_llm_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.LLM, label="LLM",
-                              config={"prompt": "Hello", "provider": "mock"})
+        stage = PipelineStage(
+            id="s1", type=StageType.LLM, label="LLM", config={"prompt": "Hello", "provider": "mock"}
+        )
         execution = MagicMock()
         pipeline = MagicMock()
 
@@ -364,8 +382,9 @@ class TestStageExecution:
         assert result["response"] == "mock response"
 
     async def test_tool_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.TOOL, label="Tool",
-                              config={"tool": "test-tool"})
+        stage = PipelineStage(
+            id="s1", type=StageType.TOOL, label="Tool", config={"tool": "test-tool"}
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["tool"] == "test-tool"
 
@@ -375,8 +394,9 @@ class TestStageExecution:
             await engine._execute_stage(stage, MagicMock(), MagicMock())
 
     async def test_workflow_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.WORKFLOW, label="WF",
-                              config={"workflow_id": "wf-1"})
+        stage = PipelineStage(
+            id="s1", type=StageType.WORKFLOW, label="WF", config={"workflow_id": "wf-1"}
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["workflow_id"] == "wf-1"
 
@@ -386,32 +406,46 @@ class TestStageExecution:
             await engine._execute_stage(stage, MagicMock(), MagicMock())
 
     async def test_condition_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.CONDITION, label="Cond",
-                              config={"condition": {"type": "always_true"}})
+        stage = PipelineStage(
+            id="s1",
+            type=StageType.CONDITION,
+            label="Cond",
+            config={"condition": {"type": "always_true"}},
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["condition_result"] is True
 
     async def test_parallel_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.PARALLEL, label="Par",
-                              config={"children": ["a", "b"]})
+        stage = PipelineStage(
+            id="s1", type=StageType.PARALLEL, label="Par", config={"children": ["a", "b"]}
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["parallel"] is True
 
     async def test_approval_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.APPROVAL, label="Approve",
-                              config={"approvers": ["admin"]})
+        stage = PipelineStage(
+            id="s1", type=StageType.APPROVAL, label="Approve", config={"approvers": ["admin"]}
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["approval_required"] is True
 
     async def test_mcp_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.MCP, label="MCP",
-                              config={"server": "my-server", "tool": "my-tool"})
+        stage = PipelineStage(
+            id="s1",
+            type=StageType.MCP,
+            label="MCP",
+            config={"server": "my-server", "tool": "my-tool"},
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["mcp"] == "my-server"
 
     async def test_plugin_stage(self, engine):
-        stage = PipelineStage(id="s1", type=StageType.PLUGIN, label="Plugin",
-                              config={"plugin": "my-plugin", "method": "run"})
+        stage = PipelineStage(
+            id="s1",
+            type=StageType.PLUGIN,
+            label="Plugin",
+            config={"plugin": "my-plugin", "method": "run"},
+        )
         result = await engine._execute_stage(stage, MagicMock(), MagicMock())
         assert result["plugin"] == "my-plugin"
 
@@ -592,9 +626,14 @@ class TestRetry:
 
     async def test_stage_retry_on_failure(self, engine):
         """Stage with retry_count > 0 should retry on failure."""
-        stage = PipelineStage(id="s1", type=StageType.AGENT, label="Agent",
-                              config={"agent_id": "test-agent"},
-                              retry_count=2, retry_delay_seconds=0.01)
+        stage = PipelineStage(
+            id="s1",
+            type=StageType.AGENT,
+            label="Agent",
+            config={"agent_id": "test-agent"},
+            retry_count=2,
+            retry_delay_seconds=0.01,
+        )
         pipeline = PipelineCreate(
             name="Retry Test",
             description="",
@@ -629,9 +668,14 @@ class TestRetry:
 
     async def test_stage_retry_exhausted_fails(self, engine):
         """Stage with retry_count should fail after all retries exhausted."""
-        stage = PipelineStage(id="s1", type=StageType.AGENT, label="Agent",
-                              config={"agent_id": "test-agent"},
-                              retry_count=1, retry_delay_seconds=0.01)
+        stage = PipelineStage(
+            id="s1",
+            type=StageType.AGENT,
+            label="Agent",
+            config={"agent_id": "test-agent"},
+            retry_count=1,
+            retry_delay_seconds=0.01,
+        )
         pipeline = PipelineCreate(
             name="Retry Fail",
             description="",
@@ -735,20 +779,19 @@ class TestDAGExecution:
     async def test_stages_execute_in_order(self, engine):
         """Stages connected by edges should execute in dependency order."""
         stages = [
-            PipelineStage(id="first", type=StageType.TOOL, label="First",
-                          config={"tool": "t1"}),
-            PipelineStage(id="second", type=StageType.TOOL, label="Second",
-                          config={"tool": "t2"}),
-            PipelineStage(id="third", type=StageType.TOOL, label="Third",
-                          config={"tool": "t3"}),
+            PipelineStage(id="first", type=StageType.TOOL, label="First", config={"tool": "t1"}),
+            PipelineStage(id="second", type=StageType.TOOL, label="Second", config={"tool": "t2"}),
+            PipelineStage(id="third", type=StageType.TOOL, label="Third", config={"tool": "t3"}),
         ]
         from agentic_os.domain.pipeline import PipelineEdge
+
         edges = [
             PipelineEdge(id="e1", from_stage="first", to_stage="second"),
             PipelineEdge(id="e2", from_stage="second", to_stage="third"),
         ]
-        pipeline = PipelineCreate(name="Order", description="", stages=stages,
-                                  edges=edges, created_by="test")
+        pipeline = PipelineCreate(
+            name="Order", description="", stages=stages, edges=edges, created_by="test"
+        )
         created = await engine.create_pipeline(pipeline)
         engine._pipelines[created.id] = engine._pipelines[created.id].activate()
 
@@ -783,20 +826,19 @@ class TestDAGExecution:
     async def test_parallel_dependencies(self, engine):
         """Two stages that depend on the same upstream should both execute."""
         stages = [
-            PipelineStage(id="source", type=StageType.TOOL, label="Source",
-                          config={"tool": "src"}),
-            PipelineStage(id="branch_a", type=StageType.TOOL, label="A",
-                          config={"tool": "a"}),
-            PipelineStage(id="branch_b", type=StageType.TOOL, label="B",
-                          config={"tool": "b"}),
+            PipelineStage(id="source", type=StageType.TOOL, label="Source", config={"tool": "src"}),
+            PipelineStage(id="branch_a", type=StageType.TOOL, label="A", config={"tool": "a"}),
+            PipelineStage(id="branch_b", type=StageType.TOOL, label="B", config={"tool": "b"}),
         ]
         from agentic_os.domain.pipeline import PipelineEdge
+
         edges = [
             PipelineEdge(id="e1", from_stage="source", to_stage="branch_a"),
             PipelineEdge(id="e2", from_stage="source", to_stage="branch_b"),
         ]
-        pipeline = PipelineCreate(name="FanOut", description="", stages=stages,
-                                  edges=edges, created_by="test")
+        pipeline = PipelineCreate(
+            name="FanOut", description="", stages=stages, edges=edges, created_by="test"
+        )
         created = await engine.create_pipeline(pipeline)
         engine._pipelines[created.id] = engine._pipelines[created.id].activate()
 
@@ -821,11 +863,13 @@ class TestErrorHandling:
     async def test_stage_failure_propagates(self, engine):
         """A failing stage should result in FAILED status."""
         stages = [
-            PipelineStage(id="s1", type=StageType.AGENT, label="Failer",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="s1", type=StageType.AGENT, label="Failer", config={"agent_id": "test-agent"}
+            ),
         ]
-        pipeline = PipelineCreate(name="Fail", description="", stages=stages,
-                                  edges=[], created_by="test")
+        pipeline = PipelineCreate(
+            name="Fail", description="", stages=stages, edges=[], created_by="test"
+        )
         created = await engine.create_pipeline(pipeline)
         engine._pipelines[created.id] = engine._pipelines[created.id].activate()
 
@@ -851,7 +895,7 @@ class TestErrorHandling:
 
         engine._run_execution = crashing_run
         # Mock execute_pipeline to not create a background task
-        execution = await engine.execute_pipeline(created.id, PipelineExecute())
+        execution = await engine.execute_pipeline(created.id, PipelineExecute())  # noqa: F841
         # The background task will crash but the engine should handle it
         await anyio.sleep(0.5)
 
@@ -861,8 +905,9 @@ class TestErrorHandling:
 
     async def test_empty_stages_completes(self, engine):
         """Pipeline with no stages should still complete."""
-        pipeline = PipelineCreate(name="Empty", description="", stages=[],
-                                  edges=[], created_by="test")
+        pipeline = PipelineCreate(
+            name="Empty", description="", stages=[], edges=[], created_by="test"
+        )
         created = await engine.create_pipeline(pipeline)
         engine._pipelines[created.id] = engine._pipelines[created.id].activate()
 
@@ -910,10 +955,12 @@ class TestConcurrency:
         """Run multiple pipelines concurrently."""
         ids = []
         for i in range(3):
-            stage = PipelineStage(id=f"s{i}", type=StageType.TOOL, label=f"S{i}",
-                                  config={"tool": "t"})
-            p = PipelineCreate(name=f"P{i}", description="", stages=[stage],
-                               edges=[], created_by="test")
+            stage = PipelineStage(
+                id=f"s{i}", type=StageType.TOOL, label=f"S{i}", config={"tool": "t"}
+            )
+            p = PipelineCreate(
+                name=f"P{i}", description="", stages=[stage], edges=[], created_by="test"
+            )
             created = await engine.create_pipeline(p)
             engine._pipelines[created.id] = engine._pipelines[created.id].activate()
             ids.append(created.id)
@@ -958,10 +1005,10 @@ class TestEdgeCases:
         assert exec_id not in engine._running_executions
 
     async def test_single_stage_pipeline(self, engine):
-        stage = PipelineStage(id="only", type=StageType.TOOL, label="Only",
-                              config={"tool": "test"})
-        p = PipelineCreate(name="Single", description="", stages=[stage],
-                           edges=[], created_by="test")
+        stage = PipelineStage(id="only", type=StageType.TOOL, label="Only", config={"tool": "test"})
+        p = PipelineCreate(
+            name="Single", description="", stages=[stage], edges=[], created_by="test"
+        )
         created = await engine.create_pipeline(p)
         engine._pipelines[created.id] = engine._pipelines[created.id].activate()
 

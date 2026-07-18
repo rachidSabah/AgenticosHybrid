@@ -181,9 +181,7 @@ class Span:
             end_time=end_time or _utcnow(),
         )
 
-    def with_status(
-        self, status: SpanStatus, message: str | None = None
-    ) -> Span:
+    def with_status(self, status: SpanStatus, message: str | None = None) -> Span:
         """Return a new span with status set."""
         return Span(
             name=self.name,

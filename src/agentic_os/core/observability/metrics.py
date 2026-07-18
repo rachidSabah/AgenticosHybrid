@@ -201,9 +201,7 @@ class PrometheusMetrics(MetricsPort):
                 metric.name, metric.value, metric.labels, metric.unit, metric.description
             )
         elif metric.type == MetricType.SUMMARY:
-            self.summary(
-                metric.name, metric.value, metric.labels, metric.unit, metric.description
-            )
+            self.summary(metric.name, metric.value, metric.labels, metric.unit, metric.description)
 
     def get_metric(self, name: str, labels: dict[str, str] | None = None) -> Metric | None:
         """Get a metric value."""
@@ -212,9 +210,7 @@ class PrometheusMetrics(MetricsPort):
 
     def list_metrics(self, prefix: str = "") -> list[Metric]:
         """List all metrics matching prefix."""
-        return [
-            m for k, m in self._metrics_cache.items() if k.startswith(prefix)
-        ]
+        return [m for k, m in self._metrics_cache.items() if k.startswith(prefix)]
 
     def export_prometheus(self) -> bytes:
         """Export metrics in Prometheus format."""

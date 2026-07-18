@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 
@@ -17,7 +17,6 @@ from agentic_os.domain.pipeline import (
     PipelineVersion,
     StageType,
 )
-
 
 # ---------------------------------------------------------------------------
 # PipelineStatus enum
@@ -78,8 +77,16 @@ class TestStageTypeEnum:
 
     def test_all_members(self) -> None:
         expected = {
-            "agent", "workflow", "tool", "llm", "condition",
-            "parallel", "approval", "mcp", "plugin", "custom",
+            "agent",
+            "workflow",
+            "tool",
+            "llm",
+            "condition",
+            "parallel",
+            "approval",
+            "mcp",
+            "plugin",
+            "custom",
         }
         assert {m.value for m in StageType} == expected
 
@@ -215,7 +222,7 @@ class TestPipelineStage:
     def test_slots_no_dict(self) -> None:
         stage = PipelineStage(id="s1", type=StageType.AGENT, label="Slotted")
         with pytest.raises(AttributeError):
-            stage.__dict__  # type: ignore[attr-defined]
+            _ = stage.__dict__  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +313,9 @@ class TestPipeline:
             children=("child1",),
         )
         edge = PipelineEdge(id="e1", from_stage="s1", to_stage="s2", condition={"x": 1})
-        pipeline = Pipeline.create(name="DictTest", description="test", stages=[stage], edges=[edge])
+        pipeline = Pipeline.create(
+            name="DictTest", description="test", stages=[stage], edges=[edge]
+        )
 
         d = pipeline.to_dict()
         assert d["name"] == "DictTest"
@@ -945,12 +954,10 @@ class TestPipelineVersion:
 class TestEdgeCases:
     def test_pipeline_with_many_stages(self) -> None:
         stages = [
-            PipelineStage(id=f"s{i}", type=StageType.AGENT, label=f"Stage {i}")
-            for i in range(10)
+            PipelineStage(id=f"s{i}", type=StageType.AGENT, label=f"Stage {i}") for i in range(10)
         ]
         edges = [
-            PipelineEdge(id=f"e{i}", from_stage=f"s{i}", to_stage=f"s{i+1}")
-            for i in range(9)
+            PipelineEdge(id=f"e{i}", from_stage=f"s{i}", to_stage=f"s{i + 1}") for i in range(9)
         ]
         pipeline = Pipeline.create(name="Large", description="", stages=stages, edges=edges)
         assert len(pipeline.stages) == 10

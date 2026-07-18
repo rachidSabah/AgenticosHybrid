@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.domain.agent import Task
+from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.pipeline import (
     PipelineEdge,
     PipelineExecutionStatus,
@@ -35,6 +36,7 @@ from agentic_os.domain.workflow import (
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.infrastructure.metrics import metrics_payload, observe
 from agentic_os.kernel import Platform
+from agentic_os.ports.execution import EngineRegistration, ExecutionRequest
 
 log = get_logger("api")
 
@@ -612,6 +614,322 @@ def create_app(platform: Platform) -> FastAPI:
         if not execution:
             raise HTTPException(status_code=404, detail="Execution not found")
         return dataclasses.asdict(execution)
+
+    # ── Runtime: Execution Engine Framework (Phase 4, M1) ──
+    runtime = platform.runtime
+    if runtime is None:
+        raise RuntimeError("RuntimeManager is required but was not initialised on the Platform")
+
+    @app.get("/api/runtime/engines")
+    async def list_runtime_engines(
+        engine_type: str | None = None,
+        capability: str | None = None,
+        status: str | None = None,
+    ) -> dict:
+        type_filter = EngineType(engine_type) if engine_type else None
+        cap_filter = EngineCapability(capability) if capability else None
+        engines = await runtime.list_engines(type_filter, cap_filter, status)
+        return {"engines": [e.to_dict() for e in engines], "total": len(engines)}
+
+    @app.get("/api/runtime/engines/{engine_id}")
+    async def get_runtime_engine(engine_id: str) -> dict:
+        engine = await runtime.get_engine(engine_id)
+        if engine is None:
+            raise HTTPException(status_code=404, detail="Engine not found")
+        return engine.to_dict()
+
+    @app.post("/api/runtime/engines")
+    async def register_runtime_engine(body: dict) -> dict:
+        try:
+            registration = EngineRegistration(
+                name=body["name"],
+                engine_type=EngineType(body.get("engine_type", "generic")),
+                endpoint=body.get("endpoint"),
+                transport=body.get("transport", "local"),
+                capabilities=[EngineCapability(c) for c in body.get("capabilities", [])],
+                description=body.get("description", ""),
+                version=body.get("version", "1.0.0"),
+                tags=body.get("tags", []),
+                metadata=body.get("metadata", {}),
+            )
+            engine = await runtime.register_engine(registration)
+            return engine.to_dict()
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.delete("/api/runtime/engines/{engine_id}")
+    async def unregister_runtime_engine(engine_id: str) -> dict:
+        removed = await runtime.unregister_engine(engine_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Engine not found")
+        return {"removed": True, "engine_id": engine_id}
+
+    @app.post("/api/runtime/engines/{engine_id}/execute")
+    async def execute_on_engine(engine_id: str, body: dict) -> dict:
+        try:
+            request = ExecutionRequest(
+                action=body["action"],
+                payload=body.get("payload", {}),
+                timeout_seconds=body.get("timeout_seconds", 60.0),
+                stream=body.get("stream", False),
+                metadata=body.get("metadata", {}),
+            )
+            result = await runtime.execute(engine_id, request)
+            return result.to_dict()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.post("/api/runtime/execute")
+    async def execute_best(body: dict) -> dict:
+        try:
+            request = ExecutionRequest(
+                action=body["action"],
+                payload=body.get("payload", {}),
+                timeout_seconds=body.get("timeout_seconds", 60.0),
+            )
+            required = None
+            if "required_capability" in body:
+                required = EngineCapability(body["required_capability"])
+            result = await runtime.execute_on_best(request, required)
+            return result.to_dict()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.post("/api/runtime/discover")
+    async def discover_engines() -> dict:
+        engines = await runtime.discover_engines()
+        return {"engines": [e.to_dict() for e in engines], "total": len(engines)}
+
+    @app.get("/api/runtime/capabilities")
+    async def list_runtime_capabilities() -> dict:
+        caps = await runtime.list_capabilities()
+        return {
+            engine_id: [c.to_dict() for c in caps_list] for engine_id, caps_list in caps.items()
+        }
+
+    @app.get("/api/runtime/engines/{engine_id}/health")
+    async def engine_health(engine_id: str) -> dict:
+        health = await runtime.health_check(engine_id)
+        return health.to_dict()
+
+    @app.post("/api/runtime/engines/{engine_id}/benchmark")
+    async def benchmark_engine(engine_id: str, body: dict | None = None) -> dict:
+        try:
+            benchmark = await runtime.benchmark(engine_id, body or {})
+            return benchmark.to_dict()
+        except NotImplementedError:
+            raise HTTPException(
+                status_code=501,
+                detail="Engine does not support benchmarking",
+            ) from None
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    @app.get("/api/runtime/engines/{engine_id}/sessions")
+    async def list_engine_sessions(
+        engine_id: str,
+        limit: int = 50,
+    ) -> dict:
+        sessions = await runtime.list_sessions(engine_id=engine_id, limit=limit)
+        return {"sessions": [s.to_dict() for s in sessions], "total": len(sessions)}
+
+    # ── Discovery & Profiling API (Phase 4, M2) ──
+    discovery_framework = platform.discovery_framework
+
+    @app.get("/api/discovery/providers")
+    async def list_discovery_providers() -> list[dict]:
+        """List registered discovery providers with status."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.list_providers()
+
+    @app.put("/api/discovery/providers/{name}")
+    async def configure_discovery_provider(name: str, body: dict) -> dict:
+        """Enable/disable or configure a discovery provider."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        enabled = body.get("enabled")
+        if enabled is True:
+            discovery_framework.enable_provider(name)
+        elif enabled is False:
+            discovery_framework.disable_provider(name)
+        return {"name": name, "enabled": enabled}
+
+    @app.post("/api/discovery/scan")
+    async def run_discovery_scan(profile: str | None = None) -> dict:
+        """Run discovery using optional named profile."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        profile_name = profile or discovery_framework.config.default_profile
+        engines = await discovery_framework.discover_and_register(profile_name)
+        return {
+            "profile": profile_name,
+            "engines_found": len(engines),
+            "engines": [e.to_dict() for e in engines] if engines else [],
+        }
+
+    @app.get("/api/discovery/cache")
+    async def get_discovery_cache() -> dict:
+        """List cached discovery results."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        cache_entries = discovery_framework.get_cache_entries()
+        return {"entries": cache_entries, "total": len(cache_entries)}
+
+    @app.delete("/api/discovery/cache")
+    async def clear_discovery_cache() -> dict:
+        """Invalidate all cached discovery results."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        count = discovery_framework.cache.invalidate_all()
+        return {"invalidated": count}
+
+    @app.get("/api/discovery/history")
+    async def get_discovery_history(limit: int = 50) -> list[dict]:
+        """Return discovery scan history."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.telemetry.get_history(limit)
+
+    @app.get("/api/discovery/stats")
+    async def get_discovery_stats() -> dict:
+        """Aggregated discovery statistics."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.telemetry.get_stats()
+
+    # Profiles
+    @app.get("/api/discovery/profiles")
+    async def list_discovery_profiles() -> list[dict]:
+        """List all discovery profiles."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.config.list_profiles()
+
+    @app.post("/api/discovery/profiles")
+    async def create_discovery_profile(body: dict) -> dict:
+        """Create a new discovery profile."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        from agentic_os.domain.discovery import DiscoveryProfile
+
+        profile = DiscoveryProfile(
+            name=body["name"],
+            description=body.get("description", ""),
+            interval_seconds=body.get("interval_seconds", 60.0),
+            validate_after_discovery=body.get("validate_after_discovery", True),
+            profile_after_discovery=body.get("profile_after_discovery", True),
+            auto_register=body.get("auto_register", True),
+            tags=tuple(body.get("tags", [])),
+        )
+        discovery_framework.config.add_profile(profile)
+        return profile.to_dict()
+
+    @app.get("/api/discovery/profiles/{name}")
+    async def get_discovery_profile(name: str) -> dict:
+        """Get a discovery profile by name."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        profile = discovery_framework.config.get_profile(name)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        return profile.to_dict()
+
+    @app.delete("/api/discovery/profiles/{name}")
+    async def delete_discovery_profile(name: str) -> dict:
+        """Delete a discovery profile."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        removed = discovery_framework.config.remove_profile(name)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        return {"removed": name}
+
+    @app.post("/api/discovery/profiles/{name}/activate")
+    async def activate_discovery_profile(name: str) -> dict:
+        """Activate a discovery profile for scheduled scanning."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        profile = discovery_framework.config.get_profile(name)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        discovery_framework.config.default_profile = name
+        return {"activated": name}
+
+    # Validation
+    @app.post("/api/discovery/engines/{engine_id}/validate")
+    async def validate_discovered_engine(engine_id: str) -> dict:
+        """Validate a discovered engine by its ID."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+
+        # Find the engine in the runtime registry
+        engine = await runtime.get_engine(engine_id)
+        if engine is None:
+            raise HTTPException(status_code=404, detail="Engine not found")
+
+        # Build a fake registration from engine data for validation
+        registration = EngineRegistration(
+            name=engine.name,
+            engine_type=engine.engine_type,
+            endpoint=engine.endpoint or f"local:{engine.name}",
+            transport=engine.transport,
+            capabilities=[c.type for c in engine.capabilities],
+            description="",
+            version=engine.version or "",
+        )
+        passed, results = await discovery_framework.validate_engine(registration)
+        return {
+            "engine_id": engine_id,
+            "valid": passed,
+            "results": [r.to_dict() for r in results],
+        }
+
+    # Profiling
+    @app.post("/api/discovery/engines/{engine_id}/profile")
+    async def profile_discovered_engine(engine_id: str) -> dict:
+        """Profile a discovered engine by its ID."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        engine = await runtime.get_engine(engine_id)
+        if engine is None:
+            raise HTTPException(status_code=404, detail="Engine not found")
+
+        registration = EngineRegistration(
+            name=engine.name,
+            engine_type=engine.engine_type,
+            endpoint=engine.endpoint or f"local:{engine.name}",
+            transport=engine.transport,
+            capabilities=[c.type for c in engine.capabilities],
+            description="",
+            version=engine.version or "",
+        )
+        profile_result = await discovery_framework.profile_engine(registration, engine)
+        return profile_result.to_dict()
+
+    # Hot Reload
+    @app.post("/api/discovery/hot-reload/start")
+    async def start_discovery_hot_reload() -> dict:
+        """Start hot-reload for runtime discovery."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        await discovery_framework.start_hot_reload()
+        return {"status": "started"}
+
+    @app.post("/api/discovery/hot-reload/stop")
+    async def stop_discovery_hot_reload() -> dict:
+        """Stop hot-reload for runtime discovery."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        await discovery_framework.stop_hot_reload()
+        return {"status": "stopped"}
+
+    @app.get("/api/discovery/hot-reload/status")
+    async def get_discovery_hot_reload_status() -> dict:
+        """Get hot-reload status."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return {"running": discovery_framework.hot_reload_running}
 
     # ── Minimal provider management UI page (Phase 3 builds Mission Control) ──
     @app.get("/providers", response_class=HTMLResponse)

@@ -86,9 +86,7 @@ class InMemoryTracing(TracingPort):
         log.debug("span_started", name=name, trace_id=trace_id, span_id=span_context.span_id)
         return span
 
-    def end_span(
-        self, span: Span, status: str = "ok", message: str | None = None
-    ) -> None:
+    def end_span(self, span: Span, status: str = "ok", message: str | None = None) -> None:
         """End a span."""
         ended_span = span.with_end_time().with_status(
             SpanStatus(status) if status in SpanStatus.__members__.values() else SpanStatus.OK,

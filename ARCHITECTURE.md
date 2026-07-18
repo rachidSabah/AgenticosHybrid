@@ -66,6 +66,37 @@ timestamp, topic, payload). Topics are centralized in `domain/events.py`.
 
 All core engines achieve >90% test coverage with comprehensive unit, integration, and stress tests.
 
+## Phase 4 Subsystem (v0.5.0, M1)
+
+| Subsystem | Ports | Core Impl | Status |
+|-----------|-------|-----------|--------|
+| Universal Execution Engine Framework | `ExecutionEnginePort`, `RuntimeManagerPort`, `DiscoveryProvider` | `RuntimeManager` + `RuntimeRegistryImpl` + `CapabilityNegotiator` + `DiscoveryEngine` + `CompositeEngine` | ✅ Verified |
+
+The Universal Execution Engine Framework is a hexagonal abstraction layer where
+ANY execution engine (MCP, Docker, WSL, Claude Code, subprocess, cloud API)
+implements a single `ExecutionEnginePort` interface (~22 methods). The kernel
+discovers, binds, orchestrates, supervises, and optimizes engines through this
+shared contract. Adding a new engine = one new adapter file = zero kernel changes.
+
+**Key components:**
+- **`ExecutionEnginePort`** (ports) — universal interface: lifecycle, execution,
+  health, benchmark, telemetry, compatibility, workspace, recovery.
+- **`RuntimeManager`** (core) — high-level subsystem wiring registry + discovery +
+  negotiator + adapters. Single integration point in the kernel.
+- **`RuntimeRegistryImpl`** (core) — in-memory engine CRUD, capability search,
+  health caching, session tracking, EventBus emissions.
+- **`CapabilityNegotiator`** (core) — scored matching (required 10x weighting,
+  confidence-based filtering, TTL cache).
+- **`DiscoveryEngine`** (core) — multi-provider orchestration with deduplication
+  and confidence scoring.
+- **`CompositeEngine`** (core) — combines multiple engines behind one port for
+  fallback, load balancing, and fan-out routing.
+- **`GenericExecutionEngine`** (adapter) — reference adapter demonstrating the
+  port contract with echo/ping/sleep/info/fail actions.
+- **`PathDiscovery`** (adapter) — scans system PATH for known AI executables.
+
+**Phase 4 event topics:** 14 new `engine.*` topics on the EventBus.
+
 ## Phase 2 Subsystems (frozen interfaces)
 
 | Subsystem | Ports | Default impl |

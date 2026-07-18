@@ -149,6 +149,78 @@ export interface TaskNode {
   status: "pending" | "planned" | "dispatched" | "assigned" | "in_progress" | "completed" | "failed" | "recovered";
 }
 
+// ── Discovery types (Phase 4, M2) ──
+
+export interface DiscoveryProviderInfo {
+  name: string;
+  provider_type: string;
+  enabled: boolean;
+  interval_seconds: number;
+  timeout_seconds: number;
+  confidence_override: number | null;
+}
+
+export interface DiscoveryCacheEntry {
+  key: string;
+  provider_name: string;
+  confidence: number;
+  discovered_at: string;
+  expires_at: string;
+  hit_count: number;
+  expired: boolean;
+}
+
+export interface DiscoveryHistoryEntry {
+  id: string;
+  profile_name: string;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number;
+  providers_run: number;
+  providers_failed: number;
+  engines_found: number;
+  errors: string[];
+}
+
+export interface DiscoveryStats {
+  total_scans: number;
+  total_engines_found: number;
+  avg_duration_ms: number;
+  failure_rate: number;
+  cache_hit_rate: number;
+  active_providers: number;
+}
+
+export interface DiscoveryProfileEntry {
+  name: string;
+  description: string;
+  provider_configs: DiscoveryProviderConfig[];
+  auto_register: boolean;
+  validate_after_discovery: boolean;
+  interval_seconds: number;
+  tags: string[];
+}
+
+export interface DiscoveryProviderConfig {
+  name: string;
+  provider_type: string;
+  enabled: boolean;
+  interval_seconds: number;
+}
+
+export interface DiscoveryValidationEntry {
+  engine_id: string;
+  engine_name: string;
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  validated_at: string;
+}
+
+export interface HotReloadStatus {
+  running: boolean;
+}
+
 export interface SystemMetrics {
   tasks: number;
   agents: number;

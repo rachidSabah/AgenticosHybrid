@@ -44,6 +44,9 @@ const TaskTimeline = lazy(() =>
 const SystemMonitor = lazy(() =>
   import("@/views/system-monitor").then((m) => ({ default: m.SystemMonitor }))
 );
+const DiscoveryDashboard = lazy(() =>
+  import("@/views/discovery-dashboard").then((m) => ({ default: m.DiscoveryDashboard }))
+);
 
 const VIEWS: Record<string, () => ReactNode> = {
   overview: () => (
@@ -134,6 +137,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="System Monitor" fallback={<ViewSkeleton title="System Monitor" />}>
       <Suspense fallback={<ViewSkeleton title="System Monitor" />}>
         <SystemMonitor />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  discovery: () => (
+    <ErrorBoundary viewName="Discovery" fallback={<ViewSkeleton title="Discovery" />}>
+      <Suspense fallback={<ViewSkeleton title="Discovery" />}>
+        <DiscoveryDashboard />
       </Suspense>
     </ErrorBoundary>
   ),

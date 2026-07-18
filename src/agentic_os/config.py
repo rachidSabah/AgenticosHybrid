@@ -30,5 +30,36 @@ class Settings(BaseSettings):
     heartbeat_timeout_seconds: float = 6.0
     max_attempts: int = 3
 
+    # Runtime settings (Phase 4, M1)
+    runtime_discovery_enabled: bool = True
+    runtime_discovery_interval_seconds: float = 60.0
+    runtime_health_interval_seconds: float = 30.0
+    runtime_default_timeout_seconds: int = 60
+
+    # Discovery & Profiling settings (Phase 4, M2)
+    discovery_cache_ttl_seconds: float = 300.0
+    discovery_max_cache_entries: int = 1000
+    discovery_telemetry_max_entries: int = 1000
+    discovery_hot_reload_enabled: bool = True
+    discovery_hot_reload_interval_seconds: float = 30.0
+    discovery_default_profile: str = "default"
+    discovery_validation_enabled: bool = True
+    discovery_profiling_enabled: bool = True
+
+    # Multi-Agent Orchestration & Swarm Intelligence (Phase 4, M3)
+    orchestration_enabled: bool = True
+    orchestration_default_topology: str = "mesh"
+    orchestration_default_strategy: str = "sequential"
+    orchestration_max_agents_per_swarm: int = 10
+    orchestration_default_timeout_seconds: int = 300
+    orchestration_telemetry_max_entries: int = 1000
+    orchestration_task_monitoring_interval: float = 5.0
+    orchestration_leader_election_enabled: bool = True
+    orchestration_consensus_quorum: float = 0.51
+    orchestration_voting_enabled: bool = True
+    orchestration_auto_recover: bool = True
+    orchestration_default_decomposition_strategy: str = "rule-based"
+    orchestration_inter_agent_timeout_seconds: int = 60
+
 
 settings = Settings()

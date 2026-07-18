@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-os"
-version = "0.4.0"
+version = "0.6.0"
 description = "Agentic OS — a local-first, event-bus-driven AI Agent Operating System."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Agentic OS Contributors" }]
 dependencies = [
@@ -47,7 +47,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 100
 src = ["src", "tests"]
 

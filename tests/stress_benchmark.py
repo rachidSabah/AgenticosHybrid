@@ -25,13 +25,11 @@ from agentic_os.core.observability.in_memory import (
 )
 from agentic_os.core.pipeline.engine import PipelineEngineImpl
 from agentic_os.core.workflow.engine import WorkflowEngineImpl
-from agentic_os.domain.events import Topic
 from agentic_os.domain.observability import SpanEvent
 from agentic_os.domain.pipeline import PipelineStage, StageType
 from agentic_os.domain.workflow import NodeType, WorkflowEdge, WorkflowNode
 from agentic_os.ports.pipeline import PipelineCreate, PipelineExecute
 from agentic_os.ports.workflow import WorkflowCreate, WorkflowExecute
-
 
 # =============================================================================
 # Shared Helpers
@@ -46,8 +44,9 @@ def _make_workflow_nodes(n: int) -> tuple[list[WorkflowNode], list[WorkflowEdge]
     for i in range(n):
         nid = f"node_{i}"
         nodes.append(
-            WorkflowNode(id=nid, type=NodeType.AGENT, label=f"Node {i}",
-                         config={"agent_id": "test-agent"})
+            WorkflowNode(
+                id=nid, type=NodeType.AGENT, label=f"Node {i}", config={"agent_id": "test-agent"}
+            )
         )
         if i == 0:
             edges.append(WorkflowEdge(id=f"e_{i}", source="start", target=nid))
@@ -55,16 +54,23 @@ def _make_workflow_nodes(n: int) -> tuple[list[WorkflowNode], list[WorkflowEdge]
             edges.append(WorkflowEdge(id=f"e_{i}", source=f"node_{i - 1}", target=nid))
 
     nodes.append(WorkflowNode(id="end", type=NodeType.END, label="End"))
-    edges.append(WorkflowEdge(id="e_end", source=f"node_{n - 1}", target="end") if n > 0
-                 else WorkflowEdge(id="e_end", source="start", target="end"))
+    edges.append(
+        WorkflowEdge(id="e_end", source=f"node_{n - 1}", target="end")
+        if n > 0
+        else WorkflowEdge(id="e_end", source="start", target="end")
+    )
     return nodes, edges
 
 
 def _make_pipeline_stages(n: int) -> list[PipelineStage]:
     """Build N linear pipeline stages."""
     return [
-        PipelineStage(id=f"stage_{i}", type=StageType.AGENT, label=f"Stage {i}",
-                      config={"agent_id": "test-agent"})
+        PipelineStage(
+            id=f"stage_{i}",
+            type=StageType.AGENT,
+            label=f"Stage {i}",
+            config={"agent_id": "test-agent"},
+        )
         for i in range(n)
     ]
 
@@ -151,15 +157,14 @@ class TestWorkflowConcurrency:
     async def test_concurrent_executions(self, workflow_engine, concurrency):
         """Run many simple workflows concurrently."""
         nodes, edges = _make_workflow_nodes(3)
-        wc = WorkflowCreate(name="stress", description="", nodes=nodes, edges=edges,
-                            created_by="test")
+        wc = WorkflowCreate(
+            name="stress", description="", nodes=nodes, edges=edges, created_by="test"
+        )
         detail = await workflow_engine.create_workflow(wc)
         _activate_workflow(workflow_engine, detail.id)
 
         async def exec_one():
-            ex = await workflow_engine.execute_workflow(
-                detail.id, WorkflowExecute(inputs={})
-            )
+            ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
             status = await _wait_for_execution(workflow_engine, ex.id, timeout=30.0)
             return status
 
@@ -169,22 +174,23 @@ class TestWorkflowConcurrency:
 
         completed = sum(1 for s in statuses if s == "completed")
         rate = concurrency / elapsed
-        print(f"\n  [{concurrency} concurrent workflows] "
-              f"{concurrency} in {elapsed:.2f}s → {rate:.1f} exec/s")
+        print(
+            f"\n  [{concurrency} concurrent workflows] "
+            f"{concurrency} in {elapsed:.2f}s → {rate:.1f} exec/s"
+        )
         assert completed == concurrency, f"Got {completed}/{concurrency} completed"
 
     async def test_many_node_workflow(self, workflow_engine):
         """Execute a workflow with many nodes (50-node chain)."""
         nodes, edges = _make_workflow_nodes(50)
-        wc = WorkflowCreate(name="big-wf", description="", nodes=nodes, edges=edges,
-                            created_by="test")
+        wc = WorkflowCreate(
+            name="big-wf", description="", nodes=nodes, edges=edges, created_by="test"
+        )
         detail = await workflow_engine.create_workflow(wc)
         _activate_workflow(workflow_engine, detail.id)
 
         start = time.monotonic()
-        ex = await workflow_engine.execute_workflow(
-            detail.id, WorkflowExecute(inputs={})
-        )
+        ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
         status = await _wait_for_execution(workflow_engine, ex.id, timeout=60.0)
         elapsed = time.monotonic() - start
 
@@ -195,24 +201,22 @@ class TestWorkflowConcurrency:
     async def test_throughput_vs_size(self, workflow_engine, node_count):
         """Measure throughput as node count increases."""
         nodes, edges = _make_workflow_nodes(node_count)
-        wc = WorkflowCreate(name=f"perf-{node_count}", description="",
-                            nodes=nodes, edges=edges, created_by="test")
+        wc = WorkflowCreate(
+            name=f"perf-{node_count}", description="", nodes=nodes, edges=edges, created_by="test"
+        )
         detail = await workflow_engine.create_workflow(wc)
         _activate_workflow(workflow_engine, detail.id)
 
         start = time.monotonic()
         for _ in range(5):
-            ex = await workflow_engine.execute_workflow(
-                detail.id, WorkflowExecute(inputs={})
-            )
+            ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
             status = await _wait_for_execution(workflow_engine, ex.id, timeout=60.0)
             assert status == "completed", f"Got {status}"
         elapsed = time.monotonic() - start
         avg = elapsed / 5
         throughput = 1.0 / avg if avg > 0 else float("inf")
 
-        print(f"\n  [{node_count} nodes × 5 runs] avg {avg:.3f}s/exec, "
-              f"{throughput:.1f} exec/s")
+        print(f"\n  [{node_count} nodes × 5 runs] avg {avg:.3f}s/exec, {throughput:.1f} exec/s")
         assert avg < 30.0, f"Avg execution took {avg:.1f}s — too slow"
 
 
@@ -228,15 +232,14 @@ class TestPipelineConcurrency:
     async def test_concurrent_executions(self, pipeline_engine, concurrency):
         """Run many simple pipelines concurrently."""
         stages = _make_pipeline_stages(3)
-        pc = PipelineCreate(name="stress", description="", stages=stages,
-                            edges=[], created_by="test")
+        pc = PipelineCreate(
+            name="stress", description="", stages=stages, edges=[], created_by="test"
+        )
         detail = await pipeline_engine.create_pipeline(pc)
         _activate_pipeline(pipeline_engine, detail.id)
 
         async def exec_one():
-            ex = await pipeline_engine.execute_pipeline(
-                detail.id, PipelineExecute(inputs={})
-            )
+            ex = await pipeline_engine.execute_pipeline(detail.id, PipelineExecute(inputs={}))
             status = await _wait_for_execution(pipeline_engine, ex.id, timeout=30.0)
             return status
 
@@ -246,22 +249,23 @@ class TestPipelineConcurrency:
 
         completed = sum(1 for s in statuses if s == "completed")
         rate = concurrency / elapsed
-        print(f"\n  [{concurrency} concurrent pipelines] "
-              f"{concurrency} in {elapsed:.2f}s → {rate:.1f} exec/s")
+        print(
+            f"\n  [{concurrency} concurrent pipelines] "
+            f"{concurrency} in {elapsed:.2f}s → {rate:.1f} exec/s"
+        )
         assert completed == concurrency, f"Got {completed}/{concurrency} completed"
 
     async def test_many_stage_pipeline(self, pipeline_engine):
         """Execute a pipeline with many stages (50-stage chain)."""
         stages = _make_pipeline_stages(50)
-        pc = PipelineCreate(name="big-pl", description="", stages=stages,
-                            edges=[], created_by="test")
+        pc = PipelineCreate(
+            name="big-pl", description="", stages=stages, edges=[], created_by="test"
+        )
         detail = await pipeline_engine.create_pipeline(pc)
         _activate_pipeline(pipeline_engine, detail.id)
 
         start = time.monotonic()
-        ex = await pipeline_engine.execute_pipeline(
-            detail.id, PipelineExecute(inputs={})
-        )
+        ex = await pipeline_engine.execute_pipeline(detail.id, PipelineExecute(inputs={}))
         status = await _wait_for_execution(pipeline_engine, ex.id, timeout=60.0)
         elapsed = time.monotonic() - start
 
@@ -271,21 +275,26 @@ class TestPipelineConcurrency:
     async def test_concurrent_with_retries(self, pipeline_engine):
         """Stress retry mechanism under concurrency."""
         stages = [
-            PipelineStage(id="s1", type=StageType.AGENT, label="S1",
-                          config={"agent_id": "test-agent"}, retry_count=2,
-                          retry_delay_seconds=0),
-            PipelineStage(id="s2", type=StageType.AGENT, label="S2",
-                          config={"agent_id": "test-agent"}),
+            PipelineStage(
+                id="s1",
+                type=StageType.AGENT,
+                label="S1",
+                config={"agent_id": "test-agent"},
+                retry_count=2,
+                retry_delay_seconds=0,
+            ),
+            PipelineStage(
+                id="s2", type=StageType.AGENT, label="S2", config={"agent_id": "test-agent"}
+            ),
         ]
-        pc = PipelineCreate(name="retry-stress", description="", stages=stages,
-                            edges=[], created_by="test")
+        pc = PipelineCreate(
+            name="retry-stress", description="", stages=stages, edges=[], created_by="test"
+        )
         detail = await pipeline_engine.create_pipeline(pc)
         _activate_pipeline(pipeline_engine, detail.id)
 
         async def exec_one():
-            ex = await pipeline_engine.execute_pipeline(
-                detail.id, PipelineExecute(inputs={})
-            )
+            ex = await pipeline_engine.execute_pipeline(detail.id, PipelineExecute(inputs={}))
             status = await _wait_for_execution(pipeline_engine, ex.id, timeout=30.0)
             return status
 
@@ -418,8 +427,9 @@ class TestMixedLoad:
     """End-to-end load with engines + observability simultaneously."""
 
     @pytest.mark.parametrize("n", [5, 10])
-    async def test_engines_under_observability(self, bus, mock_provider_router,
-                                                mock_agent_registry, n):
+    async def test_engines_under_observability(
+        self, bus, mock_provider_router, mock_agent_registry, n
+    ):
         """Run engines while observability records everything."""
         metrics = InMemoryMetrics()
         tracing = InMemoryTracing()
@@ -429,14 +439,16 @@ class TestMixedLoad:
         pe = PipelineEngineImpl(bus, mock_provider_router, mock_agent_registry)
 
         nodes, edges = _make_workflow_nodes(5)
-        wc = WorkflowCreate(name="mixed", description="",
-                            nodes=nodes, edges=edges, created_by="test")
+        wc = WorkflowCreate(
+            name="mixed", description="", nodes=nodes, edges=edges, created_by="test"
+        )
         wf_detail = await we.create_workflow(wc)
         _activate_workflow(we, wf_detail.id)
 
         stages = _make_pipeline_stages(5)
-        pc = PipelineCreate(name="mixed-pl", description="", stages=stages,
-                            edges=[], created_by="test")
+        pc = PipelineCreate(
+            name="mixed-pl", description="", stages=stages, edges=[], created_by="test"
+        )
         pl_detail = await pe.create_pipeline(pc)
         _activate_pipeline(pe, pl_detail.id)
 
@@ -468,8 +480,10 @@ class TestMixedLoad:
 
         completed = sum(1 for r in all_results if r == "completed")
         total = len(all_results)
-        print(f"\n  [{n} workflows + {n} pipelines] {total} in {elapsed:.2f}s — "
-              f"{completed}/{total} completed")
+        print(
+            f"\n  [{n} workflows + {n} pipelines] {total} in {elapsed:.2f}s — "
+            f"{completed}/{total} completed"
+        )
 
         assert completed == total
         ws = metrics.get_metric("workflow_starts")
@@ -493,27 +507,26 @@ class TestEdgeCaseStress:
             WorkflowNode(id="end", type=NodeType.END, label="End"),
         ]
         edges = [WorkflowEdge(id="e1", source="start", target="end")]
-        wc = WorkflowCreate(name="empty", description="", nodes=nodes, edges=edges,
-                            created_by="test")
+        wc = WorkflowCreate(
+            name="empty", description="", nodes=nodes, edges=edges, created_by="test"
+        )
         detail = await workflow_engine.create_workflow(wc)
         _activate_workflow(workflow_engine, detail.id)
-        ex = await workflow_engine.execute_workflow(
-            detail.id, WorkflowExecute(inputs={})
-        )
+        ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
         status = await _wait_for_execution(workflow_engine, ex.id, timeout=30.0)
         assert status == "completed"
 
     async def test_single_stage_pipeline(self, pipeline_engine):
         """A pipeline with a single stage."""
-        stages = [PipelineStage(id="solo", type=StageType.AGENT, label="Solo",
-                                config={"agent_id": "test-agent"})]
-        pc = PipelineCreate(name="solo", description="", stages=stages,
-                            edges=[], created_by="test")
+        stages = [
+            PipelineStage(
+                id="solo", type=StageType.AGENT, label="Solo", config={"agent_id": "test-agent"}
+            )
+        ]
+        pc = PipelineCreate(name="solo", description="", stages=stages, edges=[], created_by="test")
         detail = await pipeline_engine.create_pipeline(pc)
         _activate_pipeline(pipeline_engine, detail.id)
-        ex = await pipeline_engine.execute_pipeline(
-            detail.id, PipelineExecute(inputs={})
-        )
+        ex = await pipeline_engine.execute_pipeline(detail.id, PipelineExecute(inputs={}))
         status = await _wait_for_execution(pipeline_engine, ex.id, timeout=30.0)
         assert status == "completed"
 
@@ -521,28 +534,26 @@ class TestEdgeCaseStress:
         """Rapidly create, execute, and delete workflows."""
         for i in range(20):
             nodes, edges = _make_workflow_nodes(2)
-            wc = WorkflowCreate(name=f"rapid-{i}", description="",
-                                nodes=nodes, edges=edges, created_by="test")
+            wc = WorkflowCreate(
+                name=f"rapid-{i}", description="", nodes=nodes, edges=edges, created_by="test"
+            )
             detail = await workflow_engine.create_workflow(wc)
             _activate_workflow(workflow_engine, detail.id)
-            ex = await workflow_engine.execute_workflow(
-                detail.id, WorkflowExecute(inputs={})
-            )
+            ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
             status = await _wait_for_execution(workflow_engine, ex.id, timeout=30.0)
             assert status == "completed"
 
     async def test_concurrent_same_workflow(self, workflow_engine):
         """Multiple concurrent executions of the same workflow."""
         nodes, edges = _make_workflow_nodes(3)
-        wc = WorkflowCreate(name="shared", description="",
-                            nodes=nodes, edges=edges, created_by="test")
+        wc = WorkflowCreate(
+            name="shared", description="", nodes=nodes, edges=edges, created_by="test"
+        )
         detail = await workflow_engine.create_workflow(wc)
         _activate_workflow(workflow_engine, detail.id)
 
         async def exec_one():
-            ex = await workflow_engine.execute_workflow(
-                detail.id, WorkflowExecute(inputs={})
-            )
+            ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
             status = await _wait_for_execution(workflow_engine, ex.id, timeout=30.0)
             return status
 
@@ -562,8 +573,7 @@ class TestThroughput:
     async def test_workflow_throughput(self, workflow_engine):
         """Measure baseline workflow execution throughput."""
         nodes, edges = _make_workflow_nodes(3)
-        wc = WorkflowCreate(name="tp", description="", nodes=nodes, edges=edges,
-                            created_by="test")
+        wc = WorkflowCreate(name="tp", description="", nodes=nodes, edges=edges, created_by="test")
         detail = await workflow_engine.create_workflow(wc)
         _activate_workflow(workflow_engine, detail.id)
 
@@ -571,9 +581,7 @@ class TestThroughput:
         for _ in range(3):
             start = time.monotonic()
             for _ in range(10):
-                ex = await workflow_engine.execute_workflow(
-                    detail.id, WorkflowExecute(inputs={})
-                )
+                ex = await workflow_engine.execute_workflow(detail.id, WorkflowExecute(inputs={}))
                 status = await _wait_for_execution(workflow_engine, ex.id, timeout=30.0)
                 assert status == "completed"
             elapsed = time.monotonic() - start
@@ -586,8 +594,9 @@ class TestThroughput:
     async def test_pipeline_throughput(self, pipeline_engine):
         """Measure baseline pipeline execution throughput."""
         stages = _make_pipeline_stages(3)
-        pc = PipelineCreate(name="tp-pl", description="", stages=stages,
-                            edges=[], created_by="test")
+        pc = PipelineCreate(
+            name="tp-pl", description="", stages=stages, edges=[], created_by="test"
+        )
         detail = await pipeline_engine.create_pipeline(pc)
         _activate_pipeline(pipeline_engine, detail.id)
 
@@ -595,9 +604,7 @@ class TestThroughput:
         for _ in range(3):
             start = time.monotonic()
             for _ in range(10):
-                ex = await pipeline_engine.execute_pipeline(
-                    detail.id, PipelineExecute(inputs={})
-                )
+                ex = await pipeline_engine.execute_pipeline(detail.id, PipelineExecute(inputs={}))
                 status = await _wait_for_execution(pipeline_engine, ex.id, timeout=30.0)
                 assert status == "completed"
             elapsed = time.monotonic() - start

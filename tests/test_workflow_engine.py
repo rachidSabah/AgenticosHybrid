@@ -24,14 +24,12 @@ from agentic_os.domain.workflow import (
     WorkflowStatus,
 )
 from agentic_os.ports.workflow import (
-    ValidationResult,
     WorkflowApproval,
     WorkflowCreate,
     WorkflowExecute,
     WorkflowReplay,
     WorkflowUpdate,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -74,8 +72,9 @@ def sample_node_start():
 
 @pytest.fixture
 def sample_node_agent():
-    return WorkflowNode(id="agent1", type=NodeType.AGENT, label="Agent 1",
-                        config={"agent_id": "test-agent"})
+    return WorkflowNode(
+        id="agent1", type=NodeType.AGENT, label="Agent 1", config={"agent_id": "test-agent"}
+    )
 
 
 @pytest.fixture
@@ -101,8 +100,12 @@ def _make_approval_workflow() -> WorkflowCreate:
     """Create a workflow with an approval gate (won't auto-complete)."""
     nodes = [
         WorkflowNode(id="start", type=NodeType.START, label="Start"),
-        WorkflowNode(id="approval", type=NodeType.APPROVAL, label="Review",
-                     config={"context": {"message": "OK?"}}),
+        WorkflowNode(
+            id="approval",
+            type=NodeType.APPROVAL,
+            label="Review",
+            config={"context": {"message": "OK?"}},
+        ),
         WorkflowNode(id="end", type=NodeType.END, label="End"),
     ]
     edges = [
@@ -176,12 +179,15 @@ class TestCRUD:
 
     async def test_update_workflow_new_version(self, engine, sample_workflow_create):
         created = await engine.create_workflow(sample_workflow_create)
-        new_node = WorkflowNode(id="agent2", type=NodeType.AGENT, label="Agent 2",
-                                config={"agent_id": "test-agent"})
+        new_node = WorkflowNode(
+            id="agent2", type=NodeType.AGENT, label="Agent 2", config={"agent_id": "test-agent"}
+        )
         updated = await engine.update_workflow(
             created.id,
-            WorkflowUpdate(nodes=[created.nodes[0], created.nodes[1], new_node, created.nodes[2]],
-                           updated_by="tester"),
+            WorkflowUpdate(
+                nodes=[created.nodes[0], created.nodes[1], new_node, created.nodes[2]],
+                updated_by="tester",
+            ),
         )
         assert updated.version == 2  # New version for structural changes
         assert len(updated.nodes) == 4
@@ -286,20 +292,20 @@ class TestValidation:
 class TestExecution:
     """Test workflow execution."""
 
-    async def test_execute_workflow_creates_execution(self, engine,
-                                                      sample_workflow_create):
+    async def test_execute_workflow_creates_execution(self, engine, sample_workflow_create):
         created = await engine.create_workflow(sample_workflow_create)
         # Activate first
         wf = engine._workflows[created.id].activate()
         engine._workflows[created.id] = wf
 
-        execution = await engine.execute_workflow(created.id, WorkflowExecute(inputs={"key": "val"}))
+        execution = await engine.execute_workflow(
+            created.id, WorkflowExecute(inputs={"key": "val"})
+        )
         assert execution.workflow_id == created.id
         assert execution.status == WorkflowExecutionStatus.PENDING
         assert execution.inputs == {"key": "val"}
 
-    async def test_execute_inactive_workflow_raises(self, engine,
-                                                    sample_workflow_create):
+    async def test_execute_inactive_workflow_raises(self, engine, sample_workflow_create):
         created = await engine.create_workflow(sample_workflow_create)
         # DRAFT, not ACTIVE
         with pytest.raises(ValueError, match="not active"):
@@ -309,8 +315,7 @@ class TestExecution:
         with pytest.raises(ValueError, match="not found"):
             await engine.execute_workflow("missing", WorkflowExecute())
 
-    async def test_execution_runs_to_completion(self, engine,
-                                                sample_workflow_create):
+    async def test_execution_runs_to_completion(self, engine, sample_workflow_create):
         created = await engine.create_workflow(sample_workflow_create)
         wf = engine._workflows[created.id].activate()
         engine._workflows[created.id] = wf
@@ -345,8 +350,8 @@ class TestExecution:
         wf = engine._workflows[created.id].activate()
         engine._workflows[created.id] = wf
 
-        exec1 = await engine.execute_workflow(created.id, WorkflowExecute())
-        exec2 = await engine.execute_workflow(created.id, WorkflowExecute())
+        exec1 = await engine.execute_workflow(created.id, WorkflowExecute())  # noqa: F841
+        exec2 = await engine.execute_workflow(created.id, WorkflowExecute())  # noqa: F841
         await anyio.sleep(0.5)
 
         executions = await engine.get_workflow_executions(created.id)
@@ -367,8 +372,12 @@ class TestExecution:
         """Execute a workflow with a condition node."""
         nodes = [
             WorkflowNode(id="start", type=NodeType.START, label="Start"),
-            WorkflowNode(id="cond", type=NodeType.CONDITION, label="Check",
-                         config={"condition": {"type": "always_true"}}),
+            WorkflowNode(
+                id="cond",
+                type=NodeType.CONDITION,
+                label="Check",
+                config={"condition": {"type": "always_true"}},
+            ),
             WorkflowNode(id="end", type=NodeType.END, label="End"),
         ]
         edges = [
@@ -416,8 +425,9 @@ class TestNodeExecution:
         assert result["result"] == {"prev": "result"}
 
     async def test_agent_node(self, engine):
-        node = WorkflowNode(id="agent1", type=NodeType.AGENT, label="Agent",
-                            config={"agent_id": "test-agent"})
+        node = WorkflowNode(
+            id="agent1", type=NodeType.AGENT, label="Agent", config={"agent_id": "test-agent"}
+        )
         exec_mock = MagicMock(spec=WorkflowExecution)
         exec_mock.inputs = {}
         exec_mock.node_outputs = {}
@@ -437,8 +447,9 @@ class TestNodeExecution:
             await engine._execute_node(node, exec_mock, wf_mock)
 
     async def test_agent_node_agent_not_found(self, engine, mock_agent_registry):
-        node = WorkflowNode(id="agent1", type=NodeType.AGENT, label="Agent",
-                            config={"agent_id": "missing"})
+        node = WorkflowNode(
+            id="agent1", type=NodeType.AGENT, label="Agent", config={"agent_id": "missing"}
+        )
         mock_agent_registry.get_agent.return_value = None
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
@@ -447,8 +458,9 @@ class TestNodeExecution:
             await engine._execute_node(node, exec_mock, wf_mock)
 
     async def test_tool_node(self, engine):
-        node = WorkflowNode(id="tool1", type=NodeType.TOOL, label="Tool",
-                            config={"tool": "test-tool"})
+        node = WorkflowNode(
+            id="tool1", type=NodeType.TOOL, label="Tool", config={"tool": "test-tool"}
+        )
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
 
@@ -465,8 +477,12 @@ class TestNodeExecution:
             await engine._execute_node(node, exec_mock, wf_mock)
 
     async def test_approval_node_raises(self, engine):
-        node = WorkflowNode(id="approval1", type=NodeType.APPROVAL, label="Approve",
-                            config={"context": {"message": "Needs review"}})
+        node = WorkflowNode(
+            id="approval1",
+            type=NodeType.APPROVAL,
+            label="Approve",
+            config={"context": {"message": "Needs review"}},
+        )
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
 
@@ -475,8 +491,12 @@ class TestNodeExecution:
         assert exc_info.value.context["message"] == "Needs review"
 
     async def test_condition_node(self, engine):
-        node = WorkflowNode(id="cond1", type=NodeType.CONDITION, label="Check",
-                            config={"condition": {"type": "always_true"}})
+        node = WorkflowNode(
+            id="cond1",
+            type=NodeType.CONDITION,
+            label="Check",
+            config={"condition": {"type": "always_true"}},
+        )
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
 
@@ -484,8 +504,12 @@ class TestNodeExecution:
         assert result["condition_result"] is True
 
     async def test_parallel_node(self, engine):
-        node = WorkflowNode(id="par1", type=NodeType.PARALLEL, label="Parallel",
-                            config={"children": ["child1", "child2"]})
+        node = WorkflowNode(
+            id="par1",
+            type=NodeType.PARALLEL,
+            label="Parallel",
+            config={"children": ["child1", "child2"]},
+        )
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
 
@@ -494,8 +518,9 @@ class TestNodeExecution:
         assert "child1" in result["children"]
 
     async def test_subworkflow_node(self, engine):
-        node = WorkflowNode(id="sub1", type=NodeType.SUBWORKFLOW, label="Sub",
-                            subworkflow_id="sub-wf-1")
+        node = WorkflowNode(
+            id="sub1", type=NodeType.SUBWORKFLOW, label="Sub", subworkflow_id="sub-wf-1"
+        )
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
 
@@ -503,8 +528,7 @@ class TestNodeExecution:
         assert result["subworkflow"] == "sub-wf-1"
 
     async def test_llm_node(self, engine):
-        node = WorkflowNode(id="llm1", type=NodeType.LLM, label="LLM",
-                            config={"prompt": "Hello"})
+        node = WorkflowNode(id="llm1", type=NodeType.LLM, label="LLM", config={"prompt": "Hello"})
         exec_mock = MagicMock(spec=WorkflowExecution)
         wf_mock = MagicMock(spec=Workflow)
 
@@ -532,8 +556,12 @@ class TestControl:
         """Cancel a workflow that's awaiting approval (doesn't auto-complete)."""
         nodes = [
             WorkflowNode(id="start", type=NodeType.START, label="Start"),
-            WorkflowNode(id="approval", type=NodeType.APPROVAL, label="Review",
-                         config={"context": {"message": "OK?"}}),
+            WorkflowNode(
+                id="approval",
+                type=NodeType.APPROVAL,
+                label="Review",
+                config={"context": {"message": "OK?"}},
+            ),
             WorkflowNode(id="end", type=NodeType.END, label="End"),
         ]
         edges = [
@@ -622,8 +650,12 @@ class TestApproval:
         """Workflow with approval node: approve to complete."""
         nodes = [
             WorkflowNode(id="start", type=NodeType.START, label="Start"),
-            WorkflowNode(id="approval", type=NodeType.APPROVAL, label="Review",
-                         config={"context": {"message": "OK?"}}),
+            WorkflowNode(
+                id="approval",
+                type=NodeType.APPROVAL,
+                label="Review",
+                config={"context": {"message": "OK?"}},
+            ),
             WorkflowNode(id="end", type=NodeType.END, label="End"),
         ]
         edges = [
@@ -645,8 +677,9 @@ class TestApproval:
             # Approve it
             approved = await engine.approve_workflow(
                 created.id,
-                WorkflowApproval(node_id="approval", approved=True,
-                                 decided_by="admin", reason="Looks good"),
+                WorkflowApproval(
+                    node_id="approval", approved=True, decided_by="admin", reason="Looks good"
+                ),
             )
             assert approved.status == WorkflowExecutionStatus.RUNNING
 
@@ -654,8 +687,12 @@ class TestApproval:
         """Workflow with approval node: deny to fail."""
         nodes = [
             WorkflowNode(id="start", type=NodeType.START, label="Start"),
-            WorkflowNode(id="approval", type=NodeType.APPROVAL, label="Review",
-                         config={"context": {"message": "OK?"}}),
+            WorkflowNode(
+                id="approval",
+                type=NodeType.APPROVAL,
+                label="Review",
+                config={"context": {"message": "OK?"}},
+            ),
         ]
         edges = [WorkflowEdge(id="e1", source="start", target="approval")]
         wf_create = WorkflowCreate(name="Deny Test", description="", nodes=nodes, edges=edges)
@@ -671,8 +708,9 @@ class TestApproval:
         if stored.status == WorkflowExecutionStatus.AWAITING_APPROVAL:
             denied = await engine.approve_workflow(
                 created.id,
-                WorkflowApproval(node_id="approval", approved=False,
-                                 decided_by="admin", reason="Not ready"),
+                WorkflowApproval(
+                    node_id="approval", approved=False, decided_by="admin", reason="Not ready"
+                ),
             )
             assert denied.status == WorkflowExecutionStatus.FAILED
             assert "Not ready" in (denied.error or "")
@@ -750,8 +788,9 @@ class TestErrorHandling:
         """Workflow with a node that fails should end in FAILED status."""
         nodes = [
             WorkflowNode(id="start", type=NodeType.START, label="Start"),
-            WorkflowNode(id="agent1", type=NodeType.AGENT, label="Agent",
-                         config={"agent_id": "test-agent"}),
+            WorkflowNode(
+                id="agent1", type=NodeType.AGENT, label="Agent", config={"agent_id": "test-agent"}
+            ),
             WorkflowNode(id="end", type=NodeType.END, label="End"),
         ]
         edges = [
@@ -779,7 +818,7 @@ class TestErrorHandling:
         wf = engine._workflows[created.id].activate()
         engine._workflows[created.id] = wf
 
-        execution = await engine.execute_workflow(created.id, WorkflowExecute())
+        execution = await engine.execute_workflow(created.id, WorkflowExecute())  # noqa: F841
         await anyio.sleep(0.5)
 
         # Should not crash the engine
@@ -860,14 +899,18 @@ class TestConcurrency:
         wf_ids = []
         for i in range(3):
             nodes = [
-                WorkflowNode(id=f"start", type=NodeType.START, label="Start"),
-                WorkflowNode(id=f"agent", type=NodeType.AGENT, label=f"Agent {i}",
-                             config={"agent_id": "test-agent"}),
-                WorkflowNode(id=f"end", type=NodeType.END, label="End"),
+                WorkflowNode(id="start", type=NodeType.START, label="Start"),
+                WorkflowNode(
+                    id="agent",
+                    type=NodeType.AGENT,
+                    label=f"Agent {i}",
+                    config={"agent_id": "test-agent"},
+                ),
+                WorkflowNode(id="end", type=NodeType.END, label="End"),
             ]
             edges = [
-                WorkflowEdge(id=f"e1", source="start", target="agent"),
-                WorkflowEdge(id=f"e2", source="agent", target="end"),
+                WorkflowEdge(id="e1", source="start", target="agent"),
+                WorkflowEdge(id="e2", source="agent", target="end"),
             ]
             wf_create = WorkflowCreate(name=f"WF {i}", description="", nodes=nodes, edges=edges)
             created = await engine.create_workflow(wf_create)
@@ -884,7 +927,9 @@ class TestConcurrency:
         for exec_ in executions:
             updated = await engine.get_execution(exec_.id)
             assert updated is not None
-            assert updated.status == WorkflowExecutionStatus.COMPLETED, f"Exec {exec_.id} failed: {updated.error}"
+            assert updated.status == WorkflowExecutionStatus.COMPLETED, (
+                f"Exec {exec_.id} failed: {updated.error}"
+            )
 
 
 # ---------------------------------------------------------------------------

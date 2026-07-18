@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -173,9 +173,7 @@ class TestCorrelationContext:
         assert cc.baggage == {"user": "alice", "env": "prod"}
 
     def test_to_dict(self) -> None:
-        cc = CorrelationContext(
-            trace_id="abc", span_id="def", baggage={"k": "v"}
-        )
+        cc = CorrelationContext(trace_id="abc", span_id="def", baggage={"k": "v"})
         d = cc.to_dict()
         assert d == {"trace_id": "abc", "span_id": "def", "baggage": {"k": "v"}}
 
@@ -192,9 +190,7 @@ class TestCorrelationContext:
         assert cc.baggage == {}
 
     def test_from_dict_roundtrip(self) -> None:
-        original = CorrelationContext(
-            trace_id="abc", span_id="def", baggage={"env": "test"}
-        )
+        original = CorrelationContext(trace_id="abc", span_id="def", baggage={"env": "test"})
         restored = CorrelationContext.from_dict(original.to_dict())
         assert restored == original
 
@@ -223,14 +219,14 @@ class TestSpanEvent:
         assert isinstance(event.timestamp, datetime)
 
     def test_creation_with_attributes(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         event = SpanEvent(name="ev", attributes={"key": "val"}, timestamp=now)
         assert event.name == "ev"
         assert event.attributes == {"key": "val"}
         assert event.timestamp is now
 
     def test_to_dict(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         event = SpanEvent(name="ev", attributes={"k": "v"}, timestamp=now)
         d = event.to_dict()
         assert d["name"] == "ev"
@@ -468,7 +464,7 @@ class TestMetric:
         assert metric.description is None
 
     def test_creation_with_all_fields(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         metric = Metric(
             name="latency",
             type=MetricType.HISTOGRAM,
@@ -488,7 +484,7 @@ class TestMetric:
         assert metric.type is MetricType.SUMMARY
 
     def test_to_dict(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         metric = Metric(
             name="mem",
             type=MetricType.GAUGE,
@@ -529,7 +525,7 @@ class TestLogEntry:
         assert entry.correlation_context is None
 
     def test_creation_with_all_fields(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cc = CorrelationContext(trace_id="t", span_id="s")
         entry = LogEntry(
             level="error",
@@ -544,7 +540,7 @@ class TestLogEntry:
         assert entry.correlation_context is cc
 
     def test_to_dict(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cc = CorrelationContext(trace_id="t", span_id="s", baggage={"k": "v"})
         entry = LogEntry(
             level="warn",
@@ -581,7 +577,7 @@ class TestHealthCheck:
         assert isinstance(hc.timestamp, datetime)
 
     def test_creation_with_all_fields(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         hc = HealthCheck(
             component="api",
             healthy=False,
@@ -596,7 +592,7 @@ class TestHealthCheck:
         assert hc.timestamp is now
 
     def test_to_dict(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         hc = HealthCheck(
             component="cache",
             healthy=True,

@@ -124,9 +124,7 @@ class OTelTracing(TracingPort):
                 span_id=int(parent.span_id, 16),
                 is_remote=False,
             )
-            otel_parent = trace.set_span_in_context(
-                trace.NonRecordingSpan(otel_ctx)
-            )
+            otel_parent = trace.set_span_in_context(trace.NonRecordingSpan(otel_ctx))
 
         # Start OTel span
         otel_span = self._tracer.start_span(
@@ -232,6 +230,7 @@ class OTelMetrics(MetricsPort):
         # Prometheus reader for /metrics endpoint
         if prometheus_port:
             from opentelemetry.exporter.prometheus import PrometheusMetricReader
+
             self._prometheus_reader = PrometheusMetricReader()
             readers.append(self._prometheus_reader)
             log.info("Prometheus metric reader configured")
@@ -249,6 +248,7 @@ class OTelMetrics(MetricsPort):
 
         provider = MeterProvider(resource=resource, metric_readers=readers)
         from opentelemetry.metrics import set_meter_provider
+
         set_meter_provider(provider)
         meter = provider.get_meter(self.service_name)
         self._meter = meter
@@ -363,6 +363,7 @@ class StructuredLogging(LoggingPort):
             contextvars.ContextVar("correlation_context", default=None)
         )
         from agentic_os.infrastructure.logging import get_logger
+
         self._logger = get_logger(logger_name)
 
     def log(self, entry: LogEntry) -> None:

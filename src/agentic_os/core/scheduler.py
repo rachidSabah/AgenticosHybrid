@@ -28,7 +28,7 @@ class Scheduler:
         for t in self._tasks:
             try:
                 await t
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError, Exception:
                 pass
         self._tasks.clear()
 

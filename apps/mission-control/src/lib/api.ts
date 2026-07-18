@@ -33,6 +33,16 @@ async function post<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function put<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`PUT ${path} -> ${res.status}`);
+  return (await res.json()) as T;
+}
+
 async function del<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`DELETE ${path} -> ${res.status}`);
@@ -106,4 +116,29 @@ export const api = {
     post<{ decided: string }>(`/api/security/approval/${requestId}/decide`, { approved, by }),
   workspaceFor: (agentId: string) =>
     get<{ agent_id: string; workspace: string }>(`/api/security/workspace/${agentId}`),
+
+  // ── Discovery API (Phase 4, M2) ──
+
+  discoveryProviders: () => get<import("./types").DiscoveryProviderInfo[]>("/api/discovery/providers"),
+  enableProvider: (name: string, body: { enabled: boolean }) =>
+    put<import("./types").DiscoveryProviderInfo>(`/api/discovery/providers/${name}`, body),
+  runDiscoveryScan: (profile?: string) =>
+    post<{ profile: string; engines_found: number; engines_registered: number }>("/api/discovery/scan", profile ? { profile } : undefined),
+  discoveryCache: () => get<import("./types").DiscoveryCacheEntry[]>("/api/discovery/cache"),
+  clearDiscoveryCache: () => del<{ cleared: number }>("/api/discovery/cache"),
+  discoveryHistory: (limit = 50) =>
+    get<import("./types").DiscoveryHistoryEntry[]>(`/api/discovery/history?limit=${limit}`),
+  discoveryStats: () => get<import("./types").DiscoveryStats>("/api/discovery/stats"),
+  discoveryProfiles: () => get<import("./types").DiscoveryProfileEntry[]>("/api/discovery/profiles"),
+  createDiscoveryProfile: (body: { name: string; description?: string; provider_configs?: import("./types").DiscoveryProviderConfig[] }) =>
+    post<import("./types").DiscoveryProfileEntry>("/api/discovery/profiles", body),
+  getDiscoveryProfile: (name: string) => get<import("./types").DiscoveryProfileEntry>(`/api/discovery/profiles/${encodeURIComponent(name)}`),
+  deleteDiscoveryProfile: (name: string) => del<{ deleted: boolean }>(`/api/discovery/profiles/${encodeURIComponent(name)}`),
+  activateDiscoveryProfile: (name: string) =>
+    post<{ activated: string }>(`/api/discovery/profiles/${encodeURIComponent(name)}/activate`),
+  validateEngine: (engineId: string) =>
+    post<import("./types").DiscoveryValidationEntry[]>(`/api/discovery/engines/${encodeURIComponent(engineId)}/validate`),
+  startHotReload: () => post<{ status: string }>("/api/discovery/hot-reload/start"),
+  stopHotReload: () => post<{ status: string }>("/api/discovery/hot-reload/stop"),
+  hotReloadStatus: () => get<import("./types").HotReloadStatus>("/api/discovery/hot-reload/status"),
 };

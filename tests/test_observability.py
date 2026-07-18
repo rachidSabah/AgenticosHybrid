@@ -7,11 +7,8 @@ and the factory function create_observability_stack.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Any
 from unittest.mock import MagicMock, patch
 
-import anyio
 import pytest
 
 from agentic_os.core.observability import (
@@ -48,10 +45,7 @@ from agentic_os.domain.observability import (
     SpanContext,
     SpanEvent,
     SpanKind,
-    SpanStatus,
-    Trace,
 )
-
 
 # =========================================================================
 # InMemoryTracing Tests
@@ -722,8 +716,10 @@ class TestOTelTracing:
             mock_ctx_span = MagicMock()
             mock_ctx_span.get_span_context.return_value = mock_sc
 
-            with patch("agentic_os.core.observability.tracing.trace.get_current_span",
-                       return_value=mock_ctx_span):
+            with patch(
+                "agentic_os.core.observability.tracing.trace.get_current_span",
+                return_value=mock_ctx_span,
+            ):
                 mock_extract.return_value = mock_ctx
                 result = tracing.extract_context({"traceparent": "test"})
                 assert result is not None
@@ -757,7 +753,10 @@ class TestOTelTracing:
         # Replace OTel span with a spec'd mock so isinstance passes
         mock_otel = MagicMock(spec=OtelSpanType)
         mock_otel.get_span_context.return_value = MagicMock(
-            trace_id=12345, span_id=67890, trace_flags=1, trace_state=None,
+            trace_id=12345,
+            span_id=67890,
+            trace_flags=1,
+            trace_state=None,
         )
         tracing._otel_spans[span_with_event.context.span_id] = mock_otel
 
@@ -807,6 +806,7 @@ class TestOTelStructuredLogging:
     @pytest.fixture
     def logging(self):
         from agentic_os.core.observability.otel import StructuredLogging
+
         return StructuredLogging("otel-test")
 
     def test_debug(self, logging):
@@ -882,29 +882,21 @@ class TestGlobalAccessors:
             assert metrics is not None
 
     def test_configure_tracing(self):
-        with patch(
-            "agentic_os.core.observability.tracing.OTelTracing"
-        ) as mock_cls:
+        with patch("agentic_os.core.observability.tracing.OTelTracing") as mock_cls:
             mock_instance = MagicMock()
             mock_cls.return_value = mock_instance
             with patch("agentic_os.core.observability.tracing.TracerProvider"):
-                with patch(
-                    "agentic_os.core.observability.tracing.trace.get_tracer"
-                ) as gt:
+                with patch("agentic_os.core.observability.tracing.trace.get_tracer") as gt:
                     gt.return_value = MagicMock()
                     tracing = configure_tracing("test-svc")
                     assert tracing is not None
 
     def test_get_tracing(self):
-        with patch(
-            "agentic_os.core.observability.tracing.OTelTracing"
-        ) as mock_cls:
+        with patch("agentic_os.core.observability.tracing.OTelTracing") as mock_cls:
             mock_instance = MagicMock()
             mock_cls.return_value = mock_instance
             with patch("agentic_os.core.observability.tracing.TracerProvider"):
-                with patch(
-                    "agentic_os.core.observability.tracing.trace.get_tracer"
-                ) as gt:
+                with patch("agentic_os.core.observability.tracing.trace.get_tracer") as gt:
                     gt.return_value = MagicMock()
                     tracing = get_tracing()
                     assert tracing is not None
