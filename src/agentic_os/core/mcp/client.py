@@ -1,11 +1,9 @@
 """
 MCP Client Implementation
 
-Handles stdio and SSE transport connections to MCP servers.
-Provides capability negotiation, tool listing, and tool invocation.
+Handles stdio, SSE, and Streamable HTTP transport connections to MCP servers.
+Provides capability negotiation, tool/resource/prompt management.
 """
-
-from __future__ import annotations
 
 import asyncio
 import json
@@ -13,10 +11,14 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
 from agentic_os.domain.mcp import (
+    MCPPrompt,
+    MCPResource,
+    MCPResourceTemplate,
     MCPServerConfig,
     MCPTool,
     MCPToolResult,
@@ -30,39 +32,62 @@ log = get_logger("mcp.client")
 MCP_PROTOCOL_VERSION = "2024-11-05"
 JSON_RPC_VERSION = "2.0"
 
+# Reconnection defaults
+_DEFAULT_MAX_RETRIES = 5
+_DEFAULT_BASE_DELAY = 1.0
+_DEFAULT_MAX_DELAY = 30.0
+
 
 @dataclass
 class MCPClient:
     """
-    MCP Client for communicating with MCP servers via stdio or SSE.
+    MCP Client for communicating with MCP servers via stdio, SSE, or Streamable HTTP.
 
     Supports:
     - stdio transport (subprocess with stdin/stdout JSON-RPC)
     - SSE transport (HTTP with Server-Sent Events)
+    - Streamable HTTP transport (HTTP POST with streaming responses)
     - Capability negotiation
     - Tool listing and invocation
+    - Resource listing, reading, and subscription
+    - Prompt listing and retrieval
     - Health checks
+    - Automatic reconnection with exponential backoff
     """
 
     config: MCPServerConfig
     _process: subprocess.Popen | None = field(default=None, init=False, repr=False)
-    _sse_client: httpx.AsyncClient | None = field(default=None, init=False, repr=False)
+    _http_client: httpx.AsyncClient | None = field(default=None, init=False, repr=False)
     _sse_task: asyncio.Task | None = field(default=None, init=False, repr=False)
     _request_id: int = field(default=0, init=False, repr=False)
     _pending_requests: dict[int, asyncio.Future] = field(
         default_factory=dict, init=False, repr=False
     )
     _tools: list[MCPTool] = field(default_factory=list, init=False, repr=False)
+    _resources: list[MCPResource] = field(default_factory=list, init=False, repr=False)
+    _resource_templates: list[MCPResourceTemplate] = field(
+        default_factory=list, init=False, repr=False
+    )
+    _prompts: list[MCPPrompt] = field(default_factory=list, init=False, repr=False)
     _connected: bool = field(default=False, init=False, repr=False)
     _capabilities: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+    _server_capabilities: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
     process_id: int | None = field(default=None, init=False, repr=False)
+    _reconnect_task: asyncio.Task | None = field(default=None, init=False, repr=False)
+    _retry_count: int = field(default=0, init=False, repr=False)
+    _session_id: str | None = field(default=None, init=False, repr=False)
+
+    # ── Connection ──────────────────────────────────────────────────────
 
     async def connect(self) -> dict[str, Any]:
         """Connect to the MCP server and perform initialization."""
+        self._session_id = uuid4().hex
         if self.config.transport == MCPTransport.STDIO:
             return await self._connect_stdio()
         elif self.config.transport == MCPTransport.SSE:
             return await self._connect_sse()
+        elif self.config.transport == MCPTransport.STREAMABLE_HTTP:
+            return await self._connect_streamable_http()
         else:
             raise ValueError(f"Unknown transport: {self.config.transport}")
 
@@ -71,11 +96,9 @@ class MCPClient:
         if not self.config.command:
             raise ValueError("No command configured for stdio transport")
 
-        # Prepare environment
         env = os.environ.copy()
         env.update(self.config.env)
 
-        # Start subprocess
         self._process = subprocess.Popen(
             [self.config.command, *self.config.args],
             stdin=subprocess.PIPE,
@@ -87,11 +110,9 @@ class MCPClient:
         )
         self.process_id = self._process.pid
 
-        # Start reader task
         self._connected = True
         asyncio.create_task(self._read_stdout())
 
-        # Send initialize request
         init_result = await self._send_request(
             "initialize",
             {
@@ -104,10 +125,10 @@ class MCPClient:
             },
         )
 
-        # Send initialized notification
         await self._send_notification("notifications/initialized", {})
 
-        self._capabilities = init_result.get("capabilities", {})
+        self._server_capabilities = init_result.get("capabilities", {})
+        self._capabilities = self._server_capabilities
         return init_result
 
     async def _connect_sse(self) -> dict[str, Any]:
@@ -115,14 +136,15 @@ class MCPClient:
         if not self.config.url:
             raise ValueError("No URL configured for SSE transport")
 
-        self._sse_client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
+        self._http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0),
+            headers=self.config.headers,
+        )
         self._connected = True
 
-        # Start SSE listener
         self._sse_task = asyncio.create_task(self._sse_listener())
 
-        # Send initialize via POST to /mcp
-        init_result = await self._send_sse_request(
+        init_result = await self._send_request(
             "initialize",
             {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
@@ -134,8 +156,47 @@ class MCPClient:
             },
         )
 
-        self._capabilities = init_result.get("capabilities", {})
+        await self._send_notification("notifications/initialized", {})
+
+        self._server_capabilities = init_result.get("capabilities", {})
+        self._capabilities = self._server_capabilities
         return init_result
+
+    async def _connect_streamable_http(self) -> dict[str, Any]:
+        """Connect via Streamable HTTP transport.
+
+        Uses HTTP POST with streaming response for bidirectional JSON-RPC.
+        Each request/response pair is a separate HTTP exchange with the
+        server streaming the response back as newline-delimited JSON.
+        """
+        if not self.config.url:
+            raise ValueError("No URL configured for Streamable HTTP transport")
+
+        self._http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0),
+            headers=self.config.headers,
+        )
+        self._connected = True
+
+        init_result = await self._send_request(
+            "initialize",
+            {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {
+                    "roots": {"listChanged": True},
+                    "sampling": {},
+                },
+                "clientInfo": {"name": "agentic-os-mcp-client", "version": "0.4.0"},
+            },
+        )
+
+        await self._send_notification("notifications/initialized", {})
+
+        self._server_capabilities = init_result.get("capabilities", {})
+        self._capabilities = self._server_capabilities
+        return init_result
+
+    # ── Stream readers ──────────────────────────────────────────────────
 
     async def _read_stdout(self) -> None:
         """Read stdout from stdio subprocess."""
@@ -155,17 +216,20 @@ class MCPClient:
                 log.error(f"Error reading from MCP server stdout: {e}")
                 break
 
-        # Process ended
         self._connected = False
+        if not self._reconnect_task or self._reconnect_task.done():
+            self._reconnect_task = asyncio.create_task(self._auto_reconnect())
 
     async def _sse_listener(self) -> None:
         """Listen for SSE events from the server."""
-        if not self._sse_client or not self.config.url:
+        if not self._http_client or not self.config.url:
             return
 
         try:
-            async with self._sse_client.stream(
-                "GET", f"{self.config.url}/sse", headers={"Accept": "text/event-stream"}
+            async with self._http_client.stream(
+                "GET",
+                f"{self.config.url}/sse",
+                headers={"Accept": "text/event-stream"},
             ) as response:
                 async for line in response.aiter_lines():
                     if not self._connected:
@@ -180,6 +244,10 @@ class MCPClient:
             log.error(f"SSE listener error: {e}")
         finally:
             self._connected = False
+            if not self._reconnect_task or self._reconnect_task.done():
+                self._reconnect_task = asyncio.create_task(self._auto_reconnect())
+
+    # ── Message handling ────────────────────────────────────────────────
 
     async def _handle_message(self, message: str) -> None:
         """Handle incoming JSON-RPC message."""
@@ -189,42 +257,74 @@ class MCPClient:
             log.warning(f"Failed to parse JSON-RPC message: {message[:200]}")
             return
 
-        # Response to a request
         if "id" in data and data["id"] is not None:
             request_id = data["id"]
             future = self._pending_requests.pop(request_id, None)
             if future:
                 if "error" in data:
-                    future.set_exception(Exception(data["error"].get("message", "Unknown error")))
+                    future.set_exception(
+                        Exception(data["error"].get("message", "Unknown error"))
+                    )
                 else:
                     future.set_result(data.get("result"))
             return
 
-        # Notification
         if "method" in data and "id" not in data:
             method = data["method"]
             params = data.get("params", {})
             await self._handle_notification(method, params)
             return
 
-        # Response without ID (shouldn't happen)
         log.warning(f"Received message without ID: {data}")
 
     async def _handle_notification(self, method: str, params: dict[str, Any]) -> None:
         """Handle incoming notifications."""
         if method == "notifications/tools/list_changed":
-            # Refresh tools
             await self.list_tools()
+        elif method == "notifications/resources/list_changed":
+            await self.list_resources()
+        elif method == "notifications/resources/subscription_change":
+            resource_uri = params.get("uri", "")
+            log.info(f"Resource changed: {resource_uri}")
         elif method == "notifications/roots/list_changed":
-            pass  # Handle roots change if needed
+            pass
         else:
             log.debug(f"Unhandled notification: {method}")
+
+    # ── Request IDs ─────────────────────────────────────────────────────
 
     def _next_request_id(self) -> int:
         self._request_id += 1
         return self._request_id
 
+    # ── Request dispatch ────────────────────────────────────────────────
+
     async def _send_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Send a JSON-RPC request, dispatching to the active transport."""
+        if self.config.transport == MCPTransport.STDIO:
+            return await self._send_stdio_request(method, params)
+        elif self.config.transport == MCPTransport.SSE:
+            return await self._send_sse_request(method, params)
+        elif self.config.transport == MCPTransport.STREAMABLE_HTTP:
+            return await self._send_streamable_request(method, params)
+        raise RuntimeError(f"Unsupported transport: {self.config.transport}")
+
+    async def _send_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
+        """Send a JSON-RPC notification, dispatching to the active transport."""
+        if self.config.transport == MCPTransport.STDIO:
+            await self._send_stdio_notification(method, params)
+        elif self.config.transport in (MCPTransport.SSE, MCPTransport.STREAMABLE_HTTP):
+            await self._send_http_notification(method, params)
+        else:
+            raise RuntimeError(f"Unsupported transport: {self.config.transport}")
+
+    # ── Stdio request/notification ──────────────────────────────────────
+
+    async def _send_stdio_request(
         self, method: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Send JSON-RPC request over stdio and wait for response."""
@@ -257,8 +357,10 @@ class MCPClient:
             self._pending_requests.pop(request_id, None)
             raise TimeoutError(f"Request {method} timed out") from err
 
-    async def _send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
-        """Send JSON-RPC notification (no response expected)."""
+    async def _send_stdio_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
+        """Send JSON-RPC notification over stdio (no response expected)."""
         if not self._process or not self._process.stdin:
             raise RuntimeError("Not connected")
 
@@ -273,11 +375,13 @@ class MCPClient:
         self._process.stdin.write(message)
         await asyncio.get_event_loop().run_in_executor(None, self._process.stdin.flush)
 
+    # ── SSE request/notification ────────────────────────────────────────
+
     async def _send_sse_request(
         self, method: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        """Send JSON-RPC request over SSE (via POST to /mcp endpoint)."""
-        if not self._sse_client or not self.config.url:
+        """Send JSON-RPC request over SSE (via POST to the MCP endpoint)."""
+        if not self._http_client or not self.config.url:
             raise RuntimeError("Not connected")
 
         request_id = self._next_request_id()
@@ -293,17 +397,14 @@ class MCPClient:
         self._pending_requests[request_id] = future
 
         try:
-            response = await self._sse_client.post(
+            response = await self._http_client.post(
                 f"{self.config.url}/mcp",
                 json=request,
                 headers={"Content-Type": "application/json", **self.config.headers},
             )
             response.raise_for_status()
-            # For SSE, responses come via the SSE stream, not the POST response
-            # But some implementations may return immediate response
             data = response.json()
             if "id" in data and data["id"] is not None:
-                # Immediate response
                 self._pending_requests.pop(request_id, None)
                 if "error" in data:
                     raise Exception(data["error"].get("message", "Unknown error"))
@@ -312,12 +413,101 @@ class MCPClient:
             self._pending_requests.pop(request_id, None)
             raise
 
-        # Wait for response via SSE
         try:
             return await asyncio.wait_for(future, timeout=30.0)
         except TimeoutError as err:
             self._pending_requests.pop(request_id, None)
             raise TimeoutError(f"SSE request {method} timed out") from err
+
+    # ── Streamable HTTP request/notification ────────────────────────────
+
+    async def _send_streamable_request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Send JSON-RPC request over Streamable HTTP and read streaming response.
+
+        The server responds with newline-delimited JSON that may contain
+        the response to this request or server-initiated notifications.
+        """
+        if not self._http_client or not self.config.url:
+            raise RuntimeError("Not connected")
+
+        request_id = self._next_request_id()
+        request = {
+            "jsonrpc": JSON_RPC_VERSION,
+            "id": request_id,
+            "method": method,
+        }
+        if params is not None:
+            request["params"] = params
+
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        self._pending_requests[request_id] = future
+
+        try:
+            async with self._http_client.stream(
+                "POST",
+                self.config.url,
+                json=request,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        data = json.loads(line)
+                        if not isinstance(data, dict):
+                            continue
+                        msg_id = data.get("id")
+                        if msg_id == request_id:
+                            self._pending_requests.pop(request_id, None)
+                            if "error" in data:
+                                raise Exception(
+                                    data["error"].get("message", "Unknown error")
+                                )
+                            return data.get("result", {})
+                        elif msg_id is None and "method" in data:
+                            await self._handle_notification(
+                                data["method"], data.get("params", {})
+                            )
+                    except json.JSONDecodeError:
+                        continue
+
+                self._pending_requests.pop(request_id, None)
+                raise TimeoutError(
+                    f"Streamable HTTP request {method} ended without response"
+                )
+        except Exception:
+            self._pending_requests.pop(request_id, None)
+            raise
+        finally:
+            if request_id in self._pending_requests:
+                self._pending_requests.pop(request_id, None)
+
+    async def _send_http_notification(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> None:
+        """Send JSON-RPC notification via HTTP (fire-and-forget)."""
+        if not self._http_client or not self.config.url:
+            raise RuntimeError("Not connected")
+
+        notification = {
+            "jsonrpc": JSON_RPC_VERSION,
+            "method": method,
+        }
+        if params is not None:
+            notification["params"] = params
+
+        endpoint = self.config.url
+        if self.config.transport == MCPTransport.SSE:
+            endpoint = f"{self.config.url}/mcp"
+
+        try:
+            await self._http_client.post(endpoint, json=notification)
+        except Exception as e:
+            log.warning(f"Failed to send notification {method}: {e}")
+
+    # ── Tool methods ────────────────────────────────────────────────────
 
     async def list_tools(self) -> list[MCPTool]:
         """List available tools from the MCP server."""
@@ -335,7 +525,9 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Not connected to MCP server")
 
-        result = await self._send_request("tools/call", {"name": name, "arguments": arguments})
+        result = await self._send_request(
+            "tools/call", {"name": name, "arguments": arguments}
+        )
 
         content = result.get("content", [])
         is_error = result.get("isError", False)
@@ -348,7 +540,6 @@ class MCPClient:
             return {"healthy": False, "error": "Not connected"}
 
         try:
-            # Ping the server
             start = asyncio.get_event_loop().time()
             await self._send_request("ping", {})
             latency = (asyncio.get_event_loop().time() - start) * 1000
@@ -361,21 +552,113 @@ class MCPClient:
         except Exception as e:
             return {"healthy": False, "error": str(e)}
 
+    # ── Resource methods ────────────────────────────────────────────────
+
+    async def list_resources(self) -> list[MCPResource]:
+        """List available resources from the MCP server."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        result = await self._send_request("resources/list", {})
+        resources_data = result.get("resources", [])
+
+        self._resources = [MCPResource.from_mcp(r) for r in resources_data]
+        return self._resources
+
+    async def read_resource(self, uri: str) -> dict[str, Any]:
+        """Read a specific resource by URI."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        return await self._send_request("resources/read", {"uri": uri})
+
+    async def list_resource_templates(self) -> list[MCPResourceTemplate]:
+        """List available resource templates from the MCP server."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        result = await self._send_request("resources/templates/list", {})
+        templates_data = result.get("resourceTemplates", [])
+
+        self._resource_templates = [
+            MCPResourceTemplate(
+                uri_template=t.get("uriTemplate", ""),
+                name=t.get("name", ""),
+                description=t.get("description", ""),
+                mime_type=t.get("mimeType"),
+            )
+            for t in templates_data
+        ]
+        return self._resource_templates
+
+    async def subscribe_resource(self, uri: str) -> bool:
+        """Subscribe to resource change notifications."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        result = await self._send_request("resources/subscribe", {"uri": uri})
+        return result.get("success", True)
+
+    async def unsubscribe_resource(self, uri: str) -> bool:
+        """Unsubscribe from resource change notifications."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        result = await self._send_request("resources/unsubscribe", {"uri": uri})
+        return result.get("success", True)
+
+    # ── Prompt methods ──────────────────────────────────────────────────
+
+    async def list_prompts(self) -> list[MCPPrompt]:
+        """List available prompts from the MCP server."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        result = await self._send_request("prompts/list", {})
+        prompts_data = result.get("prompts", [])
+
+        self._prompts = [MCPPrompt.from_mcp(p) for p in prompts_data]
+        return self._prompts
+
+    async def get_prompt(
+        self, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Get a specific prompt by name."""
+        if not self._connected:
+            raise RuntimeError("Not connected to MCP server")
+
+        params: dict[str, Any] = {"name": name}
+        if arguments:
+            params["arguments"] = arguments
+
+        return await self._send_request("prompts/get", params)
+
+    # ── Lifecycle ───────────────────────────────────────────────────────
+
     async def disconnect(self) -> None:
         """Disconnect from the MCP server."""
         self._connected = False
 
-        # Cancel pending requests
         for future in self._pending_requests.values():
             if not future.done():
                 future.cancel()
         self._pending_requests.clear()
 
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
+            self._reconnect_task = None
+
         if self._process:
             try:
                 if self._process.poll() is None:
                     self._process.terminate()
-                    await asyncio.get_event_loop().run_in_executor(None, self._process.wait, 5.0)
+                    await asyncio.get_event_loop().run_in_executor(
+                        None, self._process.wait, 5.0
+                    )
             except subprocess.TimeoutExpired:
                 self._process.kill()
                 await asyncio.get_event_loop().run_in_executor(None, self._process.wait)
@@ -393,12 +676,65 @@ class MCPClient:
                 pass
             self._sse_task = None
 
-        if self._sse_client:
-            await self._sse_client.aclose()
-            self._sse_client = None
+        if self._http_client:
+            await self._http_client.aclose()
+            self._http_client = None
 
         self._tools.clear()
+        self._resources.clear()
+        self._resource_templates.clear()
+        self._prompts.clear()
         self._capabilities.clear()
+        self._server_capabilities.clear()
+        self._retry_count = 0
+        self._session_id = None
+
+    # ── Reconnection ────────────────────────────────────────────────────
+
+    async def _auto_reconnect(self) -> None:
+        """Attempt to reconnect with exponential backoff."""
+        if self._connected:
+            return
+
+        retries = 0
+        while retries < _DEFAULT_MAX_RETRIES:
+            delay = min(_DEFAULT_BASE_DELAY * (2**retries), _DEFAULT_MAX_DELAY)
+            log.info(
+                f"Reconnecting in {delay:.1f}s "
+                f"(attempt {retries + 1}/{_DEFAULT_MAX_RETRIES})"
+            )
+            await asyncio.sleep(delay)
+
+            try:
+                await self.connect()
+
+                try:
+                    self._tools = await self.list_tools()
+                except Exception as e:
+                    log.warning(f"Failed to rediscover tools after reconnect: {e}")
+
+                try:
+                    self._resources = await self.list_resources()
+                except Exception as e:
+                    log.warning(f"Failed to rediscover resources after reconnect: {e}")
+
+                try:
+                    self._prompts = await self.list_prompts()
+                except Exception as e:
+                    log.warning(f"Failed to rediscover prompts after reconnect: {e}")
+
+                self._retry_count = retries
+                log.info("Reconnection successful")
+                return
+
+            except Exception as e:
+                log.warning(f"Reconnection attempt {retries + 1} failed: {e}")
+                retries += 1
+
+        log.error(f"Failed to reconnect after {_DEFAULT_MAX_RETRIES} attempts")
+        self._retry_count = _DEFAULT_MAX_RETRIES
+
+    # ── Properties ──────────────────────────────────────────────────────
 
     @property
     def is_connected(self) -> bool:
@@ -409,5 +745,21 @@ class MCPClient:
         return self._tools.copy()
 
     @property
+    def resources(self) -> list[MCPResource]:
+        return self._resources.copy()
+
+    @property
+    def resource_templates(self) -> list[MCPResourceTemplate]:
+        return self._resource_templates.copy()
+
+    @property
+    def prompts(self) -> list[MCPPrompt]:
+        return self._prompts.copy()
+
+    @property
     def capabilities(self) -> dict[str, Any]:
         return self._capabilities.copy()
+
+    @property
+    def session_id(self) -> str | None:
+        return self._session_id

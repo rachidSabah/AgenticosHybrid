@@ -6,8 +6,6 @@ itself is payload-agnostic; topics are plain strings defined here as constants
 to avoid drift across producers/consumers.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from enum import StrEnum
 from uuid import uuid4
@@ -93,6 +91,22 @@ class Topic(StrEnum):
     MCP_HEALTH_CHANGED = "mcp.health_changed"
     MCP_TOOL_INVOKED = "mcp.tool_invoked"
     MCP_PERMISSIONS_CHANGED = "mcp.permissions_changed"
+    # MCP Session (Phase 4, M3)
+    MCP_SESSION_CREATED = "mcp.session_created"
+    MCP_SESSION_DESTROYED = "mcp.session_destroyed"
+    MCP_SESSION_EXPIRED = "mcp.session_expired"
+    # MCP Resources (Phase 4, M3)
+    MCP_RESOURCE_CHANGED = "mcp.resource_changed"
+    MCP_RESOURCE_UPDATED = "mcp.resource_updated"
+    # MCP Transport (Phase 4, M3)
+    MCP_TRANSPORT_CONNECTED = "mcp.transport_connected"
+    MCP_TRANSPORT_DISCONNECTED = "mcp.transport_disconnected"
+    MCP_TRANSPORT_ERROR = "mcp.transport_error"
+    # MCP Capability Negotiation (Phase 4, M3)
+    MCP_CAPABILITY_NEGOTIATED = "mcp.capability_negotiated"
+    # MCP Tool Discovery (Phase 4, M3)
+    MCP_TOOL_DISCOVERED = "mcp.tool_discovered"
+    MCP_TOOL_ERROR = "mcp.tool_error"
     # Plugin (Phase 3B)
     PLUGIN_INSTALLED = "plugin.installed"
     PLUGIN_UNINSTALLED = "plugin.uninstalled"
