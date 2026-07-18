@@ -10,13 +10,13 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from agentic_os.domain.mcp import (
-    MCPCapability,
     MCPHealthStatus,
     MCPPermissionMapping,
     MCPPrompt,
     MCPRegistry,
     MCPResource,
     MCPResourceTemplate,
+    MCPServerConfig,
     MCPServerDetail,
     MCPServerStatus,
     MCPSession,
@@ -270,7 +270,9 @@ class MCPPromptProvider(Protocol):
         ...
 
     @abstractmethod
-    async def get_prompt(self, server_id: str, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def get_prompt(
+        self, server_id: str, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Get a specific prompt by name."""
         ...
 
@@ -280,7 +282,9 @@ class MCPSessionPort(Protocol):
     """Session lifecycle port."""
 
     @abstractmethod
-    async def create_session(self, server_id: str, transport: MCPTransport, capabilities: dict[str, Any] | None = None) -> MCPSession:
+    async def create_session(
+        self, server_id: str, transport: MCPTransport, capabilities: dict[str, Any] | None = None
+    ) -> MCPSession:
         """Create a new session for an MCP server."""
         ...
 
@@ -290,7 +294,9 @@ class MCPSessionPort(Protocol):
         ...
 
     @abstractmethod
-    async def list_sessions(self, server_id: str | None = None, status: MCPSessionStatus | None = None) -> list[MCPSession]:
+    async def list_sessions(
+        self, server_id: str | None = None, status: MCPSessionStatus | None = None
+    ) -> list[MCPSession]:
         """List sessions with optional filtering."""
         ...
 
@@ -330,12 +336,16 @@ class MCPRuntimePort(Protocol):
         ...
 
     @abstractmethod
-    async def list_servers(self, status: MCPServerStatus | None = None, enabled_only: bool = False) -> list[MCPServerDetail]:
+    async def list_servers(
+        self, status: MCPServerStatus | None = None, enabled_only: bool = False
+    ) -> list[MCPServerDetail]:
         """List all servers with optional filtering."""
         ...
 
     @abstractmethod
-    async def invoke_tool(self, server_id: str, tool: str, arguments: dict[str, Any]) -> MCPToolResult:
+    async def invoke_tool(
+        self, server_id: str, tool: str, arguments: dict[str, Any]
+    ) -> MCPToolResult:
         """Invoke a tool with security authorization."""
         ...
 

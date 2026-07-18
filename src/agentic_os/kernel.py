@@ -50,16 +50,16 @@ from agentic_os.core.discovery.validation import (
     VersionDetectValidator,
 )
 from agentic_os.core.health import HealthMonitorImpl
+
+# Phase 4, M3: MCP Runtime Foundation
+from agentic_os.core.mcp.manager import MCPManager
+from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.core.memory.manager import MemoryManagerImpl
 from agentic_os.core.orchestration.config import OrchestrationConfiguration
 
 # Phase 4, M3: Orchestration Framework
 from agentic_os.core.orchestration.framework import OrchestrationFramework
 from agentic_os.core.orchestrator import Orchestrator
-
-# Phase 4, M3: MCP Runtime Foundation
-from agentic_os.core.mcp.manager import MCPManager
-from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.core.pipeline.engine import PipelineEngineImpl
 from agentic_os.core.providers.health import ProviderHealthMonitorImpl
 from agentic_os.core.providers.manager import ModelManagerImpl, ProviderManagerImpl

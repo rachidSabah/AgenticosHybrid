@@ -21,7 +21,6 @@ from agentic_os.domain.mcp import (
     MCPServerDetail,
     MCPServerStatus,
     MCPTool,
-    MCPTransport,
 )
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
@@ -560,7 +559,11 @@ class MCPRegistryImpl(MCPRegistryPort):
                     if isinstance(health_result, dict)
                     else {}
                 )
-                health = MCPHealthStatus.HEALTHY if health_result.get("healthy") else MCPHealthStatus.UNHEALTHY
+                health = (
+                    MCPHealthStatus.HEALTHY
+                    if health_result.get("healthy")
+                    else MCPHealthStatus.UNHEALTHY
+                )
             except Exception as e:
                 health = MCPHealthStatus.UNHEALTHY
                 details = {"error": str(e)}

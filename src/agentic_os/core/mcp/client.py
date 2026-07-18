@@ -262,9 +262,7 @@ class MCPClient:
             future = self._pending_requests.pop(request_id, None)
             if future:
                 if "error" in data:
-                    future.set_exception(
-                        Exception(data["error"].get("message", "Unknown error"))
-                    )
+                    future.set_exception(Exception(data["error"].get("message", "Unknown error")))
                 else:
                     future.set_result(data.get("result"))
             return
@@ -311,9 +309,7 @@ class MCPClient:
             return await self._send_streamable_request(method, params)
         raise RuntimeError(f"Unsupported transport: {self.config.transport}")
 
-    async def _send_notification(
-        self, method: str, params: dict[str, Any] | None = None
-    ) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
         """Send a JSON-RPC notification, dispatching to the active transport."""
         if self.config.transport == MCPTransport.STDIO:
             await self._send_stdio_notification(method, params)
@@ -462,21 +458,15 @@ class MCPClient:
                         if msg_id == request_id:
                             self._pending_requests.pop(request_id, None)
                             if "error" in data:
-                                raise Exception(
-                                    data["error"].get("message", "Unknown error")
-                                )
+                                raise Exception(data["error"].get("message", "Unknown error"))
                             return data.get("result", {})
                         elif msg_id is None and "method" in data:
-                            await self._handle_notification(
-                                data["method"], data.get("params", {})
-                            )
+                            await self._handle_notification(data["method"], data.get("params", {}))
                     except json.JSONDecodeError:
                         continue
 
                 self._pending_requests.pop(request_id, None)
-                raise TimeoutError(
-                    f"Streamable HTTP request {method} ended without response"
-                )
+                raise TimeoutError(f"Streamable HTTP request {method} ended without response")
         except Exception:
             self._pending_requests.pop(request_id, None)
             raise
@@ -525,9 +515,7 @@ class MCPClient:
         if not self._connected:
             raise RuntimeError("Not connected to MCP server")
 
-        result = await self._send_request(
-            "tools/call", {"name": name, "arguments": arguments}
-        )
+        result = await self._send_request("tools/call", {"name": name, "arguments": arguments})
 
         content = result.get("content", [])
         is_error = result.get("isError", False)
@@ -656,9 +644,7 @@ class MCPClient:
             try:
                 if self._process.poll() is None:
                     self._process.terminate()
-                    await asyncio.get_event_loop().run_in_executor(
-                        None, self._process.wait, 5.0
-                    )
+                    await asyncio.get_event_loop().run_in_executor(None, self._process.wait, 5.0)
             except subprocess.TimeoutExpired:
                 self._process.kill()
                 await asyncio.get_event_loop().run_in_executor(None, self._process.wait)
@@ -699,10 +685,7 @@ class MCPClient:
         retries = 0
         while retries < _DEFAULT_MAX_RETRIES:
             delay = min(_DEFAULT_BASE_DELAY * (2**retries), _DEFAULT_MAX_DELAY)
-            log.info(
-                f"Reconnecting in {delay:.1f}s "
-                f"(attempt {retries + 1}/{_DEFAULT_MAX_RETRIES})"
-            )
+            log.info(f"Reconnecting in {delay:.1f}s (attempt {retries + 1}/{_DEFAULT_MAX_RETRIES})")
             await asyncio.sleep(delay)
 
             try:

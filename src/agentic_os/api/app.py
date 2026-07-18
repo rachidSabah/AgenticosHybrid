@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
+from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.domain.agent import Task
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
@@ -933,10 +934,11 @@ def create_app(platform: Platform) -> FastAPI:
     # ── MCP Runtime Foundation API (Phase 4, M3) ──
     mcp = platform.mcp
 
-    def _require_mcp() -> None:
-        """Raise 503 if MCP runtime is not available."""
+    def _require_mcp() -> MCPManager:
+        """Raise 503 if MCP runtime is not available, then return the manager."""
         if mcp is None:
             raise HTTPException(status_code=503, detail="MCP runtime not available")
+        return mcp
 
     # Server CRUD
     @app.get("/api/mcp/servers")
@@ -944,14 +946,14 @@ def create_app(platform: Platform) -> FastAPI:
         status: str | None = None,
         enabled_only: bool = False,
     ) -> list[dict]:
-        _require_mcp()
+        mcp = _require_mcp()
         status_enum = MCPServerStatus(status) if status else None
         servers = await mcp.list_servers(status=status_enum, enabled_only=enabled_only)
         return [s.to_dict() for s in servers]
 
     @app.get("/api/mcp/servers/{server_id}")
     async def get_mcp_server(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         detail = await mcp.get_server_detail(server_id)
         if not detail:
             raise HTTPException(status_code=404, detail="MCP server not found")
@@ -959,7 +961,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/mcp/servers")
     async def register_mcp_server(body: dict) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         from agentic_os.ports.mcp import MCPServerCreate
 
         data = MCPServerCreate(
@@ -989,7 +991,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.put("/api/mcp/servers/{server_id}")
     async def update_mcp_server(server_id: str, body: dict) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         from agentic_os.ports.mcp import MCPServerUpdate
 
         data = MCPServerUpdate(
@@ -1018,11 +1020,11 @@ def create_app(platform: Platform) -> FastAPI:
             detail = await mcp.registry.update_server(server_id, data)
             return detail.to_dict()
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
 
     @app.delete("/api/mcp/servers/{server_id}")
     async def delete_mcp_server(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         ok = await mcp.registry.delete_server(server_id)
         if not ok:
             raise HTTPException(status_code=404, detail="MCP server not found")
@@ -1031,63 +1033,63 @@ def create_app(platform: Platform) -> FastAPI:
     # Server Lifecycle
     @app.post("/api/mcp/servers/{server_id}/start")
     async def start_mcp_server(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             detail = await mcp.registry.start_server(server_id)
             return detail.to_dict()
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/mcp/servers/{server_id}/stop")
     async def stop_mcp_server(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             detail = await mcp.registry.stop_server(server_id)
             return detail.to_dict()
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
 
     @app.post("/api/mcp/servers/{server_id}/restart")
     async def restart_mcp_server(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             detail = await mcp.restart_server(server_id)
             return detail.to_dict()
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
 
     @app.post("/api/mcp/servers/{server_id}/reload")
     async def reload_mcp_server(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             detail = await mcp.reload_server(server_id)
             return detail.to_dict()
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
 
     # Tool Operations
     @app.get("/api/mcp/servers/{server_id}/tools")
     async def list_mcp_server_tools(server_id: str) -> list[dict]:
-        _require_mcp()
+        mcp = _require_mcp()
         tools = mcp.get_server_tools(server_id)
         return [t.to_dict() for t in tools]
 
     @app.post("/api/mcp/servers/{server_id}/tools/discover")
     async def discover_mcp_server_tools(server_id: str) -> list[dict]:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             tools = await mcp.registry.discover_tools(server_id)
             return [t.to_dict() for t in tools]
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/mcp/servers/{server_id}/tools/call")
     async def call_mcp_tool(server_id: str, body: dict) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         tool = body.get("tool")
         if not tool:
             raise HTTPException(status_code=400, detail="tool name required")
@@ -1096,32 +1098,32 @@ def create_app(platform: Platform) -> FastAPI:
             result = await mcp.invoke_tool(server_id, tool, arguments)
             return result.to_dict()
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
         except (ValueError, RuntimeError) as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Resource Operations
     @app.get("/api/mcp/servers/{server_id}/resources")
     async def list_mcp_server_resources(server_id: str) -> list[dict]:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             resources = await mcp.list_server_resources(server_id)
             return [r.to_dict() for r in resources]
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/mcp/servers/{server_id}/resources/read")
     async def read_mcp_server_resource(server_id: str, uri: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             result = await mcp.read_server_resource(server_id, uri)
             return result
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/mcp/servers/{server_id}/resources/subscribe")
     async def subscribe_mcp_resource(server_id: str, body: dict) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         uri = body.get("uri")
         if not uri:
             raise HTTPException(status_code=400, detail="uri required")
@@ -1129,32 +1131,32 @@ def create_app(platform: Platform) -> FastAPI:
             ok = await mcp.subscribe_server_resource(server_id, uri)
             return {"subscribed": ok, "uri": uri}
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.delete("/api/mcp/servers/{server_id}/resources/subscribe")
     async def unsubscribe_mcp_resource(server_id: str, uri: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             ok = await mcp.unsubscribe_server_resource(server_id, uri)
             return {"unsubscribed": ok, "uri": uri}
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Prompt Operations
     @app.get("/api/mcp/servers/{server_id}/prompts")
     async def list_mcp_server_prompts(server_id: str) -> list[dict]:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             prompts = await mcp.list_server_prompts(server_id)
             return [p.to_dict() for p in prompts]
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/mcp/servers/{server_id}/prompts/get")
     async def get_mcp_server_prompt(
         server_id: str, name: str, arguments: str | None = None
     ) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         import json
 
         args = json.loads(arguments) if arguments else None
@@ -1162,22 +1164,22 @@ def create_app(platform: Platform) -> FastAPI:
             result = await mcp.get_server_prompt(server_id, name, args)
             return result
         except RuntimeError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Health & Monitoring
     @app.get("/api/mcp/servers/{server_id}/health")
     async def check_mcp_server_health(server_id: str) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         try:
             health = await mcp.registry.check_health(server_id)
             return {"server_id": server_id, "health": health.value}
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
 
     @app.get("/api/mcp/health")
     async def mcp_health_summary() -> dict:
         """Summary of all MCP servers' health status."""
-        _require_mcp()
+        mcp = _require_mcp()
         servers = await mcp.list_servers()
         statuses = {}
         for s in servers:
@@ -1196,14 +1198,14 @@ def create_app(platform: Platform) -> FastAPI:
     # Sessions
     @app.get("/api/mcp/sessions")
     async def list_mcp_sessions() -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         sessions = mcp.get_active_session_ids()
         return {"sessions": sessions, "total": len(sessions)}
 
     # Permissions
     @app.post("/api/mcp/servers/{server_id}/permissions")
     async def set_mcp_permissions(server_id: str, body: dict) -> dict:
-        _require_mcp()
+        mcp = _require_mcp()
         from agentic_os.domain.mcp import MCPPermissionMapping
 
         mappings = [
@@ -1218,11 +1220,11 @@ def create_app(platform: Platform) -> FastAPI:
             count = await mcp.registry.set_permissions(server_id, mappings)
             return {"server_id": server_id, "mappings_count": count}
         except KeyError:
-            raise HTTPException(status_code=404, detail="MCP server not found")
+            raise HTTPException(status_code=404, detail="MCP server not found") from None
 
     @app.get("/api/mcp/servers/{server_id}/permissions")
     async def get_mcp_permissions(server_id: str) -> list[dict]:
-        _require_mcp()
+        mcp = _require_mcp()
         mappings = await mcp.registry.get_permissions(server_id)
         return [m.to_dict() for m in mappings]
 

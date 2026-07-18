@@ -157,7 +157,11 @@ class MCPManager:
                     snapshot = self.registry.get_registry_snapshot()
                     detail = snapshot.get_server(server_id)
                     if not detail or detail.status != MCPServerStatus.RUNNING:
-                        if detail and detail.status == MCPServerStatus.FAILED and self._auto_restart:
+                        if (
+                            detail
+                            and detail.status == MCPServerStatus.FAILED
+                            and self._auto_restart
+                        ):
                             await self._attempt_restart(server_id)
                         continue
 
