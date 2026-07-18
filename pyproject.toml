@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-os"
-version = "0.3.0"
+version = "0.6.0"
 description = "Agentic OS — a local-first, event-bus-driven AI Agent Operating System."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Agentic OS Contributors" }]
 dependencies = [
@@ -23,12 +23,17 @@ dependencies = [
     "python-multipart>=0.0.12",
     "httpx>=0.27.0",
     "cryptography>=43.0.0",
+    "opentelemetry-api>=1.25.0",
+    "opentelemetry-sdk>=1.25.0",
+    "opentelemetry-exporter-otlp>=1.25.0",
+    "opentelemetry-exporter-prometheus>=0.45.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.7.0",
     "ty>=0.0.1a",
 ]
@@ -42,7 +47,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 100
 src = ["src", "tests"]
 

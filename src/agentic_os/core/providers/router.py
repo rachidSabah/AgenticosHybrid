@@ -5,7 +5,7 @@ failover into a single decision point used by the orchestrator's dispatcher.
 This is the production implementation behind the routing/failover requirements.
 """
 
-from __future__ import annotations
+from typing import Any
 
 from agentic_os.core.providers.health import FailoverPolicyImpl, ProviderHealthMonitorImpl
 from agentic_os.core.providers.manager import ModelManagerImpl, ProviderManagerImpl
@@ -92,3 +92,34 @@ class ProviderRouter:
             )
         )
         return next_provider, model
+
+    async def complete(
+        self,
+        provider: str,
+        model: str,
+        messages: list[dict[str, str]],
+    ) -> Any:
+        """Execute a completion request via the provider adapter."""
+        adapter = self._manager.get(provider)
+        if not adapter:
+            raise ValueError(f"Provider {provider} not found")
+        # Use the provider adapter to execute the completion
+        # This is a simplified call - in reality would need to construct proper Task/Agent
+        from agentic_os.domain.agent import Agent, Task
+
+        agent = Agent(
+            id=f"router-{provider}-{model}", role="assistant", provider=provider, model=model
+        )
+        task = Task(
+            id=f"router-task-{model}",
+            title=f"router-task-{model}",
+            role="assistant",
+            description="\n".join(m.get("content", "") for m in messages),
+        )
+        result = await adapter.execute(agent, task)
+        return type("obj", (object,), {"content": result, "usage": None})()
+
+    async def call_mcp(self, server: str, tool: str, args: dict[str, Any]) -> Any:
+        """Call an MCP tool via the provider."""
+        # TODO: Implement MCP tool calling through provider adapter
+        raise NotImplementedError("MCP tool calling not yet implemented via router")

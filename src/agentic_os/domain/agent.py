@@ -45,6 +45,7 @@ class Agent(BaseModel):
     role: str
     name: str = ""
     provider: str
+    model: str = ""
     status: AgentStatus = AgentStatus.IDLE
     current_task_id: str | None = None
     attempts: int = 0

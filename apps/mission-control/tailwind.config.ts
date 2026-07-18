@@ -22,6 +22,15 @@ const config: Config = {
         warn: "rgb(var(--warn) / <alpha-value>)",
         danger: "rgb(var(--danger) / <alpha-value>)",
         info: "rgb(var(--info) / <alpha-value>)",
+        // Chart tokens
+        "chart-1": "rgb(var(--chart-1) / <alpha-value>)",
+        "chart-2": "rgb(var(--chart-2) / <alpha-value>)",
+        "chart-3": "rgb(var(--chart-3) / <alpha-value>)",
+        "chart-4": "rgb(var(--chart-4) / <alpha-value>)",
+        "chart-5": "rgb(var(--chart-5) / <alpha-value>)",
+        // Focus ring
+        "focus-ring": "rgb(var(--focus-ring) / <alpha-value>)",
+        "focus-ring-offset": "rgb(var(--focus-ring-offset) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
@@ -34,6 +43,12 @@ const config: Config = {
       },
       backdropBlur: {
         xs: "2px",
+      },
+      // Spring motion tokens (for Framer Motion via CSS variables)
+      transitionDuration: {
+        "spring-fast": "var(--spring-fast-duration, 200ms)",
+        "spring-base": "var(--spring-base-duration, 300ms)",
+        "spring-slow": "var(--spring-slow-duration, 500ms)",
       },
       keyframes: {
         "pulse-ring": {

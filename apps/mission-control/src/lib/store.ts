@@ -60,6 +60,11 @@ interface StoreState {
 const MAX_EVENTS = 400;
 const MAX_NOTIFS = 60;
 
+// WebSocket reconnection config
+const WS_RECONNECT_BASE_DELAY = 1000; // 1s
+const WS_RECONNECT_MAX_DELAY = 30000; // 30s
+const WS_MAX_RETRIES = 10;
+
 function pushUnique<T extends { id: string }>(map: Record<string, T>, items: T[]): Record<string, T> {
   const next = { ...map };
   for (const it of items) next[it.id] = it;
@@ -67,11 +72,9 @@ function pushUnique<T extends { id: string }>(map: Record<string, T>, items: T[]
 }
 
 function levelForTopic(topic: string): Notification["level"] {
-  if (topic.includes("failed") || topic.includes("denied") || topic === "provider.down")
-    return "danger";
+  if (topic.includes("failed") || topic.includes("denied") || topic === "provider.down") return "danger";
   if (topic.includes("degraded") || topic.includes("recovered")) return "warn";
-  if (topic.includes("completed") || topic.includes("registered") || topic.includes("granted"))
-    return "ok";
+  if (topic.includes("completed") || topic.includes("registered") || topic.includes("granted")) return "ok";
   return "info";
 }
 
@@ -124,33 +127,91 @@ export const useStore = create<StoreState>((set, get) => ({
 
   connect: () => {
     if (get().connected) return;
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const base = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
-    // Derive ws origin from the configured API base.
-    const url = `${proto}://${new URL(base).host}/ws/dashboard`;
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(url);
-    } catch {
-      return;
-    }
-    ws.onopen = () => set({ connected: true });
-    ws.onclose = () => set({ connected: false });
-    ws.onerror = () => set({ connected: false });
-    ws.onmessage = (ev) => {
+
+    let ws: WebSocket | null = null;
+    let retryCount = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let isIntentionalDisconnect = false;
+
+    const connectImpl = () => {
+      if (isIntentionalDisconnect) return;
+
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const base = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
+      const url = `${proto}://${new URL(base).host}/ws/dashboard`;
+
       try {
-        const data = JSON.parse(ev.data) as EventEnvelope;
-        get().ingest(data);
+        ws = new WebSocket(url);
       } catch {
-        /* ignore malformed frames */
+        scheduleReconnect();
+        return;
       }
+
+      ws.onopen = () => {
+        retryCount = 0;
+        set({ connected: true });
+      };
+
+      ws.onclose = () => {
+        set({ connected: false });
+        if (!isIntentionalDisconnect) {
+          scheduleReconnect();
+        }
+      };
+
+      ws.onerror = () => {
+        set({ connected: false });
+        // onclose will handle reconnection
+      };
+
+      ws.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data) as EventEnvelope;
+          get().ingest(data);
+        } catch {
+          /* ignore malformed frames */
+        }
+      };
+
+      (get() as unknown as { _ws?: WebSocket; _reconnectTimer?: ReturnType<typeof setTimeout>; _isIntentionalDisconnect?: boolean })._ws = ws;
     };
-    (get() as unknown as { _ws?: WebSocket })._ws = ws;
+
+    const scheduleReconnect = () => {
+      if (isIntentionalDisconnect) return;
+      if (retryCount >= WS_MAX_RETRIES) {
+        console.error("[WebSocket] Max retries reached, giving up");
+        return;
+      }
+
+      const delay = Math.min(WS_RECONNECT_BASE_DELAY * Math.pow(2, retryCount), WS_RECONNECT_MAX_DELAY);
+      // Add jitter (±10%)
+      const jitter = delay * 0.1 * (Math.random() * 2 - 1);
+      const finalDelay = Math.floor(delay + jitter);
+
+      console.log(`[WebSocket] Reconnecting in ${finalDelay}ms (attempt ${retryCount + 1}/${WS_MAX_RETRIES})`);
+      retryCount++;
+
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connectImpl, finalDelay);
+
+      (get() as unknown as { _reconnectTimer?: ReturnType<typeof setTimeout> })._reconnectTimer = reconnectTimer;
+    };
+
+    connectImpl();
+
+    // Store cleanup functions for disconnect
+    (get() as unknown as { _cleanup?: () => void })._cleanup = () => {
+      isIntentionalDisconnect = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
   },
 
   disconnect: () => {
-    const ws = (get() as unknown as { _ws?: WebSocket })._ws;
-    ws?.close();
+    const state = get() as unknown as { _ws?: WebSocket; _reconnectTimer?: ReturnType<typeof setTimeout>; _cleanup?: () => void };
+    state._cleanup?.();
+    state._ws?.close();
+    if (state._reconnectTimer) clearTimeout(state._reconnectTimer);
     set({ connected: false });
   },
 
@@ -224,7 +285,6 @@ export const useStore = create<StoreState>((set, get) => ({
         }
         case "provider.health":
         case "provider.registered":
-        case "provider.failed":
         case "provider.failover": {
           const name = String(p.name ?? p.provider ?? "provider");
           providers[name] = {
@@ -234,7 +294,18 @@ export const useStore = create<StoreState>((set, get) => ({
             error: p.error ?? providers[name]?.error,
           };
           telemetry.providers = Object.keys(providers).length;
-          if (e.topic === "provider.failed") telemetry.errors += 1;
+          break;
+        }
+        case "provider.failed": {
+          const name = String(p.name ?? p.provider ?? "provider");
+          providers[name] = {
+            provider: name,
+            status: "down",
+            latency_ms: 0,
+            error: p.error,
+          };
+          telemetry.providers = Object.keys(providers).length;
+          telemetry.errors += 1;
           break;
         }
         case "cost.recorded": {
@@ -246,8 +317,7 @@ export const useStore = create<StoreState>((set, get) => ({
           break;
         }
         case "tool.denied":
-        case "agent.failed":
-        case "provider.failed": {
+        case "agent.failed": {
           telemetry.errors += 1;
           break;
         }

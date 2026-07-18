@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
-import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from "reactflow";
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReactFlow, {
+  Background,
+  Controls,
+  MiniMap,
+  type Node,
+  type Edge,
+  useReactFlow,
+} from "reactflow";
 import "reactflow/dist/style.css";
 import { Panel, StatusDot, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
@@ -18,6 +25,9 @@ const STATUS_COLOR: Record<string, string> = {
 // supervisors to their agents based on REAL agent.supervisor links from events.
 export function AgentConstellation() {
   const agents = useStore((s) => s.agents);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { setNodes, getNode, setCenter, fitView } = useReactFlow();
 
   const { nodes, edges } = useMemo(() => {
     const list = Object.values(agents);
@@ -36,6 +46,8 @@ export function AgentConstellation() {
           padding: "8px 12px",
           fontSize: 12,
         },
+        tabIndex: 0,
+        "aria-label": `${a.role}, ${a.status}${a.provider ? `, ${a.provider}` : ""}`,
       };
     });
     const edges: Edge[] = list
@@ -50,6 +62,64 @@ export function AgentConstellation() {
     return { nodes, edges };
   }, [agents]);
 
+  // Keyboard navigation for nodes
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const nodeIds = nodes.map((n) => n.id);
+      if (nodeIds.length === 0) return;
+
+      const currentIndex = selectedId ? nodeIds.indexOf(selectedId) : -1;
+
+      switch (e.key) {
+        case "ArrowRight":
+        case "ArrowDown": {
+          e.preventDefault();
+          const nextIndex = (currentIndex + 1) % nodeIds.length;
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[nextIndex] })));
+          setSelectedId(nodeIds[nextIndex]);
+          break;
+        }
+        case "ArrowLeft":
+        case "ArrowUp": {
+          e.preventDefault();
+          const prevIndex = (currentIndex - 1 + nodeIds.length) % nodeIds.length;
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[prevIndex] })));
+          setSelectedId(nodeIds[prevIndex]);
+          break;
+        }
+        case "Home": {
+          e.preventDefault();
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[0] })));
+          setSelectedId(nodeIds[0]);
+          break;
+        }
+        case "End": {
+          e.preventDefault();
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[nodeIds.length - 1] })));
+          setSelectedId(nodeIds[nodeIds.length - 1]);
+          break;
+        }
+        case "Enter":
+        case " ": {
+          if (selectedId) {
+            e.preventDefault();
+            const node = getNode(selectedId);
+            if (node) {
+              setCenter(node.position.x, node.position.y, { zoom: 1.5, duration: 300 });
+            }
+          }
+          break;
+        }
+      }
+    };
+
+    container.addEventListener("keydown", handleKeyDown);
+    return () => container.removeEventListener("keydown", handleKeyDown);
+  }, [nodes, selectedId, setNodes, getNode, setCenter]);
+
   if (nodes.length === 0) {
     return (
       <div className="h-full p-4">
@@ -63,8 +133,17 @@ export function AgentConstellation() {
   return (
     <div className="h-full p-4">
       <Panel title="Agent Constellation" subtitle="Live supervisor → agent topology" contentClassName="p-0" className="h-full">
-        <div className="h-full">
-          <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }} minZoom={0.3}>
+        <div ref={containerRef} className="h-full" role="application" aria-label="Agent constellation graph" tabIndex={0}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            fitView
+            proOptions={{ hideAttribution: true }}
+            minZoom={0.3}
+            onNodeClick={(_e, node) => setSelectedId(node.id)}
+            aria-live="polite"
+            aria-label="Agent constellation: supervisors and agents"
+          >
             <Background color="#1f2633" gap={24} />
             <Controls showInteractive={false} />
             <MiniMap

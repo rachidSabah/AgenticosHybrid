@@ -11,6 +11,7 @@ providers in-browser (the unified Mission Control dashboard lands in Phase 3).
 
 from __future__ import annotations
 
+import dataclasses
 import time
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -18,10 +19,24 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.domain.agent import Task
+from agentic_os.domain.execution import EngineCapability, EngineType
+from agentic_os.domain.pipeline import (
+    PipelineEdge,
+    PipelineExecutionStatus,
+    PipelineStage,
+    PipelineStatus,
+)
 from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
+from agentic_os.domain.workflow import (
+    WorkflowEdge,
+    WorkflowExecutionStatus,
+    WorkflowNode,
+    WorkflowStatus,
+)
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.infrastructure.metrics import metrics_payload, observe
 from agentic_os.kernel import Platform
+from agentic_os.ports.execution import EngineRegistration, ExecutionRequest
 
 log = get_logger("api")
 
@@ -45,6 +60,14 @@ def create_app(platform: Platform) -> FastAPI:
     security = platform.security
     if security is None:
         raise RuntimeError("SecurityFramework is required but was not initialised on the Platform")
+
+    workflow_engine = platform.workflow
+    pipeline_engine = platform.pipeline
+
+    if workflow_engine is None:
+        raise RuntimeError("WorkflowEngine is required but was not initialised on the Platform")
+    if pipeline_engine is None:
+        raise RuntimeError("PipelineEngine is required but was not initialised on the Platform")
 
     @app.middleware("http")
     async def _metrics(request, call_next):
@@ -293,6 +316,620 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/security/workspace/{agent_id}")
     async def workspace_for(agent_id: str) -> dict:
         return {"agent_id": agent_id, "workspace": security.workspace_for(agent_id)}
+
+    # ── Workflow Engine API (Phase 3B) ──
+    workflow_engine = platform.workflow
+    pipeline_engine = platform.pipeline
+
+    if workflow_engine is None:
+        raise RuntimeError("WorkflowEngine is required but was not initialised on the Platform")
+    if pipeline_engine is None:
+        raise RuntimeError("PipelineEngine is required but was not initialised on the Platform")
+
+    @app.get("/api/workflows")
+    async def list_workflows(
+        status: WorkflowStatus | None = None, limit: int = 50, offset: int = 0
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(w)
+            for w in await workflow_engine.list_workflows(status, limit, offset)
+        ]
+
+    @app.get("/api/workflows/{workflow_id}")
+    async def get_workflow(workflow_id: str) -> dict:
+        workflow = await workflow_engine.get_workflow(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        return dataclasses.asdict(workflow)
+
+    @app.post("/api/workflows")
+    async def create_workflow(body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowCreate
+
+        data = WorkflowCreate(
+            name=body["name"],
+            description=body.get("description", ""),
+            nodes=[WorkflowNode(**n) for n in body.get("nodes", [])],
+            edges=[WorkflowEdge(**e) for e in body.get("edges", [])],
+            template_id=body.get("template_id"),
+            created_by=body.get("created_by", "system"),
+        )
+        workflow = await workflow_engine.create_workflow(data)
+        return dataclasses.asdict(workflow)
+
+    @app.put("/api/workflows/{workflow_id}")
+    async def update_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowUpdate
+
+        data = WorkflowUpdate(
+            name=body.get("name"),
+            description=body.get("description"),
+            nodes=[WorkflowNode(**n) for n in body["nodes"]] if "nodes" in body else None,
+            edges=[WorkflowEdge(**e) for e in body["edges"]] if "edges" in body else None,
+            updated_by=body.get("updated_by", "system"),
+        )
+        workflow = await workflow_engine.update_workflow(workflow_id, data)
+        return dataclasses.asdict(workflow)
+
+    @app.delete("/api/workflows/{workflow_id}")
+    async def delete_workflow(workflow_id: str) -> dict:
+        ok = await workflow_engine.delete_workflow(workflow_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        return {"deleted": workflow_id}
+
+    @app.get("/api/workflows/{workflow_id}/versions")
+    async def get_workflow_versions(workflow_id: str) -> list[dict]:
+        return [
+            dataclasses.asdict(v) for v in await workflow_engine.get_workflow_versions(workflow_id)
+        ]
+
+    @app.get("/api/workflows/{workflow_id}/versions/{version}")
+    async def get_workflow_version(workflow_id: str, version: int) -> dict:
+        workflow = await workflow_engine.get_workflow_version(workflow_id, version)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow version not found")
+        return dataclasses.asdict(workflow)
+
+    @app.post("/api/workflows/{workflow_id}/execute")
+    async def execute_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowExecute
+
+        data = WorkflowExecute(inputs=body.get("inputs", {}), version=body.get("version"))
+        execution = await workflow_engine.execute_workflow(workflow_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/{workflow_id}/replay")
+    async def replay_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowReplay
+
+        data = WorkflowReplay(
+            inputs=body.get("inputs", {}),
+            version=body.get("version"),
+            from_node=body.get("from_node"),
+            parent_execution_id=body.get("parent_execution_id"),
+        )
+        execution = await workflow_engine.replay_workflow(workflow_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/{workflow_id}/approve")
+    async def approve_workflow(workflow_id: str, body: dict) -> dict:
+        from agentic_os.ports.workflow import WorkflowApproval
+
+        data = WorkflowApproval(
+            node_id=body["node_id"],
+            approved=body["approved"],
+            decided_by=body["decided_by"],
+            reason=body.get("reason"),
+        )
+        execution = await workflow_engine.approve_workflow(workflow_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/workflows/{workflow_id}/executions")
+    async def get_workflow_executions(
+        workflow_id: str,
+        status: WorkflowExecutionStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(e)
+            for e in await workflow_engine.get_workflow_executions(
+                workflow_id, status, limit, offset
+            )
+        ]
+
+    @app.get("/api/workflows/executions/running")
+    async def get_running_workflow_executions() -> list[dict]:
+        return [dataclasses.asdict(e) for e in await workflow_engine.get_running_executions()]
+
+    @app.post("/api/workflows/executions/{execution_id}/cancel")
+    async def cancel_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.cancel_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/executions/{execution_id}/pause")
+    async def pause_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.pause_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/workflows/executions/{execution_id}/resume")
+    async def resume_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.resume_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/workflows/executions/{execution_id}")
+    async def get_workflow_execution(execution_id: str) -> dict:
+        execution = await workflow_engine.get_execution(execution_id)
+        if not execution:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        return dataclasses.asdict(execution)
+
+    # ── Pipeline Engine API (Phase 3B) ──
+    @app.get("/api/pipelines")
+    async def list_pipelines(
+        status: PipelineStatus | None = None, limit: int = 50, offset: int = 0
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(p)
+            for p in await pipeline_engine.list_pipelines(status, limit, offset)
+        ]
+
+    @app.get("/api/pipelines/{pipeline_id}")
+    async def get_pipeline(pipeline_id: str) -> dict:
+        pipeline = await pipeline_engine.get_pipeline(pipeline_id)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="Pipeline not found")
+        return dataclasses.asdict(pipeline)
+
+    @app.post("/api/pipelines")
+    async def create_pipeline(body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineCreate
+
+        data = PipelineCreate(
+            name=body["name"],
+            description=body.get("description", ""),
+            stages=[PipelineStage(**s) for s in body.get("stages", [])],
+            edges=[PipelineEdge(**e) for e in body.get("edges", [])],
+            schedule_cron=body.get("schedule_cron"),
+            schedule_timezone=body.get("schedule_timezone", "UTC"),
+            created_by=body.get("created_by", "system"),
+        )
+        pipeline = await pipeline_engine.create_pipeline(data)
+        return dataclasses.asdict(pipeline)
+
+    @app.put("/api/pipelines/{pipeline_id}")
+    async def update_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineUpdate
+
+        data = PipelineUpdate(
+            name=body.get("name"),
+            description=body.get("description"),
+            stages=[PipelineStage(**s) for s in body["stages"]] if "stages" in body else None,
+            edges=[PipelineEdge(**e) for e in body["edges"]] if "edges" in body else None,
+            schedule_cron=body.get("schedule_cron"),
+            schedule_timezone=body.get("schedule_timezone"),
+            status=PipelineStatus(body["status"]) if "status" in body else None,
+            updated_by=body.get("updated_by", "system"),
+        )
+        pipeline = await pipeline_engine.update_pipeline(pipeline_id, data)
+        return dataclasses.asdict(pipeline)
+
+    @app.delete("/api/pipelines/{pipeline_id}")
+    async def delete_pipeline(pipeline_id: str) -> dict:
+        ok = await pipeline_engine.delete_pipeline(pipeline_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Pipeline not found")
+        return {"deleted": pipeline_id}
+
+    @app.get("/api/pipelines/{pipeline_id}/versions")
+    async def get_pipeline_versions(pipeline_id: str) -> list[dict]:
+        return [
+            dataclasses.asdict(v) for v in await pipeline_engine.get_pipeline_versions(pipeline_id)
+        ]
+
+    @app.get("/api/pipelines/{pipeline_id}/versions/{version}")
+    async def get_pipeline_version(pipeline_id: str, version: int) -> dict:
+        pipeline = await pipeline_engine.get_pipeline_version(pipeline_id, version)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="Pipeline version not found")
+        return dataclasses.asdict(pipeline)
+
+    @app.post("/api/pipelines/{pipeline_id}/execute")
+    async def execute_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineExecute
+
+        data = PipelineExecute(inputs=body.get("inputs", {}))
+        execution = await pipeline_engine.execute_pipeline(pipeline_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/pipelines/{pipeline_id}/schedule")
+    async def schedule_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineScheduleRequest
+
+        data = PipelineScheduleRequest(cron=body["cron"], timezone=body.get("timezone", "UTC"))
+        schedule = await pipeline_engine.schedule_pipeline(pipeline_id, data)
+        return dataclasses.asdict(schedule)
+
+    @app.delete("/api/pipelines/{pipeline_id}/schedule")
+    async def unschedule_pipeline(pipeline_id: str) -> dict:
+        await pipeline_engine.unschedule_pipeline(pipeline_id)
+        return {"unscheduled": pipeline_id}
+
+    @app.get("/api/pipelines/{pipeline_id}/schedule")
+    async def get_pipeline_schedule(pipeline_id: str) -> dict:
+        schedule = await pipeline_engine.get_pipeline_schedule(pipeline_id)
+        if not schedule:
+            raise HTTPException(status_code=404, detail="No schedule found")
+        return dataclasses.asdict(schedule)
+
+    @app.post("/api/pipelines/{pipeline_id}/rollback")
+    async def rollback_pipeline(pipeline_id: str, body: dict) -> dict:
+        from agentic_os.ports.pipeline import PipelineRollback
+
+        data = PipelineRollback(to_execution_id=body["to_execution_id"])
+        execution = await pipeline_engine.rollback_pipeline(pipeline_id, data)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/pipelines/{pipeline_id}/executions")
+    async def get_pipeline_executions(
+        pipeline_id: str,
+        status: PipelineExecutionStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        return [
+            dataclasses.asdict(e)
+            for e in await pipeline_engine.get_pipeline_executions(
+                pipeline_id, status, limit, offset
+            )
+        ]
+
+    @app.get("/api/pipelines/executions/running")
+    async def get_running_pipeline_executions() -> list[dict]:
+        return [dataclasses.asdict(e) for e in await pipeline_engine.get_running_executions()]
+
+    @app.get("/api/pipelines/executions/scheduled")
+    async def get_scheduled_pipeline_executions() -> list[dict]:
+        return [dataclasses.asdict(e) for e in await pipeline_engine.get_scheduled_executions()]
+
+    @app.post("/api/pipelines/executions/{execution_id}/cancel")
+    async def cancel_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.cancel_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/pipelines/executions/{execution_id}/pause")
+    async def pause_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.pause_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.post("/api/pipelines/executions/{execution_id}/resume")
+    async def resume_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.resume_execution(execution_id)
+        return dataclasses.asdict(execution)
+
+    @app.get("/api/pipelines/executions/{execution_id}")
+    async def get_pipeline_execution(execution_id: str) -> dict:
+        execution = await pipeline_engine.get_execution(execution_id)
+        if not execution:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        return dataclasses.asdict(execution)
+
+    # ── Runtime: Execution Engine Framework (Phase 4, M1) ──
+    runtime = platform.runtime
+    if runtime is None:
+        raise RuntimeError("RuntimeManager is required but was not initialised on the Platform")
+
+    @app.get("/api/runtime/engines")
+    async def list_runtime_engines(
+        engine_type: str | None = None,
+        capability: str | None = None,
+        status: str | None = None,
+    ) -> dict:
+        type_filter = EngineType(engine_type) if engine_type else None
+        cap_filter = EngineCapability(capability) if capability else None
+        engines = await runtime.list_engines(type_filter, cap_filter, status)
+        return {"engines": [e.to_dict() for e in engines], "total": len(engines)}
+
+    @app.get("/api/runtime/engines/{engine_id}")
+    async def get_runtime_engine(engine_id: str) -> dict:
+        engine = await runtime.get_engine(engine_id)
+        if engine is None:
+            raise HTTPException(status_code=404, detail="Engine not found")
+        return engine.to_dict()
+
+    @app.post("/api/runtime/engines")
+    async def register_runtime_engine(body: dict) -> dict:
+        try:
+            registration = EngineRegistration(
+                name=body["name"],
+                engine_type=EngineType(body.get("engine_type", "generic")),
+                endpoint=body.get("endpoint"),
+                transport=body.get("transport", "local"),
+                capabilities=[EngineCapability(c) for c in body.get("capabilities", [])],
+                description=body.get("description", ""),
+                version=body.get("version", "1.0.0"),
+                tags=body.get("tags", []),
+                metadata=body.get("metadata", {}),
+            )
+            engine = await runtime.register_engine(registration)
+            return engine.to_dict()
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.delete("/api/runtime/engines/{engine_id}")
+    async def unregister_runtime_engine(engine_id: str) -> dict:
+        removed = await runtime.unregister_engine(engine_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Engine not found")
+        return {"removed": True, "engine_id": engine_id}
+
+    @app.post("/api/runtime/engines/{engine_id}/execute")
+    async def execute_on_engine(engine_id: str, body: dict) -> dict:
+        try:
+            request = ExecutionRequest(
+                action=body["action"],
+                payload=body.get("payload", {}),
+                timeout_seconds=body.get("timeout_seconds", 60.0),
+                stream=body.get("stream", False),
+                metadata=body.get("metadata", {}),
+            )
+            result = await runtime.execute(engine_id, request)
+            return result.to_dict()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.post("/api/runtime/execute")
+    async def execute_best(body: dict) -> dict:
+        try:
+            request = ExecutionRequest(
+                action=body["action"],
+                payload=body.get("payload", {}),
+                timeout_seconds=body.get("timeout_seconds", 60.0),
+            )
+            required = None
+            if "required_capability" in body:
+                required = EngineCapability(body["required_capability"])
+            result = await runtime.execute_on_best(request, required)
+            return result.to_dict()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @app.post("/api/runtime/discover")
+    async def discover_engines() -> dict:
+        engines = await runtime.discover_engines()
+        return {"engines": [e.to_dict() for e in engines], "total": len(engines)}
+
+    @app.get("/api/runtime/capabilities")
+    async def list_runtime_capabilities() -> dict:
+        caps = await runtime.list_capabilities()
+        return {
+            engine_id: [c.to_dict() for c in caps_list] for engine_id, caps_list in caps.items()
+        }
+
+    @app.get("/api/runtime/engines/{engine_id}/health")
+    async def engine_health(engine_id: str) -> dict:
+        health = await runtime.health_check(engine_id)
+        return health.to_dict()
+
+    @app.post("/api/runtime/engines/{engine_id}/benchmark")
+    async def benchmark_engine(engine_id: str, body: dict | None = None) -> dict:
+        try:
+            benchmark = await runtime.benchmark(engine_id, body or {})
+            return benchmark.to_dict()
+        except NotImplementedError:
+            raise HTTPException(
+                status_code=501,
+                detail="Engine does not support benchmarking",
+            ) from None
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+
+    @app.get("/api/runtime/engines/{engine_id}/sessions")
+    async def list_engine_sessions(
+        engine_id: str,
+        limit: int = 50,
+    ) -> dict:
+        sessions = await runtime.list_sessions(engine_id=engine_id, limit=limit)
+        return {"sessions": [s.to_dict() for s in sessions], "total": len(sessions)}
+
+    # ── Discovery & Profiling API (Phase 4, M2) ──
+    discovery_framework = platform.discovery_framework
+
+    @app.get("/api/discovery/providers")
+    async def list_discovery_providers() -> list[dict]:
+        """List registered discovery providers with status."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.list_providers()
+
+    @app.put("/api/discovery/providers/{name}")
+    async def configure_discovery_provider(name: str, body: dict) -> dict:
+        """Enable/disable or configure a discovery provider."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        enabled = body.get("enabled")
+        if enabled is True:
+            discovery_framework.enable_provider(name)
+        elif enabled is False:
+            discovery_framework.disable_provider(name)
+        return {"name": name, "enabled": enabled}
+
+    @app.post("/api/discovery/scan")
+    async def run_discovery_scan(profile: str | None = None) -> dict:
+        """Run discovery using optional named profile."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        profile_name = profile or discovery_framework.config.default_profile
+        engines = await discovery_framework.discover_and_register(profile_name)
+        return {
+            "profile": profile_name,
+            "engines_found": len(engines),
+            "engines": [e.to_dict() for e in engines] if engines else [],
+        }
+
+    @app.get("/api/discovery/cache")
+    async def get_discovery_cache() -> dict:
+        """List cached discovery results."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        cache_entries = discovery_framework.get_cache_entries()
+        return {"entries": cache_entries, "total": len(cache_entries)}
+
+    @app.delete("/api/discovery/cache")
+    async def clear_discovery_cache() -> dict:
+        """Invalidate all cached discovery results."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        count = discovery_framework.cache.invalidate_all()
+        return {"invalidated": count}
+
+    @app.get("/api/discovery/history")
+    async def get_discovery_history(limit: int = 50) -> list[dict]:
+        """Return discovery scan history."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.telemetry.get_history(limit)
+
+    @app.get("/api/discovery/stats")
+    async def get_discovery_stats() -> dict:
+        """Aggregated discovery statistics."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.telemetry.get_stats()
+
+    # Profiles
+    @app.get("/api/discovery/profiles")
+    async def list_discovery_profiles() -> list[dict]:
+        """List all discovery profiles."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return discovery_framework.config.list_profiles()
+
+    @app.post("/api/discovery/profiles")
+    async def create_discovery_profile(body: dict) -> dict:
+        """Create a new discovery profile."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        from agentic_os.domain.discovery import DiscoveryProfile
+
+        profile = DiscoveryProfile(
+            name=body["name"],
+            description=body.get("description", ""),
+            interval_seconds=body.get("interval_seconds", 60.0),
+            validate_after_discovery=body.get("validate_after_discovery", True),
+            profile_after_discovery=body.get("profile_after_discovery", True),
+            auto_register=body.get("auto_register", True),
+            tags=tuple(body.get("tags", [])),
+        )
+        discovery_framework.config.add_profile(profile)
+        return profile.to_dict()
+
+    @app.get("/api/discovery/profiles/{name}")
+    async def get_discovery_profile(name: str) -> dict:
+        """Get a discovery profile by name."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        profile = discovery_framework.config.get_profile(name)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        return profile.to_dict()
+
+    @app.delete("/api/discovery/profiles/{name}")
+    async def delete_discovery_profile(name: str) -> dict:
+        """Delete a discovery profile."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        removed = discovery_framework.config.remove_profile(name)
+        if not removed:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        return {"removed": name}
+
+    @app.post("/api/discovery/profiles/{name}/activate")
+    async def activate_discovery_profile(name: str) -> dict:
+        """Activate a discovery profile for scheduled scanning."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        profile = discovery_framework.config.get_profile(name)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        discovery_framework.config.default_profile = name
+        return {"activated": name}
+
+    # Validation
+    @app.post("/api/discovery/engines/{engine_id}/validate")
+    async def validate_discovered_engine(engine_id: str) -> dict:
+        """Validate a discovered engine by its ID."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+
+        # Find the engine in the runtime registry
+        engine = await runtime.get_engine(engine_id)
+        if engine is None:
+            raise HTTPException(status_code=404, detail="Engine not found")
+
+        # Build a fake registration from engine data for validation
+        registration = EngineRegistration(
+            name=engine.name,
+            engine_type=engine.engine_type,
+            endpoint=engine.endpoint or f"local:{engine.name}",
+            transport=engine.transport,
+            capabilities=[c.type for c in engine.capabilities],
+            description="",
+            version=engine.version or "",
+        )
+        passed, results = await discovery_framework.validate_engine(registration)
+        return {
+            "engine_id": engine_id,
+            "valid": passed,
+            "results": [r.to_dict() for r in results],
+        }
+
+    # Profiling
+    @app.post("/api/discovery/engines/{engine_id}/profile")
+    async def profile_discovered_engine(engine_id: str) -> dict:
+        """Profile a discovered engine by its ID."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        engine = await runtime.get_engine(engine_id)
+        if engine is None:
+            raise HTTPException(status_code=404, detail="Engine not found")
+
+        registration = EngineRegistration(
+            name=engine.name,
+            engine_type=engine.engine_type,
+            endpoint=engine.endpoint or f"local:{engine.name}",
+            transport=engine.transport,
+            capabilities=[c.type for c in engine.capabilities],
+            description="",
+            version=engine.version or "",
+        )
+        profile_result = await discovery_framework.profile_engine(registration, engine)
+        return profile_result.to_dict()
+
+    # Hot Reload
+    @app.post("/api/discovery/hot-reload/start")
+    async def start_discovery_hot_reload() -> dict:
+        """Start hot-reload for runtime discovery."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        await discovery_framework.start_hot_reload()
+        return {"status": "started"}
+
+    @app.post("/api/discovery/hot-reload/stop")
+    async def stop_discovery_hot_reload() -> dict:
+        """Stop hot-reload for runtime discovery."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        await discovery_framework.stop_hot_reload()
+        return {"status": "stopped"}
+
+    @app.get("/api/discovery/hot-reload/status")
+    async def get_discovery_hot_reload_status() -> dict:
+        """Get hot-reload status."""
+        if discovery_framework is None:
+            raise HTTPException(status_code=503, detail="Discovery framework not available")
+        return {"running": discovery_framework.hot_reload_running}
 
     # ── Minimal provider management UI page (Phase 3 builds Mission Control) ──
     @app.get("/providers", response_class=HTMLResponse)
