@@ -7,8 +7,6 @@ here behind their ports. The :class:`Platform` bundle is the single object the
 API layer receives.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from agentic_os.adapters.bus.factory import build_bus
@@ -52,6 +50,10 @@ from agentic_os.core.discovery.validation import (
     VersionDetectValidator,
 )
 from agentic_os.core.health import HealthMonitorImpl
+
+# Phase 4, M3: MCP Runtime Foundation
+from agentic_os.core.mcp.manager import MCPManager
+from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.core.memory.manager import MemoryManagerImpl
 from agentic_os.core.orchestration.config import OrchestrationConfiguration
 
@@ -116,6 +118,8 @@ class Platform:
     discovery_framework: DiscoveryFramework | None = None
     # Phase 4, M3: Orchestration Framework
     orchestration: OrchestrationFramework | None = None
+    # Phase 4, M3: MCP Runtime Foundation
+    mcp: MCPManager | None = None
 
 
 class Kernel:
@@ -194,6 +198,9 @@ class Kernel:
         # Phase 4, M3: Orchestration Framework — multi-agent orchestration & swarm intelligence
         self.orchestration = self._build_orchestration_framework()
 
+        # Phase 4, M3: MCP Runtime Foundation — universal MCP server runtime
+        self.mcp = self._build_mcp_framework()
+
     async def start(self) -> None:
         await self.bus.start()
         self._plugins = load_plugins(self.registry, self.providers)
@@ -226,9 +233,16 @@ class Kernel:
         if self.orchestration:
             await self.orchestration.start()
 
+        # Phase 4, M3: Start MCP runtime
+        if self.mcp:
+            await self.mcp.start()
+
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 4, M3: Shutdown MCP runtime
+        if self.mcp:
+            await self.mcp.shutdown()
         # Phase 4, M3: Stop orchestration framework first (depends on runtime & bus)
         if self.orchestration:
             await self.orchestration.stop()
@@ -368,6 +382,21 @@ class Kernel:
         log.info("orchestration_framework.built")
         return framework
 
+    def _build_mcp_framework(self) -> MCPManager | None:
+        """Build and return the M3 MCP Runtime Framework."""
+        if not settings.mcp_enabled:
+            return None
+
+        registry = MCPRegistryImpl(bus=self.bus)
+        manager = MCPManager(registry=registry, bus=self.bus)
+
+        log.info(
+            "mcp_framework.built",
+            transport=settings.mcp_default_transport,
+            auto_reconnect=settings.mcp_auto_reconnect,
+        )
+        return manager
+
     def _seed_default_models(self) -> None:
         """Register example models so routing/cost have candidates.
 
@@ -418,6 +447,7 @@ class Kernel:
             runtime=self.runtime,
             discovery_framework=self.discovery_framework,
             orchestration=self.orchestration,
+            mcp=self.mcp,
         )
 
 

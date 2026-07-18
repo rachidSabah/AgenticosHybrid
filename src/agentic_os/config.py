@@ -4,8 +4,6 @@ All knobs are environment-driven (12-factor). Defaults let the system boot on
 the in-process bus with the mock provider — zero infrastructure.
 """
 
-from __future__ import annotations
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,6 +58,20 @@ class Settings(BaseSettings):
     orchestration_auto_recover: bool = True
     orchestration_default_decomposition_strategy: str = "rule-based"
     orchestration_inter_agent_timeout_seconds: int = 60
+
+    # MCP Runtime Foundation (Phase 4, M3)
+    mcp_enabled: bool = True
+    mcp_default_transport: str = "stdio"  # stdio | sse | streamable_http
+    mcp_default_timeout_seconds: int = 30
+    mcp_health_check_interval_seconds: int = 30
+    mcp_health_check_timeout_seconds: int = 10
+    mcp_session_timeout_minutes: int = 60
+    mcp_max_retries: int = 5
+    mcp_auto_reconnect: bool = True
+    mcp_auto_restart: bool = True
+    mcp_discovery_enabled: bool = True
+    mcp_max_servers: int = 50
+    mcp_enforce_sandbox: bool = True
 
 
 settings = Settings()

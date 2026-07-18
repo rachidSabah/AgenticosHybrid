@@ -5,8 +5,6 @@ Domain layer for MCP framework - pure Python, no external dependencies.
 Follows hexagonal architecture: domain depends on nothing.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -23,6 +21,7 @@ class MCPTransport(StrEnum):
 
     STDIO = "stdio"
     SSE = "sse"
+    STREAMABLE_HTTP = "streamable_http"
 
 
 class MCPServerStatus(StrEnum):
@@ -42,6 +41,15 @@ class MCPHealthStatus(StrEnum):
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
     UNKNOWN = "unknown"
+
+
+class MCPSessionStatus(StrEnum):
+    """Session status for MCP connections."""
+
+    ACTIVE = "active"
+    IDLE = "idle"
+    EXPIRED = "expired"
+    CLOSED = "closed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +91,97 @@ class MCPToolResult:
         return {
             "content": self.content,
             "isError": self.is_error,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MCPResource:
+    """An MCP resource exposed by a server."""
+
+    uri: str
+    name: str
+    description: str = ""
+    mime_type: str | None = None
+    size: int | None = None
+    annotations: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "uri": self.uri,
+            "name": self.name,
+            "description": self.description,
+            "mimeType": self.mime_type,
+            "size": self.size,
+            "annotations": self.annotations,
+        }
+
+    @classmethod
+    def from_mcp(cls, resource: dict[str, Any]) -> MCPResource:
+        """Create MCPResource from MCP protocol resource definition."""
+        return cls(
+            uri=resource.get("uri", ""),
+            name=resource.get("name", ""),
+            description=resource.get("description", ""),
+            mime_type=resource.get("mimeType"),
+            size=resource.get("size"),
+            annotations=resource.get("annotations", {}),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MCPResourceTemplate:
+    """A resource template for parameterized resource URIs."""
+
+    uri_template: str
+    name: str
+    description: str = ""
+    mime_type: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "uriTemplate": self.uri_template,
+            "name": self.name,
+            "description": self.description,
+            "mimeType": self.mime_type,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MCPPrompt:
+    """An MCP prompt template exposed by a server."""
+
+    name: str
+    description: str = ""
+    arguments: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "arguments": list(self.arguments),
+        }
+
+    @classmethod
+    def from_mcp(cls, prompt: dict[str, Any]) -> MCPPrompt:
+        """Create MCPPrompt from MCP protocol prompt definition."""
+        return cls(
+            name=prompt.get("name", ""),
+            description=prompt.get("description", ""),
+            arguments=tuple(prompt.get("arguments", [])),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MCPRoot:
+    """A root directory exposed by the client to the server."""
+
+    uri: str
+    name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "uri": self.uri,
+            "name": self.name,
         }
 
 
@@ -200,6 +299,32 @@ class MCPServerConfig:
             id=str(uuid4()),
             name=name,
             transport=MCPTransport.SSE,
+            url=url,
+            headers=headers or {},
+            sandbox=sandbox,
+            sandbox_config=sandbox_config or {},
+            description=description,
+            tags=tuple(tags) if tags else (),
+            created_by=created_by,
+        )
+
+    @classmethod
+    def create_streamable_http(
+        cls,
+        name: str,
+        url: str,
+        headers: dict[str, str] | None = None,
+        sandbox: bool = True,
+        sandbox_config: dict[str, Any] | None = None,
+        description: str = "",
+        tags: list[str] | None = None,
+        created_by: str = "system",
+    ) -> MCPServerConfig:
+        """Create a Streamable HTTP transport MCP server config."""
+        return cls(
+            id=str(uuid4()),
+            name=name,
+            transport=MCPTransport.STREAMABLE_HTTP,
             url=url,
             headers=headers or {},
             sandbox=sandbox,
@@ -383,14 +508,112 @@ class MCPRegistry:
         return [s for s in self.servers if s.status == status]
 
 
+@dataclass(frozen=True, slots=True)
+class MCPSession:
+    """A session representing a long-lived MCP connection."""
+
+    id: str
+    server_id: str
+    transport: MCPTransport
+    status: MCPSessionStatus = MCPSessionStatus.ACTIVE
+    capabilities: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=_utcnow)
+    updated_at: datetime = field(default_factory=_utcnow)
+    expires_at: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "server_id": self.server_id,
+            "transport": self.transport.value,
+            "status": self.status.value,
+            "capabilities": self.capabilities,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "metadata": self.metadata,
+        }
+
+    def with_status(self, status: MCPSessionStatus) -> MCPSession:
+        return MCPSession(
+            id=self.id,
+            server_id=self.server_id,
+            transport=self.transport,
+            status=status,
+            capabilities=self.capabilities,
+            created_at=self.created_at,
+            updated_at=_utcnow(),
+            expires_at=self.expires_at,
+            metadata=self.metadata,
+        )
+
+    def with_capabilities(self, capabilities: dict[str, Any]) -> MCPSession:
+        return MCPSession(
+            id=self.id,
+            server_id=self.server_id,
+            transport=self.transport,
+            status=self.status,
+            capabilities=capabilities,
+            created_at=self.created_at,
+            updated_at=_utcnow(),
+            expires_at=self.expires_at,
+            metadata=self.metadata,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MCPSubscription:
+    """A subscription for resource change notifications."""
+
+    id: str
+    server_id: str
+    resource_uri: str
+    created_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "server_id": self.server_id,
+            "resource_uri": self.resource_uri,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class MCPCapability:
+    """A capability negotiated during MCP protocol handshake."""
+
+    name: str
+    version: str = "2024-11-05"
+    enabled: bool = True
+    config: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "enabled": self.enabled,
+            "config": self.config,
+        }
+
+
 __all__ = [
     "MCPTransport",
     "MCPServerStatus",
     "MCPHealthStatus",
+    "MCPSessionStatus",
     "MCPTool",
     "MCPToolResult",
+    "MCPResource",
+    "MCPResourceTemplate",
+    "MCPPrompt",
+    "MCPRoot",
     "MCPPermissionMapping",
     "MCPServerConfig",
     "MCPServerDetail",
     "MCPRegistry",
+    "MCPSession",
+    "MCPSubscription",
+    "MCPCapability",
 ]

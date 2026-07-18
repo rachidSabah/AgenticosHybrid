@@ -2,10 +2,8 @@
 MCP Registry Implementation
 
 In-memory implementation of MCPRegistryPort with server lifecycle management,
-tool registry, and hot reload support.
+tool registry, resource/prompt delegation, and hot reload support.
 """
-
-from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
@@ -16,7 +14,9 @@ from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.mcp import (
     MCPHealthStatus,
     MCPPermissionMapping,
+    MCPPrompt,
     MCPRegistry,
+    MCPResource,
     MCPServerConfig,
     MCPServerDetail,
     MCPServerStatus,
@@ -44,6 +44,7 @@ class MCPRegistryImpl(MCPRegistryPort):
     Features:
     - Server lifecycle management (register, start, stop, hot reload)
     - Tool registry with caching
+    - Resource/prompt delegation through connected clients
     - Health monitoring integration
     - Permission mapping for tool-to-capability
     - Event emission for all lifecycle transitions
@@ -55,6 +56,34 @@ class MCPRegistryImpl(MCPRegistryPort):
     _health_cache: dict[str, tuple[MCPHealthStatus, dict[str, Any]]] = field(default_factory=dict)
     _clients: dict[str, Any] = field(default_factory=dict)  # MCPClient instances
     _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+
+    # ── Public accessors for manager layer ──────────────────────────────
+
+    def get_registry_snapshot(self) -> MCPRegistry:
+        """Return the current registry snapshot (public accessor)."""
+        return self._registry
+
+    def get_health_cache(self) -> dict[str, tuple[MCPHealthStatus, dict[str, Any]]]:
+        """Return the health cache (public accessor)."""
+        return dict(self._health_cache)
+
+    def get_clients(self) -> dict[str, Any]:
+        """Return the client map (public accessor)."""
+        return dict(self._clients)
+
+    def get_client(self, server_id: str) -> Any | None:
+        """Get the MCPClient for a server by ID (public accessor)."""
+        return self._clients.get(server_id)
+
+    def set_registry(self, registry: MCPRegistry) -> None:
+        """Replace the registry snapshot (public accessor)."""
+        self._registry = registry
+
+    def client_count(self) -> int:
+        """Return the number of connected clients."""
+        return len(self._clients)
+
+    # ── Internal helpers ────────────────────────────────────────────────
 
     def _get_lock(self, server_id: str) -> asyncio.Lock:
         if server_id not in self._locks:
@@ -74,8 +103,8 @@ class MCPRegistryImpl(MCPRegistryPort):
 
     def _validate_create(self, data: MCPServerCreate) -> ValidationResult:
         """Validate server creation input."""
-        errors = []
-        warnings = []
+        errors: list[str] = []
+        warnings: list[str] = []
 
         if not data.name or not data.name.strip():
             errors.append("name is required")
@@ -83,13 +112,15 @@ class MCPRegistryImpl(MCPRegistryPort):
         if data.transport == "stdio":
             if not data.command:
                 errors.append("command is required for stdio transport")
-        elif data.transport == "sse":
+        elif data.transport in ("sse", "streamable_http"):
             if not data.url:
-                errors.append("url is required for SSE transport")
+                errors.append("url is required for SSE and Streamable HTTP transport")
         else:
             errors.append(f"unknown transport: {data.transport}")
 
         return ValidationResult(valid=len(errors) == 0, errors=errors, warnings=warnings)
+
+    # ── CRUD Operations ─────────────────────────────────────────────────
 
     async def register_server(self, data: MCPServerCreate) -> MCPServerDetail:
         """Register a new MCP server."""
@@ -97,7 +128,6 @@ class MCPRegistryImpl(MCPRegistryPort):
         if not validation.valid:
             raise ValueError(f"Invalid server config: {', '.join(validation.errors)}")
 
-        # Create server config
         if data.transport == "stdio":
             if not data.command:
                 raise ValueError("command is required for stdio transport")
@@ -106,6 +136,19 @@ class MCPRegistryImpl(MCPRegistryPort):
                 command=data.command,
                 args=data.args,
                 env=data.env,
+                sandbox=data.sandbox,
+                sandbox_config=data.sandbox_config,
+                description=data.description,
+                tags=data.tags,
+                created_by=data.created_by,
+            )
+        elif data.transport == "streamable_http":
+            if not data.url:
+                raise ValueError("url is required for Streamable HTTP transport")
+            config = MCPServerConfig.create_streamable_http(
+                name=data.name,
+                url=data.url,
+                headers=data.headers,
                 sandbox=data.sandbox,
                 sandbox_config=data.sandbox_config,
                 description=data.description,
@@ -126,17 +169,14 @@ class MCPRegistryImpl(MCPRegistryPort):
                 created_by=data.created_by,
             )
 
-        # Create server detail with stopped status
         detail = MCPServerDetail(
             config=config,
             status=MCPServerStatus.STOPPED,
             health=MCPHealthStatus.UNKNOWN,
         )
 
-        # Update registry
         self._registry = self._registry.with_server(detail)
 
-        # Emit event
         await self._emit(
             Topic.MCP_SERVER_REGISTERED,
             {"server_id": config.id, "name": config.name, "transport": config.transport.value},
@@ -177,7 +217,6 @@ class MCPRegistryImpl(MCPRegistryPort):
         if not detail:
             raise KeyError(f"Server not found: {server_id}")
 
-        # Build updated config
         config = detail.config
         updated = False
 
@@ -208,7 +247,6 @@ class MCPRegistryImpl(MCPRegistryPort):
         if not updated:
             return detail
 
-        # Create new config with updated fields
         new_config = MCPServerConfig(
             id=config.id,
             name=new_name if new_name is not None else config.name,
@@ -230,7 +268,6 @@ class MCPRegistryImpl(MCPRegistryPort):
             created_by=config.created_by,
         )
 
-        # Update detail
         new_detail = MCPServerDetail(
             config=new_config,
             status=detail.status,
@@ -271,7 +308,6 @@ class MCPRegistryImpl(MCPRegistryPort):
         if not detail:
             return False
 
-        # Stop if running
         if detail.status in (MCPServerStatus.RUNNING, MCPServerStatus.STARTING):
             await self.stop_server(server_id)
 
@@ -291,6 +327,8 @@ class MCPRegistryImpl(MCPRegistryPort):
         log.info(f"Deleted MCP server: {server_id}")
         return True
 
+    # ── Server Lifecycle ────────────────────────────────────────────────
+
     async def start_server(self, server_id: str) -> MCPServerDetail:
         """Start an MCP server."""
         detail = self._registry.get_server(server_id)
@@ -304,7 +342,6 @@ class MCPRegistryImpl(MCPRegistryPort):
             raise ValueError(f"Server {server_id} is disabled")
 
         async with self._get_lock(server_id):
-            # Double-check after acquiring lock
             detail = self._registry.get_server(server_id)
             if not detail:
                 raise KeyError(f"Server not found: {server_id}")
@@ -312,24 +349,22 @@ class MCPRegistryImpl(MCPRegistryPort):
             if detail.status in (MCPServerStatus.RUNNING, MCPServerStatus.STARTING):
                 return detail
 
-            # Update status to starting
             starting_detail = detail.with_status(MCPServerStatus.STARTING)
             self._registry = self._registry.with_server(starting_detail)
 
             try:
-                # Import MCP client here to avoid circular imports
                 from agentic_os.core.mcp.client import MCPClient
 
                 client = MCPClient(detail.config)
                 await client.connect()
+
                 tools = await client.list_tools()
 
-                # Create running detail
                 running_detail = (
                     detail.with_status(
                         MCPServerStatus.RUNNING,
                         error=None,
-                        process_id=client.process_id if hasattr(client, "process_id") else None,
+                        process_id=client.process_id,
                     )
                     .with_tools(tools)
                     .with_health(MCPHealthStatus.HEALTHY, {"tools": len(tools)})
@@ -338,7 +373,6 @@ class MCPRegistryImpl(MCPRegistryPort):
                 self._registry = self._registry.with_server(running_detail)
                 self._clients[server_id] = client
 
-                # Emit events
                 await self._emit(
                     Topic.MCP_SERVER_STARTED,
                     {"server_id": server_id, "name": detail.config.name, "tools": len(tools)},
@@ -384,7 +418,6 @@ class MCPRegistryImpl(MCPRegistryPort):
             if detail.status in (MCPServerStatus.STOPPED, MCPServerStatus.STOPPING):
                 return detail
 
-            # Update to stopping
             stopping_detail = detail.with_status(MCPServerStatus.STOPPING)
             self._registry = self._registry.with_server(stopping_detail)
 
@@ -394,7 +427,6 @@ class MCPRegistryImpl(MCPRegistryPort):
                     await client.disconnect()
                     del self._clients[server_id]
 
-                # Update to stopped
                 stopped_detail = detail.with_status(MCPServerStatus.STOPPED)
                 self._registry = self._registry.with_server(stopped_detail)
 
@@ -412,6 +444,17 @@ class MCPRegistryImpl(MCPRegistryPort):
                 log.error(f"Error stopping MCP server {server_id}: {e}")
                 raise
 
+    async def restart_server(self, server_id: str) -> MCPServerDetail:
+        """Restart an MCP server (stop then start)."""
+        detail = self._registry.get_server(server_id)
+        if not detail:
+            raise KeyError(f"Server not found: {server_id}")
+
+        if detail.status in (MCPServerStatus.RUNNING, MCPServerStatus.STARTING):
+            await self.stop_server(server_id)
+
+        return await self.start_server(server_id)
+
     async def reload_server(self, server_id: str) -> MCPServerDetail:
         """Hot reload an MCP server (restart and refresh tools)."""
         detail = self._registry.get_server(server_id)
@@ -424,7 +467,35 @@ class MCPRegistryImpl(MCPRegistryPort):
         else:
             return await self.start_server(server_id)
 
-    async def list_tools(self, server_id: str) -> list[MCPTool]:
+    # ── Tool Discovery ──────────────────────────────────────────────────
+
+    async def discover_tools(self, server_id: str) -> list[MCPTool]:
+        """Discover tools from an MCP server by reconnecting and listing."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+
+        try:
+            tools = await client.list_tools()
+
+            detail = self._registry.get_server(server_id)
+            if detail:
+                self._registry = self._registry.with_server(detail.with_tools(tools))
+
+                await self._emit(
+                    Topic.MCP_TOOL_DISCOVERED,
+                    {"server_id": server_id, "tools": len(tools)},
+                )
+
+            return tools
+        except Exception as e:
+            await self._emit(
+                Topic.MCP_TOOL_ERROR,
+                {"server_id": server_id, "error": str(e)},
+            )
+            raise
+
+    async def get_tools(self, server_id: str) -> list[MCPTool]:
         """Get cached tools for a server."""
         detail = self._registry.get_server(server_id)
         if not detail:
@@ -446,12 +517,10 @@ class MCPRegistryImpl(MCPRegistryPort):
         if not client:
             raise RuntimeError(f"Client not found for server {data.server_id}")
 
-        # Check permission if mapped
         permissions = self._permissions.get(data.server_id, [])
         tool_perm = next((p for p in permissions if p.tool_name == data.tool), None)
         if tool_perm:
-            # Permission check would go through AccessControl port
-            pass
+            pass  # Permission check would go through AccessControl port
 
         try:
             result = await client.call_tool(data.tool, data.args)
@@ -481,6 +550,8 @@ class MCPRegistryImpl(MCPRegistryPort):
             )
             raise
 
+    # ── Health Monitoring ───────────────────────────────────────────────
+
     async def check_health(self, server_id: str) -> MCPHealthStatus:
         """Check health of an MCP server."""
         detail = self._registry.get_server(server_id)
@@ -490,18 +561,24 @@ class MCPRegistryImpl(MCPRegistryPort):
         client = self._clients.get(server_id)
         if not client or detail.status != MCPServerStatus.RUNNING:
             health = MCPHealthStatus.UNHEALTHY
-            details = {"error": "Server not running"}
+            details: dict[str, Any] = {"error": "Server not running"}
         else:
             try:
-                health = await client.health_check()
+                health_result = await client.health_check()
                 details = (
-                    {"latency_ms": health.get("latency_ms", 0)} if isinstance(health, dict) else {}
+                    {"latency_ms": health_result.get("latency_ms", 0)}
+                    if isinstance(health_result, dict)
+                    else {}
+                )
+                health = (
+                    MCPHealthStatus.HEALTHY
+                    if health_result.get("healthy")
+                    else MCPHealthStatus.UNHEALTHY
                 )
             except Exception as e:
                 health = MCPHealthStatus.UNHEALTHY
                 details = {"error": str(e)}
 
-        # Update cached health
         new_detail = detail.with_health(health, details)
         self._registry = self._registry.with_server(new_detail)
         self._health_cache[server_id] = (health, details)
@@ -521,6 +598,8 @@ class MCPRegistryImpl(MCPRegistryPort):
         """Get cached health status."""
         cached = self._health_cache.get(server_id)
         return cached[0] if cached else None
+
+    # ── Permissions ─────────────────────────────────────────────────────
 
     async def set_permissions(self, server_id: str, mappings: list[MCPPermissionMapping]) -> int:
         """Set tool-to-capability permission mappings."""
@@ -542,12 +621,93 @@ class MCPRegistryImpl(MCPRegistryPort):
         """Get tool-to-capability permission mappings."""
         return self._permissions.get(server_id, [])
 
+    # ── Registry Snapshot ───────────────────────────────────────────────
+
     async def get_registry(self) -> MCPRegistry:
         """Get full registry snapshot."""
         return self._registry
 
+    # ── Resource delegation ─────────────────────────────────────────────
+
+    async def list_server_resources(self, server_id: str) -> list[MCPResource]:
+        """List resources from a running server."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+        return await client.list_resources()
+
+    async def read_server_resource(self, server_id: str, uri: str) -> dict[str, Any]:
+        """Read a resource from a running server."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+        return await client.read_resource(uri)
+
+    async def subscribe_server_resource(self, server_id: str, uri: str) -> bool:
+        """Subscribe to resource changes on a running server."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+        return await client.subscribe_resource(uri)
+
+    async def unsubscribe_server_resource(self, server_id: str, uri: str) -> bool:
+        """Unsubscribe from resource changes on a running server."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+        return await client.unsubscribe_resource(uri)
+
+    # ── Prompt delegation ───────────────────────────────────────────────
+
+    async def list_server_prompts(self, server_id: str) -> list[MCPPrompt]:
+        """List prompts from a running server."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+        return await client.list_prompts()
+
+    async def get_server_prompt(
+        self, server_id: str, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Get a prompt from a running server."""
+        client = self._clients.get(server_id)
+        if not client:
+            raise RuntimeError(f"Client not found for server {server_id}")
+        return await client.get_prompt(name, arguments)
+
+    # ── Discovery integration stub ──────────────────────────────────────
+
+    async def discover_and_register(
+        self,
+        name: str,
+        command: str | None = None,
+        url: str | None = None,
+        transport: str = "stdio",
+        **kwargs: Any,
+    ) -> MCPServerDetail | None:
+        """Discover and register an MCP server automatically.
+
+        This is a stub for future discovery integration (Phase C2).
+        Currently creates a server config directly.
+        """
+        from agentic_os.domain.mcp import MCPTransport as MCPTransportEnum
+
+        try:
+            transport_enum = MCPTransportEnum(transport)
+        except ValueError:
+            log.warning(f"Unknown transport type for discovery: {transport}")
+            return None
+
+        create_data = MCPServerCreate(
+            name=name,
+            transport=transport_enum.value,
+            command=command,
+            url=url,
+            **kwargs,
+        )
+
+        return await self.register_server(create_data)
+
 
 def _utcnow() -> datetime:
-    from datetime import datetime
-
     return datetime.now(UTC)

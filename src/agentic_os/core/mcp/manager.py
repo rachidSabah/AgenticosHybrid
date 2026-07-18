@@ -1,11 +1,10 @@
 """
 MCP Manager
 
-High-level manager for MCP server lifecycle, process supervision, and sandboxing.
+High-level manager for MCP server lifecycle, process supervision, health monitoring,
+tool/resource/prompt discovery, session tracking, and error recovery.
 Coordinates between registry, client, and infrastructure.
 """
-
-from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
@@ -15,6 +14,8 @@ from typing import Any
 from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.domain.mcp import (
     MCPHealthStatus,
+    MCPPrompt,
+    MCPResource,
     MCPServerDetail,
     MCPServerStatus,
     MCPTool,
@@ -33,13 +34,16 @@ def _utcnow() -> datetime:
 @dataclass
 class MCPManager:
     """
-    MCP Manager - orchestrates server lifecycle, health monitoring, and tool invocation.
+    MCP Manager - orchestrates server lifecycle, health monitoring, tool/resource/prompt
+    discovery, session tracking, and error recovery.
 
     Responsibilities:
+    - Lifecycle management (initialize, start, stop, shutdown)
     - Server process supervision (start/stop/restart/health)
-    - Health monitoring with periodic checks
+    - Health monitoring with periodic checks and auto-restart
     - Tool discovery and caching
-    - Sandbox enforcement
+    - Resource and prompt discovery
+    - Session tracking
     - Event emission for all lifecycle changes
     """
 
@@ -49,11 +53,48 @@ class MCPManager:
         default_factory=dict, init=False, repr=False
     )
     _shutdown: bool = field(default=False, init=False, repr=False)
+    _initialized: bool = field(default=False, init=False, repr=False)
+    _auto_restart: bool = field(default=True, init=False, repr=False)
+
+    # ── Lifecycle ───────────────────────────────────────────────────────
+
+    async def initialize(self) -> None:
+        """Initialize the MCP manager.
+
+        Prepares the manager for operation. Does not start any servers.
+        Idempotent — safe to call multiple times.
+        """
+        if self._initialized:
+            log.debug("MCP Manager already initialized")
+            return
+        log.info("Initializing MCP Manager...")
+        self._initialized = True
+
+    async def start(self) -> None:
+        """Start the MCP manager — initialize, start all enabled servers,
+        and begin health monitoring."""
+        log.info("Starting MCP Manager...")
+        await self.initialize()
+        started = await self.start_all_enabled()
+        await self.start_health_monitoring()
+        log.info(f"MCP Manager started with {len(started)} servers")
+
+    async def shutdown(self) -> None:
+        """Shutdown manager - stop all servers, monitoring, and cleanup."""
+        log.info("Shutting down MCP Manager...")
+        self._shutdown = True
+        self._initialized = False
+        await self.stop_health_monitoring()
+        await self.stop_all()
+        log.info("MCP Manager shutdown complete")
+
+    # ── Server Lifecycle ────────────────────────────────────────────────
 
     async def start_all_enabled(self) -> list[MCPServerDetail]:
         """Start all enabled servers."""
-        enabled = self.registry._registry.list_enabled()
-        started = []
+        snapshot = self.registry.get_registry_snapshot()
+        enabled = snapshot.list_enabled()
+        started: list[MCPServerDetail] = []
 
         for detail in enabled:
             if detail.status == MCPServerStatus.STOPPED:
@@ -67,8 +108,9 @@ class MCPManager:
 
     async def stop_all(self) -> list[MCPServerDetail]:
         """Stop all running servers."""
-        running = self.registry._registry.list_by_status(MCPServerStatus.RUNNING)
-        stopped = []
+        snapshot = self.registry.get_registry_snapshot()
+        running = snapshot.list_by_status(MCPServerStatus.RUNNING)
+        stopped: list[MCPServerDetail] = []
 
         for detail in running:
             try:
@@ -81,20 +123,21 @@ class MCPManager:
 
     async def restart_server(self, server_id: str) -> MCPServerDetail:
         """Restart a server (stop then start)."""
-        detail = self.registry._registry.get_server(server_id)
+        snapshot = self.registry.get_registry_snapshot()
+        detail = snapshot.get_server(server_id)
         if not detail:
             raise KeyError(f"Server not found: {server_id}")
 
-        # Stop if running
         if detail.status in (MCPServerStatus.RUNNING, MCPServerStatus.STARTING):
             await self.registry.stop_server(server_id)
 
-        # Start again
         return await self.registry.start_server(server_id)
 
     async def reload_server(self, server_id: str) -> MCPServerDetail:
         """Hot reload server configuration and tools."""
         return await self.registry.reload_server(server_id)
+
+    # ── Health Monitoring ───────────────────────────────────────────────
 
     async def start_health_monitoring(self, interval_seconds: int = 30) -> None:
         """Start periodic health checks for all running servers."""
@@ -111,8 +154,15 @@ class MCPManager:
                     if self._shutdown:
                         break
 
-                    detail = self.registry._registry.get_server(server_id)
+                    snapshot = self.registry.get_registry_snapshot()
+                    detail = snapshot.get_server(server_id)
                     if not detail or detail.status != MCPServerStatus.RUNNING:
+                        if (
+                            detail
+                            and detail.status == MCPServerStatus.FAILED
+                            and self._auto_restart
+                        ):
+                            await self._attempt_restart(server_id)
                         continue
 
                     await self.registry.check_health(server_id)
@@ -122,8 +172,8 @@ class MCPManager:
                 except Exception as e:
                     log.error(f"Health check error for {server_id}: {e}")
 
-        # Start tasks for all currently running servers
-        running = self.registry._registry.list_by_status(MCPServerStatus.RUNNING)
+        snapshot = self.registry.get_registry_snapshot()
+        running = snapshot.list_by_status(MCPServerStatus.RUNNING)
         for detail in running:
             interval = detail.config.health_check_interval_seconds
             task = asyncio.create_task(health_check_loop(detail.config.id, interval))
@@ -138,7 +188,6 @@ class MCPManager:
         for task in self._health_check_tasks.values():
             task.cancel()
 
-        # Wait for tasks to complete
         if self._health_check_tasks:
             await asyncio.gather(*self._health_check_tasks.values(), return_exceptions=True)
 
@@ -150,7 +199,8 @@ class MCPManager:
         if self._shutdown:
             return
 
-        detail = self.registry._registry.get_server(server_id)
+        snapshot = self.registry.get_registry_snapshot()
+        detail = snapshot.get_server(server_id)
         if not detail or detail.status != MCPServerStatus.RUNNING:
             return
 
@@ -166,7 +216,8 @@ class MCPManager:
                     if self._shutdown:
                         break
 
-                    detail = self.registry._registry.get_server(server_id)
+                    snapshot = self.registry.get_registry_snapshot()
+                    detail = snapshot.get_server(server_id)
                     if not detail or detail.status != MCPServerStatus.RUNNING:
                         break
 
@@ -190,6 +241,35 @@ class MCPManager:
             except asyncio.CancelledError:
                 pass
 
+    # ── Error Recovery ──────────────────────────────────────────────────
+
+    async def _attempt_restart(self, server_id: str) -> bool:
+        """Attempt to restart a failed server with backoff."""
+        log.info(f"Attempting auto-restart of server {server_id}")
+        try:
+            snapshot = self.registry.get_registry_snapshot()
+            detail = snapshot.get_server(server_id)
+            if not detail:
+                return False
+
+            restart_count = detail.restart_count
+            if restart_count >= 3:
+                log.warning(
+                    f"Server {server_id} has been restarted {restart_count} times, "
+                    f"skipping auto-restart"
+                )
+                return False
+
+            await asyncio.sleep(min(restart_count * 5, 30))
+            await self.registry.start_server(server_id)
+            log.info(f"Auto-restart successful for server {server_id}")
+            return True
+        except Exception as e:
+            log.error(f"Auto-restart failed for server {server_id}: {e}")
+            return False
+
+    # ── Tool Operations ─────────────────────────────────────────────────
+
     async def invoke_tool(
         self,
         server_id: str,
@@ -198,7 +278,7 @@ class MCPManager:
         timeout: int | None = None,
     ) -> MCPToolResult:
         """Invoke a tool on an MCP server."""
-        from agentic_os.core.mcp.registry import MCPToolInvoke
+        from agentic_os.ports.mcp import MCPToolInvoke
 
         return await self.registry.invoke_tool(
             MCPToolInvoke(server_id=server_id, tool=tool, args=arguments, timeout_seconds=timeout)
@@ -206,7 +286,8 @@ class MCPManager:
 
     async def get_server_detail(self, server_id: str) -> MCPServerDetail | None:
         """Get full server detail including tools and health."""
-        return self.registry._registry.get_server(server_id)
+        snapshot = self.registry.get_registry_snapshot()
+        return snapshot.get_server(server_id)
 
     async def list_servers(
         self, status: MCPServerStatus | None = None, enabled_only: bool = False
@@ -214,38 +295,99 @@ class MCPManager:
         """List all servers with optional filtering."""
         return await self.registry.list_servers(status=status, enabled_only=enabled_only)
 
-    async def shutdown(self) -> None:
-        """Shutdown manager - stop all servers and monitoring."""
-        log.info("Shutting down MCP Manager...")
-        await self.stop_health_monitoring()
-        await self.stop_all()
-        log.info("MCP Manager shutdown complete")
-
     def get_server_tools(self, server_id: str) -> list[MCPTool]:
         """Get cached tools for a server."""
-        detail = self.registry._registry.get_server(server_id)
+        snapshot = self.registry.get_registry_snapshot()
+        detail = snapshot.get_server(server_id)
         if not detail:
             return []
         return list(detail.tools)
 
     def get_server_health(self, server_id: str) -> MCPHealthStatus | None:
         """Get cached health status for a server."""
-        health = self.registry._health_cache.get(server_id)
-        return health[0] if health else None
+        health_cache = self.registry.get_health_cache()
+        cached = health_cache.get(server_id)
+        return cached[0] if cached else None
 
     async def discover_all_tools(self) -> dict[str, list[MCPTool]]:
         """Discover tools from all running servers."""
-        tools = {}
-        running = self.registry._registry.list_by_status(MCPServerStatus.RUNNING)
+        all_tools: dict[str, list[MCPTool]] = {}
+        snapshot = self.registry.get_registry_snapshot()
+        running = snapshot.list_by_status(MCPServerStatus.RUNNING)
 
         for detail in running:
-            client = self.registry._clients.get(detail.config.id)
+            client = self.registry.get_client(detail.config.id)
             if client:
                 try:
-                    tools = await client.list_tools()
-                    tools[detail.config.id] = tools
+                    server_tools = await client.list_tools()
+                    all_tools[detail.config.id] = server_tools
                 except Exception as e:
                     log.error(f"Failed to discover tools for {detail.config.id}: {e}")
-                    tools[detail.config.id] = []
+                    all_tools[detail.config.id] = []
 
-        return tools
+        return all_tools
+
+    # ── Resource Operations ─────────────────────────────────────────────
+
+    async def list_server_resources(self, server_id: str) -> list[MCPResource]:
+        """List resources from an MCP server."""
+        return await self.registry.list_server_resources(server_id)
+
+    async def read_server_resource(self, server_id: str, uri: str) -> dict[str, Any]:
+        """Read a resource from an MCP server."""
+        return await self.registry.read_server_resource(server_id, uri)
+
+    async def subscribe_server_resource(self, server_id: str, uri: str) -> bool:
+        """Subscribe to resource changes on an MCP server."""
+        return await self.registry.subscribe_server_resource(server_id, uri)
+
+    async def unsubscribe_server_resource(self, server_id: str, uri: str) -> bool:
+        """Unsubscribe from resource changes on an MCP server."""
+        return await self.registry.unsubscribe_server_resource(server_id, uri)
+
+    # ── Prompt Operations ───────────────────────────────────────────────
+
+    async def list_server_prompts(self, server_id: str) -> list[MCPPrompt]:
+        """List prompts from an MCP server."""
+        return await self.registry.list_server_prompts(server_id)
+
+    async def get_server_prompt(
+        self, server_id: str, name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Get a prompt from an MCP server."""
+        return await self.registry.get_server_prompt(server_id, name, arguments)
+
+    # ── Session Tracking ────────────────────────────────────────────────
+
+    def get_active_session_ids(self) -> dict[str, str]:
+        """Get map of server_id -> session_id for all connected clients."""
+        sessions: dict[str, str] = {}
+        clients = self.registry.get_clients()
+        for server_id, client in clients.items():
+            session_id = getattr(client, "session_id", None)
+            if session_id:
+                sessions[server_id] = session_id
+        return sessions
+
+    async def get_session_id(self, server_id: str) -> str | None:
+        """Get the active session ID for a server."""
+        client = self.registry.get_client(server_id)
+        if not client:
+            return None
+        return getattr(client, "session_id", None)
+
+    # ── Utility ─────────────────────────────────────────────────────────
+
+    @property
+    def is_running(self) -> bool:
+        return self._initialized and not self._shutdown
+
+    @property
+    def server_count(self) -> int:
+        snapshot = self.registry.get_registry_snapshot()
+        return len(snapshot.servers)
+
+    @property
+    def active_server_count(self) -> int:
+        snapshot = self.registry.get_registry_snapshot()
+        return len(snapshot.list_by_status(MCPServerStatus.RUNNING))
