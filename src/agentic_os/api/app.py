@@ -202,6 +202,10 @@ def create_app(platform: Platform) -> FastAPI:
     if pipeline_engine is None:
         raise RuntimeError("PipelineEngine is required but was not initialised on the Platform")
 
+    learning = platform.learning
+    if learning is None:
+        raise RuntimeError("LearningManager is required but was not initialised on the Platform")
+
     @app.middleware("http")
     async def _metrics(request, call_next):
         start = time.perf_counter()
@@ -1836,6 +1840,502 @@ def create_app(platform: Platform) -> FastAPI:
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return task.to_dict()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Learning & Optimization Engine API (Phase 5 / v0.9.0)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # -- Executions --
+
+    @app.get("/api/learning/executions")
+    async def list_learning_executions(
+        target_id: str | None = None,
+        target_type: str | None = None,
+        outcome: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List execution records with optional filters."""
+        results = await learning.list_executions(target_id, target_type, outcome, limit, offset)
+        return [r.to_dict() for r in results]
+
+    @app.get("/api/learning/executions/{execution_id}")
+    async def get_learning_execution(execution_id: str) -> dict:
+        """Get an execution record by ID."""
+        result = await learning.get_execution(execution_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        return result.to_dict()
+
+    @app.post("/api/learning/executions")
+    async def record_learning_execution(body: dict) -> dict:
+        """Record an execution in the learning history."""
+        from agentic_os.domain.learning import ExecutionHistory, ExecutionOutcome
+
+        outcome_str = body.get("outcome", "success")
+        try:
+            outcome = ExecutionOutcome(outcome_str)
+        except ValueError:
+            outcome = ExecutionOutcome.SUCCESS
+
+        execution = ExecutionHistory(
+            id=body.get("id", f"exec-{int(time.time())}"),
+            target_id=body["target_id"],
+            target_type=body.get("target_type", "engine"),
+            outcome=outcome,
+            duration_ms=body.get("duration_ms", 0.0),
+            cpu_percent=body.get("cpu_percent", 0.0),
+            memory_mb=body.get("memory_mb", 0.0),
+            token_count=body.get("token_count", 0),
+            cost=body.get("cost", 0.0),
+            error=body.get("error"),
+            metadata=body.get("metadata", {}),
+        )
+        recorded = await learning.record_execution(execution)
+        return recorded.to_dict()
+
+    @app.get("/api/learning/executions/profile/{target_id}")
+    async def get_execution_profile(
+        target_id: str,
+        target_type: str = "engine",
+        window_hours: int = 24,
+    ) -> dict:
+        """Get an execution profile for a target."""
+        profile = await learning.get_execution_profile(target_id, target_type, window_hours)
+        return profile.to_dict()
+
+    # -- Failure Patterns --
+
+    @app.get("/api/learning/patterns/failure")
+    async def list_failure_patterns(
+        target_type: str | None = None,
+        pattern_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List failure patterns."""
+        patterns = await learning.list_failure_patterns(target_type, pattern_type, limit)
+        return [p.to_dict() for p in patterns]
+
+    @app.get("/api/learning/patterns/failure/{pattern_id}")
+    async def get_failure_pattern(pattern_id: str) -> dict:
+        """Get a failure pattern by ID."""
+        pattern = await learning.get_failure_pattern(pattern_id)
+        if pattern is None:
+            raise HTTPException(status_code=404, detail="Failure pattern not found")
+        return pattern.to_dict()
+
+    # -- Recovery Patterns --
+
+    @app.get("/api/learning/patterns/recovery")
+    async def list_recovery_patterns(
+        strategy: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List recovery patterns."""
+        patterns = await learning.list_recovery_patterns(strategy, limit)
+        return [p.to_dict() for p in patterns]
+
+    @app.get("/api/learning/patterns/recovery/{pattern_id}")
+    async def get_recovery_pattern(pattern_id: str) -> dict:
+        """Get a recovery pattern by ID."""
+        pattern = await learning.get_recovery_pattern(pattern_id)
+        if pattern is None:
+            raise HTTPException(status_code=404, detail="Recovery pattern not found")
+        return pattern.to_dict()
+
+    # -- Knowledge --
+
+    @app.get("/api/learning/knowledge")
+    async def list_knowledge_patterns(
+        pattern_type: str | None = None,
+        min_confidence: float = 0.0,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List knowledge patterns."""
+        patterns = await learning.list_knowledge_patterns(pattern_type, min_confidence, limit)
+        return [p.to_dict() for p in patterns]
+
+    @app.get("/api/learning/knowledge/{pattern_id}")
+    async def get_knowledge_pattern(pattern_id: str) -> dict:
+        """Get a knowledge pattern by ID."""
+        pattern = await learning.get_knowledge_pattern(pattern_id)
+        if pattern is None:
+            raise HTTPException(status_code=404, detail="Knowledge pattern not found")
+        return pattern.to_dict()
+
+    # -- Predictions --
+
+    @app.post("/api/learning/predict/execution")
+    async def predict_execution(body: dict) -> dict:
+        """Predict execution characteristics."""
+        pred = await learning.predict_execution(
+            body["target_id"],
+            body.get("target_type", "engine"),
+            body.get("features"),
+        )
+        return pred.to_dict()
+
+    @app.post("/api/learning/predict/duration")
+    async def predict_duration(body: dict) -> dict:
+        """Predict execution duration."""
+        pred = await learning.predict_duration(
+            body["target_id"],
+            body.get("target_type", "engine"),
+            body.get("features"),
+        )
+        return pred.to_dict()
+
+    @app.post("/api/learning/predict/cost")
+    async def predict_cost(body: dict) -> dict:
+        """Predict execution cost."""
+        pred = await learning.predict_cost(
+            body["target_id"],
+            body.get("target_type", "engine"),
+            body.get("features"),
+        )
+        return pred.to_dict()
+
+    @app.post("/api/learning/predict/success")
+    async def predict_success_probability(body: dict) -> dict:
+        """Predict success probability."""
+        pred = await learning.predict_success_probability(
+            body["target_id"],
+            body.get("target_type", "engine"),
+            body.get("features"),
+        )
+        return pred.to_dict()
+
+    @app.get("/api/learning/predictions")
+    async def list_predictions(
+        target_id: str | None = None,
+        prediction_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """List predictions."""
+        preds = await learning.list_predictions(target_id, prediction_type, limit)
+        return [p.to_dict() for p in preds]
+
+    @app.get("/api/learning/predictions/{prediction_id}")
+    async def get_prediction(prediction_id: str) -> dict:
+        """Get a prediction by ID."""
+        pred = await learning.get_prediction(prediction_id)
+        if pred is None:
+            raise HTTPException(status_code=404, detail="Prediction not found")
+        return pred.to_dict()
+
+    # -- Recommendations --
+
+    @app.get("/api/learning/recommendations")
+    async def list_recommendations(
+        target_id: str | None = None,
+        recommendation_type: str | None = None,
+        priority: str | None = None,
+        applied: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List recommendations with optional filters."""
+        recs = await learning.list_recommendations(
+            target_id=target_id,
+            recommendation_type=recommendation_type,
+            priority=priority,
+            applied=applied,
+            limit=limit,
+            offset=offset,
+        )
+        return [r.to_dict() for r in recs]
+
+    @app.get("/api/learning/recommendations/{recommendation_id}")
+    async def get_recommendation(recommendation_id: str) -> dict:
+        """Get a recommendation by ID."""
+        rec = await learning.get_recommendation(recommendation_id)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+        return rec.to_dict()
+
+    @app.post("/api/learning/recommendations/{recommendation_id}/apply")
+    async def apply_recommendation(recommendation_id: str) -> dict:
+        """Apply a recommendation."""
+        rec = await learning.apply_recommendation(recommendation_id)
+        return rec.to_dict()
+
+    @app.post("/api/learning/recommendations/{recommendation_id}/dismiss")
+    async def dismiss_recommendation(recommendation_id: str) -> dict:
+        """Dismiss a recommendation."""
+        rec = await learning.dismiss_recommendation(recommendation_id)
+        return rec.to_dict()
+
+    @app.post("/api/learning/recommendations/generate")
+    async def generate_recommendations(body: dict) -> list[dict]:
+        """Generate recommendations for a target."""
+        recs = await learning.generate_recommendations(
+            body["target_id"],
+            body.get("target_type", "engine"),
+            body.get("limit", 10),
+        )
+        return [r.to_dict() for r in recs]
+
+    # -- Routing --
+
+    @app.post("/api/learning/routing/optimize")
+    async def optimize_routing(body: dict) -> dict:
+        """Optimize routing for a task."""
+
+        decision = await learning.optimize_routing(
+            task_id=body["task_id"],
+            required_capabilities=body.get("required_capabilities", []),
+            available_engines=body.get("available_engines", []),
+        )
+        return decision.to_dict()
+
+    @app.get("/api/learning/routing/history")
+    async def get_routing_history(
+        task_id: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Get routing decision history."""
+        decisions = await learning.get_routing_history(task_id, limit)
+        return [d.to_dict() for d in decisions]
+
+    # -- Benchmarks --
+
+    @app.post("/api/learning/benchmarks")
+    async def run_benchmark(body: dict) -> dict:
+        """Run a benchmark against a target."""
+        record = await learning.run_benchmark(
+            target_id=body["target_id"],
+            target_type=body.get("target_type", "engine"),
+            benchmark_name=body["benchmark_name"],
+        )
+        return record.to_dict()
+
+    @app.get("/api/learning/benchmarks")
+    async def list_benchmarks(
+        target_id: str | None = None,
+        benchmark_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List benchmark records."""
+        records = await learning.list_benchmarks(target_id, benchmark_name, limit, offset)
+        return [r.to_dict() for r in records]
+
+    @app.get("/api/learning/benchmarks/{benchmark_id}")
+    async def get_benchmark(benchmark_id: str) -> dict:
+        """Get a benchmark record by ID."""
+        record = await learning.get_benchmark(benchmark_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Benchmark not found")
+        return record.to_dict()
+
+    @app.post("/api/learning/benchmarks/compare")
+    async def compare_engines(body: dict) -> dict:
+        """Compare multiple engines on a benchmark."""
+        result = await learning.compare_engines(
+            engine_ids=body["engine_ids"],
+            benchmark_name=body["benchmark_name"],
+        )
+        return {k: v.to_dict() for k, v in result.items()}
+
+    @app.get("/api/learning/benchmarks/top/{benchmark_name}")
+    async def get_top_scores(benchmark_name: str, limit: int = 10) -> list[dict]:
+        """Get top scores for a benchmark."""
+        records = await learning.get_top_scores(benchmark_name, limit)
+        return [r.to_dict() for r in records]
+
+    # -- Performance / Analytics --
+
+    @app.get("/api/learning/performance/engines")
+    async def list_engine_performance(
+        engine_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List engine performance records."""
+        results = await learning.list_engine_performance(engine_type, limit, offset)
+        return [r.to_dict() for r in results]
+
+    @app.get("/api/learning/performance/engines/{engine_id}")
+    async def get_engine_performance(engine_id: str) -> dict:
+        """Get performance for a specific engine."""
+        perf = await learning.get_engine_performance(engine_id)
+        if perf is None:
+            raise HTTPException(status_code=404, detail="Engine performance not found")
+        return perf.to_dict()
+
+    @app.get("/api/learning/performance/workflows")
+    async def list_workflow_performance(
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List workflow performance records."""
+        results = await learning.list_workflow_performance(limit, offset)
+        return [r.to_dict() for r in results]
+
+    @app.get("/api/learning/performance/workflows/{workflow_type}")
+    async def get_workflow_performance(workflow_type: str) -> dict:
+        """Get performance for a specific workflow type."""
+        perf = await learning.get_workflow_performance(workflow_type)
+        if perf is None:
+            raise HTTPException(status_code=404, detail="Workflow performance not found")
+        return perf.to_dict()
+
+    @app.get("/api/learning/performance/swarms")
+    async def list_swarm_performance(
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List swarm performance records."""
+        results = await learning.list_swarm_performance(limit, offset)
+        return [r.to_dict() for r in results]
+
+    @app.get("/api/learning/performance/swarms/{swarm_id}")
+    async def get_swarm_performance(swarm_id: str) -> dict:
+        """Get performance for a specific swarm."""
+        perf = await learning.get_swarm_performance(swarm_id)
+        if perf is None:
+            raise HTTPException(status_code=404, detail="Swarm performance not found")
+        return perf.to_dict()
+
+    @app.get("/api/learning/performance/trends/{target_id}")
+    async def get_performance_trends(
+        target_id: str,
+        window_hours: int = 24,
+    ) -> list[dict]:
+        """Get performance trends for a target."""
+        trends = await learning.list_performance_trends(target_id, window_hours)
+        return [t.to_dict() for t in trends]
+
+    @app.get("/api/learning/performance/capabilities/{engine_id}")
+    async def get_capability_scores(engine_id: str) -> list[dict]:
+        """Get capability scores for an engine."""
+        scores = await learning.get_capability_scores(engine_id)
+        return [s.to_dict() for s in scores]
+
+    @app.get("/api/learning/performance/top-engines")
+    async def get_top_engines(
+        capability: str,
+        min_confidence: float = 0.0,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Get top-performing engines for a capability."""
+        engines = await learning.get_top_engines(capability, min_confidence, limit)
+        return [e.to_dict() for e in engines]
+
+    # -- Policies --
+
+    @app.get("/api/learning/policies")
+    async def list_optimization_policies(limit: int = 50) -> list[dict]:
+        """List all optimization policies."""
+        policies = await learning.list_optimization_policies(limit)
+        return [p.to_dict() for p in policies]
+
+    @app.post("/api/learning/policies")
+    async def create_optimization_policy(body: dict) -> dict:
+        """Create a new optimization policy."""
+        from agentic_os.domain.learning import OptimizationGoal, OptimizationPolicy
+
+        goal_str = body.get("goal", "balanced")
+        try:
+            goal = OptimizationGoal(goal_str)
+        except ValueError:
+            goal = OptimizationGoal.BALANCED
+
+        policy = OptimizationPolicy(
+            id=body.get("id", f"policy-{int(time.time())}"),
+            name=body["name"],
+            goal=goal,
+            enabled=body.get("enabled", True),
+            max_execution_cost=body.get("max_execution_cost", 0.0),
+            max_execution_latency_ms=body.get("max_execution_latency_ms", 0.0),
+            min_reliability=body.get("min_reliability", 0.0),
+            prefer_low_cost=body.get("prefer_low_cost", False),
+            prefer_low_latency=body.get("prefer_low_latency", False),
+            auto_apply_recommendations=body.get("auto_apply_recommendations", False),
+            learning_rate=body.get("learning_rate", 0.1),
+            exploration_rate=body.get("exploration_rate", 0.1),
+            metadata=body.get("metadata", {}),
+        )
+        created = await learning.create_optimization_policy(policy)
+        return created.to_dict()
+
+    @app.get("/api/learning/policies/{policy_id}")
+    async def get_optimization_policy(policy_id: str) -> dict:
+        """Get an optimization policy by ID."""
+        policy = await learning.get_optimization_policy(policy_id)
+        if policy is None:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        return policy.to_dict()
+
+    @app.put("/api/learning/policies/{policy_id}")
+    async def update_optimization_policy(policy_id: str, body: dict) -> dict:
+        """Update an optimization policy."""
+        from agentic_os.domain.learning import OptimizationGoal, OptimizationPolicy
+
+        existing = await learning.get_optimization_policy(policy_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Policy not found")
+
+        goal_str = body.get("goal", existing.goal.value)
+        try:
+            goal = OptimizationGoal(goal_str)
+        except ValueError:
+            goal = existing.goal
+
+        updated = OptimizationPolicy(
+            id=policy_id,
+            name=body.get("name", existing.name),
+            goal=goal,
+            enabled=body.get("enabled", existing.enabled),
+            max_execution_cost=body.get("max_execution_cost", existing.max_execution_cost),
+            max_execution_latency_ms=body.get(
+                "max_execution_latency_ms", existing.max_execution_latency_ms
+            ),
+            min_reliability=body.get("min_reliability", existing.min_reliability),
+            prefer_low_cost=body.get("prefer_low_cost", existing.prefer_low_cost),
+            prefer_low_latency=body.get("prefer_low_latency", existing.prefer_low_latency),
+            auto_apply_recommendations=body.get(
+                "auto_apply_recommendations", existing.auto_apply_recommendations
+            ),
+            learning_rate=body.get("learning_rate", existing.learning_rate),
+            exploration_rate=body.get("exploration_rate", existing.exploration_rate),
+            metadata=body.get("metadata", existing.metadata),
+        )
+        result = await learning.update_optimization_policy(policy_id, updated)
+        return result.to_dict()
+
+    @app.delete("/api/learning/policies/{policy_id}")
+    async def delete_optimization_policy(policy_id: str) -> dict:
+        """Delete an optimization policy."""
+        deleted = await learning.delete_optimization_policy(policy_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        return {"deleted": policy_id}
+
+    # -- Statistics / Snapshots --
+
+    @app.get("/api/learning/statistics")
+    async def get_learning_statistics() -> dict:
+        """Get aggregate learning statistics."""
+        stats = await learning.compute_statistics()
+        return stats.to_dict()
+
+    @app.post("/api/learning/snapshots")
+    async def take_learning_snapshot() -> dict:
+        """Take a point-in-time snapshot of learning state."""
+        snapshot = await learning.take_snapshot()
+        return snapshot.to_dict()
+
+    # -- Analyze Performance --
+
+    @app.post("/api/learning/analyze")
+    async def analyze_performance(body: dict) -> list[dict]:
+        """Analyze performance and generate optimization recommendations."""
+        recs = await learning.analyze_performance(
+            body["target_id"],
+            body.get("target_type", "engine"),
+        )
+        return [r.to_dict() for r in recs]
 
     # ── Minimal provider management UI page (Phase 3 builds Mission Control) ──
     @app.get("/providers", response_class=HTMLResponse)

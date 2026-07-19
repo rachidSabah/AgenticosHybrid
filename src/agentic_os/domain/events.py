@@ -226,6 +226,21 @@ class Topic(StrEnum):
     ORCH_EXECUTION_STAGE_COMPLETED = "orchestration.execution_stage_completed"
     ORCH_EXECUTION_STAGE_FAILED = "orchestration.execution_stage_failed"
 
+    # Learning & Optimization Engine (Phase 5)
+    LEARN_EXECUTION_RECORDED = "learning.execution_recorded"
+    LEARN_PROFILE_UPDATED = "learning.profile_updated"
+    LEARN_RECOMMENDATION_GENERATED = "learning.recommendation_generated"
+    LEARN_RECOMMENDATION_APPLIED = "learning.recommendation_applied"
+    LEARN_BENCHMARK_COMPLETED = "learning.benchmark_completed"
+    LEARN_PREDICTION_MADE = "learning.prediction_made"
+    LEARN_PATTERN_DETECTED = "learning.pattern_detected"
+    LEARN_KNOWLEDGE_EXTRACTED = "learning.knowledge_extracted"
+    LEARN_ROUTING_DECISION = "learning.routing_decision"
+    LEARN_OPTIMIZATION_APPLIED = "learning.optimization_applied"
+    LEARN_ANOMALY_DETECTED = "learning.anomaly_detected"
+    LEARN_TREND_CHANGED = "learning.trend_changed"
+    LEARN_EXPERIENCE_RECORDED = "learning.experience_recorded"
+
 
 class EventEnvelope(BaseModel):
     """Wire format for everything published to the bus."""

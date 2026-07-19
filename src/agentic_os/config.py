@@ -73,5 +73,8 @@ class Settings(BaseSettings):
     mcp_max_servers: int = 50
     mcp_enforce_sandbox: bool = True
 
+    # Learning & Optimization Engine (Phase 5)
+    learning_enabled: bool = True
+
 
 settings = Settings()
