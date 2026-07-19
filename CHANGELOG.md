@@ -4,6 +4,116 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-07-19
+
+### Added — Phase 4, Milestone 3: MCP Runtime Foundation
+
+**MCP Domain Models** (`domain/mcp.py`) — 16 frozen dataclass entities, 6 StrEnums
+- MCPTool, MCPToolResult, MCPResource, MCPResourceTemplate, MCPPrompt, MCPRoot
+- MCPPermissionMapping, MCPServerConfig (with factory methods for stdio/SSE/HTTP transports)
+- MCPServerDetail (rich lifecycle including started_at/stopped_at/restart_count/health)
+- MCPRegistry (immutable collection with get_server_by_name, with_server/without_server)
+- MCPSession, MCPSubscription, MCPCapability
+- MCPTransport, MCPServerStatus, MCPHealthStatus, MCPSessionStatus (StrEnums)
+- 621 lines, zero external dependencies
+
+**MCP Port Interfaces** (`ports/mcp.py`) — 2 runtime-checkable Protocols
+- MCPRegistryPort — 18 abstract methods (CRUD, lifecycle, tools, health, permissions, snapshots)
+- MCPTransportPort — connect/disconnect/session management
+- MCPServerCreate, MCPServerUpdate, MCPToolInvoke input DTOs
+
+**MCP Core Runtime** (`core/mcp/`) — 4 modules, 2,165 lines
+- **Registry** (`registry.py`) — MCPRegistryImpl with in-memory persistence, duplicate name detection,
+  per-server async locks, 6 EventBus lifecycle topics, tool caching, resource/prompt delegation
+- **Client** (`client.py`) — Full stdio (subprocess), SSE, and Streamable HTTP transport support.
+  Capability negotiation, auto-reconnect, 748 lines.
+- **Manager** (`manager.py`) — MCPManager: lifecycle orchestration, periodic health monitoring with auto-restart,
+  tool/resource/prompt discovery, session tracking, 27 public methods
+- **Security** (`security.py`) — MCPSecurity: 20 authorization methods wrapping SecurityFramework.
+  Fine-grained RBAC for every MCP operation.
+
+**MCP Adapter Framework** (`adapters/mcp/`) — 6 modules, 1,663 lines
+- **BaseMCPAdapter** — abstract base with lifecycle, health, discovery, prompting defaults
+- **FilesystemAdapter** — 5 tools (read, write, list, file_info, search_files), path sandboxing
+- **GitAdapter** — 5 tools (status, log, diff, branches, commit), subprocess execution
+- **HTTPAdapter** — 4 tools (GET, POST, PUT, DELETE), SSL validation, timeout handling
+- **SQLiteAdapter** — 3 tools (query, statement, list_tables), write-statement detection
+- **TerminalAdapter** — 2 tools (command, script), command allowlisting
+
+**MCP SDK** (`sdk/mcp/`) — 9 modules, 1,595 lines
+- McpServerSdk — high-level developer-facing server builder
+- ToolSdk, ResourceSdk, PromptSdk — fluent builder interfaces
+- McpAuthHelper, McpConfigHelper, RegistrationHelper — convenience wrappers
+- McpValidator — input validation against MCP protocol
+- McpTestHelper, FakeMCPRegistry, FakeMCPManager — testing utilities
+
+**MCP REST API** — 23 endpoints at `/api/mcp/`
+- Server CRUD (list, get, register, update, delete)
+- Server lifecycle (start, stop, restart, reload)
+- Tool operations (list, discover, call)
+- Resource operations (list, read, subscribe, unsubscribe)
+- Prompt operations (list, get)
+- Health & monitoring (server health, health summary)
+- Sessions (list), Permissions (set, get)
+- WebSocket endpoint at `/ws/mcp` — 20 MCP topics streamed in real-time
+
+**MCP WebSocket Broadcaster** (`api/mcp_ws.py`) — MCPBroadcaster fans 20 MCP-specific
+EventBus topics to connected Mission Control clients.
+
+**Integration**
+- 18 MCP-specific EventBus topics (registration, lifecycle, health, tools, permissions,
+  sessions, resources, transport, capabilities)
+- Platform bundle integration via `platform.mcp` and `platform.mcp_ws`
+- 107 MCP-specific tests (domain: 67, registry: 40)
+
+### Fixed
+
+- `registry.py` — Duplicate server name detection now raises ValueError
+- `registry.py` — Lazy import of MCPClient moved to module level (no circular deps)
+- `domain/mcp.py` — `with_status()` correctly sets `started_at` on RUNNING transition and
+  clears `stopped_at` for clean restart semantics
+- `get_tools()` now returns `[]` for missing servers (consistent with `get_permissions`/`get_health`)
+- SDK `auth.py`, `server.py`, `testing.py` — Removed 5 unused imports
+- `core/mcp/__init__.py` — Created (was missing)
+
+### Performance (benchmarked)
+
+| Operation | Avg latency |
+|-----------|-----------|
+| MCPTool() creation | 1 µs |
+| MCPServerConfig.create_stdio() | 4 µs |
+| MCPServerDetail() creation | 1 µs |
+| MCPTool.to_dict() | <1 µs |
+| register_server (async) | 57 µs |
+| get_server (async) | <1 µs |
+| list_servers (100 entries, async) | 1 µs |
+| MCPServerDetail.to_dict() | 7 µs |
+
+## [0.7.2] — 2026-07-19
+
+### Fixed — MCP Runtime bug fixes
+
+- `registry.py` — `MCPClient` import moved from lazy inside `start_server()` to
+  module level, enabling proper async mocking in tests (regression from 0.7.0).
+- `registry.py` — `get_tools()` returns `[]` instead of raising `KeyError` for
+  missing servers, matching the behavior of `get_permissions()` and `get_health()`.
+- `domain/mcp.py` — `with_status()` now correctly sets `started_at` on both
+  `STARTING` and `RUNNING` transitions; clears `stopped_at` on `RUNNING` for clean
+  restart semantics.
+- SDK `auth.py`, `server.py`, `testing.py` — Removed unused imports.
+- SDK `registration.py` — Added None-guards on `_registry` for `unregister()` and
+  `list_registered()`.
+- All 1526 tests pass (zero regressions).
+
+### Added — Documentation
+
+- **ADRs 0011–0015** — MCP Runtime Architecture, Session Lifecycle, Tool Registry,
+  Connection Pool, and SDK Architecture decision records.
+- **ARCHITECTURE.md** — MCP Runtime Foundation section with full component table,
+  architecture layers diagram, and performance metrics.
+- **README.md** — MCP Runtime and SDK feature bullets, updated status line and
+  roadmap.
+
 ## [0.6.0] — 2026-07-18
 
 ### Added — Phase 4: Universal Execution Framework (Milestones 1–3)

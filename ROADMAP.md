@@ -119,6 +119,28 @@ engine. The kernel never depends on a specific AI coding assistant.**
 - **Tests** — 453 new tests across 11 test files, all passing with zero
   regressions (1121 total).
 
+## ✅ Phase 4 — Universal Execution Framework (v0.7.0, Milestone 3)
+
+**Milestone 3 — MCP Runtime Foundation (done):**
+- **MCP Domain Models** (`domain/mcp.py`) — 16 frozen dataclass entities, 6 StrEnums.
+  Zero external dependencies. Pure domain.
+- **MCP Port Interfaces** (`ports/mcp.py`) — 2 runtime-checkable Protocols: MCPRegistryPort
+  (18 abstract methods) and MCPTransportPort.
+- **MCP Core Runtime** (`core/mcp/`) — Registry (in-memory with duplicate detection, locks, events),
+  Client (stdio/SSE/HTTP transports, capability negotiation, auto-reconnect),
+  Manager (lifecycle orchestration, health monitoring, discovery, sessions),
+  Security (20 authorization methods wrapping SecurityFramework).
+- **MCP Adapter Framework** (`adapters/mcp/`) — 5 production adapters: Filesystem, Git,
+  HTTP, SQLite, Terminal. Each with real tool implementations.
+- **MCP SDK** (`sdk/mcp/`) — 9 modules: ServerSdk, ToolSdk, ResourceSdk, PromptSdk,
+  Auth, Config, Registration, Validation, Testing (fakes + helpers).
+- **REST API** — 23 endpoints at `/api/mcp/*` covering CRUD, lifecycle, tools,
+  resources, prompts, health, sessions, permissions.
+- **WebSocket** — `/ws/mcp` endpoint streaming 20 MCP EventBus topics.
+- **EventBus** — 18 MCP-specific topics wired through registry lifecycle.
+- **Tests** — 107 MCP-specific tests (domain: 67, registry: 40), all passing.
+- **Performance** — Domain ops <5 µs, registry ops <60 µs, serialization <10 µs.
+
 ## 🔮 Phase 5+ — Ecosystem
 
 - **Plugin Marketplace** — discoverable, signed community plugins.

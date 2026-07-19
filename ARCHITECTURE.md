@@ -61,10 +61,76 @@ timestamp, topic, payload). Topics are centralized in `domain/events.py`.
 | Workflow Engine | `WorkflowEnginePort` | `WorkflowEngineImpl` — DAG execution, topological sort, versioning, replay, approval gates | ✅ Verified |
 | Pipeline Engine | `PipelineEnginePort` | `PipelineEngineImpl` — stage execution, scheduling, retry, rollback, parallel stages | ✅ Verified |
 | Observability Framework | `TracingPort`, `MetricsPort`, `LoggingPort` | `InMemoryTracing`, `InMemoryMetrics`, `InMemoryStructuredLogging` (Prometheus/OTel bridges available) | ✅ Verified |
-| MCP Framework | `MCPRegistryPort` | domain models + ports (server config, tools) | ✅ Domain/Ports |
+| MCP Framework | `MCPRegistryPort` | domain models + ports + full runtime (registry, client, manager, security, SDK) | ✅ Verified |
 | Plugin Framework | `PluginRegistryPort` | `PluginSDK`, `PluginValidator`, `PluginRegistryClient`, `generate_plugin_template` | ✅ Domain/Ports/SDK |
 
 All core engines achieve >90% test coverage with comprehensive unit, integration, and stress tests.
+
+## Phase 4, Milestone 3: MCP Runtime Foundation (v0.7.0)
+
+The MCP Runtime Foundation completes the MCP Framework from Phase 3B into a
+production-ready runtime with registry, client, manager, security, and SDK layers.
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────────────┐
+│              MCP SDK                         │
+│  McpServerSdk · ToolSdk · ResourceSdk ·    │
+│  PromptSdk · Auth · Testing · Validation     │
+├─────────────────────────────────────────────┤
+│              MCP Core Runtime                │
+│  MCPRegistryImpl · MCPClient · MCPManager   │
+│  MCPSecurity · EventBus integration          │
+├─────────────────────────────────────────────┤
+│              MCP Ports                       │
+│  MCPRegistryPort · MCPTransportPort          │
+├─────────────────────────────────────────────┤
+│              MCP Domain                      │
+│  MCPServerDetail · MCPTool · MCPResource    │
+│  MCSServerConfig · MCPServerCreate/Update    │
+│  MCPPermissionMapping · MCPSession           │
+└─────────────────────────────────────────────┘
+```
+
+### Components
+
+| Component | Path | Responsibility |
+|-----------|------|----------------|
+| Domain Models | `domain/mcp.py` | Frozen dataclasses for server, tool, resource, prompt, session, permission entities |
+| Port Interfaces | `ports/mcp.py` | MCPRegistryPort, MCPTransportPort runtime-checkable protocols |
+| Registry | `core/mcp/registry.py` | In-memory async server CRUD, lifecycle, tool/resource/prompt management, EventBus integration |
+| Client | `core/mcp/client.py` | stdio/subprocess, SSE, Streamable HTTP transport client with auto-reconnect |
+| Manager | `core/mcp/manager.py` | Lifecycle orchestration, health monitoring, session tracking |
+| Security | `core/mcp/security.py` | 20 authorization methods wrapping SecurityFramework |
+| SDK Server | `sdk/mcp/server.py` | McpServerSdk — fluent server lifecycle |
+| SDK Tool | `sdk/mcp/tool.py` | ToolBuilder, ToolSdk — tool construction and invocation |
+| SDK Resource | `sdk/mcp/resource.py` | ResourceSdk — resource reading and subscription |
+| SDK Prompt | `sdk/mcp/prompt.py` | PromptSdk — prompt listing and retrieval |
+| SDK Auth | `sdk/mcp/auth.py` | McpAuthHelper — MCP authorization helpers |
+| SDK Config | `sdk/mcp/config.py` | McpConfigHelper — server configuration building |
+| SDK Registration | `sdk/mcp/registration.py` | RegistrationHelper — server registration/unregistration |
+| SDK Validation | `sdk/mcp/validation.py` | McpValidator — MCP protocol validation |
+| SDK Testing | `sdk/mcp/testing.py` | McpTestHelper, FakeMCPRegistry, FakeMCPManager |
+
+### Key Design Decisions
+
+- **Immutable domain models** — All dataclasses are frozen; state transitions use
+  `with_*` builder methods returning new instances.
+- **Registry as event source** — Every lifecycle transition emits an EventBus event.
+- **Lazy transport binding** — MCPClient doesn't connect until `connect()` is called.
+- **Per-server async locks** — Thread-safe lifecycle transitions via `asyncio.Lock`.
+- **Security as a gate** — MCPSecurity wraps every MCP operation with authorization.
+
+### Performance
+
+All MCP operations are sub-millisecond:
+- Domain model instantiation: <4 µs
+- State transition (`with_status`): <1 µs
+- Registry register/get/unregister: <57 µs
+- Serialization to dict/JSON: <7 µs
+
+See ADRs `0011`–`0015` for detailed design rationale.
 
 ## Phase 4 Subsystem (v0.5.0, M1)
 
@@ -106,7 +172,7 @@ shared contract. Adding a new engine = one new adapter file = zero kernel change
 | Capability Engine | `Capability`, `CapabilityRegistry`, `AgentComposer` | 11 built-ins + intent composer |
 | Security Framework | `SecretsManager`, `AccessControl`, `WorkspaceIsolation`, `ToolPermissions`, `ApprovalGate`, `AuditLog` | RBAC + workspace isolation + approval gate + audit |
 
-See `docs/adr/0001`–`0009` for the design rationale behind each.
+See `docs/adr/0001`–`0015` for the full set of Architecture Decision Records.
 
 ## Phase 3B Engine Control Flow
 

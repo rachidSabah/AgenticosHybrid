@@ -4,16 +4,15 @@ A **local-first, event-bus-driven AI Agent Operating System**. Runs on Windows v
 WSL2, fully containerized, modular, and plugin-based. Every component communicates
 through an abstract **Event Bus** and is replaceable behind a port interface.
 
-> Status: **Phase 4 — Universal Execution Framework (v0.5.0, M1 complete)**. Phases
+> Status: **Phase 4 — MCP Runtime Foundation (v0.7.0, M3 complete)**. Phases
 > 1–3 delivered a headless hexagonal backend with EventBus, Provider Management,
 > Capability Engine, Memory System, Security Framework, and Phase 3's Mission
 > Control interface with Workflow/Pipeline engines, Observability Framework, MCP
-> Framework, and Plugin SDK. **Phase 4, Milestone 1** ships the Universal Execution
-> Engine Framework: a hexagonal abstraction layer where ANY execution engine (MCP,
-> Docker, WSL, Claude Code, local subprocess, cloud API) implements a single
-> `ExecutionEnginePort` interface. The kernel discovers, binds, orchestrates,
-> supervises, and optimizes engines through this shared contract — with zero
-> kernel changes required to add new engines.
+> Framework, and Plugin SDK. **Phase 4, Milestone 1** shipped the Universal Execution
+> Engine Framework. **Phase 4, Milestone 3** ships the MCP Runtime Foundation:
+> production-ready registry, client, manager, security, and SDK layers completing the
+> MCP Framework with 15 SDK modules, 5 adapters, 3 transport clients, and 22 modules
+> with zero circular dependencies.
 
 ## Project Vision
 
@@ -42,6 +41,10 @@ production-ready, fully tested vertical slice before expanding scope.
   via retention policies.
 - **Security Framework** — RBAC (deny-by-default), workspace isolation, approval
   gate, append-only audit log.
+- **MCP Runtime** — Full MCP server lifecycle (registry, client, manager, security)
+  with 3 transport protocols (stdio, SSE, Streamable HTTP) and 5 built-in adapters.
+- **MCP SDK** — 15-module SDK for building MCP applications: server management, tools,
+  resources, prompts, auth, config, registration, validation, and testing fakes.
 - **Live dashboard** — WebSocket event stream; REST control plane.
 - **Workflow Engine** — DAG-based workflow execution with versioning, replay,
   approval gates, and topological sort ordering.
@@ -203,7 +206,7 @@ src/agentic_os/
   kernel.py    composition root → Platform bundle
   cli.py       entrypoint
 tests/         unit + integration (incl. live kernel API smoke tests)
-docs/adr/      Architecture Decision Records (0001–0009)
+docs/adr/      Architecture Decision Records (0001–0015)
 docs/c4/       C4 diagrams (mermaid)
 ```
 
@@ -281,7 +284,9 @@ Local CI (runs ruff in repair mode, then `ty` + pytest):
 
 - ✅ Phase 1 — Foundation + Vertical Slice (v0.1.0)
 - ✅ Phase 2 — Core 4 Subsystems (v0.2.0)
-- 🔜 Phase 3 — MCP Framework, Mission Control dashboard, Workflow Engine
+- ✅ Phase 3 — MCP Framework, Mission Control dashboard, Workflow Engine
+- ✅ Phase 4, M1 — Universal Execution Engine Framework (v0.5.0)
+- ✅ Phase 4, M3 — MCP Runtime Foundation (v0.7.0)
 - 🔮 Phase 4+ — Plugin Marketplace, Provider/Capability/Plugin SDKs, Desktop
   Client, multi-tenant isolation, production memory backends
 
