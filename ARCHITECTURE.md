@@ -163,6 +163,106 @@ shared contract. Adding a new engine = one new adapter file = zero kernel change
 
 **Phase 4 event topics:** 14 new `engine.*` topics on the EventBus.
 
+## Phase 4, Milestone 4: Swarm Orchestration Engine (v0.8.0)
+
+The Swarm Orchestration Engine provides multi-agent coordination with dynamic
+goal decomposition, capability-based task assignment, and fault-tolerant
+execution. It is built as 12 hexagonal subsystems behind a single
+`OrchestrationFramework` facade.
+
+### Architecture
+
+```
+OrchestrationFramework (facade)
+ ├── SwarmPlanner         — analyze_goal, create_plan, resolve_dependencies, parallelize_plan
+ ├── SwarmScheduler       — topological sort (Kahn's algorithm), dispatch, schedule query
+ ├── SwarmSupervisor      — monitor_execution, detect_failures/deadlocks, restart/reassign
+ ├── ResultMerger         — 7 merge strategies: weighted, priority, consensus, voting, best-of-N, concatenate, semantic
+ ├── ValidationEngine     — schema, plan integrity, circular-dep (DFS), security, policy validation
+ ├── RetryManager         — exponential backoff with 10% jitter, per-task retry tracking
+ ├── FailureRecovery      — recover_task (reassign), recover_plan (with/without checkpoint), rollback
+ ├── CheckpointManager    — save/restore/list/delete execution snapshots
+ ├── AgentSelector        — weighted scoring: 50% capability, 20% health, 15% latency, 15% status
+ ├── MetricsEngine        — collect_metrics, record_timeline, get_timeline
+ ├── CostTracker          — estimate_cost, track_cost, get_costs
+ └── PerformanceAnalyzer  — success_rate, bottleneck detection, efficiency score
+```
+
+### Domain Models
+
+All 14 new models are frozen dataclasses in `domain/orchestration.py`:
+
+| Model | Key Fields |
+|-------|-----------|
+| `SwarmProfile` | name, description, topology, max_agents, capabilities |
+| `AgentDescriptor` | agent_id, name, capabilities, health, role, latency |
+| `OrchestrationGoal` | id, description, complexity, required_capabilities |
+| `AgentTask` | id, status, assigned_agent, depends_on, output, priority, timeout |
+| `OrchestrationPlan` | id, goal_id, subtasks, schedule, execution_config |
+| `ExecutionStage` | id, plan_id, tasks, status, started_at, completed_at |
+| `MergedResult` | output, confidence, conflicts, strategy_used |
+| `ValidationResult` | status, score, errors, warnings |
+| `RetryPolicy` | max_retries, base_delay, backoff_multiplier, max_delay, jitter |
+| `Checkpoint` | id, plan_id, task_states, partial_outputs, timestamp |
+| `ExecutionMetrics` | total/completed/failed tasks, duration, avg_latency |
+| `ExecutionCost` | plan_id, agent_id, cost, currency, timestamp |
+
+### Coordination Patterns
+
+The engine supports 6 coordination patterns via the `CoordinationPattern` enum:
+
+| Pattern | Behavior |
+|---------|----------|
+| `SEQUENTIAL` | Tasks execute one after another, in schedule order |
+| `PARALLEL` | All tasks execute concurrently |
+| `FAN_OUT` | One task fans out to multiple agents in parallel |
+| `FAN_IN` | Multiple agent results merge into one |
+| `HIERARCHICAL` | Tasks organized in a tree with parent-child dependencies |
+| `VOTING` | Agents vote on a decision; results merged by consensus |
+
+### REST API
+
+The engine is exposed through the FastAPI control plane at `/api/v1/swarm/`:
+- `POST /profiles` — Create swarm profile
+- `POST /planner/analyze` — Analyze a goal
+- `POST /planner/plan` — Create a plan
+- `POST /scheduler/schedule` — Schedule tasks
+- `POST /supervisor/monitor` — Monitor execution
+- `POST /merger/merge` — Merge task results
+- `POST /validation/validate` — Validate output/plan/security/policy
+- `POST /checkpoints/` — Manage checkpoints
+- `POST /selector/select` — Select best agent
+- `GET /metrics/` — Query metrics and cost data
+
+### Event Topics
+
+40+ new orchestration topics on the EventBus across all subsystems (see
+`domain/events.py` for the full list).
+
+### Test Coverage
+
+82 tests covering all 12 subsystems + domain models + event publishing, with
+mock runtimes and registries for deterministic async testing.
+
+### Key Design Decisions
+
+- **Frozen dataclasses** (not Pydantic): state transitions return new instances
+  via `with_*()` methods.
+- **Rule-based planning**: deterministic, no LLM call overhead during
+  decomposition.
+- **Kahn's algorithm**: O(V+E) topological sort with ready-set semantics.
+- **DFS cycle detection**: reports exact cycle path for diagnostics.
+- **7 merge strategies**: declaratively selected per merge call.
+- **Exponential backoff + 10% jitter**: prevents thundering-herd on transient
+  failures.
+- **Weighted agent scoring**: 50% capability + 20% health + 15% latency + 15%
+  status.
+- **In-memory checkpoints**: process-local; persistent storage deferred.
+- **Event-driven resilience**: all recovery actions publish bus events for
+  external monitoring.
+
+See ADRs `0016`–`0019` for detailed design rationale.
+
 ## Phase 2 Subsystems (frozen interfaces)
 
 | Subsystem | Ports | Default impl |
@@ -172,7 +272,7 @@ shared contract. Adding a new engine = one new adapter file = zero kernel change
 | Capability Engine | `Capability`, `CapabilityRegistry`, `AgentComposer` | 11 built-ins + intent composer |
 | Security Framework | `SecretsManager`, `AccessControl`, `WorkspaceIsolation`, `ToolPermissions`, `ApprovalGate`, `AuditLog` | RBAC + workspace isolation + approval gate + audit |
 
-See `docs/adr/0001`–`0015` for the full set of Architecture Decision Records.
+See `docs/adr/0001`–`0019` for the full set of Architecture Decision Records.
 
 ## Phase 3B Engine Control Flow
 

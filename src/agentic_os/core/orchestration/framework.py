@@ -1,4 +1,4 @@
-"""Orchestration Framework — main M3 composition root.
+"""Orchestration Framework — main M3/M4 composition root.
 
 Wires together all orchestration subsystems:
 - AgentRegistry (engine → agent wrapping)
@@ -9,6 +9,18 @@ Wires together all orchestration subsystems:
 - TaskOrchestrator (goal decomposition + execution)
 - OrchestrationEventPublisher (lifecycle events)
 - OrchestrationTelemetry (history + stats)
+- SwarmPlanner (goal analysis + plan creation)              [M4]
+- SwarmScheduler (task scheduling + dispatch)               [M4]
+- SwarmSupervisor (monitoring + failure detection)          [M4]
+- ResultMerger (output merging)                             [M4]
+- ValidationEngine (plan + output validation)               [M4]
+- RetryManager (retry with backoff)                         [M4]
+- FailureRecovery (recovery + rollback)                     [M4]
+- CheckpointManager (execution checkpointing)               [M4]
+- AgentSelector (capability-based agent selection)          [M4]
+- MetricsEngine (execution metrics)                         [M4]
+- CostTracker (cost tracking)                               [M4]
+- PerformanceAnalyzer (analysis + reporting)                [M4]
 
 The framework is the entry point for the API layer and kernel integration.
 """
@@ -17,25 +29,49 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 
+from agentic_os.core.orchestration.agent_selector import AgentSelector
+from agentic_os.core.orchestration.checkpoint import CheckpointManager
 from agentic_os.core.orchestration.communication import CommunicationBus
 from agentic_os.core.orchestration.config import OrchestrationConfiguration
 from agentic_os.core.orchestration.coordination import CoordinationEngine
 from agentic_os.core.orchestration.intelligence import SwarmIntelligenceEngine
+from agentic_os.core.orchestration.metrics import (
+    CostTracker,
+    MetricsEngine,
+    PerformanceAnalyzer,
+)
+from agentic_os.core.orchestration.planner import SwarmPlanner
 from agentic_os.core.orchestration.publisher import OrchestrationEventPublisher
+from agentic_os.core.orchestration.recovery import FailureRecovery
 from agentic_os.core.orchestration.registry import OrchestrationAgentRegistry
+from agentic_os.core.orchestration.result_merger import ResultMerger
+from agentic_os.core.orchestration.retry import RetryManager
+from agentic_os.core.orchestration.scheduler import SwarmScheduler
+from agentic_os.core.orchestration.supervisor import SwarmSupervisor
 from agentic_os.core.orchestration.swarm import SwarmManager
 from agentic_os.core.orchestration.task_orchestrator import TaskOrchestrator
 from agentic_os.core.orchestration.telemetry import OrchestrationTelemetry
+from agentic_os.core.orchestration.validation import ValidationEngine
 from agentic_os.core.runtime.manager import RuntimeManager
 from agentic_os.domain.execution import EngineCapability
 from agentic_os.domain.orchestration import (
     AgentDescriptor,
     AgentTask,
+    Checkpoint,
     ConsensusResult,
+    ExecutionCost,
+    ExecutionMetrics,
+    ExecutionStage,
+    ExecutionTimeline,
     LeaderElectionResult,
+    MergedResult,
+    MergeStrategy,
     OrchestrationGoal,
     OrchestrationPlan,
+    RetryPolicy,
+    SwarmProfile,
     SwarmSpec,
+    ValidationResult,
 )
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
@@ -45,7 +81,7 @@ log = get_logger("orchestration.framework")
 
 @dataclass
 class OrchestrationFramework:
-    """Main M3 orchestrator. Composes all orchestration subsystems.
+    """Main M3/M4 orchestrator. Composes all orchestration subsystems.
 
     Usage::
 
@@ -64,7 +100,7 @@ class OrchestrationFramework:
     runtime: RuntimeManager
     config: OrchestrationConfiguration = field(default_factory=OrchestrationConfiguration)
 
-    # Subsystems (built by ``start()`` or injected for testing)
+    # Core subsystems (injected or built by ``start()``)
     agent_registry: OrchestrationAgentRegistry | None = None
     swarm_manager: SwarmManager | None = None
     coordination_engine: CoordinationEngine | None = None
@@ -73,6 +109,20 @@ class OrchestrationFramework:
     task_orchestrator: TaskOrchestrator | None = None
     publisher: OrchestrationEventPublisher | None = None
     telemetry: OrchestrationTelemetry | None = None
+
+    # M4 Swarm Engine subsystems
+    planner: SwarmPlanner | None = None
+    scheduler: SwarmScheduler | None = None
+    supervisor: SwarmSupervisor | None = None
+    result_merger: ResultMerger | None = None
+    validation_engine: ValidationEngine | None = None
+    retry_manager: RetryManager | None = None
+    failure_recovery: FailureRecovery | None = None
+    checkpoint_manager: CheckpointManager | None = None
+    agent_selector: AgentSelector | None = None
+    metrics_engine: MetricsEngine | None = None
+    cost_tracker: CostTracker | None = None
+    performance_analyzer: PerformanceAnalyzer | None = None
 
     # Internal state
     _running: bool = field(default=False, repr=False)
@@ -395,10 +445,272 @@ class OrchestrationFramework:
             swarm_id=swarm_id,
         )
 
+    # ═══════════════════════════════════════════════════════════════
+    #  M4 Swarm Engine Methods
+    # ═══════════════════════════════════════════════════════════════
+
+    # ── Planner ──
+
+    async def analyze_goal(self, goal: OrchestrationGoal) -> dict[str, Any]:
+        """Analyze a goal for complexity, required capabilities, and topology suggestion."""
+        assert self.planner is not None
+        return await self.planner.analyze_goal(goal)
+
+    async def create_plan(
+        self,
+        goal: OrchestrationGoal,
+        swarm: SwarmSpec | None = None,
+        profile: SwarmProfile | None = None,
+    ) -> OrchestrationPlan:
+        """Create a full execution plan from a goal."""
+        assert self.planner is not None
+        return await self.planner.create_plan(goal, swarm, profile)
+
+    async def resolve_dependencies(self, plan: OrchestrationPlan) -> OrchestrationPlan:
+        """Resolve and validate all task dependencies in a plan."""
+        assert self.planner is not None
+        return await self.planner.resolve_dependencies(plan)
+
+    async def parallelize_plan(
+        self, plan: OrchestrationPlan, max_parallel: int = 5
+    ) -> OrchestrationPlan:
+        """Identify tasks that can be parallelized and annotate them."""
+        assert self.planner is not None
+        return await self.planner.parallelize_plan(plan, max_parallel)
+
+    # ── Scheduler ──
+
+    async def schedule_tasks(
+        self,
+        plan: OrchestrationPlan,
+        agents: list[AgentDescriptor],
+        policy: RetryPolicy | None = None,
+    ) -> OrchestrationPlan:
+        """Schedule all tasks in a plan, topologically sorted and agent-assigned."""
+        assert self.scheduler is not None
+        return await self.scheduler.schedule_tasks(plan, agents, policy)
+
+    async def dispatch_task(self, task: AgentTask, agent: AgentDescriptor) -> AgentTask:
+        """Dispatch a single task to an agent for execution."""
+        assert self.scheduler is not None
+        return await self.scheduler.dispatch_task(task, agent)
+
+    async def get_schedule(self, plan_id: str) -> list[AgentTask]:
+        """Get the current ordered schedule for a plan."""
+        assert self.scheduler is not None
+        return await self.scheduler.get_schedule(plan_id)
+
+    # ── Supervisor ──
+
+    async def monitor_execution(self, plan: OrchestrationPlan) -> OrchestrationPlan:
+        """Monitor ongoing execution and detect failures/deadlocks."""
+        assert self.supervisor is not None
+        return await self.supervisor.monitor_execution(plan)
+
+    async def detect_failures(self, plan: OrchestrationPlan) -> list[AgentTask]:
+        """Detect failed or hung tasks in a plan."""
+        assert self.supervisor is not None
+        return await self.supervisor.detect_failures(plan)
+
+    async def detect_deadlocks(self, plan: OrchestrationPlan) -> list[str]:
+        """Detect deadlocked dependency chains."""
+        assert self.supervisor is not None
+        return await self.supervisor.detect_deadlocks(plan)
+
+    async def restart_task(
+        self, task: AgentTask, agent: AgentDescriptor | None = None
+    ) -> AgentTask:
+        """Restart a failed task, optionally on a different agent."""
+        assert self.supervisor is not None
+        return await self.supervisor.restart_task(task, agent)
+
+    async def reassign_task(self, task: AgentTask, new_agent_id: str) -> AgentTask:
+        """Reassign a task to a different agent."""
+        assert self.supervisor is not None
+        return await self.supervisor.reassign_task(task, new_agent_id)
+
+    # ── Result Merger ──
+
+    async def merge_results(
+        self,
+        tasks: list[AgentTask],
+        strategy: MergeStrategy = MergeStrategy.CONSENSUS,
+    ) -> MergedResult:
+        """Merge results from multiple completed tasks."""
+        assert self.result_merger is not None
+        return await self.result_merger.merge(tasks, strategy)
+
+    async def resolve_merge_conflicts(self, merged_result: MergedResult) -> MergedResult:
+        """Resolve conflicts in a merged result."""
+        assert self.result_merger is not None
+        return await self.result_merger.resolve_conflicts(merged_result)
+
+    async def score_confidence(self, merged_result: MergedResult) -> float:
+        """Score the confidence of a merged result."""
+        assert self.result_merger is not None
+        return await self.result_merger.score_confidence(merged_result)
+
+    # ── Validation ──
+
+    async def validate_output(
+        self,
+        task: AgentTask,
+        schema: dict[str, Any] | None = None,
+    ) -> ValidationResult:
+        """Validate a task's output."""
+        assert self.validation_engine is not None
+        return await self.validation_engine.validate_output(task, schema)
+
+    async def validate_plan(self, plan: OrchestrationPlan) -> ValidationResult:
+        """Validate a plan's structure and dependencies."""
+        assert self.validation_engine is not None
+        return await self.validation_engine.validate_plan(plan)
+
+    async def validate_security(self, task: AgentTask, agent: AgentDescriptor) -> ValidationResult:
+        """Validate security constraints for a task-agent assignment."""
+        assert self.validation_engine is not None
+        return await self.validation_engine.validate_security(task, agent)
+
+    async def validate_policy(self, task: AgentTask, policies: dict[str, Any]) -> ValidationResult:
+        """Validate a task against execution policies."""
+        assert self.validation_engine is not None
+        return await self.validation_engine.validate_policy(task, policies)
+
+    # ── Checkpoints ──
+
+    async def save_checkpoint(
+        self,
+        plan: OrchestrationPlan,
+        stage: ExecutionStage | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> Checkpoint:
+        """Save a checkpoint of the current execution state."""
+        assert self.checkpoint_manager is not None
+        return await self.checkpoint_manager.save_checkpoint(plan, stage, metadata)
+
+    async def restore_checkpoint(self, checkpoint_id: str) -> OrchestrationPlan | None:
+        """Restore execution state from a checkpoint."""
+        assert self.checkpoint_manager is not None
+        return await self.checkpoint_manager.restore_checkpoint(checkpoint_id)
+
+    async def list_checkpoints(self, plan_id: str) -> list[Checkpoint]:
+        """List all checkpoints for a plan."""
+        assert self.checkpoint_manager is not None
+        return await self.checkpoint_manager.list_checkpoints(plan_id)
+
+    async def delete_checkpoint(self, checkpoint_id: str) -> bool:
+        """Delete a checkpoint."""
+        assert self.checkpoint_manager is not None
+        return await self.checkpoint_manager.delete_checkpoint(checkpoint_id)
+
+    # ── Agent Selection ──
+
+    async def select_agent(
+        self,
+        task: AgentTask,
+        available_agents: list[AgentDescriptor] | None = None,
+    ) -> AgentDescriptor | None:
+        """Select the best agent for a task."""
+        assert self.agent_selector is not None
+        return await self.agent_selector.select_agent(task, available_agents)
+
+    async def match_capabilities(
+        self,
+        goal: OrchestrationGoal,
+        required_capabilities: list[str],
+    ) -> list[AgentDescriptor]:
+        """Find agents matching required capabilities."""
+        assert self.agent_selector is not None
+        return await self.agent_selector.match_capabilities(goal, required_capabilities)
+
+    # ── Metrics & Cost ──
+
+    async def collect_metrics(self, plan: OrchestrationPlan) -> ExecutionMetrics:
+        """Collect execution metrics for a plan."""
+        assert self.metrics_engine is not None
+        return await self.metrics_engine.collect_metrics(plan)
+
+    async def record_timeline(self, entry: ExecutionTimeline) -> None:
+        """Record a timeline entry."""
+        assert self.metrics_engine is not None
+        await self.metrics_engine.record_timeline(entry)
+
+    async def get_timeline(self, plan_id: str, limit: int = 100) -> list[ExecutionTimeline]:
+        """Get the execution timeline for a plan."""
+        assert self.metrics_engine is not None
+        return await self.metrics_engine.get_timeline(plan_id, limit)
+
+    async def estimate_cost(self, plan: OrchestrationPlan) -> ExecutionCost:
+        """Estimate the cost of executing a plan."""
+        assert self.cost_tracker is not None
+        return await self.cost_tracker.estimate_cost(plan)
+
+    async def track_cost(
+        self, plan_id: str, agent_id: str, cost: float, stage_id: str | None = None
+    ) -> ExecutionCost:
+        """Track actual cost incurred."""
+        assert self.cost_tracker is not None
+        return await self.cost_tracker.track_cost(plan_id, agent_id, cost, stage_id)
+
+    async def get_costs(self, plan_id: str) -> ExecutionCost | None:
+        """Get accumulated costs for a plan."""
+        assert self.cost_tracker is not None
+        return await self.cost_tracker.get_costs(plan_id)
+
+    async def analyze_performance(self, plan_id: str) -> dict[str, Any]:
+        """Generate a performance analysis report."""
+        assert self.performance_analyzer is not None
+        return await self.performance_analyzer.analyze_plan(plan_id)
+
+    # ── Recovery ──
+
+    async def recover_task(
+        self,
+        task: AgentTask,
+        available_agents: list[AgentDescriptor],
+    ) -> AgentTask:
+        """Recover a failed task by retrying on a suitable agent."""
+        assert self.failure_recovery is not None
+        return await self.failure_recovery.recover_task(task, available_agents)
+
+    async def recover_plan(
+        self,
+        plan: OrchestrationPlan,
+        checkpoint: Checkpoint | None = None,
+    ) -> OrchestrationPlan:
+        """Recover a plan from checkpoint or from scratch."""
+        assert self.failure_recovery is not None
+        return await self.failure_recovery.recover_plan(plan, checkpoint)
+
+    async def rollback_plan(
+        self, plan: OrchestrationPlan, checkpoint: Checkpoint
+    ) -> OrchestrationPlan:
+        """Rollback a plan to a specific checkpoint."""
+        assert self.failure_recovery is not None
+        return await self.failure_recovery.rollback_plan(plan, checkpoint)
+
+    # ── Retry ──
+
+    async def should_retry(self, task: AgentTask, policy: RetryPolicy | None = None) -> bool:
+        """Determine if a task should be retried."""
+        assert self.retry_manager is not None
+        return await self.retry_manager.should_retry(task, policy)
+
+    async def reset_retry_count(self, task_id: str) -> None:
+        """Reset retry count for a task."""
+        assert self.retry_manager is not None
+        self.retry_manager.reset_retry_count(task_id)
+
     # ── Internal ──
 
     def _build_subsystems(self) -> None:
-        """Build all orchestration subsystems if not already injected."""
+        """Build all orchestration subsystems if not already injected.
+
+        Order matters: foundational subsystems (publisher, registry) are
+        built first, then those that depend on them, then the M4 engine
+        subsystems on top.
+        """
+        # ── M3 Core ──
         if self.publisher is None:
             self.publisher = OrchestrationEventPublisher(bus=self.bus)
 
@@ -441,6 +753,116 @@ class OrchestrationFramework:
             self.telemetry = OrchestrationTelemetry(
                 max_entries=self.config.telemetry_max_entries,
             )
+
+        # ── M4 Swarm Engine Subsystems ──
+
+        # Agent selector depends on agent_registry
+        if self.agent_selector is None:
+            self.agent_selector = AgentSelector(
+                bus=self.bus,
+                agent_registry=self.agent_registry,
+            )
+
+        # Planner: goal analysis + plan generation
+        if self.planner is None:
+            self.planner = SwarmPlanner(
+                bus=self.bus,
+                agent_registry=self.agent_registry,
+                default_strategy=None,
+            )
+
+        # Scheduler: topological sort + dispatch
+        if self.scheduler is None:
+            self.scheduler = SwarmScheduler(
+                bus=self.bus,
+                agent_registry=self.agent_registry,
+                runtime=self.runtime,
+                default_policy=RetryPolicy(
+                    max_retries=self.config.supervisor_max_retries,
+                    base_delay_seconds=self.config.retry_default_policy.get(
+                        "base_delay_seconds", 1.0
+                    ),
+                    backoff_multiplier=self.config.retry_default_policy.get(
+                        "backoff_multiplier", 2.0
+                    ),
+                    max_delay_seconds=self.config.retry_default_policy.get(
+                        "max_delay_seconds", 60.0
+                    ),
+                    jitter=self.config.retry_default_policy.get("jitter", True),
+                    retry_on_error=self.config.retry_default_policy.get("retry_on_error", True),
+                    retry_on_timeout=self.config.retry_default_policy.get("retry_on_timeout", True),
+                ),
+            )
+
+        # Supervisor: monitoring + failure detection
+        if self.supervisor is None:
+            self.supervisor = SwarmSupervisor(
+                bus=self.bus,
+                agent_registry=self.agent_registry,
+                runtime=self.runtime,
+                max_retries=self.config.supervisor_max_retries,
+                monitor_interval_seconds=self.config.supervisor_monitor_interval_seconds,
+            )
+
+        # Result merger
+        if self.result_merger is None:
+            self.result_merger = ResultMerger(bus=self.bus)
+
+        # Validation engine
+        if self.validation_engine is None:
+            self.validation_engine = ValidationEngine(bus=self.bus)
+
+        # Retry manager
+        if self.retry_manager is None:
+            policy = RetryPolicy(
+                max_retries=self.config.retry_default_policy.get("max_retries", 3),
+                base_delay_seconds=self.config.retry_default_policy.get("base_delay_seconds", 1.0),
+                backoff_multiplier=self.config.retry_default_policy.get("backoff_multiplier", 2.0),
+                max_delay_seconds=self.config.retry_default_policy.get("max_delay_seconds", 60.0),
+                jitter=self.config.retry_default_policy.get("jitter", True),
+                retry_on_error=self.config.retry_default_policy.get("retry_on_error", True),
+                retry_on_timeout=self.config.retry_default_policy.get("retry_on_timeout", True),
+            )
+            self.retry_manager = RetryManager(bus=self.bus, default_policy=policy)
+
+        # Failure recovery
+        if self.failure_recovery is None:
+            self.failure_recovery = FailureRecovery(bus=self.bus)
+
+        # Checkpoint manager
+        if self.checkpoint_manager is None:
+            self.checkpoint_manager = CheckpointManager(bus=self.bus)
+
+        # Metrics & cost
+        if self.metrics_engine is None:
+            self.metrics_engine = MetricsEngine(
+                bus=self.bus,
+                max_timeline_entries=self.config.metrics_max_timeline_entries,
+            )
+
+        if self.cost_tracker is None:
+            self.cost_tracker = CostTracker(bus=self.bus)
+
+        if self.performance_analyzer is None:
+            self.performance_analyzer = PerformanceAnalyzer(
+                metrics_engine=self.metrics_engine,
+                cost_tracker=self.cost_tracker,
+            )
+
+        log.info(
+            "Orchestration subsystems built",
+            planner=self.planner is not None,
+            scheduler=self.scheduler is not None,
+            supervisor=self.supervisor is not None,
+            result_merger=self.result_merger is not None,
+            validation=self.validation_engine is not None,
+            retry=self.retry_manager is not None,
+            recovery=self.failure_recovery is not None,
+            checkpoint=self.checkpoint_manager is not None,
+            agent_selector=self.agent_selector is not None,
+            metrics=self.metrics_engine is not None,
+            cost=self.cost_tracker is not None,
+        )
 
     async def _sync_agents_loop(self) -> None:
         """Background loop to periodically sync agents from the runtime."""

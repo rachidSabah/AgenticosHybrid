@@ -25,10 +25,18 @@ def _utcnow() -> datetime:
 class SwarmTopology(StrEnum):
     """Communication topology within a swarm."""
 
-    MESH = "mesh"
-    STAR = "star"
+    SEQUENTIAL = "sequential"
+    PARALLEL = "parallel"
     HIERARCHICAL = "hierarchical"
+    SUPERVISOR = "supervisor"
+    MESH = "mesh"
+    TREE = "tree"
+    PIPELINE = "pipeline"
+    HUB_AND_SPOKE = "hub_and_spoke"
+    STAR = "star"
     RING = "ring"
+    GRAPH = "graph"
+    DYNAMIC = "dynamic"
 
 
 class AgentTaskStatus(StrEnum):
@@ -767,4 +775,396 @@ class OrchestrationProfile:
             "subtask_timeout_seconds": self.subtask_timeout_seconds,
             "auto_discover_agents": self.auto_discover_agents,
             "tags": list(self.tags),
+        }
+
+
+# ── Swarm Orchestration Engine — Additional Domain Models ──
+
+
+class AgentRole(StrEnum):
+    """Role an agent plays within a swarm execution."""
+
+    PLANNER = "planner"
+    RESEARCHER = "researcher"
+    ARCHITECT = "architect"
+    BACKEND = "backend"
+    FRONTEND = "frontend"
+    TESTING = "testing"
+    DOCUMENTATION = "documentation"
+    SECURITY = "security"
+    DEVOPS = "devops"
+    DEPLOYMENT = "deployment"
+    REVIEW = "review"
+    OPTIMIZATION = "optimization"
+    TRANSLATION = "translation"
+    SUMMARIZATION = "summarization"
+    SUPERVISOR = "supervisor"
+    CUSTOM = "custom"
+
+
+class ExecutionStageStatus(StrEnum):
+    """Status of an execution stage within a plan."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    CANCELLED = "cancelled"
+
+
+class MergeStrategy(StrEnum):
+    """Strategy for merging results from multiple agents."""
+
+    WEIGHTED = "weighted"
+    PRIORITY = "priority"
+    CONSENSUS = "consensus"
+    VOTING = "voting"
+    CONCATENATE = "concatenate"
+    BEST_OF_N = "best_of_n"
+    SEMANTIC = "semantic"
+
+
+class ValidationStatus(StrEnum):
+    """Status of a validation check."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    ERROR = "error"
+
+
+@dataclass(frozen=True, slots=True)
+class SwarmProfile:
+    """Named configuration profile for creating swarms.
+
+    Pre-configured templates for common swarm topologies and agent compositions.
+    """
+
+    name: str
+    description: str = ""
+    topology: SwarmTopology = SwarmTopology.MESH
+    agent_roles: tuple[AgentRole, ...] = field(default_factory=tuple)
+    min_agents: int = 1
+    max_agents: int = 10
+    default_timeout_seconds: float = 300.0
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "topology": self.topology.value,
+            "agent_roles": [r.value for r in self.agent_roles],
+            "min_agents": self.min_agents,
+            "max_agents": self.max_agents,
+            "default_timeout_seconds": self.default_timeout_seconds,
+            "tags": list(self.tags),
+            "metadata": dict(self.metadata),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionStage:
+    """A stage within an execution plan, containing related tasks."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    plan_id: str = ""
+    name: str = ""
+    description: str = ""
+    status: ExecutionStageStatus = ExecutionStageStatus.PENDING
+    task_ids: tuple[str, ...] = field(default_factory=tuple)
+    depends_on: tuple[str, ...] = field(default_factory=tuple)  # stage IDs
+    coordination_pattern: CoordinationPattern = CoordinationPattern.SEQUENTIAL
+    timeout_seconds: float = 300.0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "name": self.name,
+            "description": self.description,
+            "status": self.status.value,
+            "task_ids": list(self.task_ids),
+            "depends_on": list(self.depends_on),
+            "coordination_pattern": self.coordination_pattern.value,
+            "timeout_seconds": self.timeout_seconds,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+    def with_status(self, status: ExecutionStageStatus) -> ExecutionStage:
+        return ExecutionStage(
+            id=self.id,
+            plan_id=self.plan_id,
+            name=self.name,
+            description=self.description,
+            status=status,
+            task_ids=self.task_ids,
+            depends_on=self.depends_on,
+            coordination_pattern=self.coordination_pattern,
+            timeout_seconds=self.timeout_seconds,
+            started_at=self.started_at if status != ExecutionStageStatus.RUNNING else _utcnow(),
+            completed_at=_utcnow()
+            if status
+            in (
+                ExecutionStageStatus.COMPLETED,
+                ExecutionStageStatus.FAILED,
+                ExecutionStageStatus.CANCELLED,
+            )
+            else None,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class MergedResult:
+    """Result of merging outputs from multiple agents/tasks."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    plan_id: str = ""
+    strategy: MergeStrategy = MergeStrategy.CONSENSUS
+    source_task_ids: tuple[str, ...] = field(default_factory=tuple)
+    output: dict[str, Any] = field(default_factory=dict)
+    conflicts: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    confidence: float = 1.0
+    created_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "strategy": self.strategy.value,
+            "source_task_ids": list(self.source_task_ids),
+            "output": dict(self.output),
+            "conflicts": list(self.conflicts),
+            "confidence": self.confidence,
+            "created_at": self.created_at.isoformat(),
+        }
+
+    def with_output(self, output: dict[str, Any]) -> MergedResult:
+        return MergedResult(
+            id=self.id,
+            plan_id=self.plan_id,
+            strategy=self.strategy,
+            source_task_ids=self.source_task_ids,
+            output=output,
+            conflicts=self.conflicts,
+            confidence=self.confidence,
+            created_at=self.created_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationResult:
+    """Result of a validation check against a task output or plan."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    target_id: str = ""
+    target_type: str = ""  # "task", "plan", "merged_result"
+    status: ValidationStatus = ValidationStatus.PASSED
+    errors: tuple[str, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    score: float = 1.0
+    validator_name: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "target_id": self.target_id,
+            "target_type": self.target_type,
+            "status": self.status.value,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+            "score": self.score,
+            "validator_name": self.validator_name,
+            "details": dict(self.details),
+            "created_at": self.created_at.isoformat(),
+        }
+
+    def with_status(self, status: ValidationStatus) -> ValidationResult:
+        return ValidationResult(
+            id=self.id,
+            target_id=self.target_id,
+            target_type=self.target_type,
+            status=status,
+            errors=self.errors,
+            warnings=self.warnings,
+            score=self.score,
+            validator_name=self.validator_name,
+            details=self.details,
+            created_at=self.created_at,
+        )
+
+    def with_score(self, score: float) -> ValidationResult:
+        return ValidationResult(
+            id=self.id,
+            target_id=self.target_id,
+            target_type=self.target_type,
+            status=ValidationStatus.PASSED if score >= 0.7 else ValidationStatus.FAILED,
+            errors=self.errors,
+            warnings=self.warnings,
+            score=score,
+            validator_name=self.validator_name,
+            details=self.details,
+            created_at=self.created_at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    """Retry policy configuration for failed tasks."""
+
+    max_retries: int = 3
+    base_delay_seconds: float = 1.0
+    max_delay_seconds: float = 60.0
+    backoff_multiplier: float = 2.0
+    retry_on_timeout: bool = True
+    retry_on_error: bool = True
+    retry_on_rejection: bool = False
+    jitter: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "max_retries": self.max_retries,
+            "base_delay_seconds": self.base_delay_seconds,
+            "max_delay_seconds": self.max_delay_seconds,
+            "backoff_multiplier": self.backoff_multiplier,
+            "retry_on_timeout": self.retry_on_timeout,
+            "retry_on_error": self.retry_on_error,
+            "retry_on_rejection": self.retry_on_rejection,
+            "jitter": self.jitter,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class Checkpoint:
+    """A checkpoint capturing execution state for recovery."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    plan_id: str = ""
+    stage_id: str = ""
+    task_states: dict[str, str] = field(default_factory=dict)  # task_id -> status
+    completed_task_ids: tuple[str, ...] = field(default_factory=tuple)
+    failed_task_ids: tuple[str, ...] = field(default_factory=tuple)
+    partial_outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "stage_id": self.stage_id,
+            "task_states": dict(self.task_states),
+            "completed_task_ids": list(self.completed_task_ids),
+            "failed_task_ids": list(self.failed_task_ids),
+            "partial_outputs": {k: dict(v) for k, v in self.partial_outputs.items()},
+            "metadata": dict(self.metadata),
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionMetrics:
+    """Aggregated execution metrics for a plan or task group."""
+
+    plan_id: str = ""
+    total_tasks: int = 0
+    completed_tasks: int = 0
+    failed_tasks: int = 0
+    skipped_tasks: int = 0
+    total_duration_ms: float = 0.0
+    avg_task_duration_ms: float = 0.0
+    max_task_duration_ms: float = 0.0
+    min_task_duration_ms: float = 0.0
+    task_durations: tuple[float, ...] = field(default_factory=tuple)
+    retry_count: int = 0
+    checkpoint_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "plan_id": self.plan_id,
+            "total_tasks": self.total_tasks,
+            "completed_tasks": self.completed_tasks,
+            "failed_tasks": self.failed_tasks,
+            "skipped_tasks": self.skipped_tasks,
+            "total_duration_ms": self.total_duration_ms,
+            "avg_task_duration_ms": self.avg_task_duration_ms,
+            "max_task_duration_ms": self.max_task_duration_ms,
+            "min_task_duration_ms": self.min_task_duration_ms,
+            "task_durations": list(self.task_durations),
+            "retry_count": self.retry_count,
+            "checkpoint_count": self.checkpoint_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionCost:
+    """Cost tracking for execution plans and tasks."""
+
+    plan_id: str = ""
+    total_cost: float = 0.0
+    cost_by_agent: dict[str, float] = field(default_factory=dict)
+    cost_by_stage: dict[str, float] = field(default_factory=dict)
+    estimated_total: float = 0.0
+    currency: str = "USD"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "plan_id": self.plan_id,
+            "total_cost": self.total_cost,
+            "cost_by_agent": dict(self.cost_by_agent),
+            "cost_by_stage": dict(self.cost_by_stage),
+            "estimated_total": self.estimated_total,
+            "currency": self.currency,
+            "metadata": dict(self.metadata),
+        }
+
+    def with_cost(self, agent_id: str, cost: float) -> ExecutionCost:
+        new_agent_costs = dict(self.cost_by_agent)
+        new_agent_costs[agent_id] = new_agent_costs.get(agent_id, 0.0) + cost
+        return ExecutionCost(
+            plan_id=self.plan_id,
+            total_cost=self.total_cost + cost,
+            cost_by_agent=new_agent_costs,
+            cost_by_stage=self.cost_by_stage,
+            estimated_total=self.estimated_total,
+            currency=self.currency,
+            metadata=self.metadata,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionTimeline:
+    """A timeline entry recording an execution event."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    plan_id: str = ""
+    event_type: str = ""
+    stage_id: str | None = None
+    task_id: str | None = None
+    agent_id: str | None = None
+    status: str = ""
+    duration_ms: float = 0.0
+    details: dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "plan_id": self.plan_id,
+            "event_type": self.event_type,
+            "stage_id": self.stage_id,
+            "task_id": self.task_id,
+            "agent_id": self.agent_id,
+            "status": self.status,
+            "duration_ms": self.duration_ms,
+            "details": dict(self.details),
+            "timestamp": self.timestamp.isoformat(),
         }

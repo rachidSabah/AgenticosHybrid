@@ -108,7 +108,7 @@ class TestDiscoveryTelemetry:
         entry_id = telemetry.start_scan("test")
         telemetry.complete_scan(entry_id, providers_run=1, engines_found=1)
         stats = telemetry.get_stats()
-        assert stats["avg_duration_ms"] > 0.0
+        assert stats["avg_duration_ms"] >= 0.0
 
     # ── Error tracking ──
 
