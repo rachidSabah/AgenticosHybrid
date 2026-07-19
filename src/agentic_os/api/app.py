@@ -34,7 +34,6 @@ from agentic_os.domain.orchestration import (
     OrchestrationGoal,
     OrchestrationPlan,
     RetryPolicy,
-    SwarmProfile,
 )
 from agentic_os.domain.pipeline import (
     PipelineEdge,
@@ -174,6 +173,11 @@ def create_app(platform: Platform) -> FastAPI:
     app = FastAPI(title="Agentic OS", version="0.2.0")
 
     orch = platform.orchestrator
+    swarm = platform.orchestration
+    if swarm is None:
+        raise RuntimeError(
+            "OrchestrationFramework is required but was not initialised on the Platform"
+        )
     pm = platform.provider_mgr
     vault = platform.vault
     phealth = platform.provider_health
@@ -1364,13 +1368,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/profiles")
     async def list_swarm_profiles() -> list[dict]:
         """List all swarm profiles."""
-        profiles = orch.config.profiles
+        profiles = swarm.config.profiles
         return [p.to_dict() for p in profiles.values()]
 
     @app.get("/api/swarm/profiles/{name}")
     async def get_swarm_profile(name: str) -> dict:
         """Get a swarm profile by name."""
-        profile = orch.config.get_profile(name)
+        profile = swarm.config.get_profile(name)
         if profile is None:
             raise HTTPException(status_code=404, detail="Profile not found")
         return profile.to_dict()
@@ -1378,23 +1382,24 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/swarm/profiles")
     async def create_swarm_profile(body: dict) -> dict:
         """Create a new swarm profile."""
-        profile = SwarmProfile(
+        from agentic_os.domain.orchestration import OrchestrationProfile
+
+        profile = OrchestrationProfile(
             name=body["name"],
             description=body.get("description", ""),
-            topology=body.get("default_topology", "mesh"),
-            min_agents=body.get("min_agents", 1),
-            max_agents=body.get("max_agents", 10),
-            default_timeout_seconds=body.get("default_timeout_seconds", 300.0),
+            default_topology=body.get("default_topology", "mesh"),
+            max_agents_per_swarm=body.get("max_agents", 10),
+            subtask_timeout_seconds=body.get("default_timeout_seconds", 300.0),
+            auto_discover_agents=body.get("auto_discover_agents", True),
             tags=tuple(body.get("tags", [])),
-            metadata=body.get("metadata", {}),
         )
-        orch.config.add_profile(profile)
+        swarm.config.add_profile(profile)
         return profile.to_dict()
 
     @app.delete("/api/swarm/profiles/{name}")
     async def delete_swarm_profile(name: str) -> dict:
         """Delete a swarm profile."""
-        removed = orch.config.remove_profile(name)
+        removed = swarm.config.remove_profile(name)
         if not removed:
             raise HTTPException(status_code=404, detail="Profile not found")
         return {"removed": name}
@@ -1404,21 +1409,21 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/swarms")
     async def list_swarms() -> list[dict]:
         """List all swarms."""
-        swarms = await orch.list_swarms()
+        swarms = await swarm.list_swarms()
         return [s.to_dict() for s in swarms]
 
     @app.get("/api/swarm/swarms/{swarm_id}")
     async def get_swarm(swarm_id: str) -> dict:
         """Get a swarm by ID."""
-        swarm = await orch.get_swarm(swarm_id)
-        if swarm is None:
+        result = await swarm.get_swarm(swarm_id)
+        if result is None:
             raise HTTPException(status_code=404, detail="Swarm not found")
-        return swarm.to_dict()
+        return result.to_dict()
 
     @app.post("/api/swarm/swarms")
     async def create_swarm(body: dict) -> dict:
         """Create a new swarm."""
-        swarm = await orch.create_swarm(
+        result = await swarm.create_swarm(
             name=body["name"],
             description=body.get("description", ""),
             topology=body.get("topology", "mesh"),
@@ -1426,12 +1431,12 @@ def create_app(platform: Platform) -> FastAPI:
             tags=tuple(body.get("tags", [])),
             metadata=body.get("metadata"),
         )
-        return swarm.to_dict()
+        return result.to_dict()
 
     @app.delete("/api/swarm/swarms/{swarm_id}")
     async def delete_swarm(swarm_id: str) -> dict:
         """Delete a swarm."""
-        ok = await orch.delete_swarm(swarm_id)
+        ok = await swarm.delete_swarm(swarm_id)
         if not ok:
             raise HTTPException(status_code=404, detail="Swarm not found")
         return {"deleted": swarm_id}
@@ -1447,7 +1452,7 @@ def create_app(platform: Platform) -> FastAPI:
             context=body.get("context", {}),
             swarm_id=body.get("swarm_id"),
         )
-        return await orch.analyze_goal(goal)
+        return await swarm.analyze_goal(goal)
 
     @app.post("/api/swarm/planner/plan")
     async def create_plan(body: dict) -> dict:
@@ -1458,7 +1463,7 @@ def create_app(platform: Platform) -> FastAPI:
             context=body.get("context", {}),
             swarm_id=body.get("swarm_id"),
         )
-        plan = await orch.create_plan(goal)
+        plan = await swarm.create_plan(goal)
         return plan.to_dict()
 
     @app.post("/api/swarm/planner/resolve-dependencies")
@@ -1471,7 +1476,7 @@ def create_app(platform: Platform) -> FastAPI:
             status=body.get("status", "pending"),
             metadata=body.get("metadata", {}),
         )
-        resolved = await orch.resolve_dependencies(plan)
+        resolved = await swarm.resolve_dependencies(plan)
         return resolved.to_dict()
 
     @app.post("/api/swarm/planner/parallelize")
@@ -1485,7 +1490,7 @@ def create_app(platform: Platform) -> FastAPI:
             metadata=body.get("metadata", {}),
         )
         max_parallel = body.get("max_parallel", 5)
-        parallelized = await orch.parallelize_plan(plan, max_parallel)
+        parallelized = await swarm.parallelize_plan(plan, max_parallel)
         return parallelized.to_dict()
 
     # ── Scheduler ──
@@ -1495,7 +1500,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Schedule all tasks in a plan using topological sort."""
         plan = _parse_plan(body["plan"])
         agents = [_parse_agent(a) for a in body.get("agents", [])]
-        scheduled = await orch.schedule_tasks(plan, agents)
+        scheduled = await swarm.schedule_tasks(plan, agents)
         return scheduled.to_dict()
 
     @app.post("/api/swarm/scheduler/dispatch")
@@ -1503,13 +1508,13 @@ def create_app(platform: Platform) -> FastAPI:
         """Dispatch a scheduled task to an agent."""
         task = _parse_task(body["task"])
         agent = _parse_agent(body["agent"])
-        dispatched = await orch.dispatch_task(task, agent)
+        dispatched = await swarm.dispatch_task(task, agent)
         return dispatched.to_dict()
 
     @app.get("/api/swarm/scheduler/schedule/{plan_id}")
     async def get_plan_schedule(plan_id: str) -> list[dict]:
         """Get the ordered schedule for a plan."""
-        schedule = await orch.get_schedule(plan_id)
+        schedule = await swarm.get_schedule(plan_id)
         return [t.to_dict() for t in schedule]
 
     # ── Supervisor ──
@@ -1518,35 +1523,35 @@ def create_app(platform: Platform) -> FastAPI:
     async def monitor_plan_execution(body: dict) -> dict:
         """Monitor a plan's execution for failures/deadlocks."""
         plan = _parse_plan(body)
-        monitored = await orch.monitor_execution(plan)
+        monitored = await swarm.monitor_execution(plan)
         return monitored.to_dict()
 
     @app.post("/api/swarm/supervisor/detect-failures")
     async def detect_plan_failures(body: dict) -> list[dict]:
         """Detect failed or hung tasks in a plan."""
         plan = _parse_plan(body)
-        failed = await orch.detect_failures(plan)
+        failed = await swarm.detect_failures(plan)
         return [t.to_dict() for t in failed]
 
     @app.post("/api/swarm/supervisor/detect-deadlocks")
     async def detect_plan_deadlocks(body: dict) -> list[str]:
         """Detect deadlocked dependency chains."""
         plan = _parse_plan(body)
-        return await orch.detect_deadlocks(plan)
+        return await swarm.detect_deadlocks(plan)
 
     @app.post("/api/swarm/supervisor/restart")
     async def restart_failed_task(body: dict) -> dict:
         """Restart a failed task."""
         task = _parse_task(body["task"])
         agent = _parse_agent(body["agent"]) if body.get("agent") else None
-        restarted = await orch.restart_task(task, agent)
+        restarted = await swarm.restart_task(task, agent)
         return restarted.to_dict()
 
     @app.post("/api/swarm/supervisor/reassign")
     async def reassign_task_agent(body: dict) -> dict:
         """Reassign a task to a different agent."""
         task = _parse_task(body["task"])
-        reassigned = await orch.reassign_task(task, body["new_agent_id"])
+        reassigned = await swarm.reassign_task(task, body["new_agent_id"])
         return reassigned.to_dict()
 
     # ── Result Merger ──
@@ -1560,7 +1565,7 @@ def create_app(platform: Platform) -> FastAPI:
             strategy = MergeStrategy(strategy_name)
         except ValueError:
             strategy = MergeStrategy.CONSENSUS
-        merged = await orch.merge_results(tasks, strategy)
+        merged = await swarm.merge_results(tasks, strategy)
         return merged.to_dict()
 
     @app.post("/api/swarm/merge/resolve")
@@ -1573,7 +1578,7 @@ def create_app(platform: Platform) -> FastAPI:
             conflicts=tuple(body.get("conflicts", [])),
             confidence=body.get("confidence", 0.0),
         )
-        resolved = await orch.resolve_merge_conflicts(merged)
+        resolved = await swarm.resolve_merge_conflicts(merged)
         return resolved.to_dict()
 
     # ── Validation ──
@@ -1583,14 +1588,14 @@ def create_app(platform: Platform) -> FastAPI:
         """Validate a task's output against an optional schema."""
         task = _parse_task(body["task"])
         schema = body.get("schema")
-        result = await orch.validate_output(task, schema)
+        result = await swarm.validate_output(task, schema)
         return result.to_dict()
 
     @app.post("/api/swarm/validate/plan")
     async def validate_plan_structure(body: dict) -> dict:
         """Validate a plan's structure and dependencies."""
         plan = _parse_plan(body)
-        result = await orch.validate_plan(plan)
+        result = await swarm.validate_plan(plan)
         return result.to_dict()
 
     @app.post("/api/swarm/validate/security")
@@ -1598,7 +1603,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Validate security constraints for a task-agent assignment."""
         task = _parse_task(body["task"])
         agent = _parse_agent(body["agent"])
-        result = await orch.validate_security(task, agent)
+        result = await swarm.validate_security(task, agent)
         return result.to_dict()
 
     @app.post("/api/swarm/validate/policy")
@@ -1606,7 +1611,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Validate a task against execution policies."""
         task = _parse_task(body["task"])
         policies = body.get("policies", {})
-        result = await orch.validate_policy(task, policies)
+        result = await swarm.validate_policy(task, policies)
         return result.to_dict()
 
     # ── Checkpoint ──
@@ -1617,13 +1622,13 @@ def create_app(platform: Platform) -> FastAPI:
         plan = _parse_plan(body["plan"])
         stage_data = body.get("stage")
         stage = _parse_stage(stage_data) if stage_data else None
-        checkpoint = await orch.save_checkpoint(plan, stage, body.get("metadata"))
+        checkpoint = await swarm.save_checkpoint(plan, stage, body.get("metadata"))
         return checkpoint.to_dict()
 
     @app.get("/api/swarm/checkpoints/{checkpoint_id}")
     async def restore_execution_checkpoint(checkpoint_id: str) -> dict:
         """Restore execution state from a checkpoint."""
-        plan = await orch.restore_checkpoint(checkpoint_id)
+        plan = await swarm.restore_checkpoint(checkpoint_id)
         if plan is None:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         return plan.to_dict()
@@ -1631,13 +1636,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/checkpoints")
     async def list_plan_checkpoints(plan_id: str) -> list[dict]:
         """List all checkpoints for a plan."""
-        checkpoints = await orch.list_checkpoints(plan_id)
+        checkpoints = await swarm.list_checkpoints(plan_id)
         return [c.to_dict() for c in checkpoints]
 
     @app.delete("/api/swarm/checkpoints/{checkpoint_id}")
     async def delete_execution_checkpoint(checkpoint_id: str) -> dict:
         """Delete a checkpoint."""
-        ok = await orch.delete_checkpoint(checkpoint_id)
+        ok = await swarm.delete_checkpoint(checkpoint_id)
         if not ok:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         return {"deleted": checkpoint_id}
@@ -1650,7 +1655,7 @@ def create_app(platform: Platform) -> FastAPI:
         task = _parse_task(body["task"])
         agents_data = body.get("available_agents")
         agents = [_parse_agent(a) for a in agents_data] if agents_data else None
-        agent = await orch.select_agent(task, agents)
+        agent = await swarm.select_agent(task, agents)
         if agent is None:
             raise HTTPException(status_code=404, detail="No suitable agent found")
         return agent.to_dict()
@@ -1663,7 +1668,7 @@ def create_app(platform: Platform) -> FastAPI:
             description=body.get("description", ""),
             context=body.get("context", {}),
         )
-        agents = await orch.match_capabilities(goal, body.get("capabilities", []))
+        agents = await swarm.match_capabilities(goal, body.get("capabilities", []))
         return [a.to_dict() for a in agents]
 
     # ── Metrics & Cost ──
@@ -1672,7 +1677,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def collect_execution_metrics(body: dict) -> dict:
         """Collect execution metrics for a plan."""
         plan = _parse_plan(body)
-        metrics = await orch.collect_metrics(plan)
+        metrics = await swarm.collect_metrics(plan)
         return metrics.to_dict()
 
     @app.post("/api/swarm/metrics/timeline")
@@ -1688,26 +1693,26 @@ def create_app(platform: Platform) -> FastAPI:
             duration_ms=body.get("duration_ms", 0.0),
             details=body.get("details", {}),
         )
-        await orch.record_timeline(entry)
+        await swarm.record_timeline(entry)
         return {"recorded": True}
 
     @app.get("/api/swarm/metrics/timeline/{plan_id}")
     async def get_execution_timeline(plan_id: str, limit: int = 100) -> list[dict]:
         """Get the execution timeline for a plan."""
-        entries = await orch.get_timeline(plan_id, limit)
+        entries = await swarm.get_timeline(plan_id, limit)
         return [e.to_dict() for e in entries]
 
     @app.post("/api/swarm/cost/estimate")
     async def estimate_plan_cost(body: dict) -> dict:
         """Estimate the cost of executing a plan."""
         plan = _parse_plan(body)
-        cost = await orch.estimate_cost(plan)
+        cost = await swarm.estimate_cost(plan)
         return cost.to_dict()
 
     @app.post("/api/swarm/cost/track")
     async def track_execution_cost(body: dict) -> dict:
         """Track actual cost incurred."""
-        cost = await orch.track_cost(
+        cost = await swarm.track_cost(
             plan_id=body["plan_id"],
             agent_id=body["agent_id"],
             cost=body["cost"],
@@ -1718,7 +1723,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/cost/{plan_id}")
     async def get_plan_costs(plan_id: str) -> dict:
         """Get accumulated costs for a plan."""
-        costs = await orch.get_costs(plan_id)
+        costs = await swarm.get_costs(plan_id)
         if costs is None:
             return {"plan_id": plan_id, "total_cost": 0.0, "cost_by_agent": {}}
         return costs.to_dict()
@@ -1726,7 +1731,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/performance/{plan_id}")
     async def analyze_plan_performance(plan_id: str) -> dict:
         """Generate a performance analysis report for a plan."""
-        return await orch.analyze_performance(plan_id)
+        return await swarm.analyze_performance(plan_id)
 
     # ── Recovery ──
 
@@ -1735,7 +1740,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Recover a failed task on a suitable agent."""
         task = _parse_task(body["task"])
         agents = [_parse_agent(a) for a in body.get("available_agents", [])]
-        recovered = await orch.recover_task(task, agents)
+        recovered = await swarm.recover_task(task, agents)
         return recovered.to_dict()
 
     @app.post("/api/swarm/recovery/plan")
@@ -1744,7 +1749,7 @@ def create_app(platform: Platform) -> FastAPI:
         plan = _parse_plan(body["plan"])
         checkpoint_data = body.get("checkpoint")
         checkpoint = _parse_checkpoint(checkpoint_data) if checkpoint_data else None
-        recovered = await orch.recover_plan(plan, checkpoint)
+        recovered = await swarm.recover_plan(plan, checkpoint)
         return recovered.to_dict()
 
     @app.post("/api/swarm/recovery/rollback")
@@ -1752,7 +1757,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Rollback a plan to a specific checkpoint."""
         plan = _parse_plan(body["plan"])
         checkpoint = _parse_checkpoint(body["checkpoint"])
-        rolled_back = await orch.rollback_plan(plan, checkpoint)
+        rolled_back = await swarm.rollback_plan(plan, checkpoint)
         return rolled_back.to_dict()
 
     # ── Retry ──
@@ -1763,13 +1768,13 @@ def create_app(platform: Platform) -> FastAPI:
         task = _parse_task(body["task"])
         policy_data = body.get("policy")
         policy = _parse_retry_policy(policy_data) if policy_data else None
-        should = await orch.should_retry(task, policy)
+        should = await swarm.should_retry(task, policy)
         return {"task_id": task.id, "should_retry": should}
 
     @app.post("/api/swarm/retry/reset")
     async def reset_task_retry(body: dict) -> dict:
         """Reset retry count for a task."""
-        await orch.reset_retry_count(body["task_id"])
+        await swarm.reset_retry_count(body["task_id"])
         return {"reset": body["task_id"]}
 
     # ── Goals & Tasks (extended M3) ──
@@ -1777,13 +1782,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/goals")
     async def list_orchestration_goals(status: str | None = None) -> list[dict]:
         """List orchestration goals."""
-        goals = await orch.list_goals(status)
+        goals = await swarm.list_goals(status)
         return [g.to_dict() for g in goals]
 
     @app.get("/api/swarm/goals/{goal_id}")
     async def get_orchestration_goal(goal_id: str) -> dict:
         """Get an orchestration goal."""
-        goal = await orch.get_goal(goal_id)
+        goal = await swarm.get_goal(goal_id)
         if goal is None:
             raise HTTPException(status_code=404, detail="Goal not found")
         return goal.to_dict()
@@ -1791,7 +1796,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/swarm/goals")
     async def create_orchestration_goal(body: dict) -> dict:
         """Create an orchestration goal."""
-        goal = await orch.create_goal(
+        goal = await swarm.create_goal(
             title=body["title"],
             description=body.get("description", ""),
             context=body.get("context"),
@@ -1802,7 +1807,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.delete("/api/swarm/goals/{goal_id}")
     async def cancel_orchestration_goal(goal_id: str) -> dict:
         """Cancel a goal."""
-        goal = await orch.cancel_goal(goal_id)
+        goal = await swarm.cancel_goal(goal_id)
         if goal is None:
             raise HTTPException(status_code=404, detail="Goal not found")
         return goal.to_dict()
@@ -1810,7 +1815,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/plans/{plan_id}")
     async def get_orchestration_plan(plan_id: str) -> dict:
         """Get an orchestration plan."""
-        plan = await orch.get_plan(plan_id)
+        plan = await swarm.get_plan(plan_id)
         if plan is None:
             raise HTTPException(status_code=404, detail="Plan not found")
         return plan.to_dict()
@@ -1821,13 +1826,13 @@ def create_app(platform: Platform) -> FastAPI:
         status: str | None = None,
     ) -> list[dict]:
         """List orchestration tasks."""
-        tasks = await orch.list_tasks(goal_id, status)
+        tasks = await swarm.list_tasks(goal_id, status)
         return [t.to_dict() for t in tasks]
 
     @app.get("/api/swarm/tasks/{task_id}")
     async def get_orchestration_task(task_id: str) -> dict:
         """Get a task by ID."""
-        task = await orch.get_task(task_id)
+        task = await swarm.get_task(task_id)
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return task.to_dict()

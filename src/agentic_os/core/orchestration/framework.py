@@ -768,7 +768,7 @@ class OrchestrationFramework:
             self.planner = SwarmPlanner(
                 bus=self.bus,
                 agent_registry=self.agent_registry,
-                default_strategy=self.config.planner_default_strategy,
+                default_strategy=None,
             )
 
         # Scheduler: topological sort + dispatch
