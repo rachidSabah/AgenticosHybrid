@@ -221,6 +221,91 @@ export interface HotReloadStatus {
   running: boolean;
 }
 
+// ── MCP types (Phase 4, M3) ──
+
+export interface MCPServerConfig {
+  id: string;
+  name: string;
+  transport: string;
+  command?: string;
+  args: string[];
+  env: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+  server_type?: string;
+  description?: string;
+  enabled: boolean;
+  sandbox?: boolean;
+  sandbox_config?: Record<string, unknown>;
+  health_check_interval_seconds: number;
+  health_check_timeout_seconds: number;
+  version?: string;
+  author?: string;
+  homepage?: string;
+  repository?: string;
+  tags: string[];
+  created_by?: string;
+}
+
+export interface MCPServerDetail {
+  config: MCPServerConfig;
+  status: MCPStatus;
+  health: MCPHealth;
+  tools: MCPTool[];
+  resources: MCPResource[];
+  prompts: MCPPrompt[];
+  restart_count: number;
+  error?: string;
+  process_id?: number;
+  last_health_check?: string;
+  last_error_at?: string;
+}
+
+export type MCPStatus = "stopped" | "starting" | "running" | "stopping" | "failed";
+export type MCPHealth = "healthy" | "degraded" | "unhealthy" | "unknown";
+
+export interface MCPTool {
+  name: string;
+  description: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+}
+
+export interface MCPToolResult {
+  content: string;
+  is_error: boolean;
+}
+
+export interface MCPPermissionMapping {
+  tool_name: string;
+  capability: string;
+  description?: string;
+}
+
+export interface MCPResource {
+  uri: string;
+  name: string;
+  description?: string;
+  mime_type?: string;
+}
+
+export interface MCPPrompt {
+  name: string;
+  description: string;
+  arguments?: Record<string, unknown>;
+}
+
+export interface MCPHealthSummary {
+  total: number;
+  running: number;
+  servers: Record<string, { name: string; status: MCPStatus; health: MCPHealth; tools: number }>;
+}
+
+export interface MCPSessionMap {
+  sessions: Record<string, string>;
+  total: number;
+}
+
 export interface SystemMetrics {
   tasks: number;
   agents: number;
