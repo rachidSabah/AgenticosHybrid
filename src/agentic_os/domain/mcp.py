@@ -423,10 +423,16 @@ class MCPServerDetail:
             last_health_check=self.last_health_check,
             error=error if error is not None else self.error,
             process_id=process_id if process_id is not None else self.process_id,
-            started_at=self.started_at if status != MCPServerStatus.STARTING else now,
-            stopped_at=now
-            if status in (MCPServerStatus.STOPPED, MCPServerStatus.FAILED)
-            else self.stopped_at,
+            started_at=now
+            if status in (MCPServerStatus.STARTING, MCPServerStatus.RUNNING)
+            else self.started_at,
+            stopped_at=None
+            if status == MCPServerStatus.RUNNING
+            else (
+                now
+                if status in (MCPServerStatus.STOPPED, MCPServerStatus.FAILED)
+                else self.stopped_at
+            ),
             restart_count=self.restart_count + (1 if status == MCPServerStatus.FAILED else 0),
         )
 

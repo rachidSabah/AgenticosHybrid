@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from agentic_os.core.mcp.client import MCPClient
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.mcp import (
     MCPHealthStatus,
@@ -131,6 +132,13 @@ class MCPRegistryImpl(MCPRegistryPort):
         if data.transport == "stdio":
             if not data.command:
                 raise ValueError("command is required for stdio transport")
+            assert data.command is not None  # narrow for type checker, validated above
+        existing = self._registry.get_server_by_name(data.name)
+        if existing:
+            raise ValueError(f"Server '{data.name}' already registered")
+
+        if data.transport == "stdio":
+            assert data.command is not None  # type checker narrowing across if-block
             config = MCPServerConfig.create_stdio(
                 name=data.name,
                 command=data.command,
@@ -353,8 +361,6 @@ class MCPRegistryImpl(MCPRegistryPort):
             self._registry = self._registry.with_server(starting_detail)
 
             try:
-                from agentic_os.core.mcp.client import MCPClient
-
                 client = MCPClient(detail.config)
                 await client.connect()
 
@@ -499,7 +505,7 @@ class MCPRegistryImpl(MCPRegistryPort):
         """Get cached tools for a server."""
         detail = self._registry.get_server(server_id)
         if not detail:
-            raise KeyError(f"Server not found: {server_id}")
+            return []
         return list(detail.tools)
 
     async def invoke_tool(self, data: MCPToolInvoke) -> MCPToolResult:
