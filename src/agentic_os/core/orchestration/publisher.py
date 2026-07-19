@@ -3,6 +3,8 @@
 Follows the same pattern as ``DiscoveryEventPublisher``: each event has a
 dedicated method that constructs an ``EventEnvelope`` and publishes it
 through the injected ``EventBus``.
+
+All M3 swarm + M4 swarm-engine events are here.
 """
 
 from dataclasses import dataclass
@@ -281,6 +283,218 @@ class OrchestrationEventPublisher:
                 "source_agent_id": source,
                 "swarm_id": swarm_id,
             },
+        )
+
+    # ── Planner Events ──
+
+    async def planner_started(self, goal_id: str) -> None:
+        await self._publish(
+            Topic.ORCH_PLANNER_STARTED,
+            {"goal_id": goal_id},
+        )
+
+    async def planner_completed(self, plan_id: str, goal_id: str, task_count: int) -> None:
+        await self._publish(
+            Topic.ORCH_PLANNER_COMPLETED,
+            {"plan_id": plan_id, "goal_id": goal_id, "task_count": task_count},
+        )
+
+    async def planner_failed(self, goal_id: str, error: str) -> None:
+        await self._publish(
+            Topic.ORCH_PLANNER_FAILED,
+            {"goal_id": goal_id, "error": error},
+        )
+
+    # ── Scheduler Events ──
+
+    async def scheduler_task_scheduled(
+        self, task_id: str, agent_id: str, scheduled_at: str
+    ) -> None:
+        await self._publish(
+            Topic.ORCH_SCHEDULER_TASK_SCHEDULED,
+            {"task_id": task_id, "agent_id": agent_id, "scheduled_at": scheduled_at},
+        )
+
+    async def scheduler_task_dispatched(self, task_id: str, agent_id: str) -> None:
+        await self._publish(
+            Topic.ORCH_SCHEDULER_TASK_DISPATCHED,
+            {"task_id": task_id, "agent_id": agent_id},
+        )
+
+    async def scheduler_task_delayed(self, task_id: str, delay_seconds: float) -> None:
+        await self._publish(
+            Topic.ORCH_SCHEDULER_TASK_DELAYED,
+            {"task_id": task_id, "delay_seconds": delay_seconds},
+        )
+
+    # ── Supervisor Events ──
+
+    async def supervisor_monitoring(self, plan_id: str, task_count: int) -> None:
+        await self._publish(
+            Topic.ORCH_SUPERVISOR_MONITORING,
+            {"plan_id": plan_id, "task_count": task_count},
+        )
+
+    async def supervisor_failure_detected(self, task_id: str, error: str) -> None:
+        await self._publish(
+            Topic.ORCH_SUPERVISOR_FAILURE_DETECTED,
+            {"task_id": task_id, "error": error},
+        )
+
+    async def supervisor_deadlock_detected(self, plan_id: str, task_ids: list[str]) -> None:
+        await self._publish(
+            Topic.ORCH_SUPERVISOR_DEADLOCK_DETECTED,
+            {"plan_id": plan_id, "task_ids": task_ids},
+        )
+
+    async def supervisor_restarted(self, task_id: str, agent_id: str) -> None:
+        await self._publish(
+            Topic.ORCH_SUPERVISOR_RESTARTED,
+            {"task_id": task_id, "agent_id": agent_id},
+        )
+
+    async def supervisor_reassigned(self, task_id: str, from_agent: str, to_agent: str) -> None:
+        await self._publish(
+            Topic.ORCH_SUPERVISOR_REASSIGNED,
+            {"task_id": task_id, "from_agent": from_agent, "to_agent": to_agent},
+        )
+
+    # ── Merger Events ──
+
+    async def merger_started(self, task_count: int, strategy: str) -> None:
+        await self._publish(
+            Topic.ORCH_MERGER_STARTED,
+            {"task_count": task_count, "strategy": strategy},
+        )
+
+    async def merger_completed(self, confidence: float, conflict_count: int) -> None:
+        await self._publish(
+            Topic.ORCH_MERGER_COMPLETED,
+            {"confidence": confidence, "conflict_count": conflict_count},
+        )
+
+    async def merger_conflict(self, key: str, value_count: int) -> None:
+        await self._publish(
+            Topic.ORCH_MERGER_CONFLICT,
+            {"key": key, "value_count": value_count},
+        )
+
+    # ── Validation Events ──
+
+    async def validation_passed(self, target_id: str, target_type: str, score: float) -> None:
+        await self._publish(
+            Topic.ORCH_VALIDATION_PASSED,
+            {"target_id": target_id, "target_type": target_type, "score": score},
+        )
+
+    async def validation_failed(self, target_id: str, target_type: str, errors: list[str]) -> None:
+        await self._publish(
+            Topic.ORCH_VALIDATION_FAILED,
+            {"target_id": target_id, "target_type": target_type, "errors": errors},
+        )
+
+    # ── Retry Events ──
+
+    async def retry_scheduled(self, task_id: str, retry_count: int, delay_seconds: float) -> None:
+        await self._publish(
+            Topic.ORCH_RETRY_SCHEDULED,
+            {"task_id": task_id, "retry_count": retry_count, "delay_seconds": delay_seconds},
+        )
+
+    async def retry_executing(self, task_id: str, retry_count: int) -> None:
+        await self._publish(
+            Topic.ORCH_RETRY_EXECUTING,
+            {"task_id": task_id, "retry_count": retry_count},
+        )
+
+    async def retry_exhausted(self, task_id: str, retries: int) -> None:
+        await self._publish(
+            Topic.ORCH_RETRY_EXHAUSTED,
+            {"task_id": task_id, "retries": retries},
+        )
+
+    # ── Recovery Events ──
+
+    async def recovery_started(self, plan_id: str, checkpoint_id: str | None) -> None:
+        await self._publish(
+            Topic.ORCH_RECOVERY_STARTED,
+            {"plan_id": plan_id, "checkpoint_id": checkpoint_id},
+        )
+
+    async def recovery_completed(self, plan_id: str, recovered_tasks: int) -> None:
+        await self._publish(
+            Topic.ORCH_RECOVERY_COMPLETED,
+            {"plan_id": plan_id, "recovered_tasks": recovered_tasks},
+        )
+
+    async def recovery_failed(self, plan_id: str, error: str) -> None:
+        await self._publish(
+            Topic.ORCH_RECOVERY_FAILED,
+            {"plan_id": plan_id, "error": error},
+        )
+
+    # ── Checkpoint Events ──
+
+    async def checkpoint_created(self, checkpoint_id: str, plan_id: str, task_count: int) -> None:
+        await self._publish(
+            Topic.ORCH_CHECKPOINT_CREATED,
+            {"checkpoint_id": checkpoint_id, "plan_id": plan_id, "task_count": task_count},
+        )
+
+    async def checkpoint_restored(self, checkpoint_id: str, plan_id: str) -> None:
+        await self._publish(
+            Topic.ORCH_CHECKPOINT_RESTORED,
+            {"checkpoint_id": checkpoint_id, "plan_id": plan_id},
+        )
+
+    # ── Metrics / Cost Events ──
+
+    async def metrics_collected(self, plan_id: str, metrics: dict[str, Any]) -> None:
+        await self._publish(
+            Topic.ORCH_METRICS_COLLECTED,
+            {"plan_id": plan_id, **metrics},
+        )
+
+    async def cost_recorded(self, plan_id: str, agent_id: str, cost: float) -> None:
+        await self._publish(
+            Topic.ORCH_COST_RECORDED,
+            {"plan_id": plan_id, "agent_id": agent_id, "cost": cost},
+        )
+
+    # ── Agent Selection Events ──
+
+    async def agent_selected(self, task_id: str, agent_id: str, score: float) -> None:
+        await self._publish(
+            Topic.ORCH_AGENT_SELECTED,
+            {"task_id": task_id, "agent_id": agent_id, "score": score},
+        )
+
+    async def agent_capability_matched(
+        self, agent_id: str, matched_capabilities: list[str], score: float
+    ) -> None:
+        await self._publish(
+            Topic.ORCH_AGENT_CAPABILITY_MATCHED,
+            {"agent_id": agent_id, "matched_capabilities": matched_capabilities, "score": score},
+        )
+
+    # ── Execution Stage Events ──
+
+    async def execution_stage_started(self, stage_id: str, plan_id: str, stage_name: str) -> None:
+        await self._publish(
+            Topic.ORCH_EXECUTION_STAGE_STARTED,
+            {"stage_id": stage_id, "plan_id": plan_id, "stage_name": stage_name},
+        )
+
+    async def execution_stage_completed(self, stage_id: str, plan_id: str, status: str) -> None:
+        await self._publish(
+            Topic.ORCH_EXECUTION_STAGE_COMPLETED,
+            {"stage_id": stage_id, "plan_id": plan_id, "status": status},
+        )
+
+    async def execution_stage_failed(self, stage_id: str, plan_id: str, error: str) -> None:
+        await self._publish(
+            Topic.ORCH_EXECUTION_STAGE_FAILED,
+            {"stage_id": stage_id, "plan_id": plan_id, "error": error},
         )
 
     # ── Internal ──
