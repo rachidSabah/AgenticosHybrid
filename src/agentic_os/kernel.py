@@ -52,6 +52,9 @@ from agentic_os.core.discovery.validation import (
 )
 from agentic_os.core.health import HealthMonitorImpl
 
+# Phase 5: Learning & Optimization Engine
+from agentic_os.core.learning import LearningManager
+
 # Phase 4, M3: MCP Runtime Foundation
 from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.mcp.registry import MCPRegistryImpl
@@ -124,6 +127,8 @@ class Platform:
     mcp: MCPManager | None = None
     # Phase 4, M3: MCP WebSocket broadcaster
     mcp_ws: MCPBroadcaster | None = None
+    # Phase 5: Learning & Optimization Engine
+    learning: LearningManager | None = None
 
 
 class Kernel:
@@ -206,6 +211,9 @@ class Kernel:
         # Phase 4, M3: MCP Runtime Foundation — universal MCP server runtime
         self.mcp = self._build_mcp_framework()
 
+        # Phase 5: Learning & Optimization Engine
+        self.learning = self._build_learning_framework()
+
     async def start(self) -> None:
         await self.bus.start()
         self._plugins = load_plugins(self.registry, self.providers)
@@ -243,9 +251,16 @@ class Kernel:
         if self.mcp:
             await self.mcp.start()
 
+        # Phase 5: Start Learning & Optimization Engine
+        if self.learning:
+            await self.learning.start()
+
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 5: Stop Learning & Optimization Engine
+        if self.learning:
+            await self.learning.stop()
         # Phase 4, M3: Shutdown MCP runtime
         if self.mcp:
             await self.mcp.shutdown()
@@ -406,6 +421,16 @@ class Kernel:
         )
         return manager
 
+    def _build_learning_framework(self) -> LearningManager | None:
+        """Build and return the Phase 5 Learning & Optimization Engine."""
+        if not settings.learning_enabled:
+            return None
+
+        manager = LearningManager(bus=self.bus)
+
+        log.info("learning_framework.built")
+        return manager
+
     def _seed_default_models(self) -> None:
         """Register example models so routing/cost have candidates.
 
@@ -458,6 +483,7 @@ class Kernel:
             orchestration=self.orchestration,
             mcp=self.mcp,
             mcp_ws=self.mcp_ws,
+            learning=self.learning,
         )
 
 
