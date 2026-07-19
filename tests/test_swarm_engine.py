@@ -48,8 +48,8 @@ class _MockBus:
     async def stop(self) -> None:
         pass
 
-    async def publish(self, envelope: Any) -> None:
-        self.events.append(envelope)
+    async def publish(self, event: Any) -> None:
+        self.events.append(event)
 
 
 class _MockRuntime:
