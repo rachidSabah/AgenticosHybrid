@@ -28,6 +28,7 @@ from agentic_os.adapters.engines.generic import GenericExecutionEngine
 from agentic_os.adapters.plugins.loader import load_plugins
 from agentic_os.adapters.security.encrypted_store import EncryptedSecretStore
 from agentic_os.api.dashboard import DashboardBroadcaster
+from agentic_os.api.mcp_ws import MCPBroadcaster
 from agentic_os.config import settings
 from agentic_os.core.capability.engine import CapabilityEngine
 
@@ -54,6 +55,7 @@ from agentic_os.core.health import HealthMonitorImpl
 # Phase 4, M3: MCP Runtime Foundation
 from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.mcp.registry import MCPRegistryImpl
+from agentic_os.core.mcp.security import MCPSecurity
 from agentic_os.core.memory.manager import MemoryManagerImpl
 from agentic_os.core.orchestration.config import OrchestrationConfiguration
 
@@ -120,6 +122,8 @@ class Platform:
     orchestration: OrchestrationFramework | None = None
     # Phase 4, M3: MCP Runtime Foundation
     mcp: MCPManager | None = None
+    # Phase 4, M3: MCP WebSocket broadcaster
+    mcp_ws: MCPBroadcaster | None = None
 
 
 class Kernel:
@@ -175,6 +179,7 @@ class Kernel:
         self.health = HealthMonitorImpl(self.bus, self.registry, self.scheduler, settings)
         self.recovery = RecoveryManagerImpl(self.bus, self.orchestrator, settings)
         self.dashboard = DashboardBroadcaster(self.bus)
+        self.mcp_ws = MCPBroadcaster(self.bus)
 
         self.capability = CapabilityEngine(self.bus)
         self._plugins: list = []
@@ -215,6 +220,7 @@ class Kernel:
         await self.provider_health.start()
         await self.capability.start()
         await self.dashboard.start()
+        await self.mcp_ws.start()
 
         # Phase 4: Initialize runtime and register generic engine
         if self.runtime:
@@ -254,6 +260,7 @@ class Kernel:
         if self.runtime:
             await self.runtime.shutdown()
         await self.dashboard.stop()
+        await self.mcp_ws.stop()
         await self.recovery.stop()
         await self.health.stop()
         await self.provider_health.stop()
@@ -388,12 +395,14 @@ class Kernel:
             return None
 
         registry = MCPRegistryImpl(bus=self.bus)
-        manager = MCPManager(registry=registry, bus=self.bus)
+        security = MCPSecurity(framework=self.security, bus=self.bus)
+        manager = MCPManager(registry=registry, bus=self.bus, security=security)
 
         log.info(
             "mcp_framework.built",
             transport=settings.mcp_default_transport,
             auto_reconnect=settings.mcp_auto_reconnect,
+            security_integrated=self.security is not None,
         )
         return manager
 
@@ -448,6 +457,7 @@ class Kernel:
             discovery_framework=self.discovery_framework,
             orchestration=self.orchestration,
             mcp=self.mcp,
+            mcp_ws=self.mcp_ws,
         )
 
 

@@ -141,4 +141,51 @@ export const api = {
   startHotReload: () => post<{ status: string }>("/api/discovery/hot-reload/start"),
   stopHotReload: () => post<{ status: string }>("/api/discovery/hot-reload/stop"),
   hotReloadStatus: () => get<import("./types").HotReloadStatus>("/api/discovery/hot-reload/status"),
+
+  // ── MCP Runtime API (Phase 4, M3) ──
+
+  mcpServers: (status?: string, enabledOnly?: boolean) => {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (enabledOnly) params.set("enabled_only", "true");
+    const qs = params.toString();
+    return get<import("./types").MCPServerDetail[]>(`/api/mcp/servers${qs ? `?${qs}` : ""}`);
+  },
+  mcpServer: (serverId: string) =>
+    get<import("./types").MCPServerDetail>(`/api/mcp/servers/${encodeURIComponent(serverId)}`),
+  registerMcpServer: (body: Record<string, unknown>) =>
+    post<import("./types").MCPServerDetail>("/api/mcp/servers", body),
+  updateMcpServer: (serverId: string, body: Record<string, unknown>) =>
+    put<import("./types").MCPServerDetail>(`/api/mcp/servers/${encodeURIComponent(serverId)}`, body),
+  deleteMcpServer: (serverId: string) =>
+    del<{ deleted: string }>(`/api/mcp/servers/${encodeURIComponent(serverId)}`),
+
+  mcpStartServer: (serverId: string) =>
+    post<import("./types").MCPServerDetail>(`/api/mcp/servers/${encodeURIComponent(serverId)}/start`),
+  mcpStopServer: (serverId: string) =>
+    post<import("./types").MCPServerDetail>(`/api/mcp/servers/${encodeURIComponent(serverId)}/stop`),
+  mcpRestartServer: (serverId: string) =>
+    post<import("./types").MCPServerDetail>(`/api/mcp/servers/${encodeURIComponent(serverId)}/restart`),
+  mcpReloadServer: (serverId: string) =>
+    post<import("./types").MCPServerDetail>(`/api/mcp/servers/${encodeURIComponent(serverId)}/reload`),
+
+  mcpServerTools: (serverId: string) =>
+    get<import("./types").MCPTool[]>(`/api/mcp/servers/${encodeURIComponent(serverId)}/tools`),
+  mcpDiscoverTools: (serverId: string) =>
+    post<import("./types").MCPTool[]>(`/api/mcp/servers/${encodeURIComponent(serverId)}/tools/discover`),
+  mcpCallTool: (serverId: string, tool: string, args: Record<string, unknown>) =>
+    post<import("./types").MCPToolResult>(`/api/mcp/servers/${encodeURIComponent(serverId)}/tools/call`, { tool, arguments: args }),
+
+  mcpServerHealth: (serverId: string) =>
+    get<{ server_id: string; health: string }>(`/api/mcp/servers/${encodeURIComponent(serverId)}/health`),
+  mcpHealthSummary: () =>
+    get<import("./types").MCPHealthSummary>("/api/mcp/health"),
+
+  mcpSessions: () =>
+    get<import("./types").MCPSessionMap>("/api/mcp/sessions"),
+
+  mcpPermissions: (serverId: string) =>
+    get<import("./types").MCPPermissionMapping[]>(`/api/mcp/servers/${encodeURIComponent(serverId)}/permissions`),
+  mcpSetPermissions: (serverId: string, mappings: import("./types").MCPPermissionMapping[]) =>
+    post<{ server_id: string; mappings_count: number }>(`/api/mcp/servers/${encodeURIComponent(serverId)}/permissions`, { mappings }),
 };

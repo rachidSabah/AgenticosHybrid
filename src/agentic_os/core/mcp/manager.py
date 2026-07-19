@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agentic_os.core.mcp.registry import MCPRegistryImpl
+from agentic_os.core.mcp.security import MCPSecurity
 from agentic_os.domain.mcp import (
     MCPHealthStatus,
     MCPPrompt,
@@ -21,6 +22,7 @@ from agentic_os.domain.mcp import (
     MCPTool,
     MCPToolResult,
 )
+from agentic_os.domain.security import Principal, Role
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
 
@@ -49,6 +51,12 @@ class MCPManager:
 
     registry: MCPRegistryImpl
     bus: EventBus
+    security: MCPSecurity | None = None
+    default_principal: Principal = field(
+        default_factory=lambda: Principal(id="mcp-system", roles=[Role.ADMIN]),
+        init=False,
+        repr=False,
+    )
     _health_check_tasks: dict[str, asyncio.Task] = field(
         default_factory=dict, init=False, repr=False
     )
@@ -123,6 +131,14 @@ class MCPManager:
 
     async def restart_server(self, server_id: str) -> MCPServerDetail:
         """Restart a server (stop then start)."""
+        if self.security:
+            decision = await self.security.authorize_server_restart(
+                self.default_principal,
+                server_id,
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Server restart denied: {decision.reason}")
+
         snapshot = self.registry.get_registry_snapshot()
         detail = snapshot.get_server(server_id)
         if not detail:
@@ -135,6 +151,14 @@ class MCPManager:
 
     async def reload_server(self, server_id: str) -> MCPServerDetail:
         """Hot reload server configuration and tools."""
+        if self.security:
+            decision = await self.security.authorize_server_reload(
+                self.default_principal,
+                server_id,
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Server reload denied: {decision.reason}")
+
         return await self.registry.reload_server(server_id)
 
     # ── Health Monitoring ───────────────────────────────────────────────
@@ -277,7 +301,16 @@ class MCPManager:
         arguments: dict[str, Any],
         timeout: int | None = None,
     ) -> MCPToolResult:
-        """Invoke a tool on an MCP server."""
+        """Invoke a tool on an MCP server with authorization."""
+        if self.security:
+            decision = await self.security.authorize_tool_invoke(
+                self.default_principal,
+                server_id,
+                tool,
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Tool invocation denied: {decision.reason}")
+
         from agentic_os.ports.mcp import MCPToolInvoke
 
         return await self.registry.invoke_tool(
@@ -331,14 +364,38 @@ class MCPManager:
 
     async def list_server_resources(self, server_id: str) -> list[MCPResource]:
         """List resources from an MCP server."""
+        if self.security:
+            decision = await self.security.authorize_resource_read(
+                self.default_principal,
+                server_id,
+                "*",
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Resource list denied: {decision.reason}")
         return await self.registry.list_server_resources(server_id)
 
     async def read_server_resource(self, server_id: str, uri: str) -> dict[str, Any]:
         """Read a resource from an MCP server."""
+        if self.security:
+            decision = await self.security.authorize_resource_read(
+                self.default_principal,
+                server_id,
+                uri,
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Resource read denied: {decision.reason}")
         return await self.registry.read_server_resource(server_id, uri)
 
     async def subscribe_server_resource(self, server_id: str, uri: str) -> bool:
         """Subscribe to resource changes on an MCP server."""
+        if self.security:
+            decision = await self.security.authorize_resource_subscribe(
+                self.default_principal,
+                server_id,
+                uri,
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Resource subscribe denied: {decision.reason}")
         return await self.registry.subscribe_server_resource(server_id, uri)
 
     async def unsubscribe_server_resource(self, server_id: str, uri: str) -> bool:
@@ -349,12 +406,24 @@ class MCPManager:
 
     async def list_server_prompts(self, server_id: str) -> list[MCPPrompt]:
         """List prompts from an MCP server."""
+        if self.security:
+            decision = await self.security.authorize_prompt_list(self.default_principal, server_id)
+            if not decision.allowed:
+                raise PermissionError(f"Prompt list denied: {decision.reason}")
         return await self.registry.list_server_prompts(server_id)
 
     async def get_server_prompt(
         self, server_id: str, name: str, arguments: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """Get a prompt from an MCP server."""
+        if self.security:
+            decision = await self.security.authorize_prompt_get(
+                self.default_principal,
+                server_id,
+                name,
+            )
+            if not decision.allowed:
+                raise PermissionError(f"Prompt get denied: {decision.reason}")
         return await self.registry.get_server_prompt(server_id, name, arguments)
 
     # ── Session Tracking ────────────────────────────────────────────────
