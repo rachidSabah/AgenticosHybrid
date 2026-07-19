@@ -1248,6 +1248,28 @@ def create_app(platform: Platform) -> FastAPI:
             platform.dashboard.remove_client(send)
             log.info("dashboard.disconnected")
 
+    @app.websocket("/ws/mcp")
+    async def mcp_ws(websocket: WebSocket) -> None:
+        from agentic_os.api.mcp_ws import MCPBroadcaster
+
+        mcp_bc: MCPBroadcaster | None = platform.mcp_ws
+        if mcp_bc is None:
+            await websocket.accept()
+            await websocket.close(code=1011, reason="MCP WebSocket not available")
+            return
+        await websocket.accept()
+        recv, send = mcp_bc.add_client()
+        log.info("mcp_ws.connected")
+        try:
+            async with recv:
+                async for snapshot in recv:
+                    await websocket.send_json(snapshot)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            mcp_bc.remove_client(send)
+            log.info("mcp_ws.disconnected")
+
     return app
 
 
