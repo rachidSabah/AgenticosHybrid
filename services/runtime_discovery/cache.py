@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import time
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
@@ -68,7 +66,6 @@ class RuntimeCache:
         self._entries.clear()
 
     def clean_expired(self) -> int:
-        now = datetime.now(UTC)
         expired = [k for k, v in self._entries.items() if v.is_expired()]
         for k in expired:
             self._entries.pop(k, None)

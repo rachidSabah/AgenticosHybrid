@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
 from typing import Any
 
 from core.logging import get_logger
@@ -68,7 +67,7 @@ class RuntimeHealthMonitor:
     async def check_all(self, runtimes: list[Runtime]) -> list[RuntimeHealth]:
         results = await asyncio.gather(*[self.check(r) for r in runtimes], return_exceptions=True)
         healthy = []
-        for r, result in zip(runtimes, results):
+        for r, result in zip(runtimes, results, strict=False):
             if isinstance(result, RuntimeHealth):
                 healthy.append(result)
             else:

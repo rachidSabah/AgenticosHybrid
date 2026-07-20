@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import platform
-import shutil
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -12,7 +11,6 @@ from services.runtime_discovery.models import (
     Runtime,
     RuntimeProfile,
     RuntimeType,
-    RuntimeValidationResult,
 )
 
 _log = get_logger(__name__)

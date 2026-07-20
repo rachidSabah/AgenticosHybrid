@@ -22,10 +22,9 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from core.contracts.actor import ActorRef
 from core.contracts.timestamp import utc_now
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventTopic(StrEnum):

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
-import platform
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -14,7 +14,6 @@ from services.runtime_discovery.models import (
     Runtime,
     RuntimeCapability,
     RuntimeType,
-    RuntimeValidation,
     RuntimeValidationResult,
     ValidationStatus,
 )

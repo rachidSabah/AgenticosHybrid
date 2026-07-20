@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +72,7 @@ class AiderAdapter(BaseExecutionEngineAdapter):
             self._process.terminate()
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._process.kill()
 
     async def _on_health_check(self) -> bool:

@@ -32,9 +32,9 @@ from services.execution_engine.adapters import (
 from services.execution_engine.discovery import EngineDiscovery
 from services.execution_engine.events import (
     ExecutionEventPublisher,
+    publish_engine_disabled,
     publish_engine_discovered,
     publish_engine_enabled,
-    publish_engine_disabled,
     publish_engine_registered,
     publish_engine_unregistered,
     publish_route_failover,
@@ -44,7 +44,6 @@ from services.execution_engine.events import (
     publish_task_created,
     publish_task_dispatched,
     publish_task_failed,
-    publish_task_progress,
     publish_task_queued,
     publish_task_started,
     publish_task_timeout,
@@ -54,16 +53,13 @@ from services.execution_engine.models import (
     ExecutionMetrics,
     ExecutionPlan,
     ExecutionSession,
-    ExecutionSessionStatus,
     ExecutionTask,
     ExecutionTaskPriority,
     ExecutionTaskStatus,
 )
 from services.execution_engine.routing import (
-    CustomRouter,
     RouterRegistry,
     RoutingContext,
-    RoutingDecision,
     RoutingStrategy,
 )
 
@@ -336,7 +332,7 @@ class ExecutionEngineManager:
                 await publish_task_completed(
                     self._bus, task.task_id, task.engine_type.value, task.duration_s
                 )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             task.status = ExecutionTaskStatus.TIMEOUT
             task.error = f"Task timed out after {task.timeout_s}s"
             task.completed_at = datetime.now(UTC)

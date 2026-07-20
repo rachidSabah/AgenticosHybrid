@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import statistics
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -113,7 +112,10 @@ class FastestRouter:
         return RoutingDecision(
             selected_engine=sorted_engines[0],
             strategy=RoutingStrategy.FASTEST,
-            reason=f"Selected {sorted_engines[0].value} with lowest avg latency ({_AVG_LATENCY_S.get(sorted_engines[0], 0):.1f}s)",
+            reason=(
+                f"Selected {sorted_engines[0].value} with lowest avg latency "
+                f"({_AVG_LATENCY_S.get(sorted_engines[0], 0):.1f}s)"
+            ),
             alternatives=sorted_engines[1:],
         )
 
@@ -133,7 +135,10 @@ class LowestCostRouter:
         return RoutingDecision(
             selected_engine=target,
             strategy=RoutingStrategy.LOWEST_COST,
-            reason=f"Selected {target.value} with lowest cost (${_COST_PER_TOKEN.get(target, 0):.8f}/token)",
+            reason=(
+                f"Selected {target.value} with lowest cost "
+                f"(${_COST_PER_TOKEN.get(target, 0):.8f}/token)"
+            ),
             alternatives=[e for e in available if e != target],
             confidence=1.0,
         )
@@ -149,7 +154,10 @@ class HighestQualityRouter:
         return RoutingDecision(
             selected_engine=sorted_engines[0],
             strategy=RoutingStrategy.HIGHEST_QUALITY,
-            reason=f"Selected {sorted_engines[0].value} with highest quality score ({_QUALITY_SCORES.get(sorted_engines[0], 0):.2f})",
+            reason=(
+                f"Selected {sorted_engines[0].value} with highest quality score "
+                f"({_QUALITY_SCORES.get(sorted_engines[0], 0):.2f})"
+            ),
             alternatives=sorted_engines[1:],
         )
 
@@ -175,7 +183,10 @@ class CapabilityBasedRouter:
         return RoutingDecision(
             selected_engine=scored[0][0],
             strategy=RoutingStrategy.CAPABILITY_BASED,
-            reason=f"Selected {scored[0][0].value} matching {scored[0][1]}/{len(context.required_capabilities)} required capabilities",
+            reason=(
+                f"Selected {scored[0][0].value} matching "
+                f"{scored[0][1]}/{len(context.required_capabilities)} required capabilities"
+            ),
             alternatives=[e for e, _ in scored[1:]],
         )
 

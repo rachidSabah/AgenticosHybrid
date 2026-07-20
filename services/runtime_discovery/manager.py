@@ -3,11 +3,8 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import time
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
-from core.contracts.execution_engine import EngineType
 from core.event_bus.bus import EventBus
 from core.logging import get_logger
 from services.execution_engine.discovery import EngineDiscovery
@@ -23,23 +20,18 @@ from services.runtime_discovery.events import (
     publish_discovery_scan_completed,
     publish_discovery_scan_started,
     publish_health_check_passed,
-    publish_health_status_changed,
     publish_profile_created,
     publish_registry_registered,
     publish_validation_passed,
-    publish_validation_started,
 )
 from services.runtime_discovery.health_monitor import RuntimeHealthMonitor
 from services.runtime_discovery.models import (
     DiscoveryProviderType,
-    HealthStatus,
     Runtime,
-    RuntimeBindingConfig,
     RuntimeCapability,
     RuntimeConfiguration,
     RuntimeDiscoveryResult,
     RuntimeMetadata,
-    RuntimeProfile,
     RuntimeStatus,
     RuntimeTelemetry,
     RuntimeType,
@@ -442,7 +434,6 @@ class RuntimeDiscoveryManager:
         await self._health_monitor.stop_all()
 
     def get_runtime(self, runtime_id: str) -> Runtime | None:
-        import asyncio
 
         return asyncio.get_event_loop().run_until_complete(self._registry.get(runtime_id))
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from core.contracts.execution_engine import EngineConfig, EngineType
 from core.logging import get_logger
