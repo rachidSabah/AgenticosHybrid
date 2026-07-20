@@ -56,9 +56,7 @@ class TestMCPVersionManagerRegistration:
         version_manager.update_version("nonexistent", server_version="1.0.0")
 
     def test_clear(self, version_manager) -> None:
-        version_manager.register_version(
-            "srv1", ServerVersionInfo(server_id="srv1")
-        )
+        version_manager.register_version("srv1", ServerVersionInfo(server_id="srv1"))
         version_manager.clear()
         assert len(version_manager.list_versions()) == 0
 

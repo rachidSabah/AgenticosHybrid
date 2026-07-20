@@ -54,9 +54,7 @@ class TestMCPCapabilityMapperNegotiation:
         assert "unknown_cap" in result.rejected_capabilities
 
     def test_negotiate_mixed(self, capability_mapper) -> None:
-        result = capability_mapper.negotiate(
-            "srv1", ["tools", "unknown", "prompts"]
-        )
+        result = capability_mapper.negotiate("srv1", ["tools", "unknown", "prompts"])
         assert "tools" in result.agreed_capabilities
         assert "prompts" in result.agreed_capabilities
         assert "unknown" in result.rejected_capabilities

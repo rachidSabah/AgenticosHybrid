@@ -12,9 +12,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from agentic_os.core.mcp.capability import MCPCapabilityMapper, ServerCapabilities
-from agentic_os.core.mcp.prompt_registry import MCPPromptRegistry, PromptDefinition
+from agentic_os.core.mcp.prompt_registry import MCPPromptRegistry
 from agentic_os.core.mcp.registry import MCPRegistryImpl
-from agentic_os.core.mcp.resource_registry import MCPResourceRegistry, ResourceDefinition
+from agentic_os.core.mcp.resource_registry import MCPResourceRegistry
 from agentic_os.core.mcp.security import MCPSecurity
 from agentic_os.core.mcp.tool_registry import MCPToolRegistry, ToolDefinition
 from agentic_os.core.mcp.version import MCPVersionManager, ServerVersionInfo
@@ -91,7 +91,6 @@ class MCPManager:
         for detail in snapshot.servers:
             vinfo = ServerVersionInfo(
                 server_id=detail.config.id,
-                server_version=detail.config.version,
             )
             self.version_manager.register_version(detail.config.id, vinfo)
 
@@ -105,25 +104,6 @@ class MCPManager:
                         server_id=detail.config.id,
                         description=tool.description,
                         input_schema=tool.input_schema,
-                    )
-                )
-            for resource in detail.resources:
-                self.resource_registry.register(
-                    ResourceDefinition(
-                        uri=resource.uri,
-                        server_id=detail.config.id,
-                        name=resource.name,
-                        description=resource.description,
-                        mime_type=resource.mime_type,
-                    )
-                )
-            for prompt in detail.prompts:
-                self.prompt_registry.register(
-                    PromptDefinition(
-                        name=prompt.name,
-                        server_id=detail.config.id,
-                        description=prompt.description,
-                        template=prompt.template or "",  # type: ignore[arg-type]
                     )
                 )
 
