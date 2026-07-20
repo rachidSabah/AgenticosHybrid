@@ -3,9 +3,9 @@
 import pytest
 
 from agentic_os.core.mcp.resource_registry import (
+    RESOURCE_CONTENT_TYPES,
     MCPResourceRegistry,
     ResourceDefinition,
-    RESOURCE_CONTENT_TYPES,
 )
 
 

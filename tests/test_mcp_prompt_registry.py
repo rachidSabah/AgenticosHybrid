@@ -3,10 +3,10 @@
 import pytest
 
 from agentic_os.core.mcp.prompt_registry import (
-    MCPPromptRegistry,
-    PromptDefinition,
-    PromptArgument,
     PROMPT_CATEGORIES,
+    MCPPromptRegistry,
+    PromptArgument,
+    PromptDefinition,
 )
 
 

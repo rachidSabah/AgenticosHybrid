@@ -3,9 +3,9 @@
 import pytest
 
 from agentic_os.core.mcp.capability import (
+    SUPPORTED_CAPABILITIES,
     MCPCapabilityMapper,
     ServerCapabilities,
-    SUPPORTED_CAPABILITIES,
 )
 
 

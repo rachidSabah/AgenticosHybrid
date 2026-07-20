@@ -3,10 +3,9 @@
 import pytest
 
 from agentic_os.core.mcp.version import (
+    RECOMMENDED_PROTOCOL_VERSION,
     MCPVersionManager,
     ServerVersionInfo,
-    SUPPORTED_PROTOCOL_VERSIONS,
-    RECOMMENDED_PROTOCOL_VERSION,
 )
 
 

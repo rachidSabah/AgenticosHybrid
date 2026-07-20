@@ -2,7 +2,7 @@
 
 import pytest
 
-from agentic_os.core.mcp.tool_registry import MCPToolRegistry, ToolDefinition, TOOL_CATEGORIES
+from agentic_os.core.mcp.tool_registry import TOOL_CATEGORIES, MCPToolRegistry, ToolDefinition
 
 
 @pytest.fixture
