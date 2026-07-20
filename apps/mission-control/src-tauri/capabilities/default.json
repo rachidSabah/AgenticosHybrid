@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Default capability set for AgenticOS Desktop Runtime",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "process:default",
+    "window-state:default"
+  ]
+}
