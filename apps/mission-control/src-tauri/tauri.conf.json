@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/refs/heads/dev/crates/tauri-cli/config.schema.json",
   "productName": "AgenticOS",
-  "version": "1.0.0-1",
+  "version": "1.0.0-rc1",
   "identifier": "com.agenticos.desktop",
   "build": {
     "frontendDist": "../out",
@@ -34,11 +34,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis", "appimage"],
+    "targets": ["nsis", "msi", "appimage", "deb", "rpm", "dmg"],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com",
+      "timestampUrl": null,
       "wix": {
         "language": "en-US",
         "template": null,
@@ -51,11 +51,24 @@
         "languages": ["English"]
       }
     },
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signing": null
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "rpm": {
+        "depends": []
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "resources": [],
     "externalBin": [],

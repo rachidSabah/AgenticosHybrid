@@ -1,0 +1,277 @@
+<#
+.SYNOPSIS
+    Production build script for AgenticOS Desktop Runtime (Windows).
+.DESCRIPTION
+    Builds Mission Control frontend, compiles Rust/Tauri backend,
+    generates installers (NSIS, MSI), portable ZIP, and checksums.
+.PARAMETER Config
+    Build configuration: Release (default) or Debug.
+.PARAMETER SkipFrontend
+    Skip the frontend npm build step.
+.PARAMETER SkipRust
+    Skip the Rust/Tauri cargo build step.
+.PARAMETER OutDir
+    Output directory for artifacts. Default: dist/
+.EXAMPLE
+    .\scripts\build.ps1
+    .\scripts\build.ps1 -Config Debug -OutDir artifacts
+#>
+
+param(
+    [ValidateSet("Release", "Debug")]
+    [string]$Config = "Release",
+    [switch]$SkipFrontend,
+    [switch]$SkipRust,
+    [string]$OutDir = ""
+)
+
+$ErrorActionPreference = "Stop"
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$MissionDir = Join-Path $RepoRoot "apps\mission-control"
+$TauriDir = Join-Path $MissionDir "src-tauri"
+
+if (-not $OutDir) {
+    $OutDir = Join-Path $RepoRoot "dist"
+}
+$ArtifactsDir = Join-Path $OutDir "artifacts"
+$ReleaseDir = if ($Config -eq "Release") { "release" } else { "debug" }
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  AgenticOS Production Build" -ForegroundColor Cyan
+Write-Host "  Config: $Config" -ForegroundColor Cyan
+Write-Host "  Output: $OutDir" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+
+# ---- Prerequisites ----
+Write-Host "`n[1/5] Checking prerequisites..." -ForegroundColor Yellow
+$missing = @()
+
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) { $missing += "Node.js" }
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { $missing += "npm" }
+if (-not (Get-Command rustc -ErrorAction SilentlyContinue)) { $missing += "Rust (rustc)" }
+if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { $missing += "Cargo" }
+
+if ($missing.Count -gt 0) {
+    Write-Warning "Missing prerequisites: $($missing -join ', ')"
+    Write-Warning "Install missing tools and re-run."
+    Write-Warning "  Rust: https://rustup.rs"
+    Write-Warning "  Node.js: https://nodejs.org"
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        # Non-fatal for now since CI handles Rust builds
+        Write-Warning "Rust/Cargo not found — will skip Tauri build step."
+        $SkipRust = $true
+    }
+}
+
+# ---- Version Metadata ----
+Write-Host "`n[2/5] Reading version metadata..." -ForegroundColor Yellow
+$tauriConfigPath = Join-Path $TauriDir "tauri.conf.json"
+$tauriConfig = Get-Content $tauriConfigPath -Raw | ConvertFrom-Json
+$AppVersion = $tauriConfig.version
+$ProductName = $tauriConfig.productName
+$CommitHash = git -C $RepoRoot rev-parse HEAD 2>$null
+if (-not $CommitHash) { $CommitHash = "unknown" }
+$BuildDate = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+$GitTag = git -C $RepoRoot describe --tags --exact-match 2>$null
+if (-not $GitTag) { $GitTag = "untagged" }
+
+Write-Host "  Version:   $AppVersion" -ForegroundColor Green
+Write-Host "  Commit:    $CommitHash" -ForegroundColor Green
+Write-Host "  Tag:       $GitTag" -ForegroundColor Green
+
+# ---- Clean & prepare output ----
+Write-Host "`n[3/5] Preparing output directories..." -ForegroundColor Yellow
+if (Test-Path $OutDir) {
+    Remove-Item -Recurse -Force "$OutDir\*" -ErrorAction SilentlyContinue
+}
+New-Item -ItemType Directory -Force -Path $ArtifactsDir | Out-Null
+Write-Host "  Output: $OutDir" -ForegroundColor Green
+Write-Host "  Artifacts: $ArtifactsDir" -ForegroundColor Green
+
+# ---- Frontend build (Next.js) ----
+if (-not $SkipFrontend) {
+    Write-Host "`n[4/5] Building Mission Control frontend..." -ForegroundColor Yellow
+    Push-Location $MissionDir
+    try {
+        Write-Host "  Installing npm dependencies..." -ForegroundColor Gray
+        npm ci --legacy-peer-deps 2>&1 | ForEach-Object { Write-Host "    $_" }
+
+        Write-Host "  Building Next.js static export..." -ForegroundColor Gray
+        npm run build 2>&1 | ForEach-Object { Write-Host "    $_" }
+
+        if (-not (Test-Path (Join-Path $MissionDir "out"))) {
+            throw "Frontend build failed: 'out/' directory not found. Check next build output above."
+        }
+        Write-Host "  Frontend build complete." -ForegroundColor Green
+    }
+    finally {
+        Pop-Location
+    }
+}
+else {
+    Write-Host "`n[4/5] Skipping frontend build (-SkipFrontend)." -ForegroundColor Gray
+}
+
+# ---- Rust/Tauri build ----
+if (-not $SkipRust) {
+    Write-Host "`n[5/5] Building Rust/Tauri backend..." -ForegroundColor Yellow
+    Push-Location $TauriDir
+    try {
+        $ConfigArg = if ($Config -eq "Release") { "" } else { "--debug" }
+
+        Write-Host "  Running cargo tauri build (Config: $Config)..." -ForegroundColor Gray
+
+        # Determine Tauri CLI
+        $TauriCli = "npx"
+        $TauriArgs = @("tauri", "build", "--bundles", "nsis,msi")
+        if ($Config -eq "Debug") {
+            $TauriArgs += "--debug"
+        }
+
+        & $TauriCli $TauriArgs 2>&1 | ForEach-Object { Write-Host "    $_" }
+
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+            throw "Tauri build failed with exit code $LASTEXITCODE"
+        }
+
+        Write-Host "  Tauri build complete." -ForegroundColor Green
+    }
+    finally {
+        Pop-Location
+    }
+}
+else {
+    Write-Host "`n[5/5] Skipping Rust/Tauri build (-SkipRust)." -ForegroundColor Gray
+}
+
+# ---- Collect artifacts ----
+Write-Host "`nCollecting build artifacts..." -ForegroundColor Yellow
+$BundleDir = Join-Path $TauriDir "target\$ReleaseDir\bundle"
+$BinaryPath = Join-Path $TauriDir "target\$ReleaseDir\agentic-os.exe"
+
+if (Test-Path $BundleDir) {
+    Write-Host "  Copying bundle artifacts..." -ForegroundColor Gray
+
+    # NSIS installer
+    $nsisFiles = Get-ChildItem (Join-Path $BundleDir "nsis") -Filter "*.exe" -ErrorAction SilentlyContinue
+    foreach ($f in $nsisFiles) {
+        $dest = Join-Path $ArtifactsDir "$ProductName-Setup-x64$($f.Extension)"
+        Copy-Item $f.FullName $dest -Force
+        Write-Host "    + $dest" -ForegroundColor Green
+    }
+
+    # MSI installer
+    $msiFiles = Get-ChildItem (Join-Path $BundleDir "msi") -Filter "*.msi" -ErrorAction SilentlyContinue
+    foreach ($f in $msiFiles) {
+        $dest = Join-Path $ArtifactsDir "$ProductName-Setup-x64.msi"
+        Copy-Item $f.FullName $dest -Force
+        Write-Host "    + $dest" -ForegroundColor Green
+    }
+
+    # Portable ZIP: bundle binary + resources
+    if (Test-Path $BinaryPath) {
+        $PortableDir = Join-Path $OutDir "portable"
+        New-Item -ItemType Directory -Force -Path $PortableDir | Out-Null
+
+        Copy-Item $BinaryPath (Join-Path $PortableDir "agentic-os.exe") -Force
+
+        # Copy resources if any exist
+        $ResDir = Join-Path $TauriDir "target\$ReleaseDir\resources"
+        if (Test-Path $ResDir) {
+            Copy-Item -Recurse "$ResDir\*" $PortableDir -Force -ErrorAction SilentlyContinue
+        }
+
+        # Create launcher script
+        $launcherContent = @'
+@echo off
+echo Starting AgenticOS Desktop Runtime...
+start "" "%~dp0agentic-os.exe"
+'@
+        Set-Content -Path (Join-Path $PortableDir "start.bat") -Value $launcherContent
+
+        # Create PowerShell launcher
+        $psLauncher = @'
+Write-Host "Starting AgenticOS Desktop Runtime..." -ForegroundColor Cyan
+Start-Process -FilePath "$PSScriptRoot\agentic-os.exe"
+'@
+        Set-Content -Path (Join-Path $PortableDir "start.ps1") -Value $psLauncher
+
+        # ZIP it
+        $zipDest = Join-Path $ArtifactsDir "$ProductName-Portable-x64.zip"
+        if (Get-Command Compress-Archive -ErrorAction SilentlyContinue) {
+            Compress-Archive -Path "$PortableDir\*" -DestinationPath $zipDest -Force
+            Write-Host "    + $zipDest" -ForegroundColor Green
+        }
+        else {
+            # Fallback using .NET
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::CreateFromDirectory($PortableDir, $zipDest)
+            Write-Host "    + $zipDest (.NET fallback)" -ForegroundColor Green
+        }
+
+        Remove-Item -Recurse -Force $PortableDir -ErrorAction SilentlyContinue
+    }
+}
+else {
+    Write-Warning "  Bundle directory not found: $BundleDir"
+    Write-Warning "  Artifact collection skipped. Build may have failed."
+}
+
+# ---- Generate checksums ----
+Write-Host "`nGenerating SHA256 checksums..." -ForegroundColor Yellow
+$checksumsPath = Join-Path $ArtifactsDir "SHA256SUMS.txt"
+$checksumLines = @()
+
+Get-ChildItem $ArtifactsDir -File | ForEach-Object {
+    $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+    $checksumLines += "$hash  $($_.Name)"
+    Write-Host "  $($hash.Substring(0, 16))...  $($_.Name)" -ForegroundColor Gray
+}
+
+$checksumLines | Out-File -FilePath $checksumsPath -Encoding ascii
+Write-Host "  Checksums saved: $checksumsPath" -ForegroundColor Green
+
+# ---- Installer report ----
+Write-Host "`nGenerating installer report..." -ForegroundColor Yellow
+$reportPath = Join-Path $ArtifactsDir "installer-report.json"
+$artifacts = @()
+
+Get-ChildItem $ArtifactsDir -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" -and $_.Name -ne "installer-report.json" } | ForEach-Object {
+    $artifacts += @{
+        name = $_.Name
+        size = $_.Length
+        path = $_.FullName
+    }
+}
+
+$report = @{
+    version = $AppVersion
+    productName = $ProductName
+    commit = $CommitHash
+    buildDate = $BuildDate
+    gitTag = $GitTag
+    config = $Config
+    platform = "windows-x64"
+    artifacts = $artifacts
+    checksums = @($checksumLines | ForEach-Object { $_ })
+}
+
+$report | ConvertTo-Json -Depth 5 | Out-File -FilePath $reportPath -Encoding utf8
+Write-Host "  Report: $reportPath" -ForegroundColor Green
+
+# ---- Summary ----
+Write-Host "`n========================================" -ForegroundColor Cyan
+Write-Host "  Build Complete" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "  Version: $AppVersion" -ForegroundColor Green
+Write-Host "  Commit:  $CommitHash" -ForegroundColor Green
+Write-Host "  Tag:     $GitTag" -ForegroundColor Green
+Write-Host "  Output:  $ArtifactsDir" -ForegroundColor Green
+Write-Host ""
+
+Get-ChildItem $ArtifactsDir -File | ForEach-Object {
+    $size = if ($_.Length -gt 1MB) { "{0:N2} MB" -f ($_.Length / 1MB) } else { "{0:N0} KB" -f ($_.Length / 1KB) }
+    Write-Host "  $($_.Name) ($size)" -ForegroundColor White
+}
+
+Write-Host "`nDone." -ForegroundColor Cyan
