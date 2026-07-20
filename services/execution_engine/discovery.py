@@ -52,16 +52,23 @@ _COMMON_INSTALL_DIRS_NIX = [
 
 # Windows Registry paths to check for tool installations
 _WIN_REGISTRY_PATHS: list[tuple[str, str, str]] = [
-    (r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths", "claude.exe", EngineType.CLAUDE_CODE.value),
-    (r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths", "codex.exe", EngineType.CODEX_CLI.value),
+    (
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+        "claude.exe",
+        EngineType.CLAUDE_CODE.value,
+    ),
+    (
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+        "codex.exe",
+        EngineType.CODEX_CLI.value,
+    ),
     (r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths", "aider.exe", EngineType.AIDER.value),
 ]
 
 
 def _is_executable(path: Path) -> bool:
     return path.is_file() and (
-        path.suffix.lower() in (".exe", ".cmd", ".bat", ".ps1")
-        or os.name != "nt"
+        path.suffix.lower() in (".exe", ".cmd", ".bat", ".ps1") or os.name != "nt"
     )
 
 
@@ -100,7 +107,9 @@ def _check_path(engine_type: EngineType, binary_names: list[str]) -> EngineDisco
     return None
 
 
-def _check_common_dirs(engine_type: EngineType, binary_names: list[str]) -> EngineDiscoveryResult | None:
+def _check_common_dirs(
+    engine_type: EngineType, binary_names: list[str]
+) -> EngineDiscoveryResult | None:
     dirs = _COMMON_INSTALL_DIRS_WIN if os.name == "nt" else _COMMON_INSTALL_DIRS_NIX
     for directory in dirs:
         for name in binary_names:
@@ -153,7 +162,9 @@ class EngineDiscovery:
                 results.append(result)
         return results
 
-    async def discover(self, engine_type: EngineType, binary_names: list[str] | None = None) -> EngineDiscoveryResult:
+    async def discover(
+        self, engine_type: EngineType, binary_names: list[str] | None = None
+    ) -> EngineDiscoveryResult:
         names = binary_names or _ENGINE_BINARIES.get(engine_type, [])
         result = _check_path(engine_type, names)
         if result and result.found:
@@ -194,7 +205,9 @@ class EngineDiscovery:
         self._discovered[engine_type.value] = not_found
         return not_found
 
-    async def _check_wsl(self, engine_type: EngineType, binary_names: list[str]) -> EngineDiscoveryResult | None:
+    async def _check_wsl(
+        self, engine_type: EngineType, binary_names: list[str]
+    ) -> EngineDiscoveryResult | None:
         try:
             for name in binary_names:
                 result = subprocess.run(
@@ -209,7 +222,9 @@ class EngineDiscovery:
                     try:
                         v = subprocess.run(
                             ["wsl", wsl_path, "--version"],
-                            capture_output=True, text=True, timeout=10,
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
                         )
                         version = (v.stdout or v.stderr).strip()
                     except Exception:
@@ -229,11 +244,15 @@ class EngineDiscovery:
             _log.debug("WSL check failed for %s: %s", engine_type, e)
         return None
 
-    async def _check_docker(self, engine_type: EngineType, binary_names: list[str]) -> EngineDiscoveryResult | None:
+    async def _check_docker(
+        self, engine_type: EngineType, binary_names: list[str]
+    ) -> EngineDiscoveryResult | None:
         try:
             result = subprocess.run(
                 ["docker", "ps", "--format", "{{.Names}}"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode != 0:
                 return None

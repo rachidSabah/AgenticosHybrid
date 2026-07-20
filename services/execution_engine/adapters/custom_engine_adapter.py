@@ -60,7 +60,9 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
             self._process.stdin.write(request.encode())
             await self._process.stdin.drain()
             assert self._process.stdout is not None
-            response = await asyncio.wait_for(self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 300))
+            response = await asyncio.wait_for(
+                self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 300)
+            )
             return json.loads(response.decode()) if response else {"result": "empty"}
         return {"goal": goal, "result": f"custom_execution: {command[:50]}", "mock": True}
 

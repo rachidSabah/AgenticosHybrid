@@ -118,7 +118,14 @@ class ExecutionMetrics:
     total_cost_usd: float = 0.0
     last_execution: datetime | None = None
 
-    def record_task(self, duration_s: float, success: bool, tokens_input: int = 0, tokens_output: int = 0, cost_usd: float = 0.0) -> None:
+    def record_task(
+        self,
+        duration_s: float,
+        success: bool,
+        tokens_input: int = 0,
+        tokens_output: int = 0,
+        cost_usd: float = 0.0,
+    ) -> None:
         if success:
             self.tasks_completed += 1
         else:
@@ -128,7 +135,9 @@ class ExecutionMetrics:
         self.total_tokens_output += tokens_output
         self.total_cost_usd += cost_usd
         self.last_execution = datetime.now(UTC)
-        total = self.tasks_completed + self.tasks_failed + self.tasks_cancelled + self.tasks_timed_out
+        total = (
+            self.tasks_completed + self.tasks_failed + self.tasks_cancelled + self.tasks_timed_out
+        )
         self.avg_duration_s = self.total_duration_s / max(1, total)
 
 

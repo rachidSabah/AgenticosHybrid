@@ -163,8 +163,7 @@ class BaseExecutionEngineAdapter(ABC):
         return True
 
     @abstractmethod
-    async def _on_execute(self, task: Any) -> Any:
-        ...
+    async def _on_execute(self, task: Any) -> Any: ...
 
     async def _on_cancel(self, task_id: str) -> bool:
         return False

@@ -140,8 +140,11 @@ class ExecutionEngineManager:
         for result in results:
             if self._bus:
                 await publish_engine_discovered(
-                    self._bus, result.engine_type.value, result.name,
-                    result.version, result.binary_path,
+                    self._bus,
+                    result.engine_type.value,
+                    result.name,
+                    result.version,
+                    result.binary_path,
                 )
         return results
 
@@ -203,16 +206,18 @@ class ExecutionEngineManager:
         for name, config in self._engine_configs.items():
             health = self._engine_health.get(name)
             telemetry = self._engine_telemetry.get(name)
-            result.append({
-                "name": name,
-                "type": config.type.value,
-                "enabled": config.enabled,
-                "version": config.version,
-                "healthy": health.healthy if health else False,
-                "initialized": health.initialized if health else False,
-                "tasks_completed": telemetry.tasks_completed if telemetry else 0,
-                "tasks_failed": telemetry.tasks_failed if telemetry else 0,
-            })
+            result.append(
+                {
+                    "name": name,
+                    "type": config.type.value,
+                    "enabled": config.enabled,
+                    "version": config.version,
+                    "healthy": health.healthy if health else False,
+                    "initialized": health.initialized if health else False,
+                    "tasks_completed": telemetry.tasks_completed if telemetry else 0,
+                    "tasks_failed": telemetry.tasks_failed if telemetry else 0,
+                }
+            )
         return result
 
     async def get_health(self, name: str) -> EngineHealthState | None:
@@ -291,10 +296,14 @@ class ExecutionEngineManager:
             return task
         return await self._execute_on_engine(task, engine)
 
-    async def _execute_on_engine(self, task: ExecutionTask, engine: ExecutionEnginePort) -> ExecutionTask:
+    async def _execute_on_engine(
+        self, task: ExecutionTask, engine: ExecutionEnginePort
+    ) -> ExecutionTask:
         task.status = ExecutionTaskStatus.DISPATCHED
         if self._bus:
-            await publish_task_dispatched(self._bus, task.task_id, task.engine_type.value, engine.name)
+            await publish_task_dispatched(
+                self._bus, task.task_id, task.engine_type.value, engine.name
+            )
 
         try:
             health = await engine.health_check()
@@ -317,12 +326,16 @@ class ExecutionEngineManager:
                 engine.execute(task),
                 timeout=task.timeout_s,
             )
-            task.duration_s = time.monotonic() - (task.started_at.timestamp() if task.started_at else 0)
+            task.duration_s = time.monotonic() - (
+                task.started_at.timestamp() if task.started_at else 0
+            )
             task.status = ExecutionTaskStatus.COMPLETED
             task.output = result
             task.completed_at = datetime.now(UTC)
             if self._bus:
-                await publish_task_completed(self._bus, task.task_id, task.engine_type.value, task.duration_s)
+                await publish_task_completed(
+                    self._bus, task.task_id, task.engine_type.value, task.duration_s
+                )
         except asyncio.TimeoutError:
             task.status = ExecutionTaskStatus.TIMEOUT
             task.error = f"Task timed out after {task.timeout_s}s"
@@ -354,8 +367,12 @@ class ExecutionEngineManager:
             task = self._tasks.get(task_id)
             if not task:
                 return False
-            if task.status in (ExecutionTaskStatus.COMPLETED, ExecutionTaskStatus.FAILED,
-                                ExecutionTaskStatus.CANCELLED, ExecutionTaskStatus.TIMEOUT):
+            if task.status in (
+                ExecutionTaskStatus.COMPLETED,
+                ExecutionTaskStatus.FAILED,
+                ExecutionTaskStatus.CANCELLED,
+                ExecutionTaskStatus.TIMEOUT,
+            ):
                 return False
             engine = self._engines.get(task.engine_name)
 
@@ -401,20 +418,28 @@ class ExecutionEngineManager:
             if engine_name in preferred_engines and fallback_engines:
                 if self._bus:
                     await publish_route_failover(
-                        self._bus, engine_name, fallback_engines[0],
+                        self._bus,
+                        engine_name,
+                        fallback_engines[0],
                         f"Failover: {result.error}",
                     )
 
-        task = ExecutionTask(goal=goal, status=ExecutionTaskStatus.FAILED, error=f"All engines failed: {last_error}")
+        task = ExecutionTask(
+            goal=goal, status=ExecutionTaskStatus.FAILED, error=f"All engines failed: {last_error}"
+        )
         return task
 
-    async def benchmark_engine(self, engine_name: str, tasks: list[str]) -> ExecutionBenchmarkResult:
+    async def benchmark_engine(
+        self, engine_name: str, tasks: list[str]
+    ) -> ExecutionBenchmarkResult:
         engine = self._engines.get(engine_name)
         if not engine:
             raise ValueError(f"Engine '{engine_name}' not found")
 
         benchmark = ExecutionBenchmarkResult(
-            engine_type=self._engine_configs.get(engine_name, EngineConfig(type=EngineType.CUSTOM, name=engine_name)).type,
+            engine_type=self._engine_configs.get(
+                engine_name, EngineConfig(type=EngineType.CUSTOM, name=engine_name)
+            ).type,
             engine_name=engine_name,
             tasks_run=len(tasks),
             started_at=datetime.now(UTC),
@@ -458,13 +483,16 @@ class ExecutionEngineManager:
 
     async def create_session(self, engine_name: str) -> ExecutionSession:
         session = ExecutionSession(
-            engine_type=self._engine_configs.get(engine_name, EngineConfig(type=EngineType.CUSTOM, name=engine_name)).type,
+            engine_type=self._engine_configs.get(
+                engine_name, EngineConfig(type=EngineType.CUSTOM, name=engine_name)
+            ).type,
             engine_name=engine_name,
         )
         async with self._lock:
             self._sessions[session.session_id] = session
         if self._bus:
             from services.execution_engine.events import publish_session_created
+
             await publish_session_created(self._bus, session.session_id, session.engine_type.value)
         return session
 

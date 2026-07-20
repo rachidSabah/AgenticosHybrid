@@ -107,6 +107,55 @@ class EventTopic(StrEnum):
     EXECUTION_BENCHMARK_COMPLETED = "execution.benchmark.completed"
     EXECUTION_BENCHMARK_FAILED = "execution.benchmark.failed"
 
+    # --- Runtime discovery ---
+    RUNTIME_DISCOVERY_SCAN_STARTED = "runtime.discovery.scan_started"
+    RUNTIME_DISCOVERY_SCAN_COMPLETED = "runtime.discovery.scan_completed"
+    RUNTIME_DISCOVERY_PROVIDER_RUNNING = "runtime.discovery.provider_running"
+    RUNTIME_DISCOVERY_PROVIDER_FAILED = "runtime.discovery.provider_failed"
+    RUNTIME_DISCOVERY_ENGINE_FOUND = "runtime.discovery.engine_found"
+    RUNTIME_DISCOVERY_ENGINE_LOST = "runtime.discovery.engine_lost"
+    RUNTIME_DISCOVERY_CACHE_HIT = "runtime.discovery.cache_hit"
+    RUNTIME_DISCOVERY_CACHE_MISS = "runtime.discovery.cache_miss"
+    RUNTIME_DISCOVERY_PROFILE_ACTIVATED = "runtime.discovery.profile_activated"
+    RUNTIME_DISCOVERY_PROFILE_DEACTIVATED = "runtime.discovery.profile_deactivated"
+
+    # --- Runtime binding ---
+    RUNTIME_BINDING_STARTED = "runtime.binding.started"
+    RUNTIME_BINDING_COMPLETED = "runtime.binding.completed"
+    RUNTIME_BINDING_FAILED = "runtime.binding.failed"
+    RUNTIME_BINDING_UNBOUND = "runtime.binding.unbound"
+
+    # --- Runtime validation ---
+    RUNTIME_VALIDATION_STARTED = "runtime.validation.started"
+    RUNTIME_VALIDATION_PASSED = "runtime.validation.passed"
+    RUNTIME_VALIDATION_FAILED = "runtime.validation.failed"
+    RUNTIME_VALIDATION_SKIPPED = "runtime.validation.skipped"
+
+    # --- Runtime health ---
+    RUNTIME_HEALTH_CHECK_PASSED = "runtime.health.check_passed"
+    RUNTIME_HEALTH_CHECK_FAILED = "runtime.health.check_failed"
+    RUNTIME_HEALTH_STATUS_CHANGED = "runtime.health.status_changed"
+    RUNTIME_HEALTH_DEGRADED = "runtime.health.degraded"
+    RUNTIME_HEALTH_RECOVERED = "runtime.health.recovered"
+
+    # --- Runtime profile ---
+    RUNTIME_PROFILE_CREATED = "runtime.profile.created"
+    RUNTIME_PROFILE_UPDATED = "runtime.profile.updated"
+    RUNTIME_PROFILE_DELETED = "runtime.profile.deleted"
+
+    # --- Runtime configuration ---
+    RUNTIME_CONFIGURATION_CHANGED = "runtime.configuration.changed"
+    RUNTIME_CONFIGURATION_RESET = "runtime.configuration.reset"
+
+    # --- Runtime telemetry ---
+    RUNTIME_TELEMETRY_RECORDED = "runtime.telemetry.recorded"
+    RUNTIME_TELEMETRY_FLUSHED = "runtime.telemetry.flushed"
+
+    # --- Runtime registry ---
+    RUNTIME_REGISTRY_REGISTERED = "runtime.registry.registered"
+    RUNTIME_REGISTRY_UNREGISTERED = "runtime.registry.unregistered"
+    RUNTIME_REGISTRY_UPDATED = "runtime.registry.updated"
+
     # --- Config / system ---
     CONFIG_CHANGED = "config.changed"
     SYSTEM_BOOTING = "system.booting"
