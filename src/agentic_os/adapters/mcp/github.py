@@ -52,7 +52,7 @@ class GitHubAdapter(BaseMCPAdapter):
 
     @property
     def transport_type(self) -> MCPTransport:
-        return MCPTransport.HTTP
+        return MCPTransport.SSE
 
     async def list_tools(self) -> list[MCPTool]:
         return list(self._build_tools().values())

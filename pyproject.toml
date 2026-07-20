@@ -29,6 +29,11 @@ dependencies = [
     "opentelemetry-exporter-prometheus>=0.45.0",
 ]
 
+[project.optional-dependencies]
+mcp-docker = ["docker>=7.0.0"]
+mcp-postgres = ["asyncpg>=0.29.0"]
+mcp = ["docker>=7.0.0", "asyncpg>=0.29.0"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.0",
