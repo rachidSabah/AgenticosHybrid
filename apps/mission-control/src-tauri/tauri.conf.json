@@ -52,7 +52,8 @@
       },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English"]
+        "languages": ["English"],
+        "installerHooks": "hooks.nsi"
       }
     },
     "macOS": {

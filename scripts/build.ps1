@@ -106,11 +106,14 @@ $tauriConfigPath = Join-Path $TauriDir "tauri.conf.json"
 $tauriConfig = Get-Content $tauriConfigPath -Raw | ConvertFrom-Json
 $AppVersion = $tauriConfig.version
 $ProductName = $tauriConfig.productName
+$prevErr = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $CommitHash = git -C $RepoRoot rev-parse HEAD 2>$null
 if (-not $CommitHash) { $CommitHash = "unknown" }
 $BuildDate = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 $GitTag = git -C $RepoRoot describe --tags --exact-match 2>$null
 if (-not $GitTag) { $GitTag = "untagged" }
+$ErrorActionPreference = $prevErr
 
 Write-Host "  Version:   $AppVersion" -ForegroundColor Green
 Write-Host "  Commit:    $CommitHash" -ForegroundColor Green
