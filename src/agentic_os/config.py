@@ -76,5 +76,14 @@ class Settings(BaseSettings):
     # Learning & Optimization Engine (Phase 5)
     learning_enabled: bool = True
 
+    # Desktop Runtime Foundation (Phase 4, M6)
+    desktop_enabled: bool = True
+    desktop_workspace_dir: str = ""
+    desktop_cache_dir: str = ""
+    desktop_log_dir: str = ""
+    desktop_db_path: str = ""
+    desktop_auto_start: bool = False
+    desktop_minimize_to_tray: bool = True
+
 
 settings = Settings()

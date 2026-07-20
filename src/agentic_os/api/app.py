@@ -2217,6 +2217,398 @@ def create_app(platform: Platform) -> FastAPI:
         metrics = await learning._telemetry.get_latency_metrics(period_start, period_end)
         return metrics.to_dict()
 
+    # ── Desktop Runtime API (Phase 4, M6) ──
+
+    desktop = platform.desktop
+
+    if desktop is not None:
+        # -- Runtime --
+
+        @app.get("/api/desktop/state")
+        async def get_desktop_state() -> dict:
+            state = await desktop.get_state()
+            return state.to_dict()
+
+        @app.get("/api/desktop/status")
+        async def get_desktop_status() -> dict:
+            return {"status": await desktop.get_status()}
+
+        @app.post("/api/desktop/restart")
+        async def restart_desktop() -> dict:
+            await desktop.restart()
+            return {"status": "restarted"}
+
+        # -- Windows --
+
+        @app.get("/api/desktop/windows")
+        async def list_windows() -> list[dict]:
+            return [w.to_dict() for w in await desktop.window.list_windows()]
+
+        @app.get("/api/desktop/windows/{window_id}")
+        async def get_window(window_id: str) -> dict:
+            win = await desktop.window.get_window(window_id)
+            if win is None:
+                raise HTTPException(404, "Window not found")
+            return win.to_dict()
+
+        @app.post("/api/desktop/windows")
+        async def create_window(config: dict) -> dict:
+            from agentic_os.domain.desktop import WindowConfig
+
+            wc = WindowConfig(
+                **{k: v for k, v in config.items() if k in WindowConfig.__dataclass_fields__}
+            )
+            win = await desktop.window.create_window(wc)
+            await desktop.publisher.publish_window_opened(win.id, win.label)
+            return win.to_dict()
+
+        @app.delete("/api/desktop/windows/{window_id}")
+        async def close_window(window_id: str) -> dict:
+            if not await desktop.window.close_window(window_id):
+                raise HTTPException(404, "Window not found")
+            await desktop.publisher.publish_window_closed(window_id)
+            return {"status": "closed"}
+
+        @app.post("/api/desktop/windows/{window_id}/focus")
+        async def focus_window(window_id: str) -> dict:
+            return {"focused": await desktop.window.focus_window(window_id)}
+
+        @app.post("/api/desktop/windows/{window_id}/minimize")
+        async def minimize_window(window_id: str) -> dict:
+            return {"minimized": await desktop.window.minimize_window(window_id)}
+
+        @app.post("/api/desktop/windows/{window_id}/maximize")
+        async def maximize_window(window_id: str) -> dict:
+            return {"maximized": await desktop.window.maximize_window(window_id)}
+
+        @app.post("/api/desktop/windows/{window_id}/restore")
+        async def restore_window(window_id: str) -> dict:
+            return {"restored": await desktop.window.restore_window(window_id)}
+
+        @app.post("/api/desktop/windows/{window_id}/fullscreen")
+        async def fullscreen_window(window_id: str) -> dict:
+            return {"fullscreen": await desktop.window.enter_fullscreen(window_id)}
+
+        # -- Workspaces --
+
+        @app.get("/api/desktop/workspaces")
+        async def list_workspaces() -> list[dict]:
+            return [w.to_dict() for w in await desktop.workspace.list_workspaces()]
+
+        @app.post("/api/desktop/workspaces")
+        async def create_workspace(body: dict) -> dict:
+            ws = await desktop.workspace.create_workspace(body.get("name", "New Workspace"))
+            await desktop.publisher.publish_workspace_created(ws.id, ws.name)
+            return ws.to_dict()
+
+        @app.get("/api/desktop/workspaces/{workspace_id}")
+        async def get_workspace(workspace_id: str) -> dict:
+            ws = await desktop.workspace.get_workspace(workspace_id)
+            if ws is None:
+                raise HTTPException(404, "Workspace not found")
+            return ws.to_dict()
+
+        @app.put("/api/desktop/workspaces/{workspace_id}")
+        async def update_workspace(workspace_id: str, body: dict) -> dict:
+            ws = await desktop.workspace.get_workspace(workspace_id)
+            if ws is None:
+                raise HTTPException(404, "Workspace not found")
+            for k, v in body.items():
+                if hasattr(ws, k):
+                    setattr(ws, k, v)
+            updated = await desktop.workspace.update_workspace(ws)
+            return updated.to_dict()
+
+        @app.delete("/api/desktop/workspaces/{workspace_id}")
+        async def delete_workspace(workspace_id: str) -> dict:
+            if not await desktop.workspace.delete_workspace(workspace_id):
+                raise HTTPException(404, "Workspace not found")
+            return {"status": "deleted"}
+
+        @app.post("/api/desktop/workspaces/{workspace_id}/switch")
+        async def switch_workspace(workspace_id: str) -> dict:
+            ws = await desktop.workspace.switch_workspace(workspace_id)
+            await desktop.publisher.publish_workspace_switched(ws.id)
+            return ws.to_dict()
+
+        @app.get("/api/desktop/workspaces/active")
+        async def get_active_workspace() -> dict | None:
+            ws = await desktop.workspace.get_active_workspace()
+            return ws.to_dict() if ws else None
+
+        # -- Workspace Layout --
+
+        @app.get("/api/desktop/workspaces/{workspace_id}/layout")
+        async def get_workspace_layout(workspace_id: str) -> dict:
+            layout = await desktop.workspace.get_workspace_layout(workspace_id)
+            if layout is None:
+                raise HTTPException(404, "Workspace not found")
+            return layout.to_dict()
+
+        @app.put("/api/desktop/workspaces/{workspace_id}/layout")
+        async def update_workspace_layout(workspace_id: str, body: dict) -> dict:
+            from agentic_os.domain.desktop import WorkspaceLayout
+
+            layout = WorkspaceLayout(
+                **{k: v for k, v in body.items() if k in WorkspaceLayout.__dataclass_fields__}
+            )
+            updated = await desktop.workspace.update_workspace_layout(workspace_id, layout)
+            await desktop.publisher.publish_layout_changed(workspace_id, updated.id)
+            return updated.to_dict()
+
+        # -- Workspace Tabs --
+
+        @app.post("/api/desktop/workspaces/{workspace_id}/tabs")
+        async def add_tab(workspace_id: str, body: dict) -> dict:
+            from agentic_os.domain.desktop import TabInfo
+
+            tab = TabInfo(**{k: v for k, v in body.items() if k in TabInfo.__dataclass_fields__})
+            added = await desktop.workspace.add_tab(workspace_id, tab)
+            return added.to_dict()
+
+        @app.delete("/api/desktop/workspaces/{workspace_id}/tabs/{tab_id}")
+        async def remove_tab(workspace_id: str, tab_id: str) -> dict:
+            if not await desktop.workspace.remove_tab(workspace_id, tab_id):
+                raise HTTPException(404, "Tab not found")
+            return {"status": "removed"}
+
+        @app.post("/api/desktop/workspaces/{workspace_id}/tabs/{tab_id}/activate")
+        async def activate_tab(workspace_id: str, tab_id: str) -> dict:
+            return {"activated": await desktop.workspace.activate_tab(workspace_id, tab_id)}
+
+        # -- Workspace Panels --
+
+        @app.post("/api/desktop/workspaces/{workspace_id}/panels")
+        async def add_panel(workspace_id: str, body: dict) -> dict:
+            from agentic_os.domain.desktop import PanelConfig
+
+            panel = PanelConfig(
+                **{k: v for k, v in body.items() if k in PanelConfig.__dataclass_fields__}
+            )
+            added = await desktop.workspace.add_panel(workspace_id, panel)
+            return added.to_dict()
+
+        @app.delete("/api/desktop/workspaces/{workspace_id}/panels/{panel_id}")
+        async def remove_panel(workspace_id: str, panel_id: str) -> dict:
+            if not await desktop.workspace.remove_panel(workspace_id, panel_id):
+                raise HTTPException(404, "Panel not found")
+            return {"status": "removed"}
+
+        # -- Notifications --
+
+        @app.get("/api/desktop/notifications")
+        async def list_notifications() -> list[dict]:
+            return [n.to_dict() for n in await desktop.notification.list_notifications()]
+
+        @app.post("/api/desktop/notifications")
+        async def send_notification(body: dict) -> dict:
+            from agentic_os.domain.desktop import DesktopNotification
+
+            notif = DesktopNotification(
+                **{k: v for k, v in body.items() if k in DesktopNotification.__dataclass_fields__}
+            )
+            sent = await desktop.notification.send_notification(notif)
+            await desktop.publisher.publish_notification_created(
+                sent.id, sent.title, sent.level.value
+            )
+            return sent.to_dict()
+
+        @app.delete("/api/desktop/notifications/{notification_id}")
+        async def dismiss_notification(notification_id: str) -> dict:
+            if not await desktop.notification.dismiss_notification(notification_id):
+                raise HTTPException(404, "Notification not found")
+            return {"status": "dismissed"}
+
+        @app.post("/api/desktop/notifications/{notification_id}/click")
+        async def click_notification(notification_id: str) -> dict:
+            if not await desktop.notification.mark_clicked(notification_id):
+                raise HTTPException(404, "Notification not found")
+            await desktop.publisher.publish_notification_clicked(notification_id)
+            return {"status": "clicked"}
+
+        @app.get("/api/desktop/notifications/unread/count")
+        async def get_unread_count() -> dict:
+            return {"count": await desktop.notification.get_unread_count()}
+
+        # -- Configuration --
+
+        @app.get("/api/desktop/config")
+        async def get_desktop_config() -> dict:
+            cfg = await desktop.configuration.get_config()
+            return cfg.to_dict()
+
+        @app.put("/api/desktop/config")
+        async def update_desktop_config(body: dict) -> dict:
+            cfg = await desktop.configuration.get_config()
+            for k, v in body.items():
+                if hasattr(cfg, k):
+                    setattr(cfg, k, v)
+            updated = await desktop.configuration.update_config(cfg)
+            return updated.to_dict()
+
+        @app.get("/api/desktop/config/theme")
+        async def get_theme() -> dict:
+            return {"theme": (await desktop.configuration.get_theme()).value}
+
+        @app.put("/api/desktop/config/theme")
+        async def set_theme(body: dict) -> dict:
+            from agentic_os.domain.desktop import ThemeMode
+
+            theme = ThemeMode(body.get("theme", "system"))
+            await desktop.configuration.set_theme(theme)
+            await desktop.publisher.publish_theme_changed(theme.value)
+            return {"theme": theme.value}
+
+        # -- Diagnostics --
+
+        @app.get("/api/desktop/diagnostics")
+        async def get_diagnostics() -> dict:
+            return (await desktop.diagnostics.get_diagnostics()).to_dict()
+
+        @app.get("/api/desktop/diagnostics/health")
+        async def desktop_health() -> dict:
+            return await desktop.diagnostics.check_health()
+
+        # -- Performance --
+
+        @app.get("/api/desktop/performance")
+        async def get_performance() -> dict:
+            return (await desktop.performance.get_metrics()).to_dict()
+
+        @app.get("/api/desktop/performance/history/{metric}")
+        async def get_metric_history(metric: str, limit: int = 60) -> dict:
+            return {
+                "metric": metric,
+                "values": list(await desktop.performance.get_metric_history(metric, limit)),
+            }
+
+        @app.post("/api/desktop/performance/monitor/start")
+        async def start_monitoring() -> dict:
+            await desktop.performance.start_monitoring()
+            return {"status": "started"}
+
+        @app.post("/api/desktop/performance/monitor/stop")
+        async def stop_monitoring() -> dict:
+            await desktop.performance.stop_monitoring()
+            return {"status": "stopped"}
+
+        # -- Menus --
+
+        @app.get("/api/desktop/menus")
+        async def list_menus() -> list[dict]:
+            return [m.to_dict() for m in await desktop.menu.list_menus()]
+
+        @app.post("/api/desktop/menus")
+        async def create_menu(body: dict) -> dict:
+            from agentic_os.domain.desktop import MenuConfig
+
+            menu = MenuConfig(
+                **{k: v for k, v in body.items() if k in MenuConfig.__dataclass_fields__}
+            )
+            created = await desktop.menu.create_menu(menu)
+            return created.to_dict()
+
+        @app.get("/api/desktop/menus/default")
+        async def get_default_menus() -> list[dict]:
+            return [m.to_dict() for m in await desktop.menu.get_default_menus()]
+
+        # -- File Dialogs --
+
+        @app.post("/api/desktop/file/open")
+        async def open_file_dialog(body: dict) -> dict:
+            from agentic_os.domain.desktop import DialogConfig
+
+            config = DialogConfig(
+                **{k: v for k, v in body.items() if k in DialogConfig.__dataclass_fields__}
+            )
+            result = await desktop.file.open_file_dialog(config)
+            return result.to_dict()
+
+        @app.post("/api/desktop/file/save")
+        async def save_file_dialog(body: dict) -> dict:
+            from agentic_os.domain.desktop import DialogConfig
+
+            config = DialogConfig(
+                **{k: v for k, v in body.items() if k in DialogConfig.__dataclass_fields__}
+            )
+            result = await desktop.file.save_file_dialog(config)
+            return result.to_dict()
+
+        # -- Clipboard --
+
+        @app.get("/api/desktop/clipboard")
+        async def get_clipboard() -> dict:
+            content = await desktop.clipboard.get_content()
+            return content.to_dict()
+
+        @app.put("/api/desktop/clipboard")
+        async def set_clipboard(body: dict) -> dict:
+            from agentic_os.domain.desktop import ClipboardContent
+
+            content = ClipboardContent(
+                **{k: v for k, v in body.items() if k in ClipboardContent.__dataclass_fields__}
+            )
+            await desktop.clipboard.set_content(content)
+            return {"status": "updated"}
+
+        # -- Terminal --
+
+        @app.get("/api/desktop/terminals")
+        async def list_terminals() -> list[dict]:
+            return [t.to_dict() for t in await desktop.terminal.list_terminals()]
+
+        @app.post("/api/desktop/terminals")
+        async def open_terminal(body: dict) -> dict:
+            from agentic_os.domain.desktop import TerminalConfig
+
+            config = TerminalConfig(
+                **{k: v for k, v in body.items() if k in TerminalConfig.__dataclass_fields__}
+            )
+            info = await desktop.terminal.open_terminal(config)
+            return info.to_dict()
+
+        @app.delete("/api/desktop/terminals/{terminal_id}")
+        async def close_terminal(terminal_id: str) -> dict:
+            if not await desktop.terminal.close_terminal(terminal_id):
+                raise HTTPException(404, "Terminal not found")
+            return {"status": "closed"}
+
+        # -- Keyboard Shortcuts --
+
+        @app.get("/api/desktop/shortcuts")
+        async def list_shortcuts() -> list[dict]:
+            return [s.to_dict() for s in await desktop.list_shortcuts()]
+
+        # -- Command Palette --
+
+        @app.get("/api/desktop/command-palette")
+        async def get_command_palette() -> list[dict]:
+            return list(await desktop.get_command_palette_items())
+
+        # -- Global Search --
+
+        @app.get("/api/desktop/search")
+        async def global_search(q: str = "") -> list[dict]:
+            return list(await desktop.global_search(q))
+
+        # -- Database --
+
+        @app.get("/api/desktop/database")
+        async def get_database_info() -> dict:
+            return (await desktop.database.get_info()).to_dict()
+
+        # -- Drag & Drop --
+
+        @app.post("/api/desktop/dragdrop")
+        async def handle_drop(body: dict) -> dict:
+            from agentic_os.domain.desktop import DragDropPayload
+
+            payload = DragDropPayload(
+                **{k: v for k, v in body.items() if k in DragDropPayload.__dataclass_fields__}
+            )
+            result = await desktop.dragdrop.handle_drop(payload)
+            return result
+
     # ── Minimal provider management UI page (Phase 3 builds Mission Control) ──
     @app.get("/providers", response_class=HTMLResponse)
     async def providers_page() -> str:

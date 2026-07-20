@@ -32,6 +32,9 @@ from agentic_os.api.mcp_ws import MCPBroadcaster
 from agentic_os.config import settings
 from agentic_os.core.capability.engine import CapabilityEngine
 
+# Phase 4, M6: Desktop Runtime Foundation
+from agentic_os.core.desktop import DesktopRuntimeManager
+
 # Phase 4, M2: Discovery Framework
 from agentic_os.core.discovery import (
     DiscoveryCache,
@@ -129,6 +132,8 @@ class Platform:
     mcp_ws: MCPBroadcaster | None = None
     # Phase 5: Learning & Optimization Engine
     learning: LearningManager | None = None
+    # Phase 4, M6: Desktop Runtime Foundation
+    desktop: DesktopRuntimeManager | None = None
 
 
 class Kernel:
@@ -214,6 +219,9 @@ class Kernel:
         # Phase 5: Learning & Optimization Engine
         self.learning = self._build_learning_framework()
 
+        # Phase 4, M6: Desktop Runtime Foundation
+        self.desktop = DesktopRuntimeManager(self.bus)
+
     async def start(self) -> None:
         await self.bus.start()
         self._plugins = load_plugins(self.registry, self.providers)
@@ -255,9 +263,16 @@ class Kernel:
         if self.learning:
             await self.learning.start()
 
+        # Phase 4, M6: Start Desktop Runtime
+        if self.desktop and settings.desktop_enabled:
+            await self.desktop.start()
+
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 4, M6: Stop Desktop Runtime
+        if self.desktop and settings.desktop_enabled:
+            await self.desktop.stop()
         # Phase 5: Stop Learning & Optimization Engine
         if self.learning:
             await self.learning.stop()
