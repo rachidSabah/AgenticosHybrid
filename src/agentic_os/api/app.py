@@ -2597,6 +2597,283 @@ def create_app(platform: Platform) -> FastAPI:
         async def get_database_info() -> dict:
             return (await desktop.database.get_info()).to_dict()
 
+        # -- Phase 4 M6 Part 2: Installer, Updates, Discovery, Offline, Backup --
+
+        # -- Runtime Discovery --
+
+        @app.get("/api/desktop/runtimes")
+        async def list_runtimes() -> list[dict]:
+            if desktop.runtime_discovery is None:
+                return []
+            return [r.to_dict() for r in await desktop.runtime_discovery.get_discovered_runtimes()]
+
+        @app.post("/api/desktop/runtimes/discover")
+        async def discover_runtimes() -> dict:
+            if desktop.runtime_discovery is None:
+                return {"total_discovered": 0, "runtimes": []}
+            result = await desktop.runtime_discovery.discover_runtimes()
+            return result.to_dict()
+
+        @app.get("/api/desktop/runtimes/{runtime_type}")
+        async def get_runtime(runtime_type: str) -> dict:
+            if desktop.runtime_discovery is None:
+                raise HTTPException(404, "Runtime discovery not available")
+            from agentic_os.domain.desktop import RuntimeType
+
+            try:
+                rt = RuntimeType(runtime_type)
+            except ValueError:
+                raise HTTPException(400, f"Unknown runtime type: {runtime_type}") from None
+            info = await desktop.runtime_discovery.get_runtime(rt)
+            if info is None:
+                raise HTTPException(404, f"Runtime not found: {runtime_type}")
+            return info.to_dict()
+
+        @app.post("/api/desktop/runtimes/{runtime_type}/verify")
+        async def verify_runtime(runtime_type: str) -> dict:
+            if desktop.runtime_discovery is None:
+                return {"verified": False}
+            from agentic_os.domain.desktop import RuntimeType
+
+            rt = RuntimeType(runtime_type)
+            return {"verified": await desktop.runtime_discovery.verify_runtime(rt)}
+
+        # -- Auto Updates --
+
+        @app.get("/api/desktop/updates/check")
+        async def check_updates(channel: str = "stable") -> list[dict]:
+            if desktop.update is None:
+                return []
+            from agentic_os.domain.desktop import UpdateChannel
+
+            ch = UpdateChannel(channel)
+            releases = await desktop.update.check_for_updates(ch)
+            return [r.to_dict() for r in releases]
+
+        @app.get("/api/desktop/updates/status")
+        async def get_update_status() -> dict:
+            if desktop.update is None:
+                return {"status": "idle"}
+            return {"status": (await desktop.update.get_update_status()).value}
+
+        @app.get("/api/desktop/updates/history")
+        async def get_update_history(limit: int = 50) -> list[dict]:
+            if desktop.update is None:
+                return []
+            return [h.to_dict() for h in await desktop.update.get_update_history(limit)]
+
+        @app.get("/api/desktop/updates/pending")
+        async def get_pending_update() -> dict | None:
+            if desktop.update is None:
+                return None
+            manifest = await desktop.update.get_pending_update()
+            return manifest.to_dict() if manifest else None
+
+        @app.get("/api/desktop/updates/version")
+        async def get_current_version() -> dict:
+            if desktop.update is None:
+                return {"version": "0.9.5"}
+            return {"version": await desktop.update.get_current_version()}
+
+        @app.post("/api/desktop/updates/download")
+        async def download_update(body: dict) -> dict:
+            if desktop.update is None:
+                raise HTTPException(503, "Update manager not available")
+            from agentic_os.domain.desktop import UpdateManifest
+
+            manifest = UpdateManifest(
+                **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
+            )
+            success = await desktop.update.download_update(manifest)
+            return {"success": success}
+
+        @app.post("/api/desktop/updates/install")
+        async def install_update(body: dict) -> dict:
+            if desktop.update is None:
+                raise HTTPException(503, "Update manager not available")
+            from agentic_os.domain.desktop import UpdateManifest
+
+            manifest = UpdateManifest(
+                **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
+            )
+            result = await desktop.update.install_update(manifest)
+            return result.to_dict()
+
+        # -- Update Channels --
+
+        @app.get("/api/desktop/channels")
+        async def get_channels() -> list[str]:
+            if desktop.channel is None:
+                return ["stable"]
+            return [c.value for c in await desktop.channel.get_channels()]
+
+        @app.get("/api/desktop/channels/current")
+        async def get_current_channel() -> dict:
+            if desktop.channel is None:
+                return {"channel": "stable"}
+            return {"channel": (await desktop.channel.get_current_channel()).value}
+
+        @app.put("/api/desktop/channels")
+        async def set_channel(body: dict) -> dict:
+            if desktop.channel is None:
+                raise HTTPException(503, "Channel manager not available")
+            from agentic_os.domain.desktop import UpdateChannel
+
+            ch = UpdateChannel(body.get("channel", "stable"))
+            await desktop.channel.set_channel(ch)
+            return {"channel": ch.value}
+
+        # -- Rollback --
+
+        @app.post("/api/desktop/rollback")
+        async def rollback(body: dict | None = None) -> dict:
+            if desktop.rollback is None:
+                raise HTTPException(503, "Rollback manager not available")
+            target = body.get("target_version") if body else None
+            result = await desktop.rollback.rollback(target)
+            return result.to_dict()
+
+        @app.get("/api/desktop/rollback/available")
+        async def get_rollback_versions() -> dict:
+            if desktop.rollback is None:
+                return {"versions": [], "can_rollback": False}
+            return {
+                "versions": list(await desktop.rollback.get_available_versions()),
+                "can_rollback": await desktop.rollback.can_rollback(),
+            }
+
+        # -- Installer --
+
+        @app.post("/api/desktop/installer/generate")
+        async def generate_installer(body: dict) -> dict:
+            if desktop.installer is None:
+                raise HTTPException(503, "Installer manager not available")
+            from agentic_os.domain.desktop import InstallerConfig
+
+            config = InstallerConfig(
+                **{k: v for k, v in body.items() if k in InstallerConfig.__dataclass_fields__}
+            )
+            result = await desktop.installer.generate_installer(config)
+            return result.to_dict()
+
+        @app.post("/api/desktop/installer/generate-all")
+        async def generate_all_installers(body: dict) -> list[dict]:
+            if desktop.installer is None:
+                raise HTTPException(503, "Installer manager not available")
+            from agentic_os.domain.desktop import InstallerConfig
+
+            config = InstallerConfig(
+                **{k: v for k, v in body.items() if k in InstallerConfig.__dataclass_fields__}
+            )
+            results = await desktop.installer.generate_all(config)
+            return [r.to_dict() for r in results]
+
+        @app.get("/api/desktop/installer/supported-types")
+        async def get_supported_installer_types() -> list[str]:
+            if desktop.installer is None:
+                return []
+            return [t.value for t in await desktop.installer.get_supported_types()]
+
+        @app.post("/api/desktop/installer/validate")
+        async def validate_installer(body: dict) -> dict:
+            if desktop.installer is None:
+                raise HTTPException(503, "Installer manager not available")
+            return await desktop.installer.validate_installer(body.get("path", ""))
+
+        # -- First Run Wizard --
+
+        @app.get("/api/desktop/first-run")
+        async def get_first_run_state() -> dict:
+            if desktop.first_run is None:
+                return {"completed": True}
+            return (await desktop.first_run.get_state()).to_dict()
+
+        @app.post("/api/desktop/first-run/step")
+        async def run_first_run_step(body: dict) -> dict:
+            if desktop.first_run is None:
+                return {"success": False, "error": "First run wizard not available"}
+            return await desktop.first_run.run_step(body.get("step", "welcome"))
+
+        @app.post("/api/desktop/first-run/complete")
+        async def complete_first_run() -> dict:
+            if desktop.first_run is None:
+                return {"status": "already_completed"}
+            await desktop.first_run.complete()
+            return {"status": "completed"}
+
+        # -- Offline Mode --
+
+        @app.get("/api/desktop/offline")
+        async def get_offline_state() -> dict:
+            if desktop.offline is None:
+                return {"state": "online"}
+            return {"state": (await desktop.offline.get_offline_state()).value}
+
+        @app.post("/api/desktop/offline/enable")
+        async def enable_offline() -> dict:
+            if desktop.offline is None:
+                raise HTTPException(503, "Offline manager not available")
+            await desktop.offline.enable_offline_mode()
+            return {"state": "offline"}
+
+        @app.post("/api/desktop/offline/disable")
+        async def disable_offline() -> dict:
+            if desktop.offline is None:
+                return {"state": "online"}
+            await desktop.offline.disable_offline_mode()
+            return {"state": "online"}
+
+        @app.get("/api/desktop/offline/events")
+        async def get_queued_events() -> list[dict]:
+            if desktop.offline is None:
+                return []
+            return list(await desktop.offline.get_queued_events())
+
+        @app.post("/api/desktop/offline/sync")
+        async def sync_offline_events() -> dict:
+            if desktop.offline is None:
+                return {"synced": 0}
+            count = await desktop.offline.sync_queued_events()
+            return {"synced": count}
+
+        # -- Backup / Restore --
+
+        @app.post("/api/desktop/backup")
+        async def create_backup(body: dict) -> dict:
+            if desktop.backup is None:
+                raise HTTPException(503, "Backup manager not available")
+            from agentic_os.domain.desktop import BackupConfig
+
+            config = BackupConfig(
+                **{k: v for k, v in body.items() if k in BackupConfig.__dataclass_fields__}
+            )
+            result = await desktop.backup.create_backup(config)
+            return result.to_dict()
+
+        @app.get("/api/desktop/backups")
+        async def list_backups() -> list[dict]:
+            if desktop.backup is None:
+                return []
+            return [b.to_dict() for b in await desktop.backup.list_backups()]
+
+        @app.post("/api/desktop/restore")
+        async def restore_backup(body: dict) -> dict:
+            if desktop.backup is None:
+                raise HTTPException(503, "Backup manager not available")
+            from agentic_os.domain.desktop import RestoreConfig
+
+            config = RestoreConfig(
+                **{k: v for k, v in body.items() if k in RestoreConfig.__dataclass_fields__}
+            )
+            result = await desktop.backup.restore(config)
+            return result.to_dict()
+
+        @app.get("/api/desktop/restore/points")
+        async def get_restore_points() -> dict:
+            if desktop.backup is None:
+                return {"points": []}
+            return {"points": list(await desktop.backup.get_available_restore_points())}
+
         # -- Drag & Drop --
 
         @app.post("/api/desktop/dragdrop")

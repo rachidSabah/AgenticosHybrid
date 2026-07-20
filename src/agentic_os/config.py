@@ -85,5 +85,19 @@ class Settings(BaseSettings):
     desktop_auto_start: bool = False
     desktop_minimize_to_tray: bool = True
 
+    # Desktop Runtime Operational Layer (Phase 4, M6 Part 2)
+    desktop_update_enabled: bool = True
+    desktop_update_channel: str = "stable"
+    desktop_offline_enabled: bool = True
+    desktop_backup_enabled: bool = True
+    desktop_runtime_discovery_enabled: bool = True
+    desktop_installer_enabled: bool = True
+    desktop_check_updates_on_start: bool = True
+    desktop_auto_download_updates: bool = False
+    desktop_auto_install_updates: bool = False
+    desktop_backup_interval_hours: int = 24
+    desktop_max_backups: int = 10
+    desktop_runtime_discovery_interval_seconds: int = 3600
+
 
 settings = Settings()

@@ -153,9 +153,564 @@ class DesktopEventType(StrEnum):
     WORKSPACE_SWITCHED = "desktop.workspace.switched"
     MENU_ACTION = "desktop.menu.action"
     CONFIG_CHANGED = "desktop.config.changed"
+    INSTALLED = "desktop.installed"
+    UPDATED = "desktop.updated"
+    UPDATE_AVAILABLE = "desktop.update.available"
+    UPDATE_STARTED = "desktop.update.started"
+    UPDATE_COMPLETED = "desktop.update.completed"
+    UPDATE_FAILED = "desktop.update.failed"
+    ROLLBACK_STARTED = "desktop.rollback.started"
+    ROLLBACK_COMPLETED = "desktop.rollback.completed"
+    RUNTIME_DISCOVERED = "desktop.runtime.discovered"
+    RUNTIME_UPDATED = "desktop.runtime.updated"
+    RUNTIME_REMOVED = "desktop.runtime.removed"
+    OFFLINE_ENABLED = "desktop.offline.enabled"
+    OFFLINE_DISABLED = "desktop.offline.disabled"
+    BACKUP_CREATED = "desktop.backup.created"
+    RESTORE_COMPLETED = "desktop.restore.completed"
+    FIRST_RUN_COMPLETED = "desktop.first_run.completed"
+    INSTALLER_PROGRESS = "desktop.installer.progress"
 
 
-# ── Window Models ──
+class UpdateChannel(StrEnum):
+    STABLE = "stable"
+    BETA = "beta"
+    NIGHTLY = "nightly"
+
+
+class UpdateStatus(StrEnum):
+    IDLE = "idle"
+    CHECKING = "checking"
+    DOWNLOADING = "downloading"
+    VERIFYING = "verifying"
+    READY = "ready"
+    INSTALLING = "installing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    ROLLED_BACK = "rolled_back"
+
+
+class InstallerType(StrEnum):
+    MSI = "msi"
+    EXE = "exe"
+    PORTABLE_ZIP = "portable_zip"
+    APPIMAGE = "appimage"
+    DEB = "deb"
+    RPM = "rpm"
+    DMG = "dmg"
+    PKG = "pkg"
+
+
+class RuntimeType(StrEnum):
+    PYTHON = "python"
+    GIT = "git"
+    DOCKER = "docker"
+    NODE = "node"
+    CLAUDE_CODE = "claude_code"
+    OPENCODE = "opencode"
+    GEMINI_CLI = "gemini_cli"
+    CODEX_CLI = "codex_cli"
+    OLLAMA = "ollama"
+    LM_STUDIO = "lm_studio"
+    LLAMA_CPP = "llama.cpp"
+    OPENAI_LOCAL = "openai_local"
+    MCP_SERVER = "mcp_server"
+    SQLITE = "sqlite"
+    POSTGRESQL = "postgresql"
+    REDIS = "redis"
+    UNKNOWN = "unknown"
+
+
+class OfflineState(StrEnum):
+    ONLINE = "online"
+    OFFLINE = "offline"
+    RECONNECTING = "reconnecting"
+    SYNCHRONIZING = "synchronizing"
+
+
+class BackupState(StrEnum):
+    CREATING = "creating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RESTORING = "restoring"
+    RESTORED = "restored"
+    RESTORE_FAILED = "restore_failed"
+
+
+class BackupScope(StrEnum):
+    FULL = "full"
+    CONFIG = "config"
+    WORKSPACES = "workspaces"
+    DATABASE = "database"
+    MEMORY = "memory"
+    CUSTOM = "custom"
+
+
+class FirstRunStep(StrEnum):
+    WELCOME = "welcome"
+    WORKSPACE = "workspace"
+    CONFIG = "config"
+    RUNTIME_DISCOVERY = "runtime_discovery"
+    PROVIDER = "provider"
+    PLUGIN = "plugin"
+    DATABASE = "database"
+    HEALTH = "health"
+    COMPLETE = "complete"
+
+
+# ── Runtime Discovery Models ──
+
+
+@dataclass
+class RuntimeInfo:
+    runtime_type: RuntimeType = RuntimeType.UNKNOWN
+    name: str = ""
+    version: str = ""
+    path: str = ""
+    executable: str = ""
+    capabilities: list[str] = field(default_factory=list)
+    detected_at: datetime = field(default_factory=_utcnow)
+    verified: bool = False
+    source: str = "auto"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "runtime_type": self.runtime_type.value,
+            "name": self.name,
+            "version": self.version,
+            "path": self.path,
+            "executable": self.executable,
+            "capabilities": self.capabilities,
+            "detected_at": self.detected_at.isoformat(),
+            "verified": self.verified,
+            "source": self.source,
+            "metadata": self.metadata,
+        }
+
+
+# ── Update Models ──
+
+
+@dataclass
+class ReleaseInfo:
+    version: str = ""
+    tag: str = ""
+    url: str = ""
+    published_at: datetime | None = None
+    release_notes: str = ""
+    assets: list[dict[str, Any]] = field(default_factory=list)
+    prerelease: bool = False
+    channel: UpdateChannel = UpdateChannel.STABLE
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "tag": self.tag,
+            "url": self.url,
+            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "release_notes": self.release_notes,
+            "assets": self.assets,
+            "prerelease": self.prerelease,
+            "channel": self.channel.value,
+        }
+
+
+@dataclass
+class UpdateManifest:
+    version: str = ""
+    download_url: str = ""
+    checksum_sha256: str = ""
+    signature: str = ""
+    size_bytes: int = 0
+    release_date: str = ""
+    min_version: str = ""
+    changelog: list[str] = field(default_factory=list)
+    mandatory: bool = False
+    channel: UpdateChannel = UpdateChannel.STABLE
+    installer_type: InstallerType = InstallerType.EXE
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "download_url": self.download_url,
+            "checksum_sha256": self.checksum_sha256,
+            "signature": self.signature,
+            "size_bytes": self.size_bytes,
+            "release_date": self.release_date,
+            "min_version": self.min_version,
+            "changelog": self.changelog,
+            "mandatory": self.mandatory,
+            "channel": self.channel.value,
+            "installer_type": self.installer_type.value,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class DeltaUpdate:
+    from_version: str = ""
+    to_version: str = ""
+    patch_url: str = ""
+    checksum_sha256: str = ""
+    signature: str = ""
+    size_bytes: int = 0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "from_version": self.from_version,
+            "to_version": self.to_version,
+            "patch_url": self.patch_url,
+            "checksum_sha256": self.checksum_sha256,
+            "signature": self.signature,
+            "size_bytes": self.size_bytes,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class UpdateResult:
+    success: bool = False
+    previous_version: str = ""
+    new_version: str = ""
+    installed_at: datetime = field(default_factory=_utcnow)
+    duration_seconds: float = 0.0
+    error: str | None = None
+    rolled_back: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "previous_version": self.previous_version,
+            "new_version": self.new_version,
+            "installed_at": self.installed_at.isoformat(),
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+            "rolled_back": self.rolled_back,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class UpdateHistoryRecord:
+    id: str = field(default_factory=lambda: uuid4().hex)
+    from_version: str = ""
+    to_version: str = ""
+    channel: UpdateChannel = UpdateChannel.STABLE
+    status: UpdateStatus = UpdateStatus.COMPLETED
+    installed_at: datetime = field(default_factory=_utcnow)
+    duration_seconds: float = 0.0
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "from_version": self.from_version,
+            "to_version": self.to_version,
+            "channel": self.channel.value,
+            "status": self.status.value,
+            "installed_at": self.installed_at.isoformat(),
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+            "metadata": self.metadata,
+        }
+
+
+# ── Installer Models ──
+
+
+@dataclass
+class InstallerConfig:
+    installer_type: InstallerType = InstallerType.EXE
+    output_dir: str = ""
+    app_name: str = "AgenticOS"
+    app_version: str = "0.9.5"
+    publisher: str = "AgenticOS"
+    description: str = "Agentic Operating System"
+    icon_path: str = ""
+    start_menu_folder: str = "AgenticOS"
+    desktop_shortcut: bool = True
+    start_menu_shortcut: bool = True
+    auto_start: bool = False
+    file_associations: list[dict[str, Any]] = field(default_factory=list)
+    include_portable_runtime: bool = False
+    sign: bool = True
+    certificate_path: str = ""
+    timestamp_server: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "installer_type": self.installer_type.value,
+            "output_dir": self.output_dir,
+            "app_name": self.app_name,
+            "app_version": self.app_version,
+            "publisher": self.publisher,
+            "description": self.description,
+            "icon_path": self.icon_path,
+            "start_menu_folder": self.start_menu_folder,
+            "desktop_shortcut": self.desktop_shortcut,
+            "start_menu_shortcut": self.start_menu_shortcut,
+            "auto_start": self.auto_start,
+            "file_associations": self.file_associations,
+            "include_portable_runtime": self.include_portable_runtime,
+            "sign": self.sign,
+            "certificate_path": self.certificate_path,
+            "timestamp_server": self.timestamp_server,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class InstallerResult:
+    success: bool = False
+    installer_path: str = ""
+    installer_type: InstallerType = InstallerType.EXE
+    size_bytes: int = 0
+    checksum_sha256: str = ""
+    duration_seconds: float = 0.0
+    error: str | None = None
+    output: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "installer_path": self.installer_path,
+            "installer_type": self.installer_type.value,
+            "size_bytes": self.size_bytes,
+            "checksum_sha256": self.checksum_sha256,
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+            "output": self.output,
+            "metadata": self.metadata,
+        }
+
+
+# ── Platform Integration Models ──
+
+
+@dataclass
+class ShortcutInfo:
+    name: str = "AgenticOS"
+    target_path: str = ""
+    arguments: str = ""
+    icon_path: str = ""
+    working_dir: str = ""
+    description: str = ""
+    locations: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "target_path": self.target_path,
+            "arguments": self.arguments,
+            "icon_path": self.icon_path,
+            "working_dir": self.working_dir,
+            "description": self.description,
+            "locations": self.locations,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class FileAssociation:
+    extension: str = ""
+    prog_id: str = "AgenticOS"
+    description: str = ""
+    icon_path: str = ""
+    command: str = ""
+    content_type: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "extension": self.extension,
+            "prog_id": self.prog_id,
+            "description": self.description,
+            "icon_path": self.icon_path,
+            "command": self.command,
+            "content_type": self.content_type,
+            "metadata": self.metadata,
+        }
+
+
+# ── Offline Models ──
+
+
+@dataclass
+class OfflineConfig:
+    enabled: bool = True
+    cache_dir: str = ""
+    max_cache_size_mb: int = 1024
+    sync_interval_seconds: int = 300
+    auth_token_cache: bool = True
+    queue_offline_events: bool = True
+    auto_sync_on_connect: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "cache_dir": self.cache_dir,
+            "max_cache_size_mb": self.max_cache_size_mb,
+            "sync_interval_seconds": self.sync_interval_seconds,
+            "auth_token_cache": self.auth_token_cache,
+            "queue_offline_events": self.queue_offline_events,
+            "auto_sync_on_connect": self.auto_sync_on_connect,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class OfflineEvent:
+    id: str = field(default_factory=lambda: uuid4().hex)
+    event_type: str = ""
+    payload: dict[str, Any] = field(default_factory=dict)
+    queued_at: datetime = field(default_factory=_utcnow)
+    synced: bool = False
+    synced_at: datetime | None = None
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "event_type": self.event_type,
+            "payload": self.payload,
+            "queued_at": self.queued_at.isoformat(),
+            "synced": self.synced,
+            "synced_at": self.synced_at.isoformat() if self.synced_at else None,
+            "error": self.error,
+        }
+
+
+# ── Backup / Restore Models ──
+
+
+@dataclass
+class BackupConfig:
+    scope: BackupScope = BackupScope.FULL
+    output_path: str = ""
+    compress: bool = True
+    encrypt: bool = False
+    encryption_key: str = ""
+    include_logs: bool = True
+    include_cache: bool = False
+    max_backups: int = 10
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scope": self.scope.value,
+            "output_path": self.output_path,
+            "compress": self.compress,
+            "encrypt": self.encrypt,
+            "include_logs": self.include_logs,
+            "include_cache": self.include_cache,
+            "max_backups": self.max_backups,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class BackupResult:
+    success: bool = False
+    backup_path: str = ""
+    size_bytes: int = 0
+    scope: BackupScope = BackupScope.FULL
+    started_at: datetime = field(default_factory=_utcnow)
+    completed_at: datetime | None = None
+    duration_seconds: float = 0.0
+    file_count: int = 0
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "backup_path": self.backup_path,
+            "size_bytes": self.size_bytes,
+            "scope": self.scope.value,
+            "started_at": self.started_at.isoformat(),
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "duration_seconds": self.duration_seconds,
+            "file_count": self.file_count,
+            "error": self.error,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class RestoreConfig:
+    backup_path: str = ""
+    scope: BackupScope = BackupScope.FULL
+    overwrite: bool = False
+    verify_before: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "backup_path": self.backup_path,
+            "scope": self.scope.value,
+            "overwrite": self.overwrite,
+            "verify_before": self.verify_before,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class FirstRunState:
+    completed: bool = False
+    current_step: FirstRunStep = FirstRunStep.WELCOME
+    workspace_created: bool = False
+    config_saved: bool = False
+    runtimes_discovered: bool = False
+    provider_configured: bool = False
+    plugins_initialized: bool = False
+    database_initialized: bool = False
+    health_verified: bool = False
+    completed_at: datetime | None = None
+    skipped_steps: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "completed": self.completed,
+            "current_step": self.current_step.value,
+            "workspace_created": self.workspace_created,
+            "config_saved": self.config_saved,
+            "runtimes_discovered": self.runtimes_discovered,
+            "provider_configured": self.provider_configured,
+            "plugins_initialized": self.plugins_initialized,
+            "database_initialized": self.database_initialized,
+            "health_verified": self.health_verified,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "skipped_steps": self.skipped_steps,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class RuntimeDiscoveryResult:
+    total_discovered: int = 0
+    runtimes: list[RuntimeInfo] = field(default_factory=list)
+    duration_seconds: float = 0.0
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_discovered": self.total_discovered,
+            "runtimes": [r.to_dict() for r in self.runtimes],
+            "duration_seconds": self.duration_seconds,
+            "errors": self.errors,
+            "metadata": self.metadata,
+        }
 
 
 @dataclass
@@ -986,4 +1541,30 @@ __all__ = [
     "SearchResult",
     "DesktopRuntimeState",
     "DesktopEvent",
+    "DesktopEventType",
+    "UpdateChannel",
+    "UpdateStatus",
+    "InstallerType",
+    "RuntimeType",
+    "OfflineState",
+    "BackupState",
+    "BackupScope",
+    "FirstRunStep",
+    "RuntimeInfo",
+    "ReleaseInfo",
+    "UpdateManifest",
+    "DeltaUpdate",
+    "UpdateResult",
+    "UpdateHistoryRecord",
+    "InstallerConfig",
+    "InstallerResult",
+    "ShortcutInfo",
+    "FileAssociation",
+    "OfflineConfig",
+    "OfflineEvent",
+    "BackupConfig",
+    "BackupResult",
+    "RestoreConfig",
+    "FirstRunState",
+    "RuntimeDiscoveryResult",
 ]

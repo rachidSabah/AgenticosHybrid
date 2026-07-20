@@ -89,3 +89,58 @@ class DesktopEventPublisher:
 
     async def publish_config_changed(self, changes: dict[str, Any]) -> None:
         await self._publish(DesktopEventType.CONFIG_CHANGED, changes)
+
+    # ── Phase 4 M6 Part 2 events ──
+
+    async def publish_installed(self, version: str) -> None:
+        await self._publish(DesktopEventType.INSTALLED, {"version": version})
+
+    async def publish_updated(self, from_version: str, to_version: str) -> None:
+        await self._publish(
+            DesktopEventType.UPDATED, {"from_version": from_version, "to_version": to_version}
+        )
+
+    async def publish_update_available(self, version: str, channel: str) -> None:
+        await self._publish(
+            DesktopEventType.UPDATE_AVAILABLE, {"version": version, "channel": channel}
+        )
+
+    async def publish_update_started(self, version: str) -> None:
+        await self._publish(DesktopEventType.UPDATE_STARTED, {"version": version})
+
+    async def publish_update_completed(self, version: str) -> None:
+        await self._publish(DesktopEventType.UPDATE_COMPLETED, {"version": version})
+
+    async def publish_update_failed(self, version: str, error: str) -> None:
+        await self._publish(DesktopEventType.UPDATE_FAILED, {"version": version, "error": error})
+
+    async def publish_rollback_started(self, version: str) -> None:
+        await self._publish(DesktopEventType.ROLLBACK_STARTED, {"version": version})
+
+    async def publish_rollback_completed(self, version: str) -> None:
+        await self._publish(DesktopEventType.ROLLBACK_COMPLETED, {"version": version})
+
+    async def publish_runtime_discovered(self, runtime_type: str, version: str) -> None:
+        await self._publish(
+            DesktopEventType.RUNTIME_DISCOVERED, {"runtime_type": runtime_type, "version": version}
+        )
+
+    async def publish_runtime_removed(self, runtime_type: str) -> None:
+        await self._publish(DesktopEventType.RUNTIME_REMOVED, {"runtime_type": runtime_type})
+
+    async def publish_offline_enabled(self) -> None:
+        await self._publish(DesktopEventType.OFFLINE_ENABLED, {})
+
+    async def publish_offline_disabled(self) -> None:
+        await self._publish(DesktopEventType.OFFLINE_DISABLED, {})
+
+    async def publish_backup_created(self, backup_path: str, scope: str) -> None:
+        await self._publish(
+            DesktopEventType.BACKUP_CREATED, {"backup_path": backup_path, "scope": scope}
+        )
+
+    async def publish_restore_completed(self, backup_path: str) -> None:
+        await self._publish(DesktopEventType.RESTORE_COMPLETED, {"backup_path": backup_path})
+
+    async def publish_first_run_completed(self) -> None:
+        await self._publish(DesktopEventType.FIRST_RUN_COMPLETED, {})
