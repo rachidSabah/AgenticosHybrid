@@ -51,6 +51,7 @@ redis_data/
 .env
 .env.*
 !.env.example
+secrets/
 
 # ── Logs / cache / tmp ──
 logs/
