@@ -54,6 +54,17 @@ _log = get_logger(__name__)
 
 __all__ = ["RuntimeDiscoveryManager"]
 
+# Mapping from EngineDiscovery source values to DiscoveryProviderType
+_SOURCE_TO_PROVIDER_TYPE: dict[str, DiscoveryProviderType] = {
+    "path": DiscoveryProviderType.PATH,
+    "wsl": DiscoveryProviderType.WSL,
+    "docker": DiscoveryProviderType.DOCKER,
+    "registry": DiscoveryProviderType.REGISTRY,
+    "config": DiscoveryProviderType.CONFIG_FILE,
+    "env": DiscoveryProviderType.ENV_VAR,
+    "install_dir": DiscoveryProviderType.KNOWN_INSTALL_DIRS,
+}
+
 # Map discovered binary names to RuntimeType
 _BINARY_TO_RUNTIME: dict[str, RuntimeType] = {
     "claude": RuntimeType.CLAUDE_CODE,
@@ -182,6 +193,9 @@ class RuntimeDiscoveryManager:
 
         for result in results:
             runtime_type = _BINARY_TO_RUNTIME.get(result.name, RuntimeType.CUSTOM)
+            provider_type = _SOURCE_TO_PROVIDER_TYPE.get(
+                result.source, DiscoveryProviderType.CUSTOM
+            ) if result.source else DiscoveryProviderType.PATH
             runtime_result = RuntimeDiscoveryResult(
                 runtime_type=runtime_type,
                 name=result.name,
@@ -189,9 +203,7 @@ class RuntimeDiscoveryManager:
                 version=result.version,
                 binary_path=result.binary_path,
                 executable=result.binary_path,
-                source=DiscoveryProviderType(result.source)
-                if result.source
-                else DiscoveryProviderType.PATH,
+                source=provider_type,
                 confidence=0.8 if result.found else 0.0,
                 found=result.found,
                 error=result.error,

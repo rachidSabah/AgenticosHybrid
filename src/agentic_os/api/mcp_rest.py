@@ -137,9 +137,13 @@ def create_mcp_router(
     @mcp_router.post("/servers/{server_id}/tools/invoke")
     async def invoke_tool(server_id: str, data: dict):
         """Invoke a tool on an MCP server."""
+        tool_name = data.get("tool")
+        if not tool_name or not isinstance(tool_name, str):
+            raise HTTPException(status_code=400, detail="Missing or invalid 'tool' field")
+
         tool_invoke = MCPToolInvoke(
             server_id=server_id,
-            tool=data["tool"],
+            tool=tool_name,
             args=data.get("args", {}),
             timeout_seconds=data.get("timeout_seconds"),
         )
