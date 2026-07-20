@@ -651,7 +651,7 @@ A: Yes. Runtime Discovery automatically detects Ollama installations and registe
 A: MCP is an open protocol that standardizes how applications provide context and tools to LLMs. AgenticOS includes a full MCP runtime with support for stdio, SSE, and Streamable HTTP transports.
 
 **Q: Is AgenticOS free?**
-A: Yes, AgenticOS is open source under the MIT License. It is free to use, modify, and distribute.
+A: Yes, AgenticOS is open source under the Apache 2.0 License. It is free to use, modify, and distribute.
 
 **Q: Can I run AgenticOS on a server without a display?**
 A: Yes. AgenticOS runs as a headless server via `python -m agentic_os serve` or Docker, exposing the REST API and WebSocket endpoint on port 8000.
@@ -703,6 +703,6 @@ All contributors must adhere to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-AgenticOS is released under the [MIT License](LICENSE).
+AgenticOS is released under the [Apache 2.0 License](LICENSE).
 
 Copyright (c) 2026 AgenticOS contributors. See [LICENSE](LICENSE) for the full license text.
