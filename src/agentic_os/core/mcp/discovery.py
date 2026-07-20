@@ -373,11 +373,21 @@ class MCPServerDiscovery:
 
     async def _find_executable_in_directory(self, path: str) -> str | None:
         """Find executable in a server directory."""
+        is_win = os.name == "nt"
+        extensions = (
+            [".exe", ".bat", ".cmd", ".ps1", ".js", ".py"] if is_win else ["", ".sh", ".js", ".py"]
+        )
         for name in ["server", "run", "start", "main"]:
-            for ext in ["", ".sh", ".js", ".py"]:
+            for ext in extensions:
                 executable = os.path.join(path, f"{name}{ext}")
-                if os.path.exists(executable) and os.access(executable, os.X_OK):
-                    return executable
+                if os.path.exists(executable):
+                    if is_win:
+                        if ext in (".exe", ".bat", ".cmd", ".ps1") or os.access(
+                            executable, os.X_OK
+                        ):
+                            return executable
+                    elif os.access(executable, os.X_OK):
+                        return executable
         return None
 
     async def _parse_config(self, config_path: str, server: DiscoveredServer) -> None:

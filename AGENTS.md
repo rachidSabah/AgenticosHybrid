@@ -24,3 +24,15 @@
 - Remote branch protection on `main` is REMOVED (direct pushes allowed via token)
 - All commands use `uv` (not pip/npm for Python)
 - `pythonpath = ["src"]` in pyproject.toml (repo root NOT in sys.path by default)
+
+## Windows Development
+- **Rust/MSVC**: Tauri requires MSVC build tools. Run vcvars64.bat from VS Build Tools before cargo:
+  ```
+  & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+  ```
+- **Start backend**: `uv run python -m agentic_os serve` (port 8000)
+- **Start frontend**: `npm --prefix apps/mission-control run dev` (port 3000)
+- **CORS**: Backend allows origins `localhost:3000`, `127.0.0.1:3000`, `tauri://localhost`
+- **Static export**: `npm --prefix apps/mission-control run build` produces `out/` directory
+- **Python version**: System Python may be 3.12; `uv run` uses project-managed 3.14
+- **`__main__.py`**: Exists at `src/agentic_os/__main__.py` — enables `python -m agentic_os serve`

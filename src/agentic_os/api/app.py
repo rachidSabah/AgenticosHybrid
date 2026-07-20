@@ -13,6 +13,7 @@ import dataclasses
 import time
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
@@ -171,6 +172,19 @@ def _parse_retry_policy(data: dict) -> RetryPolicy:
 
 def create_app(platform: Platform) -> FastAPI:
     app = FastAPI(title="Agentic OS", version="0.2.0")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "tauri://localhost",
+            "https://tauri.localhost",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     orch = platform.orchestrator
     swarm = platform.orchestration

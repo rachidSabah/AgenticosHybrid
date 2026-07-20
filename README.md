@@ -4,15 +4,15 @@ A **local-first, event-bus-driven AI Agent Operating System**. Runs on Windows v
 WSL2, fully containerized, modular, and plugin-based. Every component communicates
 through an abstract **Event Bus** and is replaceable behind a port interface.
 
-> Status: **Phase 4 — MCP Runtime Foundation (v0.7.0, M3 complete)**. Phases
+> Status: **Phase 4 — Desktop Runtime (v0.10.0, M6 in progress)**. Phases
 > 1–3 delivered a headless hexagonal backend with EventBus, Provider Management,
 > Capability Engine, Memory System, Security Framework, and Phase 3's Mission
 > Control interface with Workflow/Pipeline engines, Observability Framework, MCP
-> Framework, and Plugin SDK. **Phase 4, Milestone 1** shipped the Universal Execution
-> Engine Framework. **Phase 4, Milestone 3** ships the MCP Runtime Foundation:
-> production-ready registry, client, manager, security, and SDK layers completing the
-> MCP Framework with 15 SDK modules, 5 adapters, 3 transport clients, and 22 modules
-> with zero circular dependencies.
+> Framework, and Plugin SDK. **Phase 4, M1–M5** shipped the Universal Execution
+> Engine, Runtime Discovery, MCP Runtime, Swarm Orchestration, and Learning Engine.
+> **Windows Development Validation** is complete — the full system runs natively on
+> Windows 11 with Python 3.14, Node.js 24, and Rust 1.97. CORS middleware is
+> enabled for cross-origin frontend-backend communication.
 
 ## Project Vision
 
@@ -65,7 +65,7 @@ production-ready, fully tested vertical slice before expanding scope.
 
 Python 3.13+ · FastAPI · asyncio / AnyIO · Pydantic v2 · pydantic-settings ·
 structlog · Prometheus client · httpx · `cryptography` (Fernet) · uv ·
-Docker / WSL2.
+Rust / Tauri v2 (desktop) · Docker / WSL2 (optional).
 
 **Mission Control frontend:** Next.js 15 (App Router) · React 19 · TypeScript ·
 TailwindCSS · Framer Motion · React Flow · Zustand · Monaco Editor · Vitest.
@@ -267,28 +267,98 @@ docs/adr/      # Architecture Decision Records (0001–0009)
 docs/c4/       # C4 diagrams (mermaid)
 ```
 
+## Development Setup (Windows)
+
+### Prerequisites
+
+1. **Python 3.13+** — Install from [python.org](https://www.python.org/downloads/) or use `uv` (which manages its own Python):
+   ```powershell
+   uv python install 3.14
+   ```
+
+2. **Node.js 18+** — Install from [nodejs.org](https://nodejs.org/) (LTS recommended).
+
+3. **Rust** (for Tauri desktop builds) — Install from [rustup.rs](https://rustup.rs/):
+   ```powershell
+   rustup-init.exe -y --default-toolchain stable
+   ```
+
+4. **Visual Studio Build Tools** (C++ workload, required by Rust) — Download from
+   [visualstudio.microsoft.com/downloads](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022).
+   Run the installer and select the "Desktop development with C++" workload, or install
+   only the MSVC tools:
+   ```powershell
+   vs_BuildTools.exe --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait
+   ```
+
+5. **Git** — Install from [git-scm.com](https://git-scm.com/).
+
+### Verifying the toolchain
+
+```powershell
+python --version          # 3.13+ (or use `uv run python --version`)
+node --version            # 18+
+npm --version
+rustc --version; cargo --version
+git --version
+```
+
+> **Note:** Rust's `cargo` and `rustc` need MSVC tools (`link.exe`) on PATH. Run
+> the **"Developer PowerShell for VS 2022"** shortcut, or initialise the environment
+> manually:
+> ```powershell
+> & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+> ```
+
+### Backend (Python)
+
+```powershell
+uv sync                          # Install Python dependencies + create .venv
+uv run python -m agentic_os serve   # Start API on http://localhost:8000
+```
+
+Verify the API is running:
+```powershell
+curl.exe http://localhost:8000/healthz
+# → {"status":"ok","bus":"local"}
+```
+
+### Frontend (Mission Control)
+
+```powershell
+cd apps\mission-control
+npm install                      # Install Node dependencies
+npm run dev                      # Start dev server on http://localhost:3000
+```
+
+Both servers must run simultaneously. The frontend proxies `/api/*` and `/ws/*`
+requests to the backend at port 8000.
+
+### Running tests
+
+```powershell
+uv run pytest -v                           # Python backend tests
+cd apps\mission-control; npm run test      # Frontend tests
+```
+
+### Local CI
+
+```powershell
+.\scripts\ci.ps1       # Windows (PowerShell) — runs ruff, ty, pytest
+```
+
 ## Testing
-
-```bash
-uv run pytest -v
-```
-
-Local CI (runs ruff in repair mode, then `ty` + pytest):
-
-```bash
-./scripts/ci.sh        # macOS / Linux
-.\scripts\ci.ps1       # Windows (PowerShell)
-```
 
 ## Roadmap
 
 - ✅ Phase 1 — Foundation + Vertical Slice (v0.1.0)
 - ✅ Phase 2 — Core 4 Subsystems (v0.2.0)
 - ✅ Phase 3 — MCP Framework, Mission Control dashboard, Workflow Engine
-- ✅ Phase 4, M1 — Universal Execution Engine Framework (v0.5.0)
-- ✅ Phase 4, M3 — MCP Runtime Foundation (v0.7.0)
-- 🔮 Phase 4+ — Plugin Marketplace, Provider/Capability/Plugin SDKs, Desktop
-  Client, multi-tenant isolation, production memory backends
+- ✅ Phase 4, M1–M5 — Execution Engine, Discovery, MCP Runtime, Swarm, Learning
+- 🔄 Phase 4, M6 — Desktop Runtime (Tauri v2, MSI installer, offline/local AI)
+- 🔮 Phase 4, M7 — Plugin Marketplace
+- 🔮 Phase 4, M8 — Production Validation
+- 🔮 Phase 5 — Cloud Control Plane
 
 See [`ROADMAP.md`](ROADMAP.md) for detail.
 
