@@ -70,7 +70,7 @@ class MCPTool:
         }
 
     @classmethod
-    def from_mcp(cls, tool: dict[str, Any]) -> MCPTool:
+    def from_mcp(cls, tool: dict[str, Any]) -> "MCPTool":
         """Create MCPTool from MCP protocol tool definition."""
         return cls(
             name=tool.get("name", ""),
@@ -116,7 +116,7 @@ class MCPResource:
         }
 
     @classmethod
-    def from_mcp(cls, resource: dict[str, Any]) -> MCPResource:
+    def from_mcp(cls, resource: dict[str, Any]) -> "MCPResource":
         """Create MCPResource from MCP protocol resource definition."""
         return cls(
             uri=resource.get("uri", ""),
@@ -162,7 +162,7 @@ class MCPPrompt:
         }
 
     @classmethod
-    def from_mcp(cls, prompt: dict[str, Any]) -> MCPPrompt:
+    def from_mcp(cls, prompt: dict[str, Any]) -> "MCPPrompt":
         """Create MCPPrompt from MCP protocol prompt definition."""
         return cls(
             name=prompt.get("name", ""),
@@ -266,7 +266,7 @@ class MCPServerConfig:
         description: str = "",
         tags: list[str] | None = None,
         created_by: str = "system",
-    ) -> MCPServerConfig:
+    ) -> "MCPServerConfig":
         """Create a stdio transport MCP server config."""
         return cls(
             id=str(uuid4()),
@@ -293,7 +293,7 @@ class MCPServerConfig:
         description: str = "",
         tags: list[str] | None = None,
         created_by: str = "system",
-    ) -> MCPServerConfig:
+    ) -> "MCPServerConfig":
         """Create an SSE transport MCP server config."""
         return cls(
             id=str(uuid4()),
@@ -319,7 +319,7 @@ class MCPServerConfig:
         description: str = "",
         tags: list[str] | None = None,
         created_by: str = "system",
-    ) -> MCPServerConfig:
+    ) -> "MCPServerConfig":
         """Create a Streamable HTTP transport MCP server config."""
         return cls(
             id=str(uuid4()),
@@ -334,7 +334,7 @@ class MCPServerConfig:
             created_by=created_by,
         )
 
-    def with_enabled(self, enabled: bool) -> MCPServerConfig:
+    def with_enabled(self, enabled: bool) -> "MCPServerConfig":
         return MCPServerConfig(
             id=self.id,
             name=self.name,
@@ -354,7 +354,7 @@ class MCPServerConfig:
             created_by=self.created_by,
         )
 
-    def with_sandbox(self, sandbox: bool, config: dict[str, Any] | None = None) -> MCPServerConfig:
+    def with_sandbox(self, sandbox: bool, config: dict[str, Any] | None = None) -> "MCPServerConfig":
         return MCPServerConfig(
             id=self.id,
             name=self.name,
@@ -412,7 +412,7 @@ class MCPServerDetail:
 
     def with_status(
         self, status: MCPServerStatus, error: str | None = None, process_id: int | None = None
-    ) -> MCPServerDetail:
+    ) -> "MCPServerDetail":
         now = _utcnow()
         return MCPServerDetail(
             config=self.config,
@@ -436,7 +436,7 @@ class MCPServerDetail:
             restart_count=self.restart_count + (1 if status == MCPServerStatus.FAILED else 0),
         )
 
-    def with_tools(self, tools: list[MCPTool]) -> MCPServerDetail:
+    def with_tools(self, tools: list[MCPTool]) -> "MCPServerDetail":
         return MCPServerDetail(
             config=self.config,
             status=self.status,
@@ -453,7 +453,7 @@ class MCPServerDetail:
 
     def with_health(
         self, health: MCPHealthStatus, details: dict[str, Any] | None = None
-    ) -> MCPServerDetail:
+    ) -> "MCPServerDetail":
         return MCPServerDetail(
             config=self.config,
             status=self.status,
@@ -494,14 +494,14 @@ class MCPRegistry:
                 return s
         return None
 
-    def with_server(self, server: MCPServerDetail) -> MCPRegistry:
+    def with_server(self, server: MCPServerDetail) -> "MCPRegistry":
         existing = [s for s in self.servers if s.config.id != server.config.id]
         return MCPRegistry(
             servers=tuple(existing) + (server,),
             updated_at=_utcnow(),
         )
 
-    def without_server(self, server_id: str) -> MCPRegistry:
+    def without_server(self, server_id: str) -> "MCPRegistry":
         return MCPRegistry(
             servers=tuple(s for s in self.servers if s.config.id != server_id),
             updated_at=_utcnow(),
@@ -541,7 +541,7 @@ class MCPSession:
             "metadata": self.metadata,
         }
 
-    def with_status(self, status: MCPSessionStatus) -> MCPSession:
+    def with_status(self, status: MCPSessionStatus) -> "MCPSession":
         return MCPSession(
             id=self.id,
             server_id=self.server_id,
@@ -554,7 +554,7 @@ class MCPSession:
             metadata=self.metadata,
         )
 
-    def with_capabilities(self, capabilities: dict[str, Any]) -> MCPSession:
+    def with_capabilities(self, capabilities: dict[str, Any]) -> "MCPSession":
         return MCPSession(
             id=self.id,
             server_id=self.server_id,

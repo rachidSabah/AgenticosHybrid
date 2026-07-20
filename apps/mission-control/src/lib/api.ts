@@ -188,4 +188,46 @@ export const api = {
     get<import("./types").MCPPermissionMapping[]>(`/api/mcp/servers/${encodeURIComponent(serverId)}/permissions`),
   mcpSetPermissions: (serverId: string, mappings: import("./types").MCPPermissionMapping[]) =>
     post<{ server_id: string; mappings_count: number }>(`/api/mcp/servers/${encodeURIComponent(serverId)}/permissions`, { mappings }),
+
+  // Extended MCP API (Phase 4, M3)
+  mcpServerResources: (serverId: string) =>
+    get<import("./types").MCPResource[]>(`/api/mcp/servers/${encodeURIComponent(serverId)}/resources`),
+  mcpServerPrompts: (serverId: string) =>
+    get<import("./types").MCPPrompt[]>(`/api/mcp/servers/${encodeURIComponent(serverId)}/prompts`),
+  mcpServerHealthCheck: (serverId: string) =>
+    post<{ server_id: string; status: string; latency_ms: number }>(`/api/mcp/health/${encodeURIComponent(serverId)}/check`),
+  mcpDegradedServers: () =>
+    get<{ servers: string[] }>("/api/mcp/health/degraded"),
+  mcpUnhealthyServers: () =>
+    get<{ servers: string[] }>("/api/mcp/health/unhealthy"),
+
+  mcpTelemetrySummary: () =>
+    get<import("./types").MCPTelemetrySummary>("/api/mcp/telemetry/summary"),
+  mcpLatencyDistribution: () =>
+    get<{ p50: number; p90: number; p95: number; p99: number; min: number; max: number }>("/api/mcp/telemetry/latency"),
+  mcpRecentErrors: (limit?: number) =>
+    get<{ errors: Array<{ timestamp: string; server_id: string; method: string; error: string }> }>(`/api/mcp/telemetry/errors${limit ? `?limit=${limit}` : ""}`),
+  mcpServerTelemetry: (serverId: string) =>
+    get<import("./types").MCPServerMetrics>(`/api/mcp/telemetry/servers/${encodeURIComponent(serverId)}`),
+
+  mcpRegistry: () =>
+    get<{ servers: import("./types").MCPServerDetail[]; updated_at: string }>("/api/mcp/registry"),
+  mcpRegistryStats: () =>
+    get<import("./types").MCPRegistryStats>("/api/mcp/registry/stats"),
+
+  mcpSessionsList: (serverId?: string, status?: string) => {
+    const params = new URLSearchParams();
+    if (serverId) params.set("server_id", serverId);
+    if (status) params.set("status", status);
+    const qs = params.toString();
+    return get<import("./types").MCPSession[]>(`/api/mcp/sessions${qs ? `?${qs}` : ""}`);
+  },
+  mcpSession: (sessionId: string) =>
+    get<import("./types").MCPSession>(`/api/mcp/sessions/${encodeURIComponent(sessionId)}`),
+  mcpCloseSession: (sessionId: string) =>
+    del<{ closed: string }>(`/api/mcp/sessions/${encodeURIComponent(sessionId)}`),
+  mcpSessionStats: () =>
+    get<import("./types").MCPSessionStats>("/api/mcp/sessions/stats"),
+  mcpCleanupSessions: () =>
+    post<{ expired: number; closed_cleaned: number }>("/api/mcp/sessions/cleanup"),
 };

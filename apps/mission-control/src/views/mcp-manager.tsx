@@ -12,7 +12,7 @@ import type {
   MCPToolResult,
 } from "@/lib/types";
 
-type McpTab = "servers" | "tools" | "permissions" | "health" | "sessions";
+type McpTab = "servers" | "tools" | "permissions" | "health" | "sessions" | "resources" | "prompts" | "telemetry";
 
 export function McpManager() {
   const [tab, setTab] = useState<McpTab>("servers");
@@ -20,7 +20,7 @@ export function McpManager() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2">
-        {(["servers", "tools", "permissions", "health", "sessions"] as const).map((t) => (
+        {(["servers", "tools", "permissions", "health", "sessions", "resources", "prompts", "telemetry"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -38,7 +38,13 @@ export function McpManager() {
                   ? "Permissions"
                   : t === "health"
                     ? "Health"
-                    : "Sessions"}
+                    : t === "sessions"
+                      ? "Sessions"
+                      : t === "resources"
+                        ? "Resources"
+                        : t === "prompts"
+                          ? "Prompts"
+                          : "Telemetry"}
           </button>
         ))}
       </div>
@@ -48,6 +54,9 @@ export function McpManager() {
         {tab === "permissions" && <McpPermissionsTab />}
         {tab === "health" && <McpHealthTab />}
         {tab === "sessions" && <McpSessionsTab />}
+        {tab === "resources" && <McpResourcesTab />}
+        {tab === "prompts" && <McpPromptsTab />}
+        {tab === "telemetry" && <McpTelemetryTab />}
       </div>
     </div>
   );
@@ -727,6 +736,224 @@ function McpSessionsTab() {
                   </div>
                   <div className="mt-0.5 font-mono text-[11px] text-faint">Session: {sessionId}</div>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// ── Sub-tab: Resources ──
+
+function McpResourcesTab() {
+  const [servers, setServers] = useState<MCPServerDetail[]>([]);
+  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [resources, setResources] = useState<Array<{ uri: string; name: string; description?: string }>>([]);
+
+  const loadServers = useCallback(() => {
+    api.mcpServers().then(setServers).catch(() => {});
+  }, []);
+
+  useEffect(() => { loadServers(); }, [loadServers]);
+
+  const loadResources = useCallback(() => {
+    if (!selectedServer) return;
+    api.mcpServerResources(selectedServer).then(setResources).catch(() => setResources([]));
+  }, [selectedServer]);
+
+  useEffect(() => { loadResources(); }, [loadResources]);
+
+  return (
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
+        <select
+          value={selectedServer}
+          onChange={(e) => setSelectedServer(e.target.value)}
+          className="flex-1 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs"
+        >
+          <option value="">Select a server…</option>
+          {servers.map((s) => (
+            <option key={s.config.id} value={s.config.id}>{s.config.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => loadResources()}
+          className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <Panel title="Resources" subtitle={`${resources.length} resources`} className="col-span-12">
+        {!selectedServer ? (
+          <Empty title="Select a server" hint="Choose an MCP server to view its resources." />
+        ) : resources.length === 0 ? (
+          <Empty title="No resources" hint="This server does not expose any resources." />
+        ) : (
+          <div className="space-y-2">
+            {resources.map((r) => (
+              <div key={r.uri} className="rounded-xl border border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Badge tone="accent">Resource</Badge>
+                  <span className="text-sm font-medium">{r.name}</span>
+                </div>
+                <div className="mt-1 font-mono text-[11px] text-faint">{r.uri}</div>
+                {r.description && <div className="mt-0.5 text-[11px] text-faint">{r.description}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// ── Sub-tab: Prompts ──
+
+function McpPromptsTab() {
+  const [servers, setServers] = useState<MCPServerDetail[]>([]);
+  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [prompts, setPrompts] = useState<Array<{ name: string; description: string; arguments?: unknown[] }>>([]);
+
+  const loadServers = useCallback(() => {
+    api.mcpServers().then(setServers).catch(() => {});
+  }, []);
+
+  useEffect(() => { loadServers(); }, [loadServers]);
+
+  const loadPrompts = useCallback(() => {
+    if (!selectedServer) return;
+    api.mcpServerPrompts(selectedServer).then(setPrompts).catch(() => setPrompts([]));
+  }, [selectedServer]);
+
+  useEffect(() => { loadPrompts(); }, [loadPrompts]);
+
+  return (
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
+        <select
+          value={selectedServer}
+          onChange={(e) => setSelectedServer(e.target.value)}
+          className="flex-1 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs"
+        >
+          <option value="">Select a server…</option>
+          {servers.map((s) => (
+            <option key={s.config.id} value={s.config.id}>{s.config.name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => loadPrompts()}
+          className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <Panel title="Prompts" subtitle={`${prompts.length} prompt templates`} className="col-span-12">
+        {!selectedServer ? (
+          <Empty title="Select a server" hint="Choose an MCP server to view its prompt templates." />
+        ) : prompts.length === 0 ? (
+          <Empty title="No prompts" hint="This server does not expose any prompt templates." />
+        ) : (
+          <div className="space-y-2">
+            {prompts.map((p) => (
+              <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Badge tone="info">Prompt</Badge>
+                  <span className="text-sm font-medium">{p.name}</span>
+                </div>
+                {p.description && <div className="mt-0.5 text-[11px] text-faint">{p.description}</div>}
+                {p.arguments && Array.isArray(p.arguments) && p.arguments.length > 0 && (
+                  <div className="mt-1 text-[11px] text-faint">
+                    Arguments: {p.arguments.map((a: unknown) => (a as { name?: string }).name).join(", ")}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// ── Sub-tab: Telemetry ──
+
+function McpTelemetryTab() {
+  const [summary, setSummary] = useState<{ total_requests: number; successful_requests: number; failed_requests: number; error_rate: number; avg_latency_ms: number; active_servers: number } | null>(null);
+  const [latency, setLatency] = useState<{ p50: number; p90: number; p95: number; p99: number; min: number; max: number } | null>(null);
+  const [errors, setErrors] = useState<Array<{ timestamp: string; server_id: string; method: string; error: string }>>([]);
+
+  const load = useCallback(async () => {
+    try {
+      const [sum, lat, errs] = await Promise.all([
+        api.mcpTelemetrySummary(),
+        api.mcpLatencyDistribution(),
+        api.mcpRecentErrors(20),
+      ]);
+      setSummary(sum);
+      setLatency(lat);
+      setErrors(errs.errors);
+    } catch (e) {
+      // Telemetry may not be available
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
+        <Stat label="Total Requests" value={summary?.total_requests ?? 0} />
+        <Stat label="Successful" value={summary?.successful_requests ?? 0} tone="ok" />
+        <Stat label="Failed" value={summary?.failed_requests ?? 0} tone={summary?.failed_requests ? "danger" : "default"} />
+        <Stat label="Error Rate" value={summary ? `${(summary.error_rate * 100).toFixed(1)}%` : "N/A"} tone={summary && summary.error_rate > 0.1 ? "warn" : "default"} />
+        <div className="ml-auto">
+          <button
+            onClick={() => load()}
+            className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <Panel title="Latency Distribution" subtitle="Request latency percentiles (ms)" className="col-span-6">
+        {latency ? (
+          <div className="space-y-2">
+            {[
+              { label: "p50", value: latency.p50 },
+              { label: "p90", value: latency.p90 },
+              { label: "p95", value: latency.p95 },
+              { label: "p99", value: latency.p99 },
+              { label: "Min", value: latency.min },
+              { label: "Max", value: latency.max },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-xs text-faint">{label}</span>
+                <span className="font-mono text-xs">{value.toFixed(2)}ms</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No latency data" hint="Latency data will appear as requests are made." />
+        )}
+      </Panel>
+
+      <Panel title="Recent Errors" subtitle="Last 20 errors" className="col-span-6">
+        {errors.length === 0 ? (
+          <Empty title="No errors" hint="No errors have been recorded." />
+        ) : (
+          <div className="space-y-1.5">
+            {errors.slice(0, 10).map((err, i) => (
+              <div key={i} className="rounded-lg border border-danger/20 bg-danger/5 px-2 py-1.5">
+                <div className="flex items-center gap-2 text-[11px]">
+                  <Badge tone="danger">Error</Badge>
+                  <span className="font-mono text-faint">{err.method}</span>
+                </div>
+                <div className="mt-0.5 truncate text-[10px] text-danger">{err.error}</div>
               </div>
             ))}
           </div>

@@ -306,6 +306,75 @@ export interface MCPSessionMap {
   total: number;
 }
 
+// Extended MCP types for Phase 4 Milestone 3
+
+export interface MCPSession {
+  id: string;
+  server_id: string;
+  transport: string;
+  status: "active" | "idle" | "expired" | "closed";
+  capabilities: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  expires_at: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface MCPTelemetrySummary {
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  error_rate: number;
+  avg_latency_ms: number;
+  active_servers: number;
+  latency_distribution: {
+    p50: number;
+    p90: number;
+    p95: number;
+    p99: number;
+    min: number;
+    max: number;
+  };
+}
+
+export interface MCPServerMetrics {
+  server_id: string;
+  server_name: string;
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  total_latency_ms: number;
+  avg_latency_ms: number;
+  tool_invocations: Record<string, number>;
+  resource_reads: number;
+  prompt_calls: number;
+}
+
+export interface MCPResourceSubscription {
+  id: string;
+  server_id: string;
+  resource_uri: string;
+  created_at: string;
+}
+
+export interface MCPRegistryStats {
+  total_servers: number;
+  running: number;
+  stopped: number;
+  failed: number;
+  enabled: number;
+}
+
+export interface MCPSessionStats {
+  total: number;
+  active: number;
+  idle: number;
+  expired: number;
+  closed: number;
+  expiring_soon: number;
+  tracked_servers: number;
+}
+
 export interface SystemMetrics {
   tasks: number;
   agents: number;

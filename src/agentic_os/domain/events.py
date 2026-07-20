@@ -252,6 +252,6 @@ class EventEnvelope(BaseModel):
     timestamp: datetime = Field(default_factory=_utcnow)
     payload: dict = Field(default_factory=dict)
 
-    def route_to(self, topic: Topic) -> EventEnvelope:
+    def route_to(self, topic: Topic) -> "EventEnvelope":
         """Return a copy of this envelope re-targeted at a new topic."""
         return self.model_copy(update={"topic": topic.value, "id": uuid4().hex})
