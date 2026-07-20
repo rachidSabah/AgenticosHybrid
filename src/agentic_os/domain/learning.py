@@ -1,14 +1,19 @@
-"""Domain models for the Learning & Optimization Engine (Phase 5, v0.9.0).
+"""
+Learning & Optimization Domain Models
 
-All models are frozen dataclasses following the same pattern as
-:mod:`agentic_os.domain.orchestration` — immutable, with ``to_dict()``
-and ``with_*()`` builder methods for state transitions.
+Domain layer for Phase 4 Milestone 5 — Learning & Optimization Engine.
+Pure Python, no external dependencies.
+
+Every learning, optimization, benchmark, experiment, recommendation, and evaluation
+model lives here. The engine learns from historical executions and optimizes
+routing, engine selection, swarm strategies, costs, and quality.
 """
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
+from uuid import uuid4
 
 
 def _utcnow() -> datetime:
@@ -18,563 +23,113 @@ def _utcnow() -> datetime:
 # ── Enums ──
 
 
-class ExecutionOutcome(StrEnum):
-    """Result of an execution attempt."""
-
-    SUCCESS = "success"
-    FAILURE = "failure"
-    TIMEOUT = "timeout"
-    CANCELLED = "cancelled"
-    PARTIAL = "partial"
+class LearningPhase(StrEnum):
+    DATA_COLLECTION = "data_collection"
+    TRAINING = "training"
+    EVALUATION = "evaluation"
+    DEPLOYMENT = "deployment"
+    MONITORING = "monitoring"
 
 
-class OptimizationGoal(StrEnum):
-    """Target dimension for optimization."""
-
-    LATENCY = "latency"
-    COST = "cost"
-    QUALITY = "quality"
-    RELIABILITY = "reliability"
-    EFFICIENCY = "efficiency"
-    BALANCED = "balanced"
-
-
-class RecommendationPriority(StrEnum):
-    """Urgency level of a recommendation."""
-
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-    INFO = "info"
+class OptimizationTarget(StrEnum):
+    ROUTING = "routing"
+    ENGINE_SELECTION = "engine_selection"
+    SWARM_COMPOSITION = "swarm_composition"
+    PLANNER_SELECTION = "planner_selection"
+    VALIDATOR_SELECTION = "validator_selection"
+    CONSENSUS_STRATEGY = "consensus_strategy"
+    RETRY_POLICY = "retry_policy"
+    PARALLELISM = "parallelism"
+    SCHEDULING = "scheduling"
+    CHECKPOINT_FREQUENCY = "checkpoint_frequency"
+    MEMORY_USAGE = "memory_usage"
+    PROMPT_SELECTION = "prompt_selection"
+    EXECUTION_COST = "execution_cost"
+    RESPONSE_QUALITY = "response_quality"
 
 
-class PredictionStatus(StrEnum):
-    """Confidence in a prediction."""
-
-    HIGH_CONFIDENCE = "high_confidence"
-    MEDIUM_CONFIDENCE = "medium_confidence"
-    LOW_CONFIDENCE = "low_confidence"
-    INSUFFICIENT_DATA = "insufficient_data"
-
-
-class TrendDirection(StrEnum):
-    """Direction of a performance trend."""
-
-    IMPROVING = "improving"
-    DEGRADING = "degrading"
-    STABLE = "stable"
-    VOLATILE = "volatile"
-    UNKNOWN = "unknown"
+class OptimizationStatus(StrEnum):
+    PENDING = "pending"
+    APPLIED = "applied"
+    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
+    REVERTED = "reverted"
 
 
-# ── Core Models ──
+class RecommendationStatus(StrEnum):
+    ACTIVE = "active"
+    APPLIED = "applied"
+    DISMISSED = "dismissed"
+    SUPERSEDED = "superseded"
 
 
-@dataclass(frozen=True)
-class ExecutionHistory:
-    """Record of a single execution with full metrics."""
-
-    id: str
-    target_id: str
-    target_type: str  # "engine", "workflow", "swarm", "task"
-    outcome: ExecutionOutcome
-    duration_ms: float = 0.0
-    cpu_percent: float = 0.0
-    memory_mb: float = 0.0
-    token_count: int = 0
-    cost: float = 0.0
-    error: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-    started_at: datetime = field(default_factory=_utcnow)
-    completed_at: datetime | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "target_id": self.target_id,
-            "target_type": self.target_type,
-            "outcome": self.outcome.value,
-            "duration_ms": self.duration_ms,
-            "cpu_percent": self.cpu_percent,
-            "memory_mb": self.memory_mb,
-            "token_count": self.token_count,
-            "cost": self.cost,
-            "error": self.error,
-            "metadata": self.metadata,
-            "started_at": self.started_at.isoformat(),
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-        }
+class BenchmarkStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
-@dataclass(frozen=True)
-class ExecutionProfile:
-    """Aggregated profile of execution patterns over a window."""
+class ExperimentStatus(StrEnum):
+    DRAFT = "draft"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
 
-    target_id: str
-    target_type: str
-    window_hours: int = 24
-    total_executions: int = 0
-    success_count: int = 0
-    failure_count: int = 0
-    avg_duration_ms: float = 0.0
-    avg_cpu_percent: float = 0.0
-    avg_memory_mb: float = 0.0
-    avg_token_count: float = 0.0
-    avg_cost: float = 0.0
-    p50_latency_ms: float = 0.0
-    p95_latency_ms: float = 0.0
-    p99_latency_ms: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    computed_at: datetime = field(default_factory=_utcnow)
 
-    @property
-    def success_rate(self) -> float:
-        if self.total_executions == 0:
-            return 0.0
-        return self.success_count / self.total_executions
+class ExperimentType(StrEnum):
+    A_B_TEST = "a_b_test"
+    CANARY = "canary"
+    CONTROLLED_ROLLOUT = "controlled_rollout"
+    PERFORMANCE = "performance"
+    ROUTING = "routing"
+    PROMPT = "prompt"
+    BENCHMARK = "benchmark"
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "target_id": self.target_id,
-            "target_type": self.target_type,
-            "window_hours": self.window_hours,
-            "total_executions": self.total_executions,
-            "success_count": self.success_count,
-            "failure_count": self.failure_count,
-            "success_rate": self.success_rate,
-            "avg_duration_ms": self.avg_duration_ms,
-            "avg_cpu_percent": self.avg_cpu_percent,
-            "avg_memory_mb": self.avg_memory_mb,
-            "avg_token_count": self.avg_token_count,
-            "avg_cost": self.avg_cost,
-            "p50_latency_ms": self.p50_latency_ms,
-            "p95_latency_ms": self.p95_latency_ms,
-            "p99_latency_ms": self.p99_latency_ms,
-            "metadata": self.metadata,
-            "computed_at": self.computed_at.isoformat(),
-        }
+
+class PolicyEffect(StrEnum):
+    ALLOW = "allow"
+    DENY = "deny"
+    REQUIRE_APPROVAL = "require_approval"
+    LOG_ONLY = "log_only"
+
+
+class LearningMetric(StrEnum):
+    EXECUTION_LATENCY = "execution_latency"
+    FAILURE_RATE = "failure_rate"
+    RESOURCE_USAGE = "resource_usage"
+    TASK_SUCCESS_RATE = "task_success_rate"
+    RETRY_COUNT = "retry_count"
+    CAPABILITY_UTILIZATION = "capability_utilization"
+    COST_PER_EXECUTION = "cost_per_execution"
+    RESPONSE_QUALITY = "response_quality"
+    USER_SATISFACTION = "user_satisfaction"
+
+
+class TelemetryGranularity(StrEnum):
+    PER_EXECUTION = "per_execution"
+    HOURLY = "hourly"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
+# ── Domain Models ──
 
 
 @dataclass(frozen=True)
-class BenchmarkRecord:
-    """Result of a single benchmark measurement."""
+class LearningProfile:
+    """Configuration profile for a learning session."""
 
-    id: str
-    target_id: str
-    target_type: str
-    benchmark_name: str
-    score: float = 0.0
-    latency_ms: float = 0.0
-    cost: float = 0.0
-    reliability: float = 0.0
-    memory_mb: float = 0.0
-    cpu_percent: float = 0.0
-    capability_coverage: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "target_id": self.target_id,
-            "target_type": self.target_type,
-            "benchmark_name": self.benchmark_name,
-            "score": self.score,
-            "latency_ms": self.latency_ms,
-            "cost": self.cost,
-            "reliability": self.reliability,
-            "memory_mb": self.memory_mb,
-            "cpu_percent": self.cpu_percent,
-            "capability_coverage": self.capability_coverage,
-            "metadata": self.metadata,
-            "created_at": self.created_at.isoformat(),
-        }
-
-    def with_score(self, **kwargs: Any) -> BenchmarkRecord:
-        return BenchmarkRecord(
-            id=self.id,
-            target_id=self.target_id,
-            target_type=self.target_type,
-            benchmark_name=self.benchmark_name,
-            score=kwargs.get("score", self.score),
-            latency_ms=kwargs.get("latency_ms", self.latency_ms),
-            cost=kwargs.get("cost", self.cost),
-            reliability=kwargs.get("reliability", self.reliability),
-            memory_mb=kwargs.get("memory_mb", self.memory_mb),
-            cpu_percent=kwargs.get("cpu_percent", self.cpu_percent),
-            capability_coverage=kwargs.get("capability_coverage", self.capability_coverage),
-            metadata=kwargs.get("metadata", self.metadata),
-            created_at=self.created_at,
-        )
-
-
-@dataclass(frozen=True)
-class OptimizationRecommendation:
-    """Recommendation for optimizing a specific target."""
-
-    id: str
-    target_id: str
-    target_type: str
-    recommendation_type: str  # "routing", "engine", "swarm", "workflow", "policy"
-    title: str
+    id: str = field(default_factory=lambda: uuid4().hex)
+    name: str = ""
     description: str = ""
-    expected_improvement: float = 0.0
-    priority: RecommendationPriority = RecommendationPriority.MEDIUM
-    confidence: float = 0.0
-    parameters: dict[str, Any] = field(default_factory=dict)
-    rationale: str = ""
-    created_at: datetime = field(default_factory=_utcnow)
-    applied_at: datetime | None = None
-    applied: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "target_id": self.target_id,
-            "target_type": self.target_type,
-            "recommendation_type": self.recommendation_type,
-            "title": self.title,
-            "description": self.description,
-            "expected_improvement": self.expected_improvement,
-            "priority": self.priority.value,
-            "confidence": self.confidence,
-            "parameters": self.parameters,
-            "rationale": self.rationale,
-            "created_at": self.created_at.isoformat(),
-            "applied_at": self.applied_at.isoformat() if self.applied_at else None,
-            "applied": self.applied,
-        }
-
-    def with_applied(self, applied: bool = True) -> OptimizationRecommendation:
-        return OptimizationRecommendation(
-            id=self.id,
-            target_id=self.target_id,
-            target_type=self.target_type,
-            recommendation_type=self.recommendation_type,
-            title=self.title,
-            description=self.description,
-            expected_improvement=self.expected_improvement,
-            priority=self.priority,
-            confidence=self.confidence,
-            parameters=self.parameters,
-            rationale=self.rationale,
-            created_at=self.created_at,
-            applied_at=_utcnow() if applied else self.applied_at,
-            applied=applied,
-        )
-
-
-@dataclass(frozen=True)
-class RoutingDecision:
-    """Record of a routing decision made by the optimizer."""
-
-    id: str
-    task_id: str
-    selected_engine_id: str
-    alternative_engine_ids: tuple[str, ...] = field(default_factory=tuple)
-    routing_reason: str = ""
-    expected_latency_ms: float = 0.0
-    expected_cost: float = 0.0
-    confidence: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "task_id": self.task_id,
-            "selected_engine_id": self.selected_engine_id,
-            "alternative_engine_ids": list(self.alternative_engine_ids),
-            "routing_reason": self.routing_reason,
-            "expected_latency_ms": self.expected_latency_ms,
-            "expected_cost": self.expected_cost,
-            "confidence": self.confidence,
-            "metadata": self.metadata,
-            "created_at": self.created_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class CapabilityScore:
-    """Score for an engine's capability in a specific area."""
-
-    engine_id: str
-    capability: str
-    score: float = 0.0
-    confidence: float = 0.0
-    sample_count: int = 0
-    last_evaluated: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "engine_id": self.engine_id,
-            "capability": self.capability,
-            "score": self.score,
-            "confidence": self.confidence,
-            "sample_count": self.sample_count,
-            "last_evaluated": self.last_evaluated.isoformat(),
-        }
-
-    def with_score(self, score: float, confidence: float, sample_count: int) -> CapabilityScore:
-        return CapabilityScore(
-            engine_id=self.engine_id,
-            capability=self.capability,
-            score=score,
-            confidence=confidence,
-            sample_count=sample_count,
-            last_evaluated=_utcnow(),
-        )
-
-
-@dataclass(frozen=True)
-class EnginePerformance:
-    """Aggregated performance metrics for a single execution engine."""
-
-    engine_id: str
-    engine_type: str = ""
-    total_executions: int = 0
-    success_count: int = 0
-    failure_count: int = 0
-    avg_latency_ms: float = 0.0
-    avg_cost: float = 0.0
-    avg_cpu_percent: float = 0.0
-    avg_memory_mb: float = 0.0
-    capability_scores: tuple[CapabilityScore, ...] = field(default_factory=tuple)
-    metadata: dict[str, Any] = field(default_factory=dict)
-    updated_at: datetime = field(default_factory=_utcnow)
-
-    @property
-    def success_rate(self) -> float:
-        if self.total_executions == 0:
-            return 0.0
-        return self.success_count / self.total_executions
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "engine_id": self.engine_id,
-            "engine_type": self.engine_type,
-            "total_executions": self.total_executions,
-            "success_count": self.success_count,
-            "failure_count": self.failure_count,
-            "success_rate": self.success_rate,
-            "avg_latency_ms": self.avg_latency_ms,
-            "avg_cost": self.avg_cost,
-            "avg_cpu_percent": self.avg_cpu_percent,
-            "avg_memory_mb": self.avg_memory_mb,
-            "capability_scores": [s.to_dict() for s in self.capability_scores],
-            "metadata": self.metadata,
-            "updated_at": self.updated_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class WorkflowPerformance:
-    """Performance metrics for a workflow type."""
-
-    workflow_type: str
-    total_executions: int = 0
-    success_count: int = 0
-    avg_duration_ms: float = 0.0
-    avg_cost: float = 0.0
-    avg_stage_count: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    updated_at: datetime = field(default_factory=_utcnow)
-
-    @property
-    def success_rate(self) -> float:
-        if self.total_executions == 0:
-            return 0.0
-        return self.success_count / self.total_executions
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "workflow_type": self.workflow_type,
-            "total_executions": self.total_executions,
-            "success_count": self.success_count,
-            "success_rate": self.success_rate,
-            "avg_duration_ms": self.avg_duration_ms,
-            "avg_cost": self.avg_cost,
-            "avg_stage_count": self.avg_stage_count,
-            "metadata": self.metadata,
-            "updated_at": self.updated_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class SwarmPerformance:
-    """Performance metrics for swarm orchestration."""
-
-    swarm_id: str
-    total_goals: int = 0
-    completed_goals: int = 0
-    failed_goals: int = 0
-    total_tasks: int = 0
-    completed_tasks: int = 0
-    failed_tasks: int = 0
-    avg_goal_duration_ms: float = 0.0
-    avg_task_duration_ms: float = 0.0
-    avg_agents_per_swarm: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    updated_at: datetime = field(default_factory=_utcnow)
-
-    @property
-    def goal_success_rate(self) -> float:
-        if self.total_goals == 0:
-            return 0.0
-        return self.completed_goals / self.total_goals
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "swarm_id": self.swarm_id,
-            "total_goals": self.total_goals,
-            "completed_goals": self.completed_goals,
-            "failed_goals": self.failed_goals,
-            "total_tasks": self.total_tasks,
-            "completed_tasks": self.completed_tasks,
-            "failed_tasks": self.failed_tasks,
-            "goal_success_rate": self.goal_success_rate,
-            "avg_goal_duration_ms": self.avg_goal_duration_ms,
-            "avg_task_duration_ms": self.avg_task_duration_ms,
-            "avg_agents_per_swarm": self.avg_agents_per_swarm,
-            "metadata": self.metadata,
-            "updated_at": self.updated_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class FailurePattern:
-    """Identified pattern in execution failures."""
-
-    id: str
-    pattern_type: str  # "timeout", "crash", "resource_exhaustion", "network", "unknown"
-    target_type: str  # "engine", "workflow", "swarm", "task"
-    signature: str  # Hash/description of the failure signature
-    frequency: int = 0
-    avg_recovery_time_ms: float = 0.0
-    severity: float = 0.0  # 0.0 (low) to 1.0 (critical)
-    common_errors: tuple[str, ...] = field(default_factory=tuple)
-    metadata: dict[str, Any] = field(default_factory=dict)
-    first_seen: datetime = field(default_factory=_utcnow)
-    last_seen: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "pattern_type": self.pattern_type,
-            "target_type": self.target_type,
-            "signature": self.signature,
-            "frequency": self.frequency,
-            "avg_recovery_time_ms": self.avg_recovery_time_ms,
-            "severity": self.severity,
-            "common_errors": list(self.common_errors),
-            "metadata": self.metadata,
-            "first_seen": self.first_seen.isoformat(),
-            "last_seen": self.last_seen.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class RecoveryPattern:
-    """Identified pattern in successful recoveries."""
-
-    id: str
-    failure_pattern_id: str
-    strategy: str  # "retry", "failover", "reassign", "checkpoint_restore", "reroute"
-    success_rate: float = 0.0
-    avg_recovery_time_ms: float = 0.0
-    application_count: int = 0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "failure_pattern_id": self.failure_pattern_id,
-            "strategy": self.strategy,
-            "success_rate": self.success_rate,
-            "avg_recovery_time_ms": self.avg_recovery_time_ms,
-            "application_count": self.application_count,
-            "metadata": self.metadata,
-            "created_at": self.created_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class LearningSnapshot:
-    """Point-in-time snapshot of the learning engine's state."""
-
-    id: str
-    total_experiences: int = 0
-    total_patterns: int = 0
-    total_recommendations: int = 0
-    total_benchmarks: int = 0
-    profile_count: int = 0
-    knowledge_patterns: int = 0
-    avg_learning_score: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "total_experiences": self.total_experiences,
-            "total_patterns": self.total_patterns,
-            "total_recommendations": self.total_recommendations,
-            "total_benchmarks": self.total_benchmarks,
-            "profile_count": self.profile_count,
-            "knowledge_patterns": self.knowledge_patterns,
-            "avg_learning_score": self.avg_learning_score,
-            "metadata": self.metadata,
-            "created_at": self.created_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class LearningStatistics:
-    """Aggregated statistics about the learning process."""
-
-    total_experiences: int = 0
-    total_patterns_detected: int = 0
-    total_recommendations_generated: int = 0
-    recommendations_applied: int = 0
-    avg_improvement_per_recommendation: float = 0.0
-    learning_accuracy: float = 0.0
-    knowledge_base_size: int = 0
-    metadata: dict[str, Any] = field(default_factory=dict)
-    computed_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "total_experiences": self.total_experiences,
-            "total_patterns_detected": self.total_patterns_detected,
-            "total_recommendations_generated": self.total_recommendations_generated,
-            "recommendations_applied": self.recommendations_applied,
-            "avg_improvement_per_recommendation": self.avg_improvement_per_recommendation,
-            "learning_accuracy": self.learning_accuracy,
-            "knowledge_base_size": self.knowledge_base_size,
-            "metadata": self.metadata,
-            "computed_at": self.computed_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class OptimizationPolicy:
-    """Policy configuration that guides optimization behavior."""
-
-    id: str
-    name: str
-    goal: OptimizationGoal = OptimizationGoal.BALANCED
+    targets: tuple[OptimizationTarget, ...] = field(default_factory=tuple)
+    metrics: tuple[LearningMetric, ...] = field(default_factory=tuple)
     enabled: bool = True
-    max_execution_cost: float = 0.0  # 0 = unlimited
-    max_execution_latency_ms: float = 0.0  # 0 = unlimited
-    min_reliability: float = 0.0
-    prefer_low_cost: bool = False
-    prefer_low_latency: bool = False
-    auto_apply_recommendations: bool = False
-    learning_rate: float = 0.1
-    exploration_rate: float = 0.1
-    metadata: dict[str, Any] = field(default_factory=dict)
+    telemetry_granularity: TelemetryGranularity = TelemetryGranularity.HOURLY
+    max_history_size: int = 10000
+    min_confidence: float = 0.6
     created_at: datetime = field(default_factory=_utcnow)
     updated_at: datetime = field(default_factory=_utcnow)
 
@@ -582,232 +137,570 @@ class OptimizationPolicy:
         return {
             "id": self.id,
             "name": self.name,
-            "goal": self.goal.value,
+            "description": self.description,
+            "targets": [t.value for t in self.targets],
+            "metrics": [m.value for m in self.metrics],
             "enabled": self.enabled,
-            "max_execution_cost": self.max_execution_cost,
-            "max_execution_latency_ms": self.max_execution_latency_ms,
-            "min_reliability": self.min_reliability,
-            "prefer_low_cost": self.prefer_low_cost,
-            "prefer_low_latency": self.prefer_low_latency,
-            "auto_apply_recommendations": self.auto_apply_recommendations,
-            "learning_rate": self.learning_rate,
-            "exploration_rate": self.exploration_rate,
-            "metadata": self.metadata,
+            "telemetry_granularity": self.telemetry_granularity.value,
+            "max_history_size": self.max_history_size,
+            "min_confidence": self.min_confidence,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }
 
-    def with_updated(self, **kwargs: Any) -> OptimizationPolicy:
-        return OptimizationPolicy(
-            id=self.id,
-            name=kwargs.get("name", self.name),
-            goal=kwargs.get("goal", self.goal),
-            enabled=kwargs.get("enabled", self.enabled),
-            max_execution_cost=kwargs.get("max_execution_cost", self.max_execution_cost),
-            max_execution_latency_ms=kwargs.get(
-                "max_execution_latency_ms", self.max_execution_latency_ms
-            ),
-            min_reliability=kwargs.get("min_reliability", self.min_reliability),
-            prefer_low_cost=kwargs.get("prefer_low_cost", self.prefer_low_cost),
-            prefer_low_latency=kwargs.get("prefer_low_latency", self.prefer_low_latency),
-            auto_apply_recommendations=kwargs.get(
-                "auto_apply_recommendations", self.auto_apply_recommendations
-            ),
-            learning_rate=kwargs.get("learning_rate", self.learning_rate),
-            exploration_rate=kwargs.get("exploration_rate", self.exploration_rate),
-            metadata=kwargs.get("metadata", self.metadata),
-            created_at=self.created_at,
-            updated_at=_utcnow(),
-        )
+
+@dataclass(frozen=True)
+class ExecutionHistory:
+    """Record of a single historical execution for analysis."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    execution_id: str = ""
+    engine_type: str = ""
+    engine_name: str = ""
+    task_type: str = ""
+    status: str = ""
+    duration_ms: float = 0.0
+    cost: float = 0.0
+    retry_count: int = 0
+    resource_usage: dict[str, float] = field(default_factory=dict)
+    error_type: str | None = None
+    swarm_id: str | None = None
+    plan_id: str | None = None
+    model_used: str | None = None
+    prompt_template: str | None = None
+    user_id: str | None = None
+    workspace_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    executed_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "execution_id": self.execution_id,
+            "engine_type": self.engine_type,
+            "engine_name": self.engine_name,
+            "task_type": self.task_type,
+            "status": self.status,
+            "duration_ms": self.duration_ms,
+            "cost": self.cost,
+            "retry_count": self.retry_count,
+            "resource_usage": dict(self.resource_usage),
+            "error_type": self.error_type,
+            "swarm_id": self.swarm_id,
+            "plan_id": self.plan_id,
+            "model_used": self.model_used,
+            "prompt_template": self.prompt_template,
+            "user_id": self.user_id,
+            "workspace_id": self.workspace_id,
+            "metadata": dict(self.metadata),
+            "executed_at": self.executed_at.isoformat(),
+        }
 
 
 @dataclass(frozen=True)
-class Prediction:
-    """A prediction about future execution characteristics."""
+class OptimizationPolicy:
+    """Policy that governs what optimizations are allowed."""
 
-    id: str
-    target_id: str
-    target_type: str
-    prediction_type: (
-        str  # "duration", "cost", "success_probability", "failure_probability", "resource_usage"
-    )
-    predicted_value: float = 0.0
-    confidence: float = 0.0
-    lower_bound: float = 0.0
-    upper_bound: float = 0.0
-    prediction_status: PredictionStatus = PredictionStatus.INSUFFICIENT_DATA
-    features: dict[str, Any] = field(default_factory=dict)
-    model_version: str = ""
+    id: str = field(default_factory=lambda: uuid4().hex)
+    name: str = ""
+    description: str = ""
+    target: OptimizationTarget | None = None
+    effect: PolicyEffect = PolicyEffect.ALLOW
+    conditions: dict[str, Any] = field(default_factory=dict)
+    priority: int = 0
+    enabled: bool = True
     created_at: datetime = field(default_factory=_utcnow)
-    valid_until: datetime | None = None
+    updated_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "target": self.target.value if self.target else None,
+            "effect": self.effect.value,
+            "conditions": dict(self.conditions),
+            "priority": self.priority,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class OptimizationRecommendation:
+    """A recommendation produced by the optimization engine."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    target: OptimizationTarget | None = None
+    current_value: str = ""
+    recommended_value: str = ""
+    confidence: float = 0.0
+    supporting_evidence: str = ""
+    historical_data: dict[str, Any] = field(default_factory=dict)
+    alternatives: tuple[str, ...] = field(default_factory=tuple)
+    estimated_improvement: float = 0.0
+    status: RecommendationStatus = RecommendationStatus.ACTIVE
+    source: str = ""
+    created_at: datetime = field(default_factory=_utcnow)
+    applied_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "target": self.target.value if self.target else None,
+            "current_value": self.current_value,
+            "recommended_value": self.recommended_value,
+            "confidence": self.confidence,
+            "supporting_evidence": self.supporting_evidence,
+            "historical_data": dict(self.historical_data),
+            "alternatives": list(self.alternatives),
+            "estimated_improvement": self.estimated_improvement,
+            "status": self.status.value,
+            "source": self.source,
+            "created_at": self.created_at.isoformat(),
+            "applied_at": self.applied_at.isoformat() if self.applied_at else None,
+        }
+
+
+@dataclass(frozen=True)
+class RoutingDecision:
+    """Record of a routing decision made by the optimizer."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    execution_id: str = ""
+    selected_engine: str = ""
+    alternative_engines: tuple[str, ...] = field(default_factory=tuple)
+    selection_reason: str = ""
+    confidence: float = 0.0
+    expected_latency_ms: float = 0.0
+    expected_cost: float = 0.0
+    actual_latency_ms: float | None = None
+    actual_cost: float | None = None
+    success: bool | None = None
+    created_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "execution_id": self.execution_id,
+            "selected_engine": self.selected_engine,
+            "alternative_engines": list(self.alternative_engines),
+            "selection_reason": self.selection_reason,
+            "confidence": self.confidence,
+            "expected_latency_ms": self.expected_latency_ms,
+            "expected_cost": self.expected_cost,
+            "actual_latency_ms": self.actual_latency_ms,
+            "actual_cost": self.actual_cost,
+            "success": self.success,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class Benchmark:
+    """A benchmark run comparing engines, strategies, or configurations."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    name: str = ""
+    description: str = ""
+    targets: tuple[str, ...] = field(default_factory=tuple)
+    metrics: tuple[LearningMetric, ...] = field(default_factory=tuple)
+    iterations: int = 10
+    status: BenchmarkStatus = BenchmarkStatus.PENDING
+    results: dict[str, dict[str, float]] = field(default_factory=dict)
+    winner: str | None = None
+    report: str = ""
+    created_at: datetime = field(default_factory=_utcnow)
+    completed_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "targets": list(self.targets),
+            "metrics": [m.value for m in self.metrics],
+            "iterations": self.iterations,
+            "status": self.status.value,
+            "results": {k: dict(v) for k, v in self.results.items()},
+            "winner": self.winner,
+            "report": self.report,
+            "created_at": self.created_at.isoformat(),
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+
+@dataclass(frozen=True)
+class Evaluation:
+    """Evaluation of an engine, strategy, or optimization result."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    target_id: str = ""
+    target_type: str = ""
+    score: float = 0.0
+    metrics: dict[str, float] = field(default_factory=dict)
+    passed: bool = False
+    details: str = ""
+    evaluated_at: datetime = field(default_factory=_utcnow)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "target_id": self.target_id,
             "target_type": self.target_type,
-            "prediction_type": self.prediction_type,
-            "predicted_value": self.predicted_value,
+            "score": self.score,
+            "metrics": dict(self.metrics),
+            "passed": self.passed,
+            "details": self.details,
+            "evaluated_at": self.evaluated_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class Experiment:
+    """A controlled experiment comparing two or more configurations."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    name: str = ""
+    description: str = ""
+    experiment_type: ExperimentType = ExperimentType.A_B_TEST
+    control_config: dict[str, Any] = field(default_factory=dict)
+    treatment_config: dict[str, Any] = field(default_factory=dict)
+    status: ExperimentStatus = ExperimentStatus.DRAFT
+    winner: str | None = None
+    metrics: dict[str, dict[str, float]] = field(default_factory=dict)
+    confidence: float = 0.0
+    rollback_on_regression: bool = True
+    created_at: datetime = field(default_factory=_utcnow)
+    completed_at: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "experiment_type": self.experiment_type.value,
+            "control_config": dict(self.control_config),
+            "treatment_config": dict(self.treatment_config),
+            "status": self.status.value,
+            "winner": self.winner,
+            "metrics": {k: dict(v) for k, v in self.metrics.items()},
             "confidence": self.confidence,
-            "lower_bound": self.lower_bound,
-            "upper_bound": self.upper_bound,
-            "prediction_status": self.prediction_status.value,
-            "features": self.features,
-            "model_version": self.model_version,
+            "rollback_on_regression": self.rollback_on_regression,
             "created_at": self.created_at.isoformat(),
-            "valid_until": self.valid_until.isoformat() if self.valid_until else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+
+@dataclass(frozen=True)
+class PerformanceProfile:
+    """Performance characteristics of an engine, provider, or strategy."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    target_id: str = ""
+    target_type: str = ""
+    avg_latency_ms: float = 0.0
+    p50_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    avg_cost: float = 0.0
+    success_rate: float = 0.0
+    throughput: float = 0.0
+    sample_count: int = 0
+    profiled_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "target_id": self.target_id,
+            "target_type": self.target_type,
+            "avg_latency_ms": self.avg_latency_ms,
+            "p50_latency_ms": self.p50_latency_ms,
+            "p95_latency_ms": self.p95_latency_ms,
+            "p99_latency_ms": self.p99_latency_ms,
+            "avg_cost": self.avg_cost,
+            "success_rate": self.success_rate,
+            "throughput": self.throughput,
+            "sample_count": self.sample_count,
+            "profiled_at": self.profiled_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class LearningMetrics:
+    """Aggregated learning metrics snapshot."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    total_executions: int = 0
+    total_optimizations: int = 0
+    total_recommendations: int = 0
+    average_improvement: float = 0.0
+    success_rate: float = 0.0
+    optimization_effectiveness: float = 0.0
+    recommendation_accuracy: float = 0.0
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    created_at: datetime = field(default_factory=_utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "total_executions": self.total_executions,
+            "total_optimizations": self.total_optimizations,
+            "total_recommendations": self.total_recommendations,
+            "average_improvement": self.average_improvement,
+            "success_rate": self.success_rate,
+            "optimization_effectiveness": self.optimization_effectiveness,
+            "recommendation_accuracy": self.recommendation_accuracy,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+            "created_at": self.created_at.isoformat(),
+        }
+
+
+@dataclass(frozen=True)
+class ExecutionStatistics:
+    """Statistical breakdown of execution performance."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    total_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    avg_duration_ms: float = 0.0
+    min_duration_ms: float = 0.0
+    max_duration_ms: float = 0.0
+    total_retries: int = 0
+    by_engine: dict[str, int] = field(default_factory=dict)
+    by_status: dict[str, int] = field(default_factory=dict)
+    by_error_type: dict[str, int] = field(default_factory=dict)
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "total_count": self.total_count,
+            "success_count": self.success_count,
+            "failure_count": self.failure_count,
+            "avg_duration_ms": self.avg_duration_ms,
+            "min_duration_ms": self.min_duration_ms,
+            "max_duration_ms": self.max_duration_ms,
+            "total_retries": self.total_retries,
+            "by_engine": dict(self.by_engine),
+            "by_status": dict(self.by_status),
+            "by_error_type": dict(self.by_error_type),
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+        }
+
+
+@dataclass(frozen=True)
+class CostMetrics:
+    """Cost tracking and optimization metrics."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    total_cost: float = 0.0
+    avg_cost_per_execution: float = 0.0
+    cost_by_engine: dict[str, float] = field(default_factory=dict)
+    cost_by_provider: dict[str, float] = field(default_factory=dict)
+    estimated_savings: float = 0.0
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "total_cost": self.total_cost,
+            "avg_cost_per_execution": self.avg_cost_per_execution,
+            "cost_by_engine": dict(self.cost_by_engine),
+            "cost_by_provider": dict(self.cost_by_provider),
+            "estimated_savings": self.estimated_savings,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+        }
+
+
+@dataclass(frozen=True)
+class LatencyMetrics:
+    """Latency tracking and optimization metrics."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    avg_latency_ms: float = 0.0
+    p50_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    latency_by_engine: dict[str, float] = field(default_factory=dict)
+    latency_by_provider: dict[str, float] = field(default_factory=dict)
+    improvement_pct: float = 0.0
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "avg_latency_ms": self.avg_latency_ms,
+            "p50_latency_ms": self.p50_latency_ms,
+            "p95_latency_ms": self.p95_latency_ms,
+            "p99_latency_ms": self.p99_latency_ms,
+            "latency_by_engine": dict(self.latency_by_engine),
+            "latency_by_provider": dict(self.latency_by_provider),
+            "improvement_pct": self.improvement_pct,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+        }
+
+
+@dataclass(frozen=True)
+class QualityMetrics:
+    """Quality assessment metrics."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    avg_quality_score: float = 0.0
+    min_quality_score: float = 0.0
+    max_quality_score: float = 0.0
+    quality_by_engine: dict[str, float] = field(default_factory=dict)
+    quality_by_provider: dict[str, float] = field(default_factory=dict)
+    improvement_pct: float = 0.0
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "avg_quality_score": self.avg_quality_score,
+            "min_quality_score": self.min_quality_score,
+            "max_quality_score": self.max_quality_score,
+            "quality_by_engine": dict(self.quality_by_engine),
+            "quality_by_provider": dict(self.quality_by_provider),
+            "improvement_pct": self.improvement_pct,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+        }
+
+
+@dataclass(frozen=True)
+class FailureAnalysis:
+    """Analysis of execution failures and their root causes."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    total_failures: int = 0
+    failure_rate: float = 0.0
+    top_error_types: dict[str, int] = field(default_factory=dict)
+    top_failing_engines: dict[str, int] = field(default_factory=dict)
+    recovery_success_rate: float = 0.0
+    common_patterns: tuple[str, ...] = field(default_factory=tuple)
+    recommendations: tuple[str, ...] = field(default_factory=tuple)
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "total_failures": self.total_failures,
+            "failure_rate": self.failure_rate,
+            "top_error_types": dict(self.top_error_types),
+            "top_failing_engines": dict(self.top_failing_engines),
+            "recovery_success_rate": self.recovery_success_rate,
+            "common_patterns": list(self.common_patterns),
+            "recommendations": list(self.recommendations),
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+        }
+
+
+@dataclass(frozen=True)
+class OptimizationResult:
+    """Result of applying an optimization."""
+
+    id: str = field(default_factory=lambda: uuid4().hex)
+    recommendation_id: str = ""
+    target: OptimizationTarget | None = None
+    previous_value: str = ""
+    new_value: str = ""
+    status: OptimizationStatus = OptimizationStatus.PENDING
+    improvement_pct: float = 0.0
+    metrics_before: dict[str, float] = field(default_factory=dict)
+    metrics_after: dict[str, float] = field(default_factory=dict)
+    applied_at: datetime | None = None
+    rolled_back_at: datetime | None = None
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "recommendation_id": self.recommendation_id,
+            "target": self.target.value if self.target else None,
+            "previous_value": self.previous_value,
+            "new_value": self.new_value,
+            "status": self.status.value,
+            "improvement_pct": self.improvement_pct,
+            "metrics_before": dict(self.metrics_before),
+            "metrics_after": dict(self.metrics_after),
+            "applied_at": self.applied_at.isoformat() if self.applied_at else None,
+            "rolled_back_at": self.rolled_back_at.isoformat() if self.rolled_back_at else None,
+            "reason": self.reason,
         }
 
 
 @dataclass(frozen=True)
 class Recommendation:
-    """Actionable recommendation for the user or system."""
+    """A general recommendation from the recommendation engine."""
 
-    id: str
-    title: str
-    description: str = ""
-    recommendation_type: str = (
-        ""  # "routing", "engine", "swarm", "workflow", "policy", "security", "infrastructure"
-    )
-    priority: RecommendationPriority = RecommendationPriority.INFO
-    expected_benefit: str = ""
-    effort: str = ""  # "low", "medium", "high"
-    parameters: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=_utcnow)
-    applied_at: datetime | None = None
-    dismissed_at: datetime | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "title": self.title,
-            "description": self.description,
-            "recommendation_type": self.recommendation_type,
-            "priority": self.priority.value,
-            "expected_benefit": self.expected_benefit,
-            "effort": self.effort,
-            "parameters": self.parameters,
-            "metadata": self.metadata,
-            "created_at": self.created_at.isoformat(),
-            "applied_at": self.applied_at.isoformat() if self.applied_at else None,
-            "dismissed_at": self.dismissed_at.isoformat() if self.dismissed_at else None,
-        }
-
-    def with_applied(self) -> Recommendation:
-        return Recommendation(
-            id=self.id,
-            title=self.title,
-            description=self.description,
-            recommendation_type=self.recommendation_type,
-            priority=self.priority,
-            expected_benefit=self.expected_benefit,
-            effort=self.effort,
-            parameters=self.parameters,
-            metadata=self.metadata,
-            created_at=self.created_at,
-            applied_at=_utcnow(),
-        )
-
-    def with_dismissed(self) -> Recommendation:
-        return Recommendation(
-            id=self.id,
-            title=self.title,
-            description=self.description,
-            recommendation_type=self.recommendation_type,
-            priority=self.priority,
-            expected_benefit=self.expected_benefit,
-            effort=self.effort,
-            parameters=self.parameters,
-            metadata=self.metadata,
-            created_at=self.created_at,
-            dismissed_at=_utcnow(),
-        )
-
-
-@dataclass(frozen=True)
-class ExperienceRecord:
-    """Record of a single learning experience."""
-
-    id: str
-    experience_type: str  # "execution", "failure", "recovery", "benchmark", "feedback"
-    source: str  # Origin of the experience (engine, workflow, swarm)
-    observation: dict[str, Any] = field(default_factory=dict)
-    outcome: str = ""
-    reward: float = 0.0  # Reinforcement learning reward signal
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "experience_type": self.experience_type,
-            "source": self.source,
-            "observation": self.observation,
-            "outcome": self.outcome,
-            "reward": self.reward,
-            "metadata": self.metadata,
-            "created_at": self.created_at.isoformat(),
-        }
-
-
-@dataclass(frozen=True)
-class KnowledgePattern:
-    """Extracted knowledge pattern from experience analysis."""
-
-    id: str
-    pattern_type: str
+    id: str = field(default_factory=lambda: uuid4().hex)
+    category: str = ""
+    title: str = ""
     description: str = ""
     confidence: float = 0.0
-    support_count: int = 0  # Number of experiences supporting this pattern
-    conditions: dict[str, Any] = field(default_factory=dict)
-    actions: dict[str, Any] = field(default_factory=dict)
-    expected_outcome: str = ""
-    metadata: dict[str, Any] = field(default_factory=dict)
+    evidence: str = ""
+    alternatives: tuple[str, ...] = field(default_factory=tuple)
+    status: RecommendationStatus = RecommendationStatus.ACTIVE
+    source: str = ""
     created_at: datetime = field(default_factory=_utcnow)
-    last_verified: datetime = field(default_factory=_utcnow)
+    applied_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
-            "pattern_type": self.pattern_type,
+            "category": self.category,
+            "title": self.title,
             "description": self.description,
             "confidence": self.confidence,
-            "support_count": self.support_count,
-            "conditions": self.conditions,
-            "actions": self.actions,
-            "expected_outcome": self.expected_outcome,
-            "metadata": self.metadata,
+            "evidence": self.evidence,
+            "alternatives": list(self.alternatives),
+            "status": self.status.value,
+            "source": self.source,
             "created_at": self.created_at.isoformat(),
-            "last_verified": self.last_verified.isoformat(),
+            "applied_at": self.applied_at.isoformat() if self.applied_at else None,
         }
 
 
-@dataclass(frozen=True)
-class PerformanceTrend:
-    """Trend information for a performance metric over time."""
-
-    target_id: str
-    metric_name: str  # "latency", "cost", "success_rate", "resource_usage"
-    direction: TrendDirection = TrendDirection.UNKNOWN
-    current_value: float = 0.0
-    previous_value: float = 0.0
-    change_percent: float = 0.0
-    samples_analyzed: int = 0
-    window_hours: int = 24
-    metadata: dict[str, Any] = field(default_factory=dict)
-    computed_at: datetime = field(default_factory=_utcnow)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "target_id": self.target_id,
-            "metric_name": self.metric_name,
-            "direction": self.direction.value,
-            "current_value": self.current_value,
-            "previous_value": self.previous_value,
-            "change_percent": self.change_percent,
-            "samples_analyzed": self.samples_analyzed,
-            "window_hours": self.window_hours,
-            "metadata": self.metadata,
-            "computed_at": self.computed_at.isoformat(),
-        }
+__all__ = [
+    "LearningPhase",
+    "OptimizationTarget",
+    "OptimizationStatus",
+    "RecommendationStatus",
+    "BenchmarkStatus",
+    "ExperimentStatus",
+    "ExperimentType",
+    "PolicyEffect",
+    "LearningMetric",
+    "TelemetryGranularity",
+    "LearningProfile",
+    "ExecutionHistory",
+    "OptimizationPolicy",
+    "OptimizationRecommendation",
+    "RoutingDecision",
+    "Benchmark",
+    "Evaluation",
+    "Experiment",
+    "PerformanceProfile",
+    "LearningMetrics",
+    "ExecutionStatistics",
+    "CostMetrics",
+    "LatencyMetrics",
+    "QualityMetrics",
+    "FailureAnalysis",
+    "OptimizationResult",
+    "Recommendation",
+]

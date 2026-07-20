@@ -1,496 +1,187 @@
 """
-Learning & Optimization Engine Port Interfaces
+Learning & Optimization Port Interfaces
 
-Defines protocol contracts for the Phase 5 learning, prediction, optimization,
-recommendation, benchmark, and analytics subsystems.  Domain logic depends on
-these interfaces, never on implementations.
-
-Six protocols follow the same pattern as ``ports/orchestration.py``:
-
-- **LearningEnginePort** — record experiences, detect failure/recovery patterns,
-  manage the knowledge base
-- **OptimizerPort** — analyze performance, generate and apply recommendations,
-  manage routing decisions
-- **PredictorPort** — predict execution outcomes (duration, cost, success
-  probability) from historical data
-- **AnalyticsPort** — aggregate performance views, trends, statistics,
-  capability scores
-- **BenchmarkPort** — run benchmarks, measure scores, compare engines
-- **KnowledgeBasePort** — store and query learned patterns and experiences
+Port layer (protocols) for Phase 4 Milestone 5.
+Every subsystem behind these ports is replaceable without touching callers.
 """
+
+from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
 from agentic_os.domain.learning import (
-    BenchmarkRecord,
-    CapabilityScore,
-    EnginePerformance,
+    Benchmark,
+    CostMetrics,
+    Evaluation,
     ExecutionHistory,
-    ExecutionProfile,
-    FailurePattern,
-    KnowledgePattern,
-    LearningSnapshot,
-    LearningStatistics,
+    ExecutionStatistics,
+    Experiment,
+    FailureAnalysis,
+    LatencyMetrics,
+    LearningMetrics,
+    LearningProfile,
     OptimizationPolicy,
     OptimizationRecommendation,
-    PerformanceTrend,
-    Prediction,
+    OptimizationResult,
+    OptimizationTarget,
+    PerformanceProfile,
+    QualityMetrics,
     Recommendation,
-    RecoveryPattern,
+    RecommendationStatus,
     RoutingDecision,
-    SwarmPerformance,
-    WorkflowPerformance,
 )
-from agentic_os.ports.event_bus import EventBus
-
-# ── Analytics Port ──
 
 
 @runtime_checkable
-class AnalyticsPort(Protocol):
-    """Aggregate performance views, trends, statistics, and capability scores."""
+class LearningPort(Protocol):
+    """Main learning interface — data collection, analysis, and model management."""
 
-    async def get_engine_performance(self, engine_id: str) -> EnginePerformance | None:
-        """Get aggregated performance metrics for a single engine."""
-        ...
-
-    async def list_engine_performance(
-        self,
-        engine_type: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[EnginePerformance]:
-        """List engine performance records, optionally filtered by type."""
-        ...
-
-    async def get_workflow_performance(self, workflow_type: str) -> WorkflowPerformance | None:
-        """Get aggregated performance metrics for a workflow type."""
-        ...
-
-    async def list_workflow_performance(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[WorkflowPerformance]:
-        """List workflow performance records."""
-        ...
-
-    async def get_swarm_performance(self, swarm_id: str) -> SwarmPerformance | None:
-        """Get aggregated performance metrics for a swarm."""
-        ...
-
-    async def list_swarm_performance(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[SwarmPerformance]:
-        """List swarm performance records."""
-        ...
-
-    async def get_performance_trend(
-        self,
-        target_id: str,
-        metric_name: str,
-        window_hours: int = 24,
-    ) -> PerformanceTrend | None:
-        """Get trend information for a specific metric over time."""
-        ...
-
-    async def list_performance_trends(
-        self,
-        target_id: str,
-        window_hours: int = 24,
-    ) -> Sequence[PerformanceTrend]:
-        """List all available trends for a target."""
-        ...
-
-    async def get_capability_scores(self, engine_id: str) -> Sequence[CapabilityScore]:
-        """Get capability scores for an engine."""
-        ...
-
-    async def get_top_engines(
-        self,
-        capability: str,
-        min_confidence: float = 0.0,
-        limit: int = 10,
-    ) -> Sequence[EnginePerformance]:
-        """Get top-performing engines for a capability."""
-        ...
-
-    async def compute_statistics(self) -> LearningStatistics:
-        """Compute aggregate learning statistics across all data."""
-        ...
-
-    async def take_snapshot(self) -> LearningSnapshot:
-        """Take a point-in-time snapshot of the learning state."""
-        ...
+    async def create_profile(self, profile: LearningProfile) -> LearningProfile: ...
+    async def get_profile(self, profile_id: str) -> LearningProfile | None: ...
+    async def list_profiles(self) -> Sequence[LearningProfile]: ...
+    async def update_profile(self, profile: LearningProfile) -> LearningProfile: ...
+    async def delete_profile(self, profile_id: str) -> None: ...
+    async def record_execution(self, history: ExecutionHistory) -> ExecutionHistory: ...
+    async def get_execution_history(self, execution_id: str) -> ExecutionHistory | None: ...
+    async def list_execution_history(
+        self, limit: int = 100, offset: int = 0, **filters: Any
+    ) -> Sequence[ExecutionHistory]: ...
+    async def analyze_executions(self, history_ids: tuple[str, ...]) -> ExecutionStatistics: ...
+    async def compute_learning_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> LearningMetrics: ...
 
 
-# ── Benchmark Port ──
+@runtime_checkable
+class OptimizationPort(Protocol):
+    """Optimization interface — applying and tracking optimizations."""
+
+    async def optimize(
+        self, target: OptimizationTarget, config: dict[str, Any]
+    ) -> OptimizationResult: ...
+    async def get_result(self, result_id: str) -> OptimizationResult | None: ...
+    async def list_results(
+        self, limit: int = 50, **filters: Any
+    ) -> Sequence[OptimizationResult]: ...
+    async def rollback(self, result_id: str) -> OptimizationResult: ...
+    async def get_effectiveness(self) -> float: ...
 
 
 @runtime_checkable
 class BenchmarkPort(Protocol):
-    """Run benchmarks, measure scores, compare engines."""
+    """Benchmark interface — running and tracking benchmarks."""
 
-    async def run_benchmark(
-        self,
-        target_id: str,
-        target_type: str,
-        benchmark_name: str,
-        bus: EventBus | None = None,
-    ) -> BenchmarkRecord:
-        """Run a benchmark against a target and return measurements."""
-        ...
-
-    async def get_benchmark(self, benchmark_id: str) -> BenchmarkRecord | None:
-        """Get a benchmark record by ID."""
-        ...
-
-    async def list_benchmarks(
-        self,
-        target_id: str | None = None,
-        benchmark_name: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[BenchmarkRecord]:
-        """List benchmark records, optionally filtered."""
-        ...
-
-    async def compare_engines(
-        self,
-        engine_ids: Sequence[str],
-        benchmark_name: str,
-    ) -> dict[str, BenchmarkRecord]:
-        """Compare multiple engines on the same benchmark."""
-        ...
-
-    async def get_benchmark_history(
-        self,
-        target_id: str,
-        benchmark_name: str,
-        limit: int = 20,
-    ) -> Sequence[BenchmarkRecord]:
-        """Get historical benchmark results for a target."""
-        ...
-
-    async def get_top_scores(
-        self,
-        benchmark_name: str,
-        limit: int = 10,
-    ) -> Sequence[BenchmarkRecord]:
-        """Get top scores for a benchmark across all targets."""
-        ...
-
-
-# ── Prediction Port ──
+    async def create_benchmark(self, benchmark: Benchmark) -> Benchmark: ...
+    async def get_benchmark(self, benchmark_id: str) -> Benchmark | None: ...
+    async def list_benchmarks(self) -> Sequence[Benchmark]: ...
+    async def run_benchmark(self, benchmark_id: str) -> Benchmark: ...
+    async def compare(self, benchmark_id: str) -> Benchmark: ...
+    async def delete_benchmark(self, benchmark_id: str) -> None: ...
 
 
 @runtime_checkable
-class PredictorPort(Protocol):
-    """Predict execution outcomes from historical data."""
+class EvaluationPort(Protocol):
+    """Evaluation interface — scoring and pass/fail assessment."""
 
-    async def predict_execution(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        """Predict execution characteristics (duration, cost, success)."""
-        ...
-
-    async def predict_duration(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        """Predict execution duration for a target."""
-        ...
-
-    async def predict_cost(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        """Predict execution cost for a target."""
-        ...
-
-    async def predict_success_probability(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        """Predict the probability of successful execution."""
-        ...
-
-    async def predict_resource_usage(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        """Predict resource usage (CPU, memory) for an execution."""
-        ...
-
-    async def get_prediction(self, prediction_id: str) -> Prediction | None:
-        """Get a prediction by ID."""
-        ...
-
-    async def list_predictions(
-        self,
-        target_id: str | None = None,
-        prediction_type: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[Prediction]:
-        """List predictions, optionally filtered."""
-        ...
-
-    async def batched_predict(
-        self,
-        target_ids: Sequence[str],
-        target_type: str,
-        prediction_type: str = "duration",
-        features: dict[str, Any] | None = None,
-    ) -> dict[str, Prediction]:
-        """Predict for multiple targets at once."""
-        ...
-
-
-# ── Optimizer Port ──
+    async def evaluate(
+        self, target_id: str, target_type: str, metrics: dict[str, float]
+    ) -> Evaluation: ...
+    async def get_evaluation(self, evaluation_id: str) -> Evaluation | None: ...
+    async def list_evaluations(self, target_id: str) -> Sequence[Evaluation]: ...
 
 
 @runtime_checkable
-class OptimizerPort(Protocol):
-    """Analyze performance, generate and apply recommendations, manage routing."""
+class RecommendationPort(Protocol):
+    """Recommendation interface — generating and managing recommendations."""
 
-    async def analyze_performance(
-        self, target_id: str, target_type: str
-    ) -> Sequence[OptimizationRecommendation]:
-        """Analyze performance of a target and generate recommendations."""
-        ...
-
-    async def optimize_routing(
-        self,
-        task_id: str,
-        required_capabilities: Sequence[str],
-        available_engines: Sequence[str],
-    ) -> RoutingDecision:
-        """Optimize routing decision for a task across available engines."""
-        ...
-
-    async def generate_recommendations(
-        self,
-        target_id: str,
-        target_type: str,
-        limit: int = 10,
-    ) -> Sequence[Recommendation]:
-        """Generate actionable recommendations for a target."""
-        ...
-
-    async def get_recommendation(self, recommendation_id: str) -> Recommendation | None:
-        """Get a recommendation by ID."""
-        ...
-
+    async def generate_recommendation(
+        self, category: str, context: dict[str, Any]
+    ) -> Recommendation: ...
+    async def get_recommendation(self, recommendation_id: str) -> Recommendation | None: ...
     async def list_recommendations(
-        self,
-        target_id: str | None = None,
-        recommendation_type: str | None = None,
-        priority: str | None = None,
-        applied: bool | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[Recommendation]:
-        """List recommendations with optional filters."""
-        ...
-
-    async def apply_recommendation(self, recommendation_id: str) -> Recommendation:
-        """Apply a recommendation (mark as applied)."""
-        ...
-
-    async def dismiss_recommendation(self, recommendation_id: str) -> Recommendation:
-        """Dismiss a recommendation without applying."""
-        ...
-
-    async def get_routing_history(
-        self,
-        task_id: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[RoutingDecision]:
-        """Get routing decision history."""
-        ...
-
-    async def get_optimization_policy(self, policy_id: str) -> OptimizationPolicy | None:
-        """Get an optimization policy by ID."""
-        ...
-
-    async def list_optimization_policies(self, limit: int = 50) -> Sequence[OptimizationPolicy]:
-        """List all optimization policies."""
-        ...
-
-    async def create_optimization_policy(self, policy: OptimizationPolicy) -> OptimizationPolicy:
-        """Create a new optimization policy."""
-        ...
-
-    async def update_optimization_policy(
-        self, policy_id: str, policy: OptimizationPolicy
-    ) -> OptimizationPolicy:
-        """Update an existing optimization policy."""
-        ...
-
-    async def delete_optimization_policy(self, policy_id: str) -> bool:
-        """Delete an optimization policy."""
-        ...
-
-
-# ── Learning Engine Port ──
+        self, status: RecommendationStatus | None = None, limit: int = 50
+    ) -> Sequence[Recommendation]: ...
+    async def apply_recommendation(self, recommendation_id: str) -> Recommendation: ...
+    async def dismiss_recommendation(self, recommendation_id: str) -> Recommendation: ...
 
 
 @runtime_checkable
-class LearningEnginePort(Protocol):
-    """Core learning: record experiences, detect patterns, manage knowledge."""
+class ExperimentPort(Protocol):
+    """Experiment interface — A/B testing, canary, controlled rollouts."""
 
-    async def record_execution(self, execution: ExecutionHistory) -> ExecutionHistory:
-        """Record an execution in the learning history."""
-        ...
-
-    async def get_execution(self, execution_id: str) -> ExecutionHistory | None:
-        """Get an execution record by ID."""
-        ...
-
-    async def list_executions(
-        self,
-        target_id: str | None = None,
-        target_type: str | None = None,
-        outcome: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[ExecutionHistory]:
-        """List execution records with optional filters."""
-        ...
-
-    async def get_execution_profile(
-        self,
-        target_id: str,
-        target_type: str,
-        window_hours: int = 24,
-    ) -> ExecutionProfile:
-        """Get or compute an execution profile for a target."""
-        ...
-
-    async def detect_failure_patterns(
-        self,
-        target_id: str | None = None,
-        min_frequency: int = 2,
-    ) -> Sequence[FailurePattern]:
-        """Detect failure patterns from execution history."""
-        ...
-
-    async def get_failure_pattern(self, pattern_id: str) -> FailurePattern | None:
-        """Get a failure pattern by ID."""
-        ...
-
-    async def list_failure_patterns(
-        self,
-        target_type: str | None = None,
-        pattern_type: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[FailurePattern]:
-        """List failure patterns with optional filters."""
-        ...
-
-    async def detect_recovery_patterns(
-        self,
-        failure_pattern_id: str | None = None,
-    ) -> Sequence[RecoveryPattern]:
-        """Detect recovery patterns from execution history."""
-        ...
-
-    async def get_recovery_pattern(self, pattern_id: str) -> RecoveryPattern | None:
-        """Get a recovery pattern by ID."""
-        ...
-
-    async def list_recovery_patterns(
-        self,
-        strategy: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[RecoveryPattern]:
-        """List recovery patterns with optional filters."""
-        ...
-
-    async def record_experience(self, experience: Any) -> Any:
-        """Record a raw learning experience for analysis."""
-        ...
-
-    async def extract_knowledge(
-        self,
-        pattern_type: str | None = None,
-        min_confidence: float = 0.5,
-    ) -> Sequence[KnowledgePattern]:
-        """Extract knowledge patterns from recorded experiences."""
-        ...
-
-    async def get_knowledge_pattern(self, pattern_id: str) -> KnowledgePattern | None:
-        """Get a knowledge pattern by ID."""
-        ...
-
-    async def list_knowledge_patterns(
-        self,
-        pattern_type: str | None = None,
-        min_confidence: float = 0.0,
-        limit: int = 50,
-    ) -> Sequence[KnowledgePattern]:
-        """List knowledge patterns with optional filters."""
-        ...
-
-    async def clear_history(self, older_than_hours: int = 0) -> int:
-        """Clear execution history, optionally older than N hours. Returns count."""
-        ...
-
-
-# ── Knowledge Base Port ──
+    async def create_experiment(self, experiment: Experiment) -> Experiment: ...
+    async def get_experiment(self, experiment_id: str) -> Experiment | None: ...
+    async def list_experiments(self) -> Sequence[Experiment]: ...
+    async def start_experiment(self, experiment_id: str) -> Experiment: ...
+    async def complete_experiment(self, experiment_id: str) -> Experiment: ...
+    async def rollback_experiment(self, experiment_id: str) -> Experiment: ...
+    async def delete_experiment(self, experiment_id: str) -> None: ...
 
 
 @runtime_checkable
-class KnowledgeBasePort(Protocol):
-    """Store and query learned patterns and experiences."""
+class RoutingOptimizationPort(Protocol):
+    """Routing-specific optimization interface."""
 
-    async def store_pattern(self, pattern: KnowledgePattern) -> KnowledgePattern:
-        """Store a knowledge pattern."""
-        ...
+    async def analyze_routing(self) -> Sequence[OptimizationRecommendation]: ...
+    async def optimize_routing(self, recommendation_id: str) -> RoutingDecision: ...
+    async def get_routing_history(self, limit: int = 100) -> Sequence[RoutingDecision]: ...
+    async def get_routing_stats(self) -> dict[str, Any]: ...
 
-    async def get_pattern(self, pattern_id: str) -> KnowledgePattern | None:
-        """Get a knowledge pattern by ID."""
-        ...
 
-    async def query_patterns(
-        self,
-        query: dict[str, Any],
-        min_confidence: float = 0.0,
-        limit: int = 20,
-    ) -> Sequence[KnowledgePattern]:
-        """Query patterns by conditions or metadata."""
-        ...
+@runtime_checkable
+class PerformanceOptimizationPort(Protocol):
+    """Performance-specific optimization interface."""
 
-    async def store_experience(self, experience: Any) -> Any:
-        """Store a raw experience record."""
-        ...
+    async def profile_performance(self, target_id: str, target_type: str) -> PerformanceProfile: ...
+    async def analyze_performance(self) -> Sequence[OptimizationRecommendation]: ...
+    async def optimize_performance(self, recommendation_id: str) -> OptimizationResult: ...
+    async def get_performance_trends(self) -> dict[str, Any]: ...
 
-    async def query_experiences(
-        self,
-        query: dict[str, Any],
-        limit: int = 50,
-    ) -> Sequence[Any]:
-        """Query experiences by conditions or metadata."""
-        ...
 
-    async def get_statistics(self) -> LearningStatistics:
-        """Get aggregate statistics about the knowledge base."""
-        ...
+@runtime_checkable
+class TelemetryLearningPort(Protocol):
+    """Telemetry feed — ingests platform metrics for learning."""
 
-    async def prune(self, older_than_days: int = 90, min_confidence: float = 0.1) -> int:
-        """Remove old or low-confidence patterns. Returns count removed."""
-        ...
+    async def ingest_execution_metrics(self, metrics: dict[str, Any]) -> None: ...
+    async def ingest_performance_metrics(self, metrics: dict[str, Any]) -> None: ...
+    async def ingest_cost_metrics(self, metrics: dict[str, Any]) -> None: ...
+    async def ingest_failure_metrics(self, metrics: dict[str, Any]) -> None: ...
+    async def get_latency_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> LatencyMetrics: ...
+    async def get_cost_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> CostMetrics: ...
+    async def get_quality_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> QualityMetrics: ...
+    async def get_failure_analysis(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> FailureAnalysis: ...
+
+
+@runtime_checkable
+class PolicyPort(Protocol):
+    """Policy interface — managing optimization policies."""
+
+    async def create_policy(self, policy: OptimizationPolicy) -> OptimizationPolicy: ...
+    async def get_policy(self, policy_id: str) -> OptimizationPolicy | None: ...
+    async def list_policies(self) -> Sequence[OptimizationPolicy]: ...
+    async def update_policy(self, policy: OptimizationPolicy) -> OptimizationPolicy: ...
+    async def delete_policy(self, policy_id: str) -> None: ...
+    async def check_policy(self, target: OptimizationTarget, context: dict[str, Any]) -> bool: ...
+
+
+__all__ = [
+    "LearningPort",
+    "OptimizationPort",
+    "BenchmarkPort",
+    "EvaluationPort",
+    "RecommendationPort",
+    "ExperimentPort",
+    "RoutingOptimizationPort",
+    "PerformanceOptimizationPort",
+    "TelemetryLearningPort",
+    "PolicyPort",
+]

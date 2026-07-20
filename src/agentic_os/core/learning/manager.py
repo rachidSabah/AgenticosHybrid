@@ -1,766 +1,385 @@
-"""Learning Manager — main Phase 5 composition root.
+"""
+LearningManager — composition root for the Learning & Optimization Engine.
 
-Wires together all learning & optimization subsystems:
-
-- **KnowledgeBase** — store and query learned patterns and experiences
-- **AnalyticsEngine** — aggregate performance views, trends, capability scores
-- **BenchmarkEngine** — run benchmarks, measure scores, compare engines
-- **PredictionEngine** — predict execution outcomes from historical data
-- **OptimizationEngine** — analyze performance, generate recommendations
-- **LearningEventPublisher** — bridge learning events onto the EventBus
-
-The manager is the entry point for the API layer and kernel integration.
+Orchestrates all learning subsystems: data collection, analysis, optimization,
+recommendations, benchmarks, experiments, policies, evaluation, and telemetry.
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
 
-from agentic_os.core.learning.analytics import AnalyticsEngine
-from agentic_os.core.learning.benchmark import BenchmarkEngine
-from agentic_os.core.learning.knowledge import KnowledgeBase
-from agentic_os.core.learning.optimizer import OptimizationEngine
-from agentic_os.core.learning.predictor import PredictionEngine
+from agentic_os.core.learning.benchmark import BenchmarkManager
+from agentic_os.core.learning.cost import CostOptimizer
+from agentic_os.core.learning.evaluation import EvaluationEngine
+from agentic_os.core.learning.experiment import ExperimentManager
+from agentic_os.core.learning.history import HistoricalAnalyzer
+from agentic_os.core.learning.model_selection import ModelSelectionEngine
+from agentic_os.core.learning.optimization import OptimizationManager
+from agentic_os.core.learning.performance import PerformanceOptimizer
+from agentic_os.core.learning.policy import PolicyEngine
+from agentic_os.core.learning.prompt import PromptOptimizationManager
 from agentic_os.core.learning.publisher import LearningEventPublisher
+from agentic_os.core.learning.quality import QualityOptimizer
+from agentic_os.core.learning.recommendation import RecommendationEngine
+from agentic_os.core.learning.routing import RoutingOptimizer
+from agentic_os.core.learning.strategy import StrategyManager
+from agentic_os.core.learning.swarm import SwarmOptimizer
+from agentic_os.core.learning.telemetry import LearningTelemetry
 from agentic_os.domain.learning import (
-    BenchmarkRecord,
-    CapabilityScore,
-    EnginePerformance,
+    Benchmark,
+    Evaluation,
     ExecutionHistory,
-    ExecutionOutcome,
-    ExecutionProfile,
-    ExperienceRecord,
-    FailurePattern,
-    KnowledgePattern,
-    LearningSnapshot,
-    LearningStatistics,
+    Experiment,
+    LearningMetrics,
+    LearningProfile,
     OptimizationPolicy,
     OptimizationRecommendation,
-    PerformanceTrend,
-    Prediction,
+    OptimizationResult,
+    OptimizationTarget,
+    PerformanceProfile,
     Recommendation,
-    RecoveryPattern,
+    RecommendationStatus,
     RoutingDecision,
-    SwarmPerformance,
-    WorkflowPerformance,
 )
 from agentic_os.infrastructure.logging import get_logger
-from agentic_os.ports.event_bus import EventBus
+from agentic_os.ports.event_bus import EventBus as EventBusProtocol
 
-log = get_logger("learning.manager")
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
+log = get_logger("core.learning.manager")
 
 
-def _maybe_parse_dt(value: Any) -> datetime | None:
-    """Parse an ISO datetime string (or return a datetime unchanged)."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        return datetime.fromisoformat(value)
-    return _utcnow()
-
-
-@dataclass
 class LearningManager:
-    """Main learning & optimization composition root.
+    """Composition root — wires and exposes the full Learning & Optimization Engine."""
 
-    Usage::
+    def __init__(
+        self,
+        bus: EventBusProtocol,
+        history: HistoricalAnalyzer | None = None,
+        telemetry: LearningTelemetry | None = None,
+        optimization: OptimizationManager | None = None,
+        benchmark: BenchmarkManager | None = None,
+        evaluation: EvaluationEngine | None = None,
+        recommendation: RecommendationEngine | None = None,
+        experiment: ExperimentManager | None = None,
+        routing: RoutingOptimizer | None = None,
+        cost: CostOptimizer | None = None,
+        performance: PerformanceOptimizer | None = None,
+        quality: QualityOptimizer | None = None,
+        swarm: SwarmOptimizer | None = None,
+        prompt: PromptOptimizationManager | None = None,
+        policy: PolicyEngine | None = None,
+        strategy: StrategyManager | None = None,
+        model_selection: ModelSelectionEngine | None = None,
+        publisher: LearningEventPublisher | None = None,
+    ) -> None:
+        self._bus = bus
+        self._history = history or HistoricalAnalyzer()
+        self._telemetry = telemetry or LearningTelemetry()
+        self._optimization = optimization or OptimizationManager()
+        self._benchmark = benchmark or BenchmarkManager()
+        self._evaluation = evaluation or EvaluationEngine()
+        self._recommendation = recommendation or RecommendationEngine()
+        self._experiment = experiment or ExperimentManager()
+        self._routing = routing or RoutingOptimizer()
+        self._cost = cost or CostOptimizer()
+        self._performance = performance or PerformanceOptimizer()
+        self._quality = quality or QualityOptimizer()
+        self._swarm = swarm or SwarmOptimizer()
+        self._prompt = prompt or PromptOptimizationManager()
+        self._policy = policy or PolicyEngine()
+        self._strategy = strategy or StrategyManager()
+        self._model_selection = model_selection or ModelSelectionEngine()
+        self._publisher = publisher or LearningEventPublisher(bus)
+        self._profiles: dict[str, LearningProfile] = {}
+        self._initialized = False
 
-        manager = LearningManager(bus=event_bus)
-        await manager.start()
+    @property
+    def publisher(self) -> LearningEventPublisher:
+        return self._publisher
 
-        execution = ExecutionHistory(id="ex-1", target_id="engine-1", ...)
-        await manager.record_execution(execution)
+    @property
+    def history(self) -> HistoricalAnalyzer:
+        return self._history
 
-        pred = await manager.predict_duration("engine-1", "engine")
-        recs = await manager.analyze_performance("engine-1", "engine")
+    @property
+    def telemetry(self) -> LearningTelemetry:
+        return self._telemetry
 
-        await manager.stop()
-    """
+    @property
+    def optimization(self) -> OptimizationManager:
+        return self._optimization
 
-    bus: EventBus
+    @property
+    def benchmark(self) -> BenchmarkManager:
+        return self._benchmark
 
-    # Subsystems (built by ``start()`` unless injected)
-    knowledge_base: KnowledgeBase | None = None
-    analytics_engine: AnalyticsEngine | None = None
-    benchmark_engine: BenchmarkEngine | None = None
-    prediction_engine: PredictionEngine | None = None
-    optimization_engine: OptimizationEngine | None = None
-    publisher: LearningEventPublisher | None = None
+    @property
+    def evaluation(self) -> EvaluationEngine:
+        return self._evaluation
 
-    # Internal state
-    _running: bool = field(default=False, repr=False)
-    _started_at: datetime | None = field(default=None, repr=False)
+    @property
+    def recommendation(self) -> RecommendationEngine:
+        return self._recommendation
 
-    # ── Lifecycle ──
+    @property
+    def experiment(self) -> ExperimentManager:
+        return self._experiment
+
+    @property
+    def routing(self) -> RoutingOptimizer:
+        return self._routing
+
+    @property
+    def cost(self) -> CostOptimizer:
+        return self._cost
+
+    @property
+    def performance(self) -> PerformanceOptimizer:
+        return self._performance
+
+    @property
+    def quality(self) -> QualityOptimizer:
+        return self._quality
+
+    @property
+    def swarm(self) -> SwarmOptimizer:
+        return self._swarm
+
+    @property
+    def prompt(self) -> PromptOptimizationManager:
+        return self._prompt
+
+    @property
+    def policy(self) -> PolicyEngine:
+        return self._policy
+
+    @property
+    def strategy(self) -> StrategyManager:
+        return self._strategy
+
+    @property
+    def model_selection(self) -> ModelSelectionEngine:
+        return self._model_selection
 
     async def start(self) -> None:
-        """Start the learning engine and build all subsystems."""
-        if self._running:
-            log.warning("LearningManager already running")
-            return
-
-        self._build_subsystems()
-        self._started_at = _utcnow()
-        self._running = True
-
-        log.info(
-            "Learning & Optimization Engine started",
-            subsystems=[
-                "knowledge_base",
-                "analytics_engine",
-                "benchmark_engine",
-                "prediction_engine",
-                "optimization_engine",
-            ],
-        )
+        self._initialized = True
+        log.info("Learning & Optimization Engine started")
 
     async def stop(self) -> None:
-        """Stop the learning engine."""
-        self._running = False
-        duration = (_utcnow() - self._started_at).total_seconds() if self._started_at else 0.0
-        log.info("Learning & Optimization Engine stopped", uptime_seconds=duration)
+        self._initialized = False
+        log.info("Learning & Optimization Engine stopped")
 
-    def _build_subsystems(self) -> None:
-        """Build default subsystems if not already injected."""
-        if self.knowledge_base is None:
-            self.knowledge_base = KnowledgeBase()
-        if self.analytics_engine is None:
-            self.analytics_engine = AnalyticsEngine()
-        if self.benchmark_engine is None:
-            self.benchmark_engine = BenchmarkEngine()
-        if self.prediction_engine is None:
-            self.prediction_engine = PredictionEngine()
-        if self.optimization_engine is None:
-            self.optimization_engine = OptimizationEngine()
-        if self.publisher is None:
-            self.publisher = LearningEventPublisher(self.bus)
+    # ── Profile management ──
 
-    # ── Convenience property access ──
+    async def create_profile(self, profile: LearningProfile) -> LearningProfile:
+        self._profiles[profile.id] = profile
+        await self._publisher.publish_learning_started(profile.id)
+        log.info("Created learning profile", profile_id=profile.id)
+        return profile
 
-    @property
-    def kb(self) -> KnowledgeBase:
-        assert self.knowledge_base is not None
-        return self.knowledge_base
+    async def get_profile(self, profile_id: str) -> LearningProfile | None:
+        return self._profiles.get(profile_id)
 
-    @property
-    def analytics(self) -> AnalyticsEngine:
-        assert self.analytics_engine is not None
-        return self.analytics_engine
+    async def list_profiles(self) -> Sequence[LearningProfile]:
+        return list(self._profiles.values())
 
-    @property
-    def benchmark(self) -> BenchmarkEngine:
-        assert self.benchmark_engine is not None
-        return self.benchmark_engine
+    async def update_profile(self, profile: LearningProfile) -> LearningProfile:
+        self._profiles[profile.id] = profile
+        await self._publisher.publish_learning_completed(profile.id)
+        return profile
 
-    @property
-    def predictor(self) -> PredictionEngine:
-        assert self.prediction_engine is not None
-        return self.prediction_engine
+    async def delete_profile(self, profile_id: str) -> None:
+        self._profiles.pop(profile_id, None)
 
-    @property
-    def optimizer(self) -> OptimizationEngine:
-        assert self.optimization_engine is not None
-        return self.optimization_engine
+    # ── Execution recording ──
 
-    # ======================================================================
-    # LearningEnginePort — record_execution, detect_patterns, manage knowledge
-    # ======================================================================
-
-    async def record_execution(self, execution: ExecutionHistory) -> ExecutionHistory:
-        """Record an execution and propagate to all subsystems."""
-        assert self.knowledge_base is not None
-        assert self.analytics_engine is not None
-        assert self.prediction_engine is not None
-        assert self.publisher is not None
-
-        # Store in knowledge base as an experience record
-        experience = ExperienceRecord(
-            id=execution.id,
-            experience_type="execution",
-            source=execution.target_type,
-            observation=execution.to_dict(),
-            outcome=execution.outcome.value,
-            reward=1.0 if execution.outcome.value == "success" else -1.0,
-            metadata=execution.metadata,
+    async def record_execution(self, history: ExecutionHistory) -> ExecutionHistory:
+        self._history.record_execution(history)
+        await self._telemetry.ingest_execution_metrics(
+            {
+                "execution_id": history.execution_id,
+                "duration_ms": history.duration_ms,
+                "status": history.status,
+                "cost": history.cost,
+                "retry_count": history.retry_count,
+                "error_type": history.error_type,
+            }
         )
-        await self.knowledge_base.store_experience(experience)
+        return history
 
-        # Update analytics
-        self.analytics_engine.record_execution(execution)
-        self.predictor.ingest_execution(execution)
+    async def analyze_executions(self, history_ids: tuple[str, ...]) -> Any:
+        return await self._history.analyze_executions(history_ids)
 
-        # Publish event
-        await self.publisher.publish_execution_recorded(
-            execution_id=execution.id,
-            target_id=execution.target_id,
-            target_type=execution.target_type,
-            outcome=execution.outcome.value,
-            duration_ms=execution.duration_ms,
+    async def compute_learning_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> LearningMetrics:
+        stats = await self._history.compute_trends()
+        stats_dict = stats if isinstance(stats, dict) else {}
+        total = stats_dict.get("total_count", 0)
+        success = stats_dict.get("success_count", 0)
+        return LearningMetrics(
+            total_executions=total,
+            total_optimizations=len(self._optimization._results),
+            total_recommendations=len(self._recommendation._recommendations),
+            success_rate=success / max(total, 1),
         )
 
-        return execution
+    # ── Optimization ──
 
-    async def get_execution(self, execution_id: str) -> ExecutionHistory | None:
-        assert self.knowledge_base is not None
-        exps = await self.knowledge_base.query_experiences({"id": execution_id}, limit=1)
-        if not exps:
-            return None
-        return ExecutionHistory(
-            id=exps[0].id,
-            target_id=exps[0].observation.get("target_id", ""),
-            target_type=exps[0].observation.get("target_type", ""),
-            outcome=ExecutionOutcome(exps[0].outcome),
-            duration_ms=exps[0].observation.get("duration_ms", 0.0),
-            cpu_percent=exps[0].observation.get("cpu_percent", 0.0),
-            memory_mb=exps[0].observation.get("memory_mb", 0.0),
-            token_count=exps[0].observation.get("token_count", 0),
-            cost=exps[0].observation.get("cost", 0.0),
-            error=exps[0].observation.get("error"),
-            metadata=exps[0].observation.get("metadata", {}),
-            started_at=_maybe_parse_dt(exps[0].observation.get("started_at")) or _utcnow(),
-            completed_at=_maybe_parse_dt(exps[0].observation.get("completed_at")),
-        )
+    async def optimize(
+        self, target: OptimizationTarget, config: dict[str, Any]
+    ) -> OptimizationResult:
+        result = await self._optimization.optimize(target, config)
+        await self._publisher.publish_optimization(result.id, target.value, result.status.value)
+        return result
 
-    async def list_executions(
-        self,
-        target_id: str | None = None,
-        target_type: str | None = None,
-        outcome: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[ExecutionHistory]:
-        assert self.knowledge_base is not None
-        # Fetch all experiences; target_id lives in observation, not on the model
-        exps = await self.knowledge_base.query_experiences({}, limit=limit + offset)
-        results: list[ExecutionHistory] = []
-        for exp in exps[offset:]:
-            obs = exp.observation
-            if target_id is not None and obs.get("target_id") != target_id:
-                continue
-            if target_type is not None and obs.get("target_type") != target_type:
-                continue
-            if outcome is not None and exp.outcome != outcome:
-                continue
-            results.append(
-                ExecutionHistory(
-                    id=exp.id,
-                    target_id=obs.get("target_id", ""),
-                    target_type=obs.get("target_type", ""),
-                    outcome=ExecutionOutcome(exp.outcome),
-                    duration_ms=obs.get("duration_ms", 0.0),
-                    cpu_percent=obs.get("cpu_percent", 0.0),
-                    memory_mb=obs.get("memory_mb", 0.0),
-                    token_count=obs.get("token_count", 0),
-                    cost=obs.get("cost", 0.0),
-                    error=obs.get("error"),
-                    metadata=obs.get("metadata", {}),
-                    started_at=_maybe_parse_dt(obs.get("started_at")) or _utcnow(),
-                    completed_at=_maybe_parse_dt(obs.get("completed_at")),
-                )
-            )
-            if len(results) >= limit:
-                break
-        return results
+    async def get_optimization_result(self, result_id: str) -> OptimizationResult | None:
+        return await self._optimization.get_result(result_id)
 
-    async def get_execution_profile(
-        self,
-        target_id: str,
-        target_type: str,
-        window_hours: int = 24,
-    ) -> ExecutionProfile:
-        assert self.analytics_engine is not None
-        # Compute from stored executions
-        engine_perf = await self.analytics_engine.get_engine_performance(target_id)
-        if engine_perf is None:
-            return ExecutionProfile(
-                target_id=target_id,
-                target_type=target_type,
-                window_hours=window_hours,
-            )
-        return ExecutionProfile(
-            target_id=target_id,
-            target_type=target_type,
-            window_hours=window_hours,
-            total_executions=engine_perf.total_executions,
-            success_count=engine_perf.success_count,
-            failure_count=engine_perf.failure_count,
-            avg_duration_ms=engine_perf.avg_latency_ms,
-            avg_cpu_percent=engine_perf.avg_cpu_percent,
-            avg_memory_mb=engine_perf.avg_memory_mb,
-            avg_cost=engine_perf.avg_cost,
-        )
+    async def list_optimization_results(
+        self, limit: int = 50, **filters: Any
+    ) -> Sequence[OptimizationResult]:
+        return await self._optimization.list_results(limit, **filters)
 
-    async def detect_failure_patterns(
-        self,
-        target_id: str | None = None,
-        min_frequency: int = 2,
-    ) -> Sequence[FailurePattern]:
-        return []  # Placeholder — will be implemented with real pattern detection
+    async def rollback_optimization(self, result_id: str) -> OptimizationResult:
+        return await self._optimization.rollback(result_id)
 
-    async def get_failure_pattern(self, pattern_id: str) -> FailurePattern | None:
-        return None
+    # ── Benchmarks ──
 
-    async def list_failure_patterns(
-        self,
-        target_type: str | None = None,
-        pattern_type: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[FailurePattern]:
-        return []
+    async def create_benchmark(self, benchmark: Benchmark) -> Benchmark:
+        created = await self._benchmark.create_benchmark(benchmark)
+        await self._publisher.publish_benchmark(created.id, "created")
+        return created
 
-    async def detect_recovery_patterns(
-        self,
-        failure_pattern_id: str | None = None,
-    ) -> Sequence[RecoveryPattern]:
-        return []
+    async def run_benchmark(self, benchmark_id: str) -> Benchmark:
+        result = await self._benchmark.run_benchmark(benchmark_id)
+        await self._publisher.publish_benchmark(benchmark_id, "completed")
+        return result
 
-    async def get_recovery_pattern(self, pattern_id: str) -> RecoveryPattern | None:
-        return None
+    async def compare_benchmark(self, benchmark_id: str) -> Benchmark:
+        return await self._benchmark.compare(benchmark_id)
 
-    async def list_recovery_patterns(
-        self,
-        strategy: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[RecoveryPattern]:
-        return []
+    async def list_benchmarks(self) -> Sequence[Benchmark]:
+        return await self._benchmark.list_benchmarks()
 
-    async def record_experience(self, experience: Any) -> Any:
-        assert self.knowledge_base is not None
-        return await self.knowledge_base.store_experience(experience)
+    async def get_benchmark(self, benchmark_id: str) -> Benchmark | None:
+        return await self._benchmark.get_benchmark(benchmark_id)
 
-    async def extract_knowledge(
-        self,
-        pattern_type: str | None = None,
-        min_confidence: float = 0.5,
-    ) -> Sequence[KnowledgePattern]:
-        assert self.knowledge_base is not None
-        return await self.knowledge_base.query_patterns(
-            {"pattern_type": pattern_type} if pattern_type else {},
-            min_confidence=min_confidence,
-        )
+    async def delete_benchmark(self, benchmark_id: str) -> None:
+        await self._benchmark.delete_benchmark(benchmark_id)
 
-    async def get_knowledge_pattern(self, pattern_id: str) -> KnowledgePattern | None:
-        assert self.knowledge_base is not None
-        return await self.knowledge_base.get_pattern(pattern_id)
+    # ── Evaluations ──
 
-    async def list_knowledge_patterns(
-        self,
-        pattern_type: str | None = None,
-        min_confidence: float = 0.0,
-        limit: int = 50,
-    ) -> Sequence[KnowledgePattern]:
-        assert self.knowledge_base is not None
-        return await self.knowledge_base.query_patterns(
-            {"pattern_type": pattern_type} if pattern_type else {},
-            min_confidence=min_confidence,
-            limit=limit,
-        )
+    async def evaluate(
+        self, target_id: str, target_type: str, metrics: dict[str, float]
+    ) -> Evaluation:
+        result = await self._evaluation.evaluate(target_id, target_type, metrics)
+        await self._publisher.publish_evaluation(result.id, target_type, result.score)
+        return result
 
-    async def clear_history(self, older_than_hours: int = 0) -> int:
-        assert self.knowledge_base is not None
-        return await self.knowledge_base.prune(
-            older_than_days=max(1, older_than_hours // 24),
-        )
+    async def list_evaluations(self, target_id: str) -> Sequence[Evaluation]:
+        return await self._evaluation.list_evaluations(target_id)
 
-    # ======================================================================
-    # OptimizerPort — analyze performance, generate recommendations, route
-    # ======================================================================
+    # ── Recommendations ──
 
-    async def analyze_performance(
-        self,
-        target_id: str,
-        target_type: str,
-    ) -> Sequence[OptimizationRecommendation]:
-        assert self.optimization_engine is not None
-        assert self.analytics_engine is not None
-
-        # Feed current engine data
-        perf = await self.analytics_engine.get_engine_performance(target_id)
-        if perf is not None:
-            self.optimization_engine.set_engine_performance([perf])
-
-        recs = await self.optimization_engine.analyze_performance(target_id, target_type)
-        assert self.publisher is not None
-        for rec in recs:
-            await self.publisher.publish_recommendation_generated(
-                recommendation_id=rec.id,
-                target_id=target_id,
-                recommendation_type=rec.recommendation_type,
-                priority=rec.priority.value,
-                title=rec.title,
-            )
-        return recs
-
-    async def optimize_routing(
-        self,
-        task_id: str,
-        required_capabilities: Sequence[str],
-        available_engines: Sequence[str],
-    ) -> RoutingDecision:
-        assert self.optimization_engine is not None
-        decision = await self.optimization_engine.optimize_routing(
-            task_id,
-            required_capabilities,
-            available_engines,
-        )
-        assert self.publisher is not None
-        await self.publisher.publish_routing_decision(
-            decision_id=decision.id,
-            task_id=task_id,
-            selected_engine_id=decision.selected_engine_id,
-            confidence=decision.confidence,
-        )
-        return decision
-
-    async def generate_recommendations(
-        self,
-        target_id: str,
-        target_type: str,
-        limit: int = 10,
-    ) -> Sequence[Recommendation]:
-        assert self.optimization_engine is not None
-        assert self.analytics_engine is not None
-
-        # Feed current engine data (same pattern as analyze_performance)
-        perf = await self.analytics_engine.get_engine_performance(target_id)
-        if perf is not None:
-            self.optimization_engine.set_engine_performance([perf])
-
-        return await self.optimization_engine.generate_recommendations(
-            target_id,
-            target_type,
-            limit,
-        )
-
-    async def get_recommendation(self, recommendation_id: str) -> Recommendation | None:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.get_recommendation(recommendation_id)
-
-    async def list_recommendations(
-        self,
-        target_id: str | None = None,
-        recommendation_type: str | None = None,
-        priority: str | None = None,
-        applied: bool | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[Recommendation]:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.list_recommendations(
-            target_id=target_id,
-            recommendation_type=recommendation_type,
-            priority=priority,
-            applied=applied,
-            limit=limit,
-            offset=offset,
-        )
-
-    async def apply_recommendation(self, recommendation_id: str) -> Recommendation:
-        assert self.optimization_engine is not None
-        rec = await self.optimization_engine.apply_recommendation(recommendation_id)
-        assert self.publisher is not None
-        await self.publisher.publish_recommendation_applied(
-            recommendation_id=rec.id,
-            target_id=rec.metadata.get("target_id", "unknown"),
-        )
+    async def generate_recommendation(
+        self, category: str, context: dict[str, Any]
+    ) -> Recommendation:
+        rec = await self._recommendation.generate_recommendation(category, context)
+        await self._publisher.publish_recommendation(rec.id, category, rec.confidence)
         return rec
 
+    async def list_recommendations(
+        self, status: RecommendationStatus | None = None, limit: int = 50
+    ) -> Sequence[Recommendation]:
+        return await self._recommendation.list_recommendations(status, limit)
+
+    async def apply_recommendation(self, recommendation_id: str) -> Recommendation:
+        return await self._recommendation.apply_recommendation(recommendation_id)
+
     async def dismiss_recommendation(self, recommendation_id: str) -> Recommendation:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.dismiss_recommendation(recommendation_id)
+        return await self._recommendation.dismiss_recommendation(recommendation_id)
 
-    async def get_routing_history(
-        self,
-        task_id: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[RoutingDecision]:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.get_routing_history(task_id, limit)
+    # ── Experiments ──
 
-    async def get_optimization_policy(self, policy_id: str) -> OptimizationPolicy | None:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.get_optimization_policy(policy_id)
+    async def create_experiment(self, experiment: Experiment) -> Experiment:
+        created = await self._experiment.create_experiment(experiment)
+        await self._publisher.publish_experiment(created.id, "created")
+        return created
 
-    async def list_optimization_policies(
-        self,
-        limit: int = 50,
-    ) -> Sequence[OptimizationPolicy]:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.list_optimization_policies(limit)
+    async def start_experiment(self, experiment_id: str) -> Experiment:
+        return await self._experiment.start_experiment(experiment_id)
 
-    async def create_optimization_policy(self, policy: OptimizationPolicy) -> OptimizationPolicy:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.create_optimization_policy(policy)
+    async def complete_experiment(self, experiment_id: str) -> Experiment:
+        result = await self._experiment.complete_experiment(experiment_id)
+        await self._publisher.publish_experiment(experiment_id, "completed")
+        return result
 
-    async def update_optimization_policy(
-        self,
-        policy_id: str,
-        policy: OptimizationPolicy,
-    ) -> OptimizationPolicy:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.update_optimization_policy(policy_id, policy)
+    async def list_experiments(self) -> Sequence[Experiment]:
+        return await self._experiment.list_experiments()
 
-    async def delete_optimization_policy(self, policy_id: str) -> bool:
-        assert self.optimization_engine is not None
-        return await self.optimization_engine.delete_optimization_policy(policy_id)
+    async def get_experiment(self, experiment_id: str) -> Experiment | None:
+        return await self._experiment.get_experiment(experiment_id)
 
-    # ======================================================================
-    # PredictorPort — predict execution outcomes
-    # ======================================================================
+    # ── Routing ──
 
-    async def predict_execution(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        assert self.prediction_engine is not None
-        pred = await self.prediction_engine.predict_execution(target_id, target_type, features)
-        assert self.publisher is not None
-        await self.publisher.publish_prediction_made(
-            prediction_id=pred.id,
-            target_id=target_id,
-            prediction_type=pred.prediction_type,
-            predicted_value=pred.predicted_value,
-            confidence=pred.confidence,
-        )
-        return pred
+    async def analyze_routing(self) -> Sequence[OptimizationRecommendation]:
+        return await self._routing.analyze_routing()
 
-    async def predict_duration(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.predict_duration(target_id, target_type, features)
+    async def optimize_routing(self, recommendation_id: str) -> RoutingDecision:
+        return await self._routing.optimize_routing(recommendation_id)
 
-    async def predict_cost(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.predict_cost(target_id, target_type, features)
+    async def get_routing_stats(self) -> dict[str, Any]:
+        return await self._routing.get_routing_stats()
 
-    async def predict_success_probability(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.predict_success_probability(
-            target_id,
-            target_type,
-            features,
-        )
+    # ── Performance ──
 
-    async def predict_resource_usage(
-        self,
-        target_id: str,
-        target_type: str,
-        features: dict[str, Any] | None = None,
-    ) -> Prediction:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.predict_resource_usage(
-            target_id,
-            target_type,
-            features,
-        )
+    async def profile_performance(self, target_id: str, target_type: str) -> PerformanceProfile:
+        return await self._performance.profile_performance(target_id, target_type)
 
-    async def get_prediction(self, prediction_id: str) -> Prediction | None:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.get_prediction(prediction_id)
+    async def get_performance_trends(self) -> dict[str, Any]:
+        return await self._performance.get_performance_trends()
 
-    async def list_predictions(
-        self,
-        target_id: str | None = None,
-        prediction_type: str | None = None,
-        limit: int = 50,
-    ) -> Sequence[Prediction]:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.list_predictions(
-            target_id=target_id,
-            prediction_type=prediction_type,
-            limit=limit,
-        )
+    # ── Cost ──
 
-    async def batched_predict(
-        self,
-        target_ids: Sequence[str],
-        target_type: str,
-        prediction_type: str = "duration",
-        features: dict[str, Any] | None = None,
-    ) -> dict[str, Prediction]:
-        assert self.prediction_engine is not None
-        return await self.prediction_engine.batched_predict(
-            target_ids,
-            target_type,
-            prediction_type,
-            features,
-        )
+    async def get_cost_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> Any:
+        return await self._telemetry.get_cost_metrics(period_start, period_end)
 
-    # ======================================================================
-    # AnalyticsPort — aggregate performance views
-    # ======================================================================
+    # ── Quality ──
 
-    async def get_engine_performance(self, engine_id: str) -> EnginePerformance | None:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.get_engine_performance(engine_id)
+    async def get_quality_metrics(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> Any:
+        return await self._telemetry.get_quality_metrics(period_start, period_end)
 
-    async def list_engine_performance(
-        self,
-        engine_type: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[EnginePerformance]:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.list_engine_performance(engine_type, limit, offset)
+    # ── Failure ──
 
-    async def get_workflow_performance(self, workflow_type: str) -> WorkflowPerformance | None:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.get_workflow_performance(workflow_type)
+    async def get_failure_analysis(
+        self, period_start: str | None = None, period_end: str | None = None
+    ) -> Any:
+        return await self._telemetry.get_failure_analysis(period_start, period_end)
 
-    async def list_workflow_performance(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[WorkflowPerformance]:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.list_workflow_performance(limit, offset)
+    # ── Policies ──
 
-    async def get_swarm_performance(self, swarm_id: str) -> SwarmPerformance | None:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.get_swarm_performance(swarm_id)
+    async def create_policy(self, policy: OptimizationPolicy) -> OptimizationPolicy:
+        created = await self._policy.create_policy(policy)
+        await self._publisher.publish_policy(created.id, "created")
+        return created
 
-    async def list_swarm_performance(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[SwarmPerformance]:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.list_swarm_performance(limit, offset)
+    async def list_policies(self) -> Sequence[OptimizationPolicy]:
+        return await self._policy.list_policies()
 
-    async def get_performance_trend(
-        self,
-        target_id: str,
-        metric_name: str,
-        window_hours: int = 24,
-    ) -> PerformanceTrend | None:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.get_performance_trend(
-            target_id, metric_name, window_hours
-        )
+    async def update_policy(self, policy: OptimizationPolicy) -> OptimizationPolicy:
+        return await self._policy.update_policy(policy)
 
-    async def list_performance_trends(
-        self,
-        target_id: str,
-        window_hours: int = 24,
-    ) -> Sequence[PerformanceTrend]:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.list_performance_trends(target_id, window_hours)
+    async def delete_policy(self, policy_id: str) -> None:
+        await self._policy.delete_policy(policy_id)
 
-    async def get_capability_scores(self, engine_id: str) -> Sequence[CapabilityScore]:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.get_capability_scores(engine_id)
+    async def check_policy(self, target: OptimizationTarget, context: dict[str, Any]) -> bool:
+        return await self._policy.check_policy(target, context)
 
-    async def get_top_engines(
-        self,
-        capability: str,
-        min_confidence: float = 0.0,
-        limit: int = 10,
-    ) -> Sequence[EnginePerformance]:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.get_top_engines(capability, min_confidence, limit)
 
-    async def compute_statistics(self) -> LearningStatistics:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.compute_statistics()
-
-    async def take_snapshot(self) -> LearningSnapshot:
-        assert self.analytics_engine is not None
-        return await self.analytics_engine.take_snapshot()
-
-    # ======================================================================
-    # BenchmarkPort — run benchmarks
-    # ======================================================================
-
-    async def run_benchmark(
-        self,
-        target_id: str,
-        target_type: str,
-        benchmark_name: str,
-        bus: EventBus | None = None,
-    ) -> BenchmarkRecord:
-        assert self.benchmark_engine is not None
-        record = await self.benchmark_engine.run_benchmark(
-            target_id=target_id,
-            target_type=target_type,
-            benchmark_name=benchmark_name,
-            bus=self.bus if bus is None else bus,
-        )
-        assert self.publisher is not None
-        await self.publisher.publish_benchmark_completed(
-            benchmark_id=record.id,
-            target_id=target_id,
-            benchmark_name=benchmark_name,
-            score=record.score,
-        )
-        return record
-
-    async def get_benchmark(self, benchmark_id: str) -> BenchmarkRecord | None:
-        assert self.benchmark_engine is not None
-        return await self.benchmark_engine.get_benchmark(benchmark_id)
-
-    async def list_benchmarks(
-        self,
-        target_id: str | None = None,
-        benchmark_name: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> Sequence[BenchmarkRecord]:
-        assert self.benchmark_engine is not None
-        return await self.benchmark_engine.list_benchmarks(
-            target_id=target_id,
-            benchmark_name=benchmark_name,
-            limit=limit,
-            offset=offset,
-        )
-
-    async def compare_engines(
-        self,
-        engine_ids: Sequence[str],
-        benchmark_name: str,
-    ) -> dict[str, BenchmarkRecord]:
-        assert self.benchmark_engine is not None
-        return await self.benchmark_engine.compare_engines(engine_ids, benchmark_name)
-
-    async def get_benchmark_history(
-        self,
-        target_id: str,
-        benchmark_name: str,
-        limit: int = 20,
-    ) -> Sequence[BenchmarkRecord]:
-        assert self.benchmark_engine is not None
-        return await self.benchmark_engine.get_benchmark_history(
-            target_id,
-            benchmark_name,
-            limit,
-        )
-
-    async def get_top_scores(
-        self,
-        benchmark_name: str,
-        limit: int = 10,
-    ) -> Sequence[BenchmarkRecord]:
-        assert self.benchmark_engine is not None
-        return await self.benchmark_engine.get_top_scores(benchmark_name, limit)
+__all__ = ["LearningManager"]
