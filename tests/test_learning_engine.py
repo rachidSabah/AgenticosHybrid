@@ -27,7 +27,6 @@ from agentic_os.core.learning import (
 )
 from agentic_os.domain.learning import (
     Benchmark,
-    Evaluation,
     ExecutionHistory,
     Experiment,
     ExperimentStatus,
@@ -35,7 +34,6 @@ from agentic_os.domain.learning import (
     OptimizationPolicy,
     OptimizationTarget,
     PolicyEffect,
-    Recommendation,
 )
 
 
@@ -55,8 +53,21 @@ class TestHistoricalAnalyzer:
     @pytest.mark.asyncio
     async def test_record_and_analyze(self) -> None:
         analyzer = HistoricalAnalyzer()
-        h1 = ExecutionHistory(execution_id="e1", engine_type="generic", engine_name="g1", status="success", duration_ms=100.0)
-        h2 = ExecutionHistory(execution_id="e2", engine_type="generic", engine_name="g1", status="failure", duration_ms=200.0, error_type="timeout")
+        h1 = ExecutionHistory(
+            execution_id="e1",
+            engine_type="generic",
+            engine_name="g1",
+            status="success",
+            duration_ms=100.0,
+        )
+        h2 = ExecutionHistory(
+            execution_id="e2",
+            engine_type="generic",
+            engine_name="g1",
+            status="failure",
+            duration_ms=200.0,
+            error_type="timeout",
+        )
 
         analyzer.record_execution(h1)
         analyzer.record_execution(h2)
@@ -100,7 +111,9 @@ class TestPolicyEngine:
     @pytest.mark.asyncio
     async def test_crud(self) -> None:
         engine = PolicyEngine()
-        policy = OptimizationPolicy(name="test-policy", target=OptimizationTarget.ROUTING, effect=PolicyEffect.ALLOW)
+        policy = OptimizationPolicy(
+            name="test-policy", target=OptimizationTarget.ROUTING, effect=PolicyEffect.ALLOW
+        )
         created = await engine.create_policy(policy)
         assert created.name == "test-policy"
 
@@ -116,7 +129,9 @@ class TestPolicyEngine:
     @pytest.mark.asyncio
     async def test_check_policy(self) -> None:
         engine = PolicyEngine()
-        policy = OptimizationPolicy(name="deny-cost", target=OptimizationTarget.EXECUTION_COST, effect=PolicyEffect.DENY)
+        policy = OptimizationPolicy(
+            name="deny-cost", target=OptimizationTarget.EXECUTION_COST, effect=PolicyEffect.DENY
+        )
         await engine.create_policy(policy)
 
         result = await engine.check_policy(OptimizationTarget.EXECUTION_COST, {})
@@ -130,7 +145,9 @@ class TestEvaluationEngine:
     @pytest.mark.asyncio
     async def test_evaluate(self) -> None:
         engine = EvaluationEngine()
-        ev = await engine.evaluate("e1", "engine", {"latency": 100.0, "cost": 0.05, "success_rate": 0.95})
+        ev = await engine.evaluate(
+            "e1", "engine", {"latency": 100.0, "cost": 0.05, "success_rate": 0.95}
+        )
         assert ev.target_id == "e1"
         assert ev.score > 0
         assert ev.passed is True
@@ -148,7 +165,12 @@ class TestExperimentManager:
     @pytest.mark.asyncio
     async def test_lifecycle(self) -> None:
         engine = ExperimentManager()
-        exp = Experiment(name="test-ab", experiment_type=ExperimentType.A_B_TEST, control_config={"engine": "a"}, treatment_config={"engine": "b"})
+        exp = Experiment(
+            name="test-ab",
+            experiment_type=ExperimentType.A_B_TEST,
+            control_config={"engine": "a"},
+            treatment_config={"engine": "b"},
+        )
         created = await engine.create_experiment(exp)
         assert created.status == ExperimentStatus.DRAFT
 
@@ -195,7 +217,13 @@ class TestLearningManager:
 
     @pytest.mark.asyncio
     async def test_record_and_analyze(self, manager: LearningManager) -> None:
-        h = ExecutionHistory(execution_id="e1", engine_type="generic", engine_name="g1", status="success", duration_ms=100.0)
+        h = ExecutionHistory(
+            execution_id="e1",
+            engine_type="generic",
+            engine_name="g1",
+            status="success",
+            duration_ms=100.0,
+        )
         recorded = await manager.record_execution(h)
         assert recorded.execution_id == "e1"
 
@@ -212,14 +240,21 @@ class TestLearningManager:
 
     @pytest.mark.asyncio
     async def test_policy_workflow(self, manager: LearningManager) -> None:
-        policy = OptimizationPolicy(name="test", target=OptimizationTarget.ROUTING, effect=PolicyEffect.ALLOW)
+        policy = OptimizationPolicy(
+            name="test", target=OptimizationTarget.ROUTING, effect=PolicyEffect.ALLOW
+        )
         created = await manager.create_policy(policy)
         assert created.name == "test"
 
         policies = await manager.list_policies()
         assert len(policies) == 1
 
-        updated = OptimizationPolicy(id=created.id, name="updated", target=OptimizationTarget.ROUTING, effect=PolicyEffect.DENY)
+        updated = OptimizationPolicy(
+            id=created.id,
+            name="updated",
+            target=OptimizationTarget.ROUTING,
+            effect=PolicyEffect.DENY,
+        )
         result = await manager.update_policy(updated)
         assert result.effect == PolicyEffect.DENY
 
@@ -228,7 +263,12 @@ class TestLearningManager:
 
     @pytest.mark.asyncio
     async def test_experiment_lifecycle(self, manager: LearningManager) -> None:
-        exp = Experiment(name="test-exp", experiment_type=ExperimentType.A_B_TEST, control_config={}, treatment_config={})
+        exp = Experiment(
+            name="test-exp",
+            experiment_type=ExperimentType.A_B_TEST,
+            control_config={},
+            treatment_config={},
+        )
         created = await manager.create_experiment(exp)
         assert created.name == "test-exp"
 

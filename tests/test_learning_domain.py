@@ -47,11 +47,15 @@ class TestOptimizationTarget:
 
 class TestRecommendation:
     def test_defaults(self) -> None:
-        rec = Recommendation(category="engine_selection", title="Switch to engine-b", confidence=0.8)
+        rec = Recommendation(
+            category="engine_selection", title="Switch to engine-b", confidence=0.8
+        )
         assert rec.status == RecommendationStatus.ACTIVE
 
     def test_to_dict(self) -> None:
-        rec = Recommendation(category="routing", title="Use engine-b", confidence=0.85, evidence="Faster latency")
+        rec = Recommendation(
+            category="routing", title="Use engine-b", confidence=0.85, evidence="Faster latency"
+        )
         d = rec.to_dict()
         assert d["category"] == "routing"
         assert d["confidence"] == 0.85
@@ -59,11 +63,21 @@ class TestRecommendation:
 
 class TestRoutingDecision:
     def test_defaults(self) -> None:
-        rd = RoutingDecision(execution_id="ex-1", selected_engine="engine-b", selection_reason="latency", confidence=0.9)
+        rd = RoutingDecision(
+            execution_id="ex-1",
+            selected_engine="engine-b",
+            selection_reason="latency",
+            confidence=0.9,
+        )
         assert rd.confidence == 0.9
 
     def test_to_dict(self) -> None:
-        rd = RoutingDecision(execution_id="ex-1", selected_engine="engine-b", selection_reason="faster", confidence=0.9)
+        rd = RoutingDecision(
+            execution_id="ex-1",
+            selected_engine="engine-b",
+            selection_reason="faster",
+            confidence=0.9,
+        )
         d = rd.to_dict()
         assert d["selected_engine"] == "engine-b"
 
@@ -75,7 +89,13 @@ class TestPerformanceProfile:
         assert pp.sample_count == 0
 
     def test_to_dict(self) -> None:
-        pp = PerformanceProfile(target_id="e1", target_type="engine", avg_latency_ms=150.0, p95_latency_ms=300.0, success_rate=0.95)
+        pp = PerformanceProfile(
+            target_id="e1",
+            target_type="engine",
+            avg_latency_ms=150.0,
+            p95_latency_ms=300.0,
+            success_rate=0.95,
+        )
         d = pp.to_dict()
         assert d["avg_latency_ms"] == 150.0
         assert d["success_rate"] == 0.95
@@ -121,13 +141,21 @@ class TestFailureAnalysis:
 
 class TestOptimizationResult:
     def test_defaults(self) -> None:
-        res = OptimizationResult(recommendation_id="rec-1", target=OptimizationTarget.ROUTING, previous_value="a", new_value="b")
+        res = OptimizationResult(
+            recommendation_id="rec-1",
+            target=OptimizationTarget.ROUTING,
+            previous_value="a",
+            new_value="b",
+        )
         assert res.status == OptimizationStatus.PENDING
 
     def test_to_dict(self) -> None:
         res = OptimizationResult(
-            recommendation_id="rec-1", target=OptimizationTarget.ROUTING,
-            previous_value="a", new_value="b", improvement_pct=25.0,
+            recommendation_id="rec-1",
+            target=OptimizationTarget.ROUTING,
+            previous_value="a",
+            new_value="b",
+            improvement_pct=25.0,
             status=OptimizationStatus.APPLIED,
         )
         d = res.to_dict()
@@ -185,7 +213,9 @@ class TestOptimizationPolicy:
         assert policy.enabled is True
 
     def test_to_dict(self) -> None:
-        policy = OptimizationPolicy(name="cost-saver", target=OptimizationTarget.EXECUTION_COST, effect=PolicyEffect.ALLOW)
+        policy = OptimizationPolicy(
+            name="cost-saver", target=OptimizationTarget.EXECUTION_COST, effect=PolicyEffect.ALLOW
+        )
         d = policy.to_dict()
         assert d["name"] == "cost-saver"
         assert d["target"] == "execution_cost"
@@ -198,7 +228,12 @@ class TestExperiment:
         assert exp.rollback_on_regression is True
 
     def test_to_dict(self) -> None:
-        exp = Experiment(name="canary-test", experiment_type=ExperimentType.CANARY, control_config={}, treatment_config={})
+        exp = Experiment(
+            name="canary-test",
+            experiment_type=ExperimentType.CANARY,
+            control_config={},
+            treatment_config={},
+        )
         d = exp.to_dict()
         assert d["name"] == "canary-test"
         assert d["experiment_type"] == "canary"
