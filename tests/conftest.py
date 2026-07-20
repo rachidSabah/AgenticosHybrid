@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from agentic_os.adapters.bus.local import LocalBus
-from agentic_os.config import Settings
-from agentic_os.core.orchestrator import Orchestrator
-from agentic_os.core.registry import AgentRegistry, ProviderRegistry
+# Ensure services/ is importable (for services.runtime_discovery tests)
+_services_path = str(Path(__file__).resolve().parent.parent / "services")
+if _services_path not in sys.path:
+    sys.path.insert(0, _services_path)
+
+from agentic_os.adapters.bus.local import LocalBus  # noqa: E402
+from agentic_os.config import Settings  # noqa: E402
+from agentic_os.core.orchestrator import Orchestrator  # noqa: E402
+from agentic_os.core.registry import AgentRegistry, ProviderRegistry  # noqa: E402
 
 
 @pytest.fixture
