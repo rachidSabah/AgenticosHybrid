@@ -498,6 +498,7 @@ class Kernel:
             orchestration=self.orchestration,
             mcp=self.mcp,
             mcp_ws=self.mcp_ws,
+            desktop=self.desktop,
             learning=self.learning,
         )
 

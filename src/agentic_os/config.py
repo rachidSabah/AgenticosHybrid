@@ -99,5 +99,15 @@ class Settings(BaseSettings):
     desktop_max_backups: int = 10
     desktop_runtime_discovery_interval_seconds: int = 3600
 
+    # Production Hardening (Phase 4, M6 Part 3)
+    desktop_validate_on_startup: bool = True
+    desktop_enable_memory_leak_detection: bool = True
+    desktop_enable_thread_monitoring: bool = True
+    desktop_enable_auto_repair: bool = True
+    desktop_enable_recovery_mode: bool = True
+    desktop_memory_leak_threshold_mb: int = 50
+    desktop_thread_count_threshold: int = 200
+    desktop_graceful_shutdown_timeout_seconds: int = 30
+
 
 settings = Settings()

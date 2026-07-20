@@ -17,6 +17,13 @@ import {
   Gauge,
   Search,
   Globe,
+  Monitor,
+  MonitorDot,
+  MonitorUp,
+  Wifi,
+  RefreshCw,
+  Shield,
+  HardDrive,
 } from "lucide-react";
 
 export interface NavItem {
@@ -24,7 +31,7 @@ export interface NavItem {
   label: string;
   hint: string;
   icon: typeof Brain;
-  group: "core" | "build" | "observe";
+  group: "core" | "build" | "observe" | "desktop";
 }
 
 export const NAV: NavItem[] = [
@@ -43,12 +50,20 @@ export const NAV: NavItem[] = [
   { id: "monitor", label: "System Monitor", hint: "Y", icon: Gauge, group: "observe" },
   { id: "discovery", label: "Discovery", hint: "D", icon: Search, group: "observe" },
   { id: "swarm", label: "Swarm Orchestration", hint: "S", icon: Globe, group: "core" },
+  // Desktop views (Phase 4, M6)
+  { id: "desktop-overview", label: "Desktop Overview", hint: "1", icon: Monitor, group: "desktop" },
+  { id: "desktop-runtimes", label: "Desktop Runtimes", hint: "2", icon: MonitorDot, group: "desktop" },
+  { id: "desktop-updates", label: "Desktop Updates", hint: "3", icon: RefreshCw, group: "desktop" },
+  { id: "desktop-diagnostics", label: "Desktop Diagnostics", hint: "4", icon: Shield, group: "desktop" },
+  { id: "desktop-offline", label: "Offline Mode", hint: "5", icon: Wifi, group: "desktop" },
+  { id: "desktop-settings", label: "Desktop Settings", hint: "6", icon: Settings, group: "desktop" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [
   { id: "core", label: "Command" },
   { id: "build", label: "Compose" },
   { id: "observe", label: "Inspect" },
+  { id: "desktop", label: "Desktop" },
 ];
 
 export const ALL_ICONS = { Command, Settings, Bell };

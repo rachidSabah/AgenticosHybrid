@@ -51,6 +51,26 @@ const SwarmDashboard = lazy(() =>
   import("@/views/swarm-dashboard").then((m) => ({ default: m.SwarmDashboard }))
 );
 
+// Desktop views (Phase 4, M6)
+const DesktopOverview = lazy(() =>
+  import("@/views/desktop-overview").then((m) => ({ default: m.default }))
+);
+const DesktopRuntimes = lazy(() =>
+  import("@/views/desktop-runtimes").then((m) => ({ default: m.default }))
+);
+const DesktopUpdates = lazy(() =>
+  import("@/views/desktop-updates").then((m) => ({ default: m.default }))
+);
+const DesktopDiagnostics = lazy(() =>
+  import("@/views/desktop-diagnostics").then((m) => ({ default: m.default }))
+);
+const DesktopOffline = lazy(() =>
+  import("@/views/desktop-offline").then((m) => ({ default: m.default }))
+);
+const DesktopSettings = lazy(() =>
+  import("@/views/desktop-settings").then((m) => ({ default: m.default }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
   overview: () => (
     <ErrorBoundary viewName="Mission Overview" fallback={<ViewSkeleton title="Mission Overview" />}>
@@ -154,6 +174,49 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Swarm Orchestration" fallback={<ViewSkeleton title="Swarm Orchestration" />}>
       <Suspense fallback={<ViewSkeleton title="Swarm Orchestration" />}>
         <SwarmDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  // Desktop views (Phase 4, M6)
+  "desktop-overview": () => (
+    <ErrorBoundary viewName="Desktop Overview" fallback={<ViewSkeleton title="Desktop Overview" />}>
+      <Suspense fallback={<ViewSkeleton title="Desktop Overview" />}>
+        <DesktopOverview />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "desktop-runtimes": () => (
+    <ErrorBoundary viewName="Desktop Runtimes" fallback={<ViewSkeleton title="Desktop Runtimes" />}>
+      <Suspense fallback={<ViewSkeleton title="Desktop Runtimes" />}>
+        <DesktopRuntimes />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "desktop-updates": () => (
+    <ErrorBoundary viewName="Desktop Updates" fallback={<ViewSkeleton title="Desktop Updates" />}>
+      <Suspense fallback={<ViewSkeleton title="Desktop Updates" />}>
+        <DesktopUpdates />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "desktop-diagnostics": () => (
+    <ErrorBoundary viewName="Desktop Diagnostics" fallback={<ViewSkeleton title="Desktop Diagnostics" />}>
+      <Suspense fallback={<ViewSkeleton title="Desktop Diagnostics" />}>
+        <DesktopDiagnostics />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "desktop-offline": () => (
+    <ErrorBoundary viewName="Offline Mode" fallback={<ViewSkeleton title="Offline Mode" />}>
+      <Suspense fallback={<ViewSkeleton title="Offline Mode" />}>
+        <DesktopOffline />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "desktop-settings": () => (
+    <ErrorBoundary viewName="Desktop Settings" fallback={<ViewSkeleton title="Desktop Settings" />}>
+      <Suspense fallback={<ViewSkeleton title="Desktop Settings" />}>
+        <DesktopSettings />
       </Suspense>
     </ErrorBoundary>
   ),

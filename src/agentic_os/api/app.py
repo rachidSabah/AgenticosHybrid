@@ -2874,6 +2874,88 @@ def create_app(platform: Platform) -> FastAPI:
                 return {"points": []}
             return {"points": list(await desktop.backup.get_available_restore_points())}
 
+        # -- Production Hardening --
+
+        @app.get("/api/desktop/hardening/config")
+        async def get_hardening_config() -> dict:
+            return (await desktop.hardening.get_config()).to_dict()
+
+        @app.put("/api/desktop/hardening/config")
+        async def update_hardening_config(body: dict) -> dict:
+            from agentic_os.domain.desktop import HardeningConfig
+
+            config = HardeningConfig(
+                **{k: v for k, v in body.items() if k in HardeningConfig.__dataclass_fields__}
+            )
+            return (await desktop.hardening.update_config(config)).to_dict()
+
+        @app.post("/api/desktop/hardening/validate")
+        async def run_startup_validation() -> dict:
+            return (await desktop.hardening.validate_startup()).to_dict()
+
+        @app.post("/api/desktop/hardening/integrity")
+        async def run_integrity_check() -> dict:
+            return (await desktop.hardening.check_integrity()).to_dict()
+
+        @app.post("/api/desktop/hardening/diagnostics")
+        async def run_diagnostics() -> dict:
+            return (await desktop.hardening.run_self_diagnostics()).to_dict()
+
+        @app.post("/api/desktop/hardening/memory")
+        async def check_memory() -> dict:
+            return (await desktop.hardening.check_memory_leaks()).to_dict()
+
+        @app.post("/api/desktop/hardening/threads")
+        async def check_threads() -> dict:
+            return (await desktop.hardening.monitor_threads()).to_dict()
+
+        @app.post("/api/desktop/hardening/cleanup")
+        async def cleanup_resources() -> dict:
+            return (await desktop.hardening.cleanup_resources()).to_dict()
+
+        @app.post("/api/desktop/hardening/repair")
+        async def repair_system(body: dict | None = None) -> dict:
+            targets = body.get("targets") if body else None
+            return (await desktop.hardening.repair(targets)).to_dict()
+
+        @app.get("/api/desktop/hardening/recovery")
+        async def get_recovery_status() -> dict:
+            return {"in_recovery": await desktop.hardening.is_in_recovery()}
+
+        @app.post("/api/desktop/hardening/recovery/enter")
+        async def enter_recovery() -> dict:
+            return {"success": await desktop.hardening.enter_recovery_mode()}
+
+        @app.post("/api/desktop/hardening/recovery/exit")
+        async def exit_recovery() -> dict:
+            return {"success": await desktop.hardening.exit_recovery_mode()}
+
+        @app.post("/api/desktop/hardening/recover")
+        async def recover() -> dict:
+            return (await desktop.hardening.recover()).to_dict()
+
+        @app.get("/api/desktop/hardening/resources")
+        async def get_resource_usage() -> dict:
+            return (await desktop.hardening.get_resource_usage()).to_dict()
+
+        @app.post("/api/desktop/hardening/shutdown")
+        async def plan_shutdown(body: dict | None = None) -> dict:
+            force = body.get("force", False) if body else False
+            return (await desktop.hardening.plan_shutdown(force=force)).to_dict()
+
+        @app.get("/api/desktop/hardening/cleanup-history")
+        async def get_cleanup_history() -> dict:
+            history = await desktop.hardening.get_cleanup_history()
+            return {"history": [r.to_dict() for r in history]}
+
+        @app.get("/api/desktop/hardening/recovery-history")
+        async def get_recovery_history() -> dict:
+            return {"history": list(await desktop.hardening.get_recovery_history())}
+
+        @app.get("/api/desktop/hardening/repair-history")
+        async def get_repair_history() -> dict:
+            return {"history": list(await desktop.hardening.get_repair_history())}
+
         # -- Drag & Drop --
 
         @app.post("/api/desktop/dragdrop")

@@ -335,4 +335,143 @@ export const api = {
     post<{ recovered: string }>(`/api/swarm/recovery/task/${encodeURIComponent(taskId)}`),
   swarmRetry: (taskId: string) =>
     post<{ retry: boolean; delay: number }>(`/api/swarm/retry/should`, { task_id: taskId }),
+
+  // ── Desktop Runtime (Phase 4, M6) ──
+
+  desktopState: () => get<import("./desktop-types").DesktopRuntimeState>("/api/desktop/state"),
+  desktopStatus: () => get<{ status: string }>("/api/desktop/status"),
+  desktopConfig: () => get<import("./desktop-types").DesktopConfig>("/api/desktop/config"),
+  updateDesktopConfig: (body: Partial<import("./desktop-types").DesktopConfig>) =>
+    put<import("./desktop-types").DesktopConfig>("/api/desktop/config", body),
+
+  // Windows
+  listWindows: () => get<import("./desktop-types").WindowInfo[]>("/api/desktop/windows"),
+
+  // Workspaces
+  listWorkspaces: () => get<import("./desktop-types").Workspace[]>("/api/desktop/workspaces"),
+  createWorkspace: (body: { name: string }) =>
+    post<import("./desktop-types").Workspace>("/api/desktop/workspaces", body),
+  getWorkspace: (id: string) =>
+    get<import("./desktop-types").Workspace>(`/api/desktop/workspaces/${encodeURIComponent(id)}`),
+  switchWorkspace: (id: string) =>
+    post<{ switched: string }>(`/api/desktop/workspaces/${encodeURIComponent(id)}/switch`),
+
+  // Notifications
+  listNotifications: () =>
+    get<import("./desktop-types").DesktopNotification[]>("/api/desktop/notifications"),
+  dismissNotification: (id: string) =>
+    del<{ dismissed: string }>(`/api/desktop/notifications/${encodeURIComponent(id)}`),
+
+  // Diagnostics & Performance
+  diagnostics: () => get<import("./desktop-types").DesktopDiagnosticsInfo>("/api/desktop/diagnostics"),
+  performance: () =>
+    get<import("./desktop-types").DesktopPerformanceMetrics>("/api/desktop/performance"),
+
+  // Runtime Discovery
+  runtimes: () =>
+    get<import("./desktop-types").RuntimeInfo[]>("/api/desktop/runtimes"),
+  discoverRuntimes: () =>
+    post<import("./desktop-types").RuntimeDiscoveryResult>("/api/desktop/runtimes/discover"),
+  getRuntime: (rt: string) =>
+    get<import("./desktop-types").RuntimeInfo | null>(`/api/desktop/runtimes/${encodeURIComponent(rt)}`),
+
+  // Updates
+  updateStatus: () => get<{ version: string; status: string }>("/api/desktop/updates/status"),
+  checkUpdates: (channel?: string) =>
+    post<import("./desktop-types").ReleaseInfo[]>(
+      `/api/desktop/updates/check${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`,
+    ),
+  updateHistory: () =>
+    get<import("./desktop-types").UpdateHistoryRecord[]>("/api/desktop/updates/history"),
+  pendingUpdate: () => get<import("./desktop-types").UpdateManifest | null>("/api/desktop/updates/pending"),
+  downloadUpdate: (body: import("./desktop-types").UpdateManifest) =>
+    post<{ success: boolean }>("/api/desktop/updates/download", body),
+  installUpdate: (body: import("./desktop-types").UpdateManifest) =>
+    post<import("./desktop-types").UpdateResult>("/api/desktop/updates/install", body),
+
+  // Channels
+  channels: () => get<string[]>("/api/desktop/channels"),
+  currentChannel: () => get<{ channel: string }>("/api/desktop/channels/current"),
+  setChannel: (channel: string) =>
+    put<{ channel: string }>("/api/desktop/channels", { channel }),
+
+  // Rollback
+  rollbackAvailable: () =>
+    get<string[]>("/api/desktop/rollback/available"),
+  rollback: () => post<import("./desktop-types").UpdateResult>("/api/desktop/rollback"),
+
+  // Backup
+  createBackup: (body?: import("./desktop-types").BackupConfig) =>
+    post<import("./desktop-types").BackupResult>("/api/desktop/backup", body ?? {}),
+  listBackups: () =>
+    get<import("./desktop-types").BackupResult[]>("/api/desktop/backups"),
+  restorePoints: () =>
+    get<{ points: Array<Record<string, unknown>> }>("/api/desktop/restore/points"),
+
+  // Offline
+  offlineState: () => get<{ state: string }>("/api/desktop/offline"),
+  enableOffline: () => post<{ state: string }>("/api/desktop/offline/enable"),
+  disableOffline: () => post<{ state: string }>("/api/desktop/offline/disable"),
+  offlineEvents: () =>
+    get<import("./desktop-types").OfflineEvent[]>("/api/desktop/offline/events"),
+  syncOffline: () => post<{ synced: number }>("/api/desktop/offline/sync"),
+
+  // First Run
+  firstRunState: () =>
+    get<import("./desktop-types").FirstRunState>("/api/desktop/first-run"),
+  runFirstRunStep: (step: string) =>
+    post<{ success: boolean }>("/api/desktop/first-run/step", { step }),
+
+  // Hardening
+  hardeningConfig: () =>
+    get<import("./desktop-types").HardeningConfig>("/api/desktop/hardening/config"),
+  updateHardeningConfig: (body: Partial<import("./desktop-types").HardeningConfig>) =>
+    put<import("./desktop-types").HardeningConfig>("/api/desktop/hardening/config", body),
+  validateStartup: () =>
+    post<{ success: boolean; checks: Array<Record<string, unknown>> }>(
+      "/api/desktop/hardening/validate",
+    ),
+  integrityCheck: () =>
+    post<import("./desktop-types").IntegrityCheckResult>("/api/desktop/hardening/integrity"),
+  runDiagnostics: () =>
+    post<import("./desktop-types").SelfDiagnosticsReport>("/api/desktop/hardening/diagnostics"),
+  checkMemory: () =>
+    post<import("./desktop-types").MemoryLeakReport>("/api/desktop/hardening/memory"),
+  checkThreads: () =>
+    post<import("./desktop-types").ThreadReport>("/api/desktop/hardening/threads"),
+  cleanupResources: () =>
+    post<import("./desktop-types").CleanupResult>("/api/desktop/hardening/cleanup"),
+  repairSystem: (targets?: string[]) =>
+    post<import("./desktop-types").RepairResult>("/api/desktop/hardening/repair", targets ? { targets } : undefined),
+  recoveryStatus: () =>
+    get<{ in_recovery: boolean }>("/api/desktop/hardening/recovery"),
+  enterRecovery: () =>
+    post<{ success: boolean }>("/api/desktop/hardening/recovery/enter"),
+  exitRecovery: () =>
+    post<{ success: boolean }>("/api/desktop/hardening/recovery/exit"),
+  recover: () =>
+    post<import("./desktop-types").RepairResult>("/api/desktop/hardening/recover"),
+  resourceUsage: () =>
+    get<import("./desktop-types").ResourceUsageSummary>("/api/desktop/hardening/resources"),
+  planShutdown: (force?: boolean) =>
+    post<{ steps: Array<Record<string, unknown>> }>(
+      "/api/desktop/hardening/shutdown", force ? { force } : undefined,
+    ),
+
+  // Menus
+  listMenus: () => get<unknown[]>("/api/desktop/menus"),
+
+  // Shortcuts
+  listShortcuts: () =>
+    get<import("./desktop-types").KeyboardShortcut[]>("/api/desktop/shortcuts"),
+
+  // Command Palette
+  commandPalette: () =>
+    get<import("./desktop-types").CommandPaletteItem[]>("/api/desktop/command-palette"),
+
+  // Search
+  globalSearch: (query: string) =>
+    get<import("./desktop-types").SearchResult[]>(
+      `/api/desktop/search?q=${encodeURIComponent(query)}`,
+    ),
 };
