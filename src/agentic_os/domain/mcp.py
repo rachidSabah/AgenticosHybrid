@@ -354,7 +354,9 @@ class MCPServerConfig:
             created_by=self.created_by,
         )
 
-    def with_sandbox(self, sandbox: bool, config: dict[str, Any] | None = None) -> "MCPServerConfig":
+    def with_sandbox(
+        self, sandbox: bool, config: dict[str, Any] | None = None
+    ) -> "MCPServerConfig":
         return MCPServerConfig(
             id=self.id,
             name=self.name,

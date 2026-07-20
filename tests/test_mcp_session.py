@@ -1,7 +1,7 @@
 """Tests for MCP Session Manager."""
 
+
 import pytest
-from unittest.mock import AsyncMock
 
 from agentic_os.core.mcp.session import MCPSessionManager
 from agentic_os.domain.mcp import MCPSessionStatus, MCPTransport

@@ -38,7 +38,11 @@ class DockerAdapter(BaseMCPAdapter):
         config: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(name, config)
-        self._docker_host = config.get("docker_host", "unix:///var/run/docker.sock") if config else "unix:///var/run/docker.sock"
+        self._docker_host = (
+            config.get("docker_host", "unix:///var/run/docker.sock")
+            if config
+            else "unix:///var/run/docker.sock"
+        )
         self._client = None
 
     @property
@@ -100,8 +104,14 @@ class DockerAdapter(BaseMCPAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "container_id": {"type": "string", "description": "Container ID or name"},
-                        "timeout": {"type": "integer", "description": "Seconds to wait before killing"},
+                        "container_id": {
+                            "type": "string",
+                            "description": "Container ID or name",
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Seconds to wait before killing",
+                        },
                     },
                     "required": ["container_id"],
                 },
@@ -112,8 +122,14 @@ class DockerAdapter(BaseMCPAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "container_id": {"type": "string", "description": "Container ID or name"},
-                        "timeout": {"type": "integer", "description": "Seconds to wait before killing"},
+                        "container_id": {
+                            "type": "string",
+                            "description": "Container ID or name",
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Seconds to wait before killing",
+                        },
                     },
                     "required": ["container_id"],
                 },

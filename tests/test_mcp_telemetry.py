@@ -1,9 +1,9 @@
 """Tests for MCP Telemetry."""
 
-import pytest
-from datetime import UTC, datetime
 
-from agentic_os.core.mcp.telemetry import MCPTelemetry, MetricType
+import pytest
+
+from agentic_os.core.mcp.telemetry import MCPTelemetry
 
 
 @pytest.fixture
@@ -66,9 +66,9 @@ class TestMCPTelemetryMetrics:
 class TestMCPTelemetryAggregation:
     async def test_get_summary(self, telemetry) -> None:
         # Make some requests
-        for i in range(5):
+        for idx in range(5):
             rid = telemetry.start_request("server1", "Server 1", "tools/list")
-            telemetry.complete_request(rid, success=i < 4)
+            telemetry.complete_request(rid, success=idx < 4)
 
         summary = telemetry.get_summary()
         assert summary["total_requests"] == 5
@@ -76,7 +76,7 @@ class TestMCPTelemetryAggregation:
         assert summary["failed_requests"] == 1
 
     async def test_get_latency_distribution(self, telemetry) -> None:
-        for i in range(10):
+        for _ in range(10):
             rid = telemetry.start_request("server1", "Server 1", "tools/list")
             telemetry.complete_request(rid, success=True)
 
@@ -90,12 +90,12 @@ class TestMCPTelemetryAggregation:
         assert telemetry.get_error_rate() == 0.0
 
         # Some successful
-        for i in range(5):
+        for _ in range(5):
             rid = telemetry.start_request("server1", "Server 1", "tools/list")
             telemetry.complete_request(rid, success=True)
 
         # Some failed
-        for i in range(5):
+        for _ in range(5):
             rid = telemetry.start_request("server2", "Server 2", "tools/list")
             telemetry.complete_request(rid, success=False)
 
@@ -104,7 +104,7 @@ class TestMCPTelemetryAggregation:
 
 class TestMCPTelemetryServerMetrics:
     async def test_get_server_metrics(self, telemetry) -> None:
-        for i in range(3):
+        for _ in range(3):
             rid = telemetry.start_request("server1", "Server 1", "tools/list")
             telemetry.complete_request(rid, success=True)
 
@@ -118,7 +118,7 @@ class TestMCPTelemetryServerMetrics:
         assert metrics is None
 
     async def test_get_all_server_metrics(self, telemetry) -> None:
-        for i in range(2):
+        for _ in range(2):
             rid = telemetry.start_request("server1", "Server 1", "tools/list")
             telemetry.complete_request(rid, success=True)
             rid = telemetry.start_request("server2", "Server 2", "prompts/list")
@@ -131,7 +131,7 @@ class TestMCPTelemetryServerMetrics:
 
 class TestMCPTelemetrySnapshot:
     async def test_get_snapshot(self, telemetry) -> None:
-        for i in range(3):
+        for _ in range(3):
             rid = telemetry.start_request("server1", "Server 1", "tools/list")
             telemetry.complete_request(rid, success=True)
 

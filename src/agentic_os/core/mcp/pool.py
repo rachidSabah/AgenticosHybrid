@@ -6,7 +6,7 @@ and reduce overhead from creating new connections.
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -15,8 +15,6 @@ from agentic_os.core.mcp.client import MCPClient
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.mcp import (
     MCPServerConfig,
-    MCPServerStatus,
-    MCPTransport,
 )
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
@@ -291,7 +289,10 @@ class MCPConnectionPool:
                 idle_count = sum(1 for c in self._pools.get(server_id, []) if not c.in_use)
                 if idle_count < self._config.min_connections:
                     # This would require server config, so we just log for now
-                    log.debug(f"Pool {server_id} below minimum connections: {idle_count}/{self._config.min_connections}")
+                    log.debug(
+                        f"Pool {server_id} below minimum connections: "
+                        f"{idle_count}/{self._config.min_connections}"
+                    )
 
         return stats
 

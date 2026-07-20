@@ -95,7 +95,10 @@ class PostgreSQLAdapter(BaseMCPAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "schema": {"type": "string", "description": "Schema name (default: public)"},
+                        "schema": {
+                            "type": "string",
+                            "description": "Schema name (default: public)",
+                        },
                     },
                 },
             ),
@@ -105,8 +108,14 @@ class PostgreSQLAdapter(BaseMCPAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "table_name": {"type": "string", "description": "Name of the table"},
-                        "schema": {"type": "string", "description": "Schema name (default: public)"},
+                        "table_name": {
+                            "type": "string",
+                            "description": "Name of the table",
+                        },
+                        "schema": {
+                            "type": "string",
+                            "description": "Schema name (default: public)",
+                        },
                     },
                     "required": ["table_name"],
                 },

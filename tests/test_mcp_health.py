@@ -1,7 +1,8 @@
 """Tests for MCP Health Monitor."""
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from agentic_os.core.mcp.health import MCPHealthMonitor
 from agentic_os.domain.mcp import MCPHealthStatus

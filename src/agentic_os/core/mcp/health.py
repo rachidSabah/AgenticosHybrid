@@ -12,10 +12,9 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
 from agentic_os.domain.events import EventEnvelope, Topic
-from agentic_os.domain.mcp import MCPHealthStatus, MCPServerStatus
+from agentic_os.domain.mcp import MCPHealthStatus
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
 
@@ -161,7 +160,6 @@ class MCPHealthMonitor:
                 error="No health check callback registered",
             )
 
-        history = self._health_history.get(server_id)
         start_time = asyncio.get_event_loop().time()
 
         try:
@@ -184,7 +182,7 @@ class MCPHealthMonitor:
                 details=details,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             check_result = HealthCheckResult(
                 server_id=server_id,
                 status=MCPHealthStatus.UNHEALTHY,
@@ -358,7 +356,9 @@ class MCPHealthMonitor:
                     "status": status.value,
                     "server_name": history.server_name,
                     "consecutive_failures": history.consecutive_failures,
-                    "last_check_at": history.last_check_at.isoformat() if history.last_check_at else None,
+                    "last_check_at": (
+                        history.last_check_at.isoformat() if history.last_check_at else None
+                    ),
                     "avg_latency_ms": history.avg_latency_ms,
                     "uptime_ratio": (
                         history.checks_healthy / history.checks_total

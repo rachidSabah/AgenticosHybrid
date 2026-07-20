@@ -246,7 +246,8 @@ class MCPTelemetry:
             sm.prompt_calls += 1
 
         if metric.error:
-            error_type = type(metric.error).__name__ if isinstance(metric.error, Exception) else "Unknown"
+            err = metric.error
+            error_type = type(err).__name__ if isinstance(err, Exception) else "Unknown"
             sm.errors_by_type[error_type] = sm.errors_by_type.get(error_type, 0) + 1
 
         sm.last_request_at = _utcnow()
@@ -312,7 +313,8 @@ class MCPTelemetry:
 
     def get_snapshot(self) -> TelemetrySnapshot:
         """Get a point-in-time snapshot of all telemetry."""
-        avg_latency = self._total_latency_ms / self._total_requests if self._total_requests > 0 else 0.0
+        total = self._total_requests
+        avg_latency = self._total_latency_ms / total if total > 0 else 0.0
 
         return TelemetrySnapshot(
             timestamp=_utcnow(),
@@ -398,4 +400,11 @@ class MCPTelemetry:
         return stats
 
 
-__all__ = ["MCPTelemetry", "TelemetryMetric", "RequestMetric", "ServerMetrics", "TelemetrySnapshot", "MetricType"]
+__all__ = [
+    "MCPTelemetry",
+    "TelemetryMetric",
+    "RequestMetric",
+    "ServerMetrics",
+    "TelemetrySnapshot",
+    "MetricType",
+]

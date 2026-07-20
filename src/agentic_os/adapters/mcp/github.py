@@ -40,7 +40,9 @@ class GitHubAdapter(BaseMCPAdapter):
     ) -> None:
         super().__init__(name, config)
         self._token = config.get("token", "") if config else ""
-        self._api_url = config.get("api_url", "https://api.github.com") if config else "https://api.github.com"
+        self._api_url = (
+            config.get("api_url", "https://api.github.com") if config else "https://api.github.com"
+        )
         self._headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "AgenticOS-MCP-GitHub",
@@ -80,9 +82,18 @@ class GitHubAdapter(BaseMCPAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "owner": {"type": "string", "description": "Repository owner"},
-                        "repo": {"type": "string", "description": "Repository name"},
-                        "state": {"type": "string", "description": "Filter by state (open, closed, all)"},
+                        "owner": {
+                            "type": "string",
+                            "description": "Repository owner",
+                        },
+                        "repo": {
+                            "type": "string",
+                            "description": "Repository name",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Filter by state (open, closed, all)",
+                        },
                     },
                     "required": ["owner", "repo"],
                 },
@@ -121,9 +132,18 @@ class GitHubAdapter(BaseMCPAdapter):
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "owner": {"type": "string", "description": "Repository owner"},
-                        "repo": {"type": "string", "description": "Repository name"},
-                        "state": {"type": "string", "description": "Filter by state (open, closed, all)"},
+                        "owner": {
+                            "type": "string",
+                            "description": "Repository owner",
+                        },
+                        "repo": {
+                            "type": "string",
+                            "description": "Repository name",
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "Filter by state (open, closed, all)",
+                        },
                     },
                     "required": ["owner", "repo"],
                 },
@@ -295,7 +315,7 @@ class GitHubAdapter(BaseMCPAdapter):
 
         return [
             MCPToolResource(
-                uri=f"github://repositories",
+                uri="github://repositories",
                 name="GitHub Repositories",
                 description="List of GitHub repositories",
                 mime_type="application/json",
@@ -315,9 +335,21 @@ class GitHubAdapter(BaseMCPAdapter):
                 name="github_issue_summary",
                 description="Generate a summary of GitHub issues",
                 arguments=(
-                    {"name": "owner", "description": "Repository owner", "required": True},
-                    {"name": "repo", "description": "Repository name", "required": True},
-                    {"name": "state", "description": "Issue state (open, closed)", "required": False},
+                    {
+                        "name": "owner",
+                        "description": "Repository owner",
+                        "required": True,
+                    },
+                    {
+                        "name": "repo",
+                        "description": "Repository name",
+                        "required": True,
+                    },
+                    {
+                        "name": "state",
+                        "description": "Issue state (open, closed)",
+                        "required": False,
+                    },
                 ),
             ),
         ]

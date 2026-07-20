@@ -12,7 +12,6 @@ from uuid import uuid4
 
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.mcp import (
-    MCPCapability,
     MCPSession,
     MCPSessionStatus,
     MCPTransport,
@@ -152,7 +151,9 @@ class MCPSessionManager:
 
     # ── Session State Management ─────────────────────────────────────────
 
-    async def update_session_status(self, session_id: str, status: MCPSessionStatus) -> MCPSession | None:
+    async def update_session_status(
+        self, session_id: str, status: MCPSessionStatus
+    ) -> MCPSession | None:
         """Update the status of a session."""
         session = self._sessions.get(session_id)
         if not session:
@@ -163,8 +164,13 @@ class MCPSessionManager:
         updated_session = session.with_status(status)
         self._sessions[session_id] = updated_session
 
+        topic = (
+            Topic.MCP_SESSION_DESTROYED
+            if status == MCPSessionStatus.CLOSED
+            else Topic.MCP_SESSION_CREATED
+        )
         await self._emit(
-            Topic.MCP_SESSION_DESTROYED if status == MCPSessionStatus.CLOSED else Topic.MCP_SESSION_CREATED,
+            topic,
             {
                 "session_id": session_id,
                 "server_id": session.server_id,
@@ -351,8 +357,7 @@ class MCPSessionManager:
             return sum(
                 1
                 for sid in session_ids
-                if sid in self._sessions
-                and self._sessions[sid].status == MCPSessionStatus.ACTIVE
+                if sid in self._sessions and self._sessions[sid].status == MCPSessionStatus.ACTIVE
             )
         return sum(1 for s in self._sessions.values() if s.status == MCPSessionStatus.ACTIVE)
 

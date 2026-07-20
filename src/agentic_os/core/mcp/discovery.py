@@ -12,16 +12,13 @@ Automatic discovery of MCP servers with:
 import asyncio
 import json
 import os
-import shutil
-import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from agentic_os.domain.events import EventEnvelope, Topic
-from agentic_os.domain.mcp import MCPTool, MCPTransport
+from agentic_os.domain.mcp import MCPTransport
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
 

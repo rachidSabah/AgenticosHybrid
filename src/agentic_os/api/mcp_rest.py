@@ -5,8 +5,6 @@ Complete REST API for MCP server lifecycle, tools, resources, prompts,
 sessions, health, and telemetry management.
 """
 
-from typing import Any
-
 from fastapi import APIRouter, HTTPException
 
 from agentic_os.core.mcp.health import MCPHealthMonitor
@@ -14,7 +12,7 @@ from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.core.mcp.session import MCPSessionManager
 from agentic_os.core.mcp.telemetry import MCPTelemetry
-from agentic_os.domain.mcp import MCPSessionStatus, MCPServerStatus
+from agentic_os.domain.mcp import MCPServerStatus, MCPSessionStatus
 from agentic_os.ports.mcp import MCPServerCreate, MCPServerUpdate, MCPToolInvoke
 
 mcp_router = APIRouter(prefix="/api/mcp", tags=["MCP"])
@@ -49,7 +47,7 @@ def create_mcp_router(
             try:
                 status_filter = MCPServerStatus(status)
             except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
 
         return await registry.list_servers(
             status=status_filter,
@@ -63,7 +61,7 @@ def create_mcp_router(
         """Get a specific MCP server."""
         detail = await registry.get_server(server_id)
         if not detail:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         return detail
 
     @mcp_router.put("/servers/{server_id}")
@@ -72,14 +70,14 @@ def create_mcp_router(
         try:
             return await registry.update_server(server_id, data)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
 
     @mcp_router.delete("/servers/{server_id}")
     async def delete_server(server_id: str):
         """Delete an MCP server registration."""
         deleted = await registry.delete_server(server_id)
         if not deleted:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         return {"deleted": server_id}
 
     @mcp_router.post("/servers/{server_id}/start")
@@ -88,7 +86,7 @@ def create_mcp_router(
         try:
             return await registry.start_server(server_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
 
     @mcp_router.post("/servers/{server_id}/stop")
     async def stop_server(server_id: str):
@@ -96,7 +94,7 @@ def create_mcp_router(
         try:
             return await registry.stop_server(server_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
 
     @mcp_router.post("/servers/{server_id}/restart")
     async def restart_server(server_id: str):
@@ -104,9 +102,9 @@ def create_mcp_router(
         try:
             return await registry.restart_server(server_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     @mcp_router.post("/servers/{server_id}/reload")
     async def reload_server(server_id: str):
@@ -114,7 +112,7 @@ def create_mcp_router(
         try:
             return await registry.reload_server(server_id)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
 
     # ── Tool Operations ───────────────────────────────────────────────
 
@@ -123,7 +121,7 @@ def create_mcp_router(
         """List available tools for a server."""
         detail = await registry.get_server(server_id)
         if not detail:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         return detail.tools
 
     @mcp_router.post("/servers/{server_id}/tools/discover")
@@ -131,7 +129,7 @@ def create_mcp_router(
         """Discover tools from an MCP server."""
         detail = await registry.get_server(server_id)
         if not detail:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
 
         tools = await registry.discover_tools(server_id)
         return tools
@@ -149,11 +147,11 @@ def create_mcp_router(
         try:
             return await registry.invoke_tool(tool_invoke)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from None
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     # ── Resource Operations ───────────────────────────────────────────
 
@@ -164,9 +162,9 @@ def create_mcp_router(
             resources = await registry.list_server_resources(server_id)
             return resources
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     @mcp_router.get("/servers/{server_id}/resources/{uri:path}")
     async def read_resource(server_id: str, uri: str):
@@ -174,9 +172,9 @@ def create_mcp_router(
         try:
             return await registry.read_server_resource(server_id, uri)
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     @mcp_router.post("/servers/{server_id}/resources/{uri:path}/subscribe")
     async def subscribe_resource(server_id: str, uri: str):
@@ -185,7 +183,7 @@ def create_mcp_router(
             success = await registry.subscribe_server_resource(server_id, uri)
             return {"success": success, "uri": uri}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     @mcp_router.delete("/servers/{server_id}/resources/{uri:path}/subscribe")
     async def unsubscribe_resource(server_id: str, uri: str):
@@ -194,7 +192,7 @@ def create_mcp_router(
             success = await registry.unsubscribe_server_resource(server_id, uri)
             return {"success": success, "uri": uri}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     # ── Prompt Operations ─────────────────────────────────────────────
 
@@ -205,9 +203,9 @@ def create_mcp_router(
             prompts = await registry.list_server_prompts(server_id)
             return prompts
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     @mcp_router.post("/servers/{server_id}/prompts/{name}")
     async def get_prompt(server_id: str, name: str, arguments: dict | None = None):
@@ -216,9 +214,9 @@ def create_mcp_router(
             result = await registry.get_server_prompt(server_id, name, arguments)
             return result
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     # ── Session Operations ─────────────────────────────────────────────
 
@@ -230,7 +228,7 @@ def create_mcp_router(
             try:
                 status_filter = MCPSessionStatus(status)
             except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
 
         return await session_manager.list_sessions(server_id=server_id, status=status_filter)
 
@@ -277,7 +275,7 @@ def create_mcp_router(
         """Get health status for a specific server."""
         status = health_monitor.get_health(server_id)
         if status is None:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         return {
             "server_id": server_id,
             "status": status.value,
@@ -297,7 +295,7 @@ def create_mcp_router(
                 "error": result.error,
             }
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from None
 
     @mcp_router.get("/health/degraded")
     async def get_degraded_servers():
@@ -336,7 +334,7 @@ def create_mcp_router(
         """Get telemetry for a specific server."""
         metrics = telemetry.get_server_metrics(server_id)
         if not metrics:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         return metrics
 
     # ── Registry Operations ───────────────────────────────────────────
@@ -369,7 +367,7 @@ def create_mcp_router(
         """Get permission mappings for a server."""
         detail = await registry.get_server(server_id)
         if not detail:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         return await registry.get_permissions(server_id)
 
     @mcp_router.post("/servers/{server_id}/permissions")
@@ -382,9 +380,9 @@ def create_mcp_router(
             count = await registry.set_permissions(server_id, mapping_objects)
             return {"set": count, "mappings": mappings}
         except KeyError:
-            raise HTTPException(status_code=404, detail="Server not found")
+            raise HTTPException(status_code=404, detail="Server not found") from None
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from None
 
     return mcp_router
 

@@ -54,7 +54,7 @@ exclude = ["services/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["B008"]  # FastAPI dependency injection uses function calls in arg defaults
+ignore = ["B008", "UP037"]  # B008: FastAPI DI, UP037: forward refs in dataclasses
 
 [tool.ruff.lint.per-file-ignores]
 "tests/test_sd_*.py" = ["E402"]  # services/ must be added to sys.path before imports
