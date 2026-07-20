@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_services_path = str(Path(__file__).resolve().parent.parent / "services")
+if _services_path not in sys.path:
+    sys.path.insert(0, _services_path)
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
