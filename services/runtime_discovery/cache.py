@@ -26,11 +26,12 @@ class RuntimeCache:
         self, provider: str, engine_name: str, runtime_type: RuntimeType, data: dict[str, Any]
     ) -> RuntimeCacheEntry:
         key = self.make_key(provider, engine_name, data.get("endpoint", ""))
+        entry_data = {"provider": provider, **data}
         return RuntimeCacheEntry(
             key=key,
             runtime_type=runtime_type,
             name=engine_name,
-            data=data,
+            data=entry_data,
             expires_at=datetime.now(UTC) + timedelta(seconds=self._ttl_seconds),
         )
 
@@ -52,8 +53,7 @@ class RuntimeCache:
         self._entries.pop(key, None)
 
     def invalidate_by_provider(self, provider: str) -> None:
-        prefix = sha256(f"{provider}|".encode()).hexdigest()[:16][:8]
-        to_remove = [k for k in self._entries if k.startswith(prefix)]
+        to_remove = [k for k, v in self._entries.items() if v.data.get("provider") == provider]
         for k in to_remove:
             self._entries.pop(k, None)
 

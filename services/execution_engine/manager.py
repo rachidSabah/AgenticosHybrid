@@ -160,7 +160,7 @@ class ExecutionEngineManager:
             )
         if self._bus:
             await publish_engine_registered(self._bus, config.type.value, config.name)
-        _log.info("Registered engine", name=config.name, type=config.type.value)
+        _log.info("Registered engine: %s (%s)", config.name, config.type.value)
         return engine
 
     async def unregister_engine(self, name: str) -> None:

@@ -40,10 +40,10 @@ class RuntimeRegistry:
             self._runtimes[runtime.runtime_id] = runtime
             self._name_index[runtime.name] = runtime.runtime_id
             _log.info(
-                "Runtime registered",
-                name=runtime.name,
-                type=runtime.runtime_type.value,
-                id=runtime.runtime_id[:8],
+                "Runtime registered: %s (%s) [%s]",
+                runtime.name,
+                runtime.runtime_type.value,
+                runtime.runtime_id[:8],
             )
             return runtime
 
@@ -52,7 +52,7 @@ class RuntimeRegistry:
             runtime = self._runtimes.pop(runtime_id, None)
             if runtime:
                 self._name_index.pop(runtime.name, None)
-                _log.info("Runtime unregistered", name=runtime.name, id=runtime_id[:8])
+                _log.info("Runtime unregistered: %s [%s]", runtime.name, runtime_id[:8])
                 return True
             return False
 

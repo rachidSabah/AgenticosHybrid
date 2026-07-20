@@ -334,10 +334,10 @@ class RuntimeDiscoveryManager:
 
         await self._registry.update(runtime)
         _log.info(
-            "Runtime discovered and bound",
-            name=runtime.name,
-            type=runtime.runtime_type.value,
-            status=runtime.status.value,
+            "Runtime discovered and bound: %s (%s) [%s]",
+            runtime.name,
+            runtime.runtime_type.value,
+            runtime.status.value,
         )
 
         if self._bus:

@@ -83,7 +83,7 @@ class RooCodeAdapter(BaseExecutionEngineAdapter):
 
     async def _on_execute(self, task: Any) -> Any:
         goal = task.goal if hasattr(task, "goal") else str(task)
-        _log.info("Executing with Roo Code", goal=goal[:100])
+        _log.info("Executing with Roo Code: %s", goal[:100])
         if not self._process:
             return {"goal": goal, "result": "mock_roo_code_execution", "mock": True}
         request = json.dumps({"method": "execute_task", "params": {"goal": goal}}) + "\n"

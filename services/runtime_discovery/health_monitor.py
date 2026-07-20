@@ -101,7 +101,7 @@ class RuntimeHealthMonitor:
 
         self._tasks[runtime.runtime_id] = asyncio.create_task(_check_loop())
         _log.info(
-            "Periodic health check started", runtime=runtime.name, interval=self._check_interval_s
+            "Periodic health check started: %s (interval=%ds)", runtime.name, self._check_interval_s
         )
 
     async def stop_periodic_check(self, runtime_id: str) -> None:

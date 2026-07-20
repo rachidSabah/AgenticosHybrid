@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-os"
-version = "0.9.0"
+version = "0.9.1"
 description = "Agentic OS — a local-first, event-bus-driven AI Agent Operating System."
 readme = "README.md"
 requires-python = ">=3.14"
@@ -44,7 +44,7 @@ packages = ["src/agentic_os"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "services"]
 
 [tool.ruff]
 target-version = "py314"

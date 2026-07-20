@@ -85,12 +85,12 @@ class RuntimeBindingManager:
             binding.status = BindingStatus.BOUND
             binding.bound_at = datetime.now(UTC)
             runtime.status = RuntimeStatus.BOUND
-            _log.info("Runtime bound", name=runtime.name, engine=engine_type.value)
+            _log.info("Runtime bound: %s (engine=%s)", runtime.name, engine_type.value)
 
         except Exception as e:
             binding.status = BindingStatus.FAILED
             binding.error = str(e)
-            _log.warning("Binding failed", name=runtime.name, error=str(e))
+            _log.warning("Binding failed: %s - %s", runtime.name, e)
 
         self._bindings[runtime.runtime_id] = binding
         runtime.binding = binding
@@ -104,10 +104,10 @@ class RuntimeBindingManager:
             if binding.engine_name:
                 await self._engine_manager.unregister_engine(binding.engine_name)
             binding.status = BindingStatus.UNBOUND
-            _log.info("Runtime unbound", name=binding.engine_name)
+            _log.info("Runtime unbound: %s", binding.engine_name)
             return True
         except Exception as e:
-            _log.warning("Unbind error", name=binding.engine_name, error=str(e))
+            _log.warning("Unbind error: %s - %s", binding.engine_name, e)
             return False
 
     def get_binding(self, runtime_id: str) -> RuntimeBinding | None:

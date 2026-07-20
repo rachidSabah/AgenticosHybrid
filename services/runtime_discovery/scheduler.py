@@ -32,7 +32,7 @@ class RuntimeDiscoveryScheduler:
                 await asyncio.sleep(interval_s)
 
         self._tasks[name] = asyncio.create_task(_loop())
-        _log.info("Scheduled task", name=name, interval=interval_s)
+        _log.info("Scheduled task: %s (interval=%ds)", name, interval_s)
 
     async def unschedule(self, name: str) -> None:
         task = self._tasks.pop(name, None)
@@ -42,7 +42,7 @@ class RuntimeDiscoveryScheduler:
                 await task
             except asyncio.CancelledError:
                 pass
-            _log.info("Unscheduled task", name=name)
+            _log.info("Unscheduled task: %s", name)
 
     async def start_all(self) -> None:
         self._running = True

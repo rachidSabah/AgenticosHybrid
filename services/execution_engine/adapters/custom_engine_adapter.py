@@ -48,7 +48,7 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
 
     async def _on_execute(self, task: Any) -> Any:
         goal = task.goal if hasattr(task, "goal") else str(task)
-        _log.info("Executing with custom engine %s", self._config.name, goal=goal[:100])
+        _log.info("Executing with custom engine %s: %s", self._config.name, goal[:100])
         command = self._config.extra.get("command_template", "{goal}").format(goal=goal)
         if self._process and self._process.returncode is None:
             request = json.dumps({"method": "execute", "params": {"command": command}}) + "\n"

@@ -83,7 +83,7 @@ class ContinueAdapter(BaseExecutionEngineAdapter):
 
     async def _on_execute(self, task: Any) -> Any:
         goal = task.goal if hasattr(task, "goal") else str(task)
-        _log.info("Executing with Continue", goal=goal[:100])
+        _log.info("Executing with Continue: %s", goal[:100])
         if not self._process:
             return {"goal": goal, "result": "mock_continue_execution", "mock": True}
         request = json.dumps({"method": "execute_task", "params": {"goal": goal}}) + "\n"

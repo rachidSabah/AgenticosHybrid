@@ -58,7 +58,7 @@ class BaseExecutionEngineAdapter(ABC):
             self._initialized = True
             self._health.initialized = True
             self._health.healthy = True
-            _log.info("Engine initialized", engine=self.name)
+            _log.info("Engine initialized: %s", self.name)
         except Exception as e:
             self._health.healthy = False
             self._health.last_error = str(e)

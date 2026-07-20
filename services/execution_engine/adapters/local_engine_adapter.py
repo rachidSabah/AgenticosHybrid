@@ -39,7 +39,7 @@ class LocalEngineAdapter(BaseExecutionEngineAdapter):
 
     async def _on_execute(self, task: Any) -> Any:
         goal = task.goal if hasattr(task, "goal") else str(task)
-        _log.info("Executing locally", goal=goal[:100])
+        _log.info("Executing locally: %s", goal[:100])
         if isinstance(goal, str) and goal.startswith(("ls", "echo", "pwd", "whoami")):
             try:
                 result = subprocess.run(

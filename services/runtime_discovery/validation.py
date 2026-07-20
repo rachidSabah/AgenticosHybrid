@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import os
 import shutil
 import subprocess
@@ -61,7 +62,7 @@ class ValidationPipeline:
             validator_fn = validator_def["validator"]
             required = validator_def["required"]
             try:
-                if asyncio.iscoroutinefunction(validator_fn):
+                if inspect.iscoroutinefunction(validator_fn):
                     check_result = await validator_fn(runtime)
                 else:
                     check_result = validator_fn(runtime)
@@ -91,7 +92,6 @@ class ValidationPipeline:
         return result
 
     async def validate_all(self, runtimes: list[Runtime]) -> list[RuntimeValidationResult]:
-        import asyncio
 
         tasks = [self.validate(r) for r in runtimes]
         return await asyncio.gather(*tasks)
