@@ -2,8 +2,8 @@
 MCP Manager
 
 High-level manager for MCP server lifecycle, process supervision, health monitoring,
-tool/resource/prompt discovery, session tracking, and error recovery.
-Coordinates between registry, client, and infrastructure.
+tool/resource/prompt discovery, session tracking, version management, capability
+negotiation, and error recovery. Coordinates between all MCP subsystems.
 """
 
 import asyncio
@@ -11,8 +11,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from agentic_os.core.mcp.capability import MCPCapabilityMapper, ServerCapabilities
+from agentic_os.core.mcp.prompt_registry import MCPPromptRegistry, PromptDefinition
 from agentic_os.core.mcp.registry import MCPRegistryImpl
+from agentic_os.core.mcp.resource_registry import MCPResourceRegistry, ResourceDefinition
 from agentic_os.core.mcp.security import MCPSecurity
+from agentic_os.core.mcp.tool_registry import MCPToolRegistry, ToolDefinition
+from agentic_os.core.mcp.version import MCPVersionManager, ServerVersionInfo
 from agentic_os.domain.mcp import (
     MCPHealthStatus,
     MCPPrompt,
@@ -52,6 +57,11 @@ class MCPManager:
     registry: MCPRegistryImpl
     bus: EventBus
     security: MCPSecurity | None = None
+    version_manager: MCPVersionManager = field(default_factory=MCPVersionManager)
+    capability_mapper: MCPCapabilityMapper = field(default_factory=MCPCapabilityMapper)
+    tool_registry: MCPToolRegistry = field(default_factory=MCPToolRegistry)
+    resource_registry: MCPResourceRegistry = field(default_factory=MCPResourceRegistry)
+    prompt_registry: MCPPromptRegistry = field(default_factory=MCPPromptRegistry)
     default_principal: Principal = field(
         default_factory=lambda: Principal(id="mcp-system", roles=[Role.ADMIN]),
         init=False,
@@ -76,14 +86,62 @@ class MCPManager:
             log.debug("MCP Manager already initialized")
             return
         log.info("Initializing MCP Manager...")
+
+        snapshot = self.registry.get_registry_snapshot()
+        for detail in snapshot.servers:
+            vinfo = ServerVersionInfo(
+                server_id=detail.config.id,
+                server_version=detail.config.version,
+            )
+            self.version_manager.register_version(detail.config.id, vinfo)
+
+            caps = ServerCapabilities(server_id=detail.config.id)
+            self.capability_mapper.register_capabilities(detail.config.id, caps)
+
+            for tool in detail.tools:
+                self.tool_registry.register(
+                    ToolDefinition(
+                        name=tool.name,
+                        server_id=detail.config.id,
+                        description=tool.description,
+                        input_schema=tool.input_schema,
+                    )
+                )
+            for resource in detail.resources:
+                self.resource_registry.register(
+                    ResourceDefinition(
+                        uri=resource.uri,
+                        server_id=detail.config.id,
+                        name=resource.name,
+                        description=resource.description,
+                        mime_type=resource.mime_type,
+                    )
+                )
+            for prompt in detail.prompts:
+                self.prompt_registry.register(
+                    PromptDefinition(
+                        name=prompt.name,
+                        server_id=detail.config.id,
+                        description=prompt.description,
+                        template=prompt.template or "",  # type: ignore[arg-type]
+                    )
+                )
+
         self._initialized = True
+        log.info(f"MCP Manager initialized with {len(snapshot.servers)} servers")
 
     async def start(self) -> None:
         """Start the MCP manager — initialize, start all enabled servers,
-        and begin health monitoring."""
+        negotiate capabilities, and begin health monitoring."""
         log.info("Starting MCP Manager...")
         await self.initialize()
         started = await self.start_all_enabled()
+        for detail in started:
+            self.version_manager.check_compatibility(detail.config.id)
+            self.capability_mapper.negotiate(
+                detail.config.id,
+                ["tools", "resources", "prompts", "streaming"],
+            )
         await self.start_health_monitoring()
         log.info(f"MCP Manager started with {len(started)} servers")
 
@@ -94,6 +152,11 @@ class MCPManager:
         self._initialized = False
         await self.stop_health_monitoring()
         await self.stop_all()
+        self.version_manager.clear()
+        self.capability_mapper.clear()
+        self.tool_registry.clear()
+        self.resource_registry.clear()
+        self.prompt_registry.clear()
         log.info("MCP Manager shutdown complete")
 
     # ── Server Lifecycle ────────────────────────────────────────────────
@@ -444,6 +507,71 @@ class MCPManager:
         if not client:
             return None
         return getattr(client, "session_id", None)
+
+    # ── Version Management ──────────────────────────────────────────────
+
+    def get_server_version_info(self, server_id: str) -> ServerVersionInfo | None:
+        """Get version info for a server."""
+        return self.version_manager.get_version(server_id)
+
+    def check_server_compatibility(self, server_id: str) -> Any:
+        """Check if a server's protocol version is compatible."""
+        return self.version_manager.check_compatibility(server_id)
+
+    def get_protocol_matrix(self) -> dict[str, Any]:
+        """Get the protocol compatibility matrix for all servers."""
+        return self.version_manager.get_protocol_compatibility_matrix()
+
+    # ── Capability Management ───────────────────────────────────────────
+
+    def get_server_capabilities(self, server_id: str) -> Any:
+        """Get capabilities for a server."""
+        return self.capability_mapper.get_capabilities(server_id)
+
+    def has_server_capability(self, server_id: str, capability: str) -> bool:
+        """Check if a server has a specific capability."""
+        return self.capability_mapper.has_capability(server_id, capability)
+
+    def negotiate_capabilities(self, server_id: str, requested: list[str]) -> Any:
+        """Negotiate capabilities with a server."""
+        return self.capability_mapper.negotiate(server_id, requested)
+
+    def list_all_capabilities(self) -> dict[str, list[str]]:
+        """List all capabilities across all servers."""
+        return self.capability_mapper.list_all_capabilities()
+
+    # ── Standalone Registry Proxies ─────────────────────────────────────
+
+    def get_registered_tools(self, server_id: str | None = None) -> list[Any]:
+        """Get registered tools, optionally filtered by server."""
+        tools = self.tool_registry.list_tools()
+        if server_id:
+            return self.tool_registry.get_server_tools(server_id)
+        return tools
+
+    def get_registered_resources(self, server_id: str | None = None) -> list[Any]:
+        """Get registered resources, optionally filtered by server."""
+        if server_id:
+            return self.resource_registry.get_server_resources(server_id)
+        return self.resource_registry.list_resources()
+
+    def get_registered_prompts(self, server_id: str | None = None) -> list[Any]:
+        """Get registered prompts, optionally filtered by server."""
+        if server_id:
+            return self.prompt_registry.get_server_prompts(server_id)
+        return self.prompt_registry.list_prompts()
+
+    def search_tools(self, query: str) -> list[Any]:
+        """Search registered tools."""
+        return self.tool_registry.search_tools(query)
+
+    def search_resources(self, query: str) -> list[Any]:
+        """Search registered resources."""
+        return self.resource_registry.search_resources(query)
+
+    def search_prompts(self, query: str) -> list[Any]:
+        """Search registered prompts."""
+        return self.prompt_registry.search_prompts(query)
 
     # ── Utility ─────────────────────────────────────────────────────────
 

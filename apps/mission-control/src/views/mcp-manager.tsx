@@ -13,7 +13,7 @@ import type {
   MCPToolResult,
 } from "@/lib/types";
 
-type McpTab = "servers" | "tools" | "permissions" | "health" | "sessions" | "resources" | "prompts" | "telemetry";
+type McpTab = "servers" | "tools" | "permissions" | "health" | "sessions" | "resources" | "prompts" | "telemetry" | "versions";
 
 export function McpManager() {
   const [tab, setTab] = useState<McpTab>("servers");
@@ -21,7 +21,7 @@ export function McpManager() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2">
-        {(["servers", "tools", "permissions", "health", "sessions", "resources", "prompts", "telemetry"] as const).map((t) => (
+        {(["servers", "tools", "permissions", "health", "sessions", "resources", "prompts", "telemetry", "versions"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -45,7 +45,9 @@ export function McpManager() {
                         ? "Resources"
                         : t === "prompts"
                           ? "Prompts"
-                          : "Telemetry"}
+                          : t === "versions"
+          ? "Versions"
+          : "Telemetry"}
           </button>
         ))}
       </div>
@@ -58,6 +60,7 @@ export function McpManager() {
         {tab === "resources" && <McpResourcesTab />}
         {tab === "prompts" && <McpPromptsTab />}
         {tab === "telemetry" && <McpTelemetryTab />}
+        {tab === "versions" && <McpVersionsTab />}
       </div>
     </div>
   );
@@ -955,6 +958,92 @@ function McpTelemetryTab() {
                   <span className="font-mono text-faint">{err.method}</span>
                 </div>
                 <div className="mt-0.5 truncate text-[10px] text-danger">{err.error}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+// ── Sub-tab: Versions ──
+
+function McpVersionsTab() {
+  const [versions, setVersions] = useState<Record<string, { server_id: string; protocol_version: string | null; server_version: string | null }>>({});
+  const [matrix, setMatrix] = useState<{ supported_versions: string[]; recommended_version: string; servers: Record<string, { protocol_version: string | null; compatible: boolean }> } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [vers, mat] = await Promise.all([
+        api.mcpVersions(),
+        api.mcpVersionMatrix(),
+      ]);
+      setVersions(vers);
+      setMatrix(mat);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center p-8 text-xs text-faint">Loading version info…</div>;
+  }
+
+  return (
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
+        <button
+          onClick={() => load()}
+          className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <Panel title="Protocol Versions" subtitle="Supported protocol versions" className="col-span-6">
+        <div className="space-y-2">
+          {matrix && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-faint">Recommended</span>
+                <span className="font-mono text-xs text-ok">{matrix.recommended_version}</span>
+              </div>
+              <div className="border-t border-border/40 pt-2">
+                <div className="mb-1 text-[11px] font-medium text-faint">Supported</div>
+                {matrix.supported_versions.map((v) => (
+                  <div key={v} className="flex items-center gap-2 py-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+                    <span className="text-xs text-muted">{v}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {!matrix && <Empty title="No version info" hint="No protocol version data available." />}
+        </div>
+      </Panel>
+
+      <Panel title="Server Versions" subtitle="Version info per server" className="col-span-6">
+        {Object.keys(versions).length === 0 ? (
+          <Empty title="No servers" hint="No MCP servers have version information." />
+        ) : (
+          <div className="space-y-2">
+            {Object.entries(versions).map(([sid, info]) => (
+              <div key={sid} className="rounded-xl border border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{sid}</span>
+                  <Badge tone={matrix?.servers[sid]?.compatible ? "ok" : "warn"}>
+                    {matrix?.servers[sid]?.compatible ? "Compatible" : "Incompatible"}
+                  </Badge>
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-faint">
+                  <span>Protocol: {info.protocol_version || "—"}</span>
+                  <span>Server: {info.server_version || "—"}</span>
+                </div>
               </div>
             ))}
           </div>

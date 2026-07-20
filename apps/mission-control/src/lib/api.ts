@@ -230,4 +230,44 @@ export const api = {
     get<import("./types").MCPSessionStats>("/api/mcp/sessions/stats"),
   mcpCleanupSessions: () =>
     post<{ expired: number; closed_cleaned: number }>("/api/mcp/sessions/cleanup"),
+
+  // ── MCP Version Management ──
+  mcpVersions: () =>
+    get<Record<string, import("./types").MCPVersionInfo>>("/api/mcp/versions"),
+  mcpServerVersion: (serverId: string) =>
+    get<import("./types").MCPVersionDetail>(`/api/mcp/versions/${encodeURIComponent(serverId)}`),
+  mcpVersionMatrix: () =>
+    get<import("./types").MCPVersionMatrix>("/api/mcp/versions/matrix"),
+
+  // ── MCP Capabilities ──
+  mcpCapabilities: () =>
+    get<Record<string, string[]>>("/api/mcp/capabilities"),
+  mcpServerCapabilities: (serverId: string) =>
+    get<import("./types").MCPCapabilityView>(`/api/mcp/capabilities/${encodeURIComponent(serverId)}`),
+  mcpNegotiateCapabilities: (body: import("./types").MCPNegotiateRequest) =>
+    post<import("./types").MCPNegotiateResult>("/api/mcp/capabilities/negotiate", body),
+
+  // ── MCP Registry Search ──
+  mcpRegisteredTools: (serverId?: string) => {
+    const qs = serverId ? `?server_id=${encodeURIComponent(serverId)}` : "";
+    return get<import("./types").MCPRegisteredTool[]>(`/api/mcp/tools/registry${qs}`);
+  },
+  mcpSearchTools: (query: string) =>
+    get<import("./types").MCPRegisteredTool[]>(`/api/mcp/tools/registry/search?query=${encodeURIComponent(query)}`),
+  mcpToolRegistryStats: () =>
+    get<{ total_tools: number; total_servers: number }>("/api/mcp/tools/registry/stats"),
+
+  mcpRegisteredResources: (serverId?: string) => {
+    const qs = serverId ? `?server_id=${encodeURIComponent(serverId)}` : "";
+    return get<import("./types").MCPRegisteredResource[]>(`/api/mcp/resources/registry${qs}`);
+  },
+  mcpSearchResources: (query: string) =>
+    get<import("./types").MCPRegisteredResource[]>(`/api/mcp/resources/registry/search?query=${encodeURIComponent(query)}`),
+
+  mcpRegisteredPrompts: (serverId?: string) => {
+    const qs = serverId ? `?server_id=${encodeURIComponent(serverId)}` : "";
+    return get<import("./types").MCPRegisteredPrompt[]>(`/api/mcp/prompts/registry${qs}`);
+  },
+  mcpSearchPrompts: (query: string) =>
+    get<import("./types").MCPRegisteredPrompt[]>(`/api/mcp/prompts/registry/search?query=${encodeURIComponent(query)}`),
 };

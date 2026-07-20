@@ -746,3 +746,6 @@ class MCPClient:
     @property
     def session_id(self) -> str | None:
         return self._session_id
+
+
+__all__ = ["MCPClient"]

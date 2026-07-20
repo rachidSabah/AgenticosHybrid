@@ -385,3 +385,78 @@ export interface SystemMetrics {
   latency: number;
   errors: number;
 }
+
+// ── MCP Version Management ──
+
+export interface MCPVersionInfo {
+  server_id: string;
+  protocol_version: string | null;
+  server_version: string | null;
+  sdk_version: string | null;
+  discovered_at: string | null;
+  last_updated: string | null;
+}
+
+export interface MCPVersionDetail extends MCPVersionInfo {
+  compatible: boolean;
+}
+
+export interface MCPVersionMatrix {
+  supported_versions: string[];
+  recommended_version: string;
+  servers: Record<string, { protocol_version: string | null; server_version: string | null; compatible: boolean }>;
+}
+
+// ── MCP Capabilities ──
+
+export interface MCPCapabilityView {
+  server_id: string;
+  tools_count: number;
+  resources_count: number;
+  prompts_count: number;
+  sampling: boolean;
+  roots: boolean;
+  streaming: boolean;
+  session_management: boolean;
+  capability_negotiation: boolean;
+  supported: string[];
+}
+
+export interface MCPNegotiateRequest {
+  server_id: string;
+  capabilities: string[];
+}
+
+export interface MCPNegotiateResult {
+  server_id: string;
+  agreed: string[];
+  rejected: string[];
+}
+
+// ── MCP Registry Search ──
+
+export interface MCPRegisteredTool {
+  name: string;
+  server_id: string;
+  description: string;
+  categories: string[];
+  tags: string[];
+  enabled: boolean;
+}
+
+export interface MCPRegisteredResource {
+  uri: string;
+  server_id: string;
+  name: string;
+  description: string;
+  mime_type: string;
+  enabled: boolean;
+}
+
+export interface MCPRegisteredPrompt {
+  name: string;
+  server_id: string;
+  description: string;
+  tags: string[];
+  enabled: boolean;
+}

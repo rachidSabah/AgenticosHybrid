@@ -388,6 +388,180 @@ def create_mcp_router(
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e)) from None
 
+    # ── Version Management ──────────────────────────────────────────────
+
+    @mcp_router.get("/versions")
+    async def list_versions():
+        """List all server versions."""
+        versions = manager.version_manager.list_versions()
+        return {
+            sid: {
+                "server_id": v.server_id,
+                "protocol_version": v.protocol_version,
+                "server_version": v.server_version,
+                "sdk_version": v.sdk_version,
+                "discovered_at": v.discovered_at.isoformat() if v.discovered_at else None,
+                "last_updated": v.last_updated.isoformat() if v.last_updated else None,
+            }
+            for sid, v in versions.items()
+        }
+
+    @mcp_router.get("/versions/{server_id}")
+    async def get_server_version(server_id: str):
+        """Get version info for a server."""
+        info = manager.version_manager.get_version(server_id)
+        if not info:
+            raise HTTPException(status_code=404, detail="Server not found") from None
+        return {
+            "server_id": info.server_id,
+            "protocol_version": info.protocol_version,
+            "server_version": info.server_version,
+            "sdk_version": info.sdk_version,
+            "compatible": manager.version_manager.check_compatibility(server_id).compatible,
+        }
+
+    @mcp_router.get("/versions/matrix")
+    async def get_version_matrix():
+        """Get protocol compatibility matrix."""
+        return manager.version_manager.get_protocol_compatibility_matrix()
+
+    # ── Capability Management ───────────────────────────────────────────
+
+    @mcp_router.get("/capabilities")
+    async def list_capabilities():
+        """List all capabilities across all servers."""
+        return manager.capability_mapper.list_all_capabilities()
+
+    @mcp_router.get("/capabilities/{server_id}")
+    async def get_server_capabilities(server_id: str):
+        """Get capabilities for a server."""
+        caps = manager.capability_mapper.get_capabilities(server_id)
+        if not caps:
+            raise HTTPException(status_code=404, detail="Server not found") from None
+        return {
+            "server_id": caps.server_id,
+            "tools_count": len(caps.tools),
+            "resources_count": len(caps.resources),
+            "prompts_count": len(caps.prompts),
+            "sampling": caps.sampling,
+            "roots": caps.roots,
+            "streaming": caps.streaming,
+            "session_management": caps.session_management,
+            "capability_negotiation": caps.capability_negotiation,
+            "supported": manager.capability_mapper.get_supported_capabilities(server_id),
+        }
+
+    @mcp_router.post("/capabilities/negotiate")
+    async def negotiate_capabilities(data: dict):
+        """Negotiate capabilities with a server."""
+        server_id = data.get("server_id")
+        requested = data.get("capabilities", [])
+        if not server_id or not requested:
+            raise HTTPException(
+                status_code=400, detail="server_id and capabilities required"
+            ) from None
+        result = manager.capability_mapper.negotiate(server_id, requested)
+        return {
+            "server_id": result.server_id,
+            "agreed": result.agreed_capabilities,
+            "rejected": result.rejected_capabilities,
+        }
+
+    # ── Tool Registry ───────────────────────────────────────────────────
+
+    @mcp_router.get("/tools/registry")
+    async def list_registered_tools(server_id: str | None = None):
+        """List registered tools, optionally filtered by server."""
+        return [
+            {
+                "name": t.name,
+                "server_id": t.server_id,
+                "description": t.description,
+                "categories": t.categories,
+                "tags": t.tags,
+                "enabled": t.enabled,
+            }
+            for t in manager.get_registered_tools(server_id)
+        ]
+
+    @mcp_router.get("/tools/registry/search")
+    async def search_tools(query: str):
+        """Search registered tools."""
+        return [
+            {
+                "name": t.name,
+                "server_id": t.server_id,
+                "description": t.description,
+                "categories": t.categories,
+            }
+            for t in manager.search_tools(query)
+        ]
+
+    @mcp_router.get("/tools/registry/stats")
+    async def tool_registry_stats():
+        """Get tool registry statistics."""
+        return manager.tool_registry.get_stats()
+
+    # ── Resource Registry ───────────────────────────────────────────────
+
+    @mcp_router.get("/resources/registry")
+    async def list_registered_resources(server_id: str | None = None):
+        """List registered resources, optionally filtered by server."""
+        return [
+            {
+                "uri": r.uri,
+                "server_id": r.server_id,
+                "name": r.name,
+                "description": r.description,
+                "mime_type": r.mime_type,
+                "enabled": r.enabled,
+            }
+            for r in manager.get_registered_resources(server_id)
+        ]
+
+    @mcp_router.get("/resources/registry/search")
+    async def search_resources(query: str):
+        """Search registered resources."""
+        return [
+            {
+                "uri": r.uri,
+                "server_id": r.server_id,
+                "name": r.name,
+                "description": r.description,
+                "mime_type": r.mime_type,
+            }
+            for r in manager.search_resources(query)
+        ]
+
+    # ── Prompt Registry ─────────────────────────────────────────────────
+
+    @mcp_router.get("/prompts/registry")
+    async def list_registered_prompts(server_id: str | None = None):
+        """List registered prompts, optionally filtered by server."""
+        return [
+            {
+                "name": p.name,
+                "server_id": p.server_id,
+                "description": p.description,
+                "tags": p.tags,
+                "enabled": p.enabled,
+            }
+            for p in manager.get_registered_prompts(server_id)
+        ]
+
+    @mcp_router.get("/prompts/registry/search")
+    async def search_prompts(query: str):
+        """Search registered prompts."""
+        return [
+            {
+                "name": p.name,
+                "server_id": p.server_id,
+                "description": p.description,
+                "argument_count": len(p.arguments),
+            }
+            for p in manager.search_prompts(query)
+        ]
+
     return mcp_router
 
 

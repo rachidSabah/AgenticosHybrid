@@ -717,3 +717,6 @@ class MCPRegistryImpl(MCPRegistryPort):
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+__all__ = ["MCPRegistryImpl"]
