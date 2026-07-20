@@ -109,6 +109,8 @@ class McpServerSdk:
                         tags=self._tags,
                     )
 
+        assert self._config is not None
+
         self._detail = MCPServerDetail(
             config=self._config,
             status=MCPServerStatus.STOPPED,

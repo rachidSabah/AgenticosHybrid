@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import type {
   MCPHealthSummary,
   MCPPermissionMapping,
+  MCPPrompt,
   MCPServerDetail,
   MCPSessionMap,
   MCPTool,
@@ -815,7 +816,7 @@ function McpResourcesTab() {
 function McpPromptsTab() {
   const [servers, setServers] = useState<MCPServerDetail[]>([]);
   const [selectedServer, setSelectedServer] = useState<string>("");
-  const [prompts, setPrompts] = useState<Array<{ name: string; description: string; arguments?: unknown[] }>>([]);
+  const [prompts, setPrompts] = useState<MCPPrompt[]>([]);
 
   const loadServers = useCallback(() => {
     api.mcpServers().then(setServers).catch(() => {});

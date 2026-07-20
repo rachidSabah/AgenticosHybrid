@@ -22,6 +22,7 @@ class MCPTransport(StrEnum):
     STDIO = "stdio"
     SSE = "sse"
     STREAMABLE_HTTP = "streamable_http"
+    HTTP = "http"
 
 
 class MCPServerStatus(StrEnum):

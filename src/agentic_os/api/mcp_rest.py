@@ -139,7 +139,7 @@ def create_mcp_router(
         """Invoke a tool on an MCP server."""
         tool_invoke = MCPToolInvoke(
             server_id=server_id,
-            tool=data.get("tool"),
+            tool=data["tool"],
             args=data.get("args", {}),
             timeout_seconds=data.get("timeout_seconds"),
         )

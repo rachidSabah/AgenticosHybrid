@@ -52,7 +52,7 @@ class PostgreSQLAdapter(BaseMCPAdapter):
     async def initialize(self) -> None:
         """Initialize the database connection."""
         try:
-            import asyncpg
+            import asyncpg  # type: ignore[import-untyped]
 
             self._connection = await asyncpg.connect(
                 host=self._host,

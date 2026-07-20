@@ -102,6 +102,12 @@ class Topic(StrEnum):
     MCP_TRANSPORT_CONNECTED = "mcp.transport_connected"
     MCP_TRANSPORT_DISCONNECTED = "mcp.transport_disconnected"
     MCP_TRANSPORT_ERROR = "mcp.transport_error"
+    # MCP Discovery (Phase 4, M3)
+    MCP_SERVER_DISCOVERED = "mcp.server_discovered"
+    # MCP Connection Pool (Phase 4, M3)
+    MCP_CONNECTION_ACQUIRED = "mcp.connection_acquired"
+    MCP_CONNECTION_RELEASED = "mcp.connection_released"
+    MCP_CONNECTION_CLOSED = "mcp.connection_closed"
     # MCP Capability Negotiation (Phase 4, M3)
     MCP_CAPABILITY_NEGOTIATED = "mcp.capability_negotiated"
     # MCP Tool Discovery (Phase 4, M3)

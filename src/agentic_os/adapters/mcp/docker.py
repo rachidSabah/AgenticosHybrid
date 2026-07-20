@@ -53,7 +53,7 @@ class DockerAdapter(BaseMCPAdapter):
         """Get or create Docker client."""
         if self._client is None:
             try:
-                import docker
+                import docker  # type: ignore[import-untyped]
 
                 self._client = docker.DockerClient(base_url=self._docker_host)
             except ImportError:

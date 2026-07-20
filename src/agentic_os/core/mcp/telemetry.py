@@ -262,7 +262,9 @@ class MCPTelemetry:
     def _record_error(self, metric: RequestMetric) -> None:
         """Record an error."""
         error_entry = {
-            "timestamp": metric.completed_at.isoformat(),
+            "timestamp": metric.completed_at.isoformat()
+            if metric.completed_at
+            else _utcnow().isoformat(),
             "request_id": metric.request_id,
             "server_id": metric.server_id,
             "method": metric.method,
@@ -393,7 +395,9 @@ class MCPTelemetry:
 
         old_count = len(self._recent_requests)
         self._recent_requests = [
-            r for r in self._recent_requests if r.completed_at.timestamp() > cutoff
+            r
+            for r in self._recent_requests
+            if r.completed_at is not None and r.completed_at.timestamp() > cutoff
         ]
         stats["requests_removed"] = old_count - len(self._recent_requests)
 

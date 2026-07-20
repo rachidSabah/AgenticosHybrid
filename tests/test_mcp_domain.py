@@ -32,7 +32,7 @@ class TestMCPTransport:
         assert MCPTransport.STREAMABLE_HTTP.value == "streamable_http"
 
     def test_all_transports_defined(self) -> None:
-        expected = {"stdio", "sse", "streamable_http"}
+        expected = {"stdio", "sse", "streamable_http", "http"}
         assert {t.value for t in MCPTransport} == expected
 
 
