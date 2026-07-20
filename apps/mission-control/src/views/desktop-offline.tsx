@@ -79,12 +79,12 @@ export default function DesktopOffline() {
   const queuedCount = events.filter((e) => !e.synced).length;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4" role="region" aria-label="Offline Mode">
       {error && (
-        <div className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
+        <div role="alert" className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
       )}
 
-      <div className="col-span-12 flex flex-wrap items-center gap-3">
+      <div className="col-span-12 flex flex-wrap items-center gap-3" aria-live="polite">
         <Stat label="Offline State" value={offlineState} tone={offlineTone(offlineState)} />
         <Stat label="Queued Events" value={queuedCount} tone={queuedCount > 0 ? "warn" : "ok"} />
         <Stat label="Total Backups" value={backups.length} />
@@ -92,6 +92,7 @@ export default function DesktopOffline() {
           {offlineState === "online" && (
             <button
               onClick={handleEnable}
+              aria-label="Enable Offline"
               className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80"
             >
               Enable Offline
@@ -100,6 +101,7 @@ export default function DesktopOffline() {
           {offlineState !== "online" && (
             <button
               onClick={handleDisable}
+              aria-label="Disable Offline"
               className="rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20"
             >
               Disable Offline
@@ -108,6 +110,7 @@ export default function DesktopOffline() {
           <button
             onClick={handleSync}
             disabled={syncing || queuedCount === 0}
+            aria-label="Sync Now"
             className="rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20 disabled:opacity-50"
           >
             {syncing ? "Syncing…" : "Sync Now"}
@@ -132,9 +135,9 @@ export default function DesktopOffline() {
                 <span className="w-28 truncate text-muted">{ev.event_type}</span>
                 <span className="flex-1 text-faint">{new Date(ev.queued_at).toLocaleString()}</span>
                 <span className="w-20 text-right">
-                  <Badge tone={ev.synced ? "ok" : ev.error ? "danger" : "warn"}>
+                  <span role="status"><Badge tone={ev.synced ? "ok" : ev.error ? "danger" : "warn"}>
                     {ev.synced ? "Synced" : ev.error ? "Error" : "Pending"}
-                  </Badge>
+                  </Badge></span>
                 </span>
               </div>
             ))}
@@ -147,6 +150,7 @@ export default function DesktopOffline() {
           <button
             onClick={handleCreateBackup}
             disabled={creatingBackup}
+            aria-label="Create Backup"
             className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
           >
             {creatingBackup ? "Creating…" : "Create Backup"}

@@ -109,12 +109,12 @@ export default function DesktopUpdates() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4" role="region" aria-label="Desktop Updates">
       {error && (
-        <div className="rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
+        <div role="alert" className="rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3" aria-live="polite">
         <Stat label="Current Version" value={version || "—"} />
         <Stat label="Status" value={updateStatus} tone={updateStatus === "up-to-date" ? "ok" : updateStatus === "update-available" ? "warn" : "default"} />
         <div className="flex items-center gap-2 rounded-xl border border-border/60 px-3.5 py-3">
@@ -122,6 +122,7 @@ export default function DesktopUpdates() {
           <select
             value={channel}
             onChange={(e) => handleChannelChange(e.target.value)}
+            aria-label="Update Channel"
             className="rounded-lg border border-border/60 bg-surface/20 px-2 py-1 text-xs text-text"
           >
             {channels.map((ch) => (
@@ -132,6 +133,7 @@ export default function DesktopUpdates() {
         <button
           onClick={handleCheck}
           disabled={checking}
+          aria-label="Check for Updates"
           className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
         >
           {checking ? "Checking…" : "Check for Updates"}
@@ -158,6 +160,7 @@ export default function DesktopUpdates() {
               <button
                 onClick={() => handleDownload(pending)}
                 disabled={downloading}
+                aria-label="Download"
                 className="rounded-lg border border-border/60 px-3 py-1.5 text-xs font-medium transition hover:bg-surface/20 disabled:opacity-50"
               >
                 {downloading ? "Downloading…" : "Download"}
@@ -165,6 +168,7 @@ export default function DesktopUpdates() {
               <button
                 onClick={() => handleInstall(pending)}
                 disabled={installing}
+                aria-label="Install"
                 className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
               >
                 {installing ? "Installing…" : "Install"}
@@ -237,6 +241,7 @@ export default function DesktopUpdates() {
               <button
                 onClick={handleRollback}
                 disabled={rollingBack}
+                aria-label="Rollback"
                 className="ml-auto rounded-lg bg-warn/12 px-4 py-2 text-xs font-medium text-warn transition hover:bg-warn/20 disabled:opacity-50"
               >
                 {rollingBack ? "Rolling back…" : "Rollback"}

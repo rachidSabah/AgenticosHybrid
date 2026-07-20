@@ -99,15 +99,15 @@ export default function DesktopDiagnostics() {
     } catch (err) { setError(String(err)); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full text-xs text-faint">Loading…</div>;
+  if (loading) return <div role="status" aria-live="polite" className="flex items-center justify-center h-full text-xs text-faint">Loading…</div>;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4" role="region" aria-label="Desktop Diagnostics">
       {error && (
-        <div className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
+        <div role="alert" className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
       )}
 
-      <div className="col-span-12 flex flex-wrap items-center gap-3">
+      <div className="col-span-12 flex flex-wrap items-center gap-3" aria-live="polite">
         <Stat label="System Info" value={diagnostics ? `${diagnostics.os_name} ${diagnostics.os_version}` : "—"} />
         {diagnostics && (
           <>
@@ -129,6 +129,7 @@ export default function DesktopDiagnostics() {
         <div className="space-y-3">
           <button
             onClick={handleIntegrity}
+            aria-label="Run Integrity Check"
             className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80"
           >
             Run Integrity Check
@@ -136,7 +137,7 @@ export default function DesktopDiagnostics() {
           {integrity && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Badge tone={integrity.status === "passed" ? "ok" : "danger"}>{integrity.status}</Badge>
+                <span role="status"><Badge tone={integrity.status === "passed" ? "ok" : "danger"}>{integrity.status}</Badge></span>
                 <span className="text-[11px] text-faint">{integrity.duration_seconds.toFixed(1)}s</span>
               </div>
               {integrity.checks.length > 0 && (
@@ -166,13 +167,14 @@ export default function DesktopDiagnostics() {
         <div className="space-y-3">
           <button
             onClick={handleDiagnostics}
+            aria-label="Run Diagnostics"
             className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80"
           >
             Run Diagnostics
           </button>
           {selfReport && (
             <div className="space-y-2">
-              <Badge tone={selfReport.status === "healthy" ? "ok" : selfReport.status === "degraded" ? "warn" : "danger"}>{selfReport.status}</Badge>
+              <span role="status"><Badge tone={selfReport.status === "healthy" ? "ok" : selfReport.status === "degraded" ? "warn" : "danger"}>{selfReport.status}</Badge></span>
               <div className="divide-y divide-border/30">
                 {selfReport.services.map((s, i) => (
                   <div key={i} className="flex items-center gap-2 py-1.5 text-xs">
@@ -202,6 +204,7 @@ export default function DesktopDiagnostics() {
         <div className="space-y-3">
           <button
             onClick={handleMemory}
+            aria-label="Check Memory"
             className="rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20"
           >
             Check Memory
@@ -227,6 +230,7 @@ export default function DesktopDiagnostics() {
         <div className="space-y-3">
           <button
             onClick={handleThreads}
+            aria-label="Check Threads"
             className="rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20"
           >
             Check Threads
@@ -245,7 +249,7 @@ export default function DesktopDiagnostics() {
         </div>
       </Panel>
 
-      <Panel title="Resource Usage" subtitle="Current utilization" className="col-span-4 row-span-2">
+      <Panel title="Resource Usage" subtitle="Current utilization" className="col-span-4 row-span-2" aria-live="polite">
         {resources ? (
           <div className="space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-faint">CPU</span><span className="font-mono">{resources.cpu_percent.toFixed(1)}%</span></div>
@@ -264,12 +268,14 @@ export default function DesktopDiagnostics() {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={handleCleanup}
+            aria-label="Cleanup Resources"
             className="rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20"
           >
             Cleanup Resources
           </button>
           <button
             onClick={handleRepair}
+            aria-label="Repair System"
             className="rounded-lg border border-warn/40 px-4 py-2 text-xs font-medium text-warn transition hover:bg-warn/10"
           >
             Repair System
@@ -292,6 +298,7 @@ export default function DesktopDiagnostics() {
           <span className="text-xs text-muted">{recoveryMode ? "Recovery mode is enabled" : "Recovery mode is disabled"}</span>
           <button
             onClick={toggleRecovery}
+            aria-label={recoveryMode ? "Exit Recovery" : "Enter Recovery"}
             className={`ml-auto rounded-lg px-4 py-2 text-xs font-medium transition ${
               recoveryMode
                 ? "border border-border/60 text-muted hover:bg-surface/20"

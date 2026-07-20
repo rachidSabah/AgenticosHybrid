@@ -19,6 +19,7 @@
     "lucide-react": "0.474.0",
     "monaco-editor": "^0.55.1",
     "next": "15.1.6",
+    "next-intl": "^4.13.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "reactflow": "11.11.4",

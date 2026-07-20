@@ -1,0 +1,45 @@
+{
+  "nav": {
+    "groups": {"core": "Command", "build": "Compose", "observe": "Inspect", "desktop": "Desktop"},
+    "items": {
+      "overview": "Mission Overview", "brain": "AI Brain", "constellation": "Agent Constellation",
+      "execution": "Execution Graph", "workflow": "Workflow Studio", "pipeline": "Pipeline Builder",
+      "providers": "Provider Control Center", "memory": "Memory Explorer", "plugins": "Plugin Marketplace",
+      "mcp": "MCP Manager", "workspace": "Workspace Explorer", "timeline": "Task Timeline",
+      "monitor": "System Monitor", "discovery": "Discovery", "swarm": "Swarm Orchestration",
+      "desktop-overview": "Desktop Overview", "desktop-runtimes": "Desktop Runtimes",
+      "desktop-updates": "Desktop Updates", "desktop-diagnostics": "Desktop Diagnostics",
+      "desktop-offline": "Offline Mode", "desktop-settings": "Desktop Settings"
+    }
+  },
+  "desktop": {
+    "status": "Status",
+    "uptime": "Uptime",
+    "cpu": "CPU",
+    "memory": "Memory",
+    "disk": "Disk",
+    "windows": "Windows",
+    "workspaces": "Workspaces",
+    "version": "Version",
+    "refresh": "Refresh",
+    "discover": "Discover",
+    "checkUpdates": "Check for Updates",
+    "download": "Download",
+    "install": "Install",
+    "rollback": "Rollback",
+    "createBackup": "Create Backup",
+    "sync": "Sync",
+    "enable": "Enable",
+    "disable": "Disable",
+    "cleanup": "Cleanup",
+    "repair": "Repair",
+    "recover": "Recover"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "save": "Save"
+  }
+}

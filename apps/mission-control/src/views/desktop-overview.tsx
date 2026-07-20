@@ -34,7 +34,7 @@ function ProgressBar({ value, label, tone }: { value: number; label: string; ton
   };
   const barColor = colorMap[tone ?? "accent"] ?? "bg-accent";
   return (
-    <div>
+    <div role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
       <div className="mb-1 flex items-center justify-between text-xs">
         <span className="text-faint">{label}</span>
         <span className="font-mono tabular-nums text-muted">{value.toFixed(1)}%</span>
@@ -66,14 +66,14 @@ export default function DesktopOverview() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div className="flex items-center justify-center h-full text-xs text-faint">Loading…</div>;
-  if (error) return <div className="flex items-center justify-center h-full text-xs text-danger">{error}</div>;
-  if (!state) return <div className="flex items-center justify-center h-full text-xs text-faint">No data</div>;
+  if (loading) return <div role="status" aria-live="polite" className="flex items-center justify-center h-full text-xs text-faint">Loading…</div>;
+  if (error) return <div role="alert" className="flex items-center justify-center h-full text-xs text-danger">{error}</div>;
+  if (!state) return <div role="status" className="flex items-center justify-center h-full text-xs text-faint">No data</div>;
 
   const activeWorkspace = state.workspaces.find((w) => w.id === state.active_workspace_id);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4" role="region" aria-label="Desktop Overview">
       <div className="col-span-12 flex flex-wrap items-start gap-3">
         <Stat label="Desktop Status" value={state.status} tone={statusTone(state.status)} />
         <Stat label="Uptime" value={formatUptime(state.uptime_seconds)} />
@@ -87,13 +87,14 @@ export default function DesktopOverview() {
         )}
         <button
           onClick={load}
+          aria-label="Refresh"
           className="ml-auto rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20"
         >
           Refresh
         </button>
       </div>
 
-      <Panel title="Performance" subtitle="CPU, Memory & Disk usage" className="col-span-6 row-span-2">
+      <Panel title="Performance" subtitle="CPU, Memory & Disk usage" className="col-span-6 row-span-2" aria-live="polite">
         {state.performance ? (
           <div className="space-y-4">
             <ProgressBar value={state.performance.cpu_usage_percent} label="CPU" tone={state.performance.cpu_usage_percent > 80 ? "danger" : state.performance.cpu_usage_percent > 60 ? "warn" : "accent"} />
@@ -121,7 +122,7 @@ export default function DesktopOverview() {
               <div key={w.id} className="flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2">
                 <span className={`h-2 w-2 rounded-full ${w.focused ? "bg-accent" : "bg-surface/60"}`} />
                 <span className="flex-1 truncate text-sm">{w.label}</span>
-                <Badge>{w.state}</Badge>
+                <span role="status"><Badge>{w.state}</Badge></span>
               </div>
             ))
           )}
@@ -133,6 +134,9 @@ export default function DesktopOverview() {
           {state.workspaces.map((ws) => (
             <div
               key={ws.id}
+              tabIndex={0}
+              role="button"
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); } }}
               className={`rounded-lg border px-3 py-2 text-xs ${ws.id === state.active_workspace_id ? "border-accent bg-accent/10 text-accent" : "border-border/60 text-muted"}`}
             >
               {ws.name}

@@ -11,6 +11,9 @@ function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: bool
       <span className="text-sm text-muted">{label}</span>
       <button
         onClick={() => onChange(!value)}
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
         className={`relative h-6 w-11 rounded-full transition-colors ${value ? "bg-accent" : "bg-surface/60"}`}
       >
         <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${value ? "translate-x-5" : "translate-x-0"}`} />
@@ -77,9 +80,9 @@ export default function DesktopSettings() {
   };
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4" role="region" aria-label="Desktop Settings">
       {error && (
-        <div className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
+        <div role="alert" className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
       )}
 
       <div className="col-span-12 flex items-center gap-3">
@@ -97,6 +100,7 @@ export default function DesktopSettings() {
                   <button
                     key={mode}
                     onClick={() => updateConfig({ theme: mode })}
+                    aria-label={`${mode} theme`}
                     className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
                       theme === mode
                         ? "bg-accent text-white"
@@ -135,11 +139,13 @@ export default function DesktopSettings() {
                     const val = parseInt(e.target.value, 10);
                     if (!isNaN(val)) setAutoSaveInterval(val);
                   }}
+                  aria-label="Auto-save interval in seconds"
                   className="w-24 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text"
                 />
                 <button
                   onClick={() => updateConfig({ auto_save_interval_seconds: autoSaveInterval })}
                   disabled={saving}
+                  aria-label="Apply auto-save interval"
                   className="rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
                 >
                   Apply
@@ -156,6 +162,7 @@ export default function DesktopSettings() {
       <Panel title="Hardening" subtitle="Security & system hardening" className="col-span-12 row-span-2" contentClassName="p-0">
         <button
           onClick={() => setShowHardening(!showHardening)}
+          aria-label={showHardening ? "Hide Hardening Configuration" : "Show Hardening Configuration"}
           className="flex w-full items-center gap-2 px-4 py-3 text-xs font-medium text-muted hover:bg-surface/10"
         >
           <span className={`transition-transform ${showHardening ? "rotate-90" : ""}`}>&#x25B6;</span>
@@ -175,6 +182,7 @@ export default function DesktopSettings() {
                   type="number"
                   value={hardening.integrity_check_interval_seconds}
                   onChange={(e) => updateHardening({ integrity_check_interval_seconds: parseInt(e.target.value, 10) || 0 })}
+                  aria-label="Integrity check interval in seconds"
                   className="w-full rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text"
                 />
               </div>
@@ -184,6 +192,7 @@ export default function DesktopSettings() {
                   type="number"
                   value={hardening.memory_leak_threshold_mb}
                   onChange={(e) => updateHardening({ memory_leak_threshold_mb: parseInt(e.target.value, 10) || 0 })}
+                  aria-label="Memory leak threshold in megabytes"
                   className="w-full rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text"
                 />
               </div>
@@ -193,6 +202,7 @@ export default function DesktopSettings() {
                   type="number"
                   value={hardening.thread_count_threshold}
                   onChange={(e) => updateHardening({ thread_count_threshold: parseInt(e.target.value, 10) || 0 })}
+                  aria-label="Thread count threshold"
                   className="w-full rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text"
                 />
               </div>
@@ -203,6 +213,7 @@ export default function DesktopSettings() {
                 type="number"
                 value={hardening.graceful_shutdown_timeout_seconds}
                 onChange={(e) => updateHardening({ graceful_shutdown_timeout_seconds: parseInt(e.target.value, 10) || 0 })}
+                aria-label="Graceful shutdown timeout in seconds"
                 className="w-32 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text"
               />
             </div>

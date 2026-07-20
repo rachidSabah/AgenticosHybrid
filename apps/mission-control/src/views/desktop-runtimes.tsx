@@ -41,13 +41,13 @@ export default function DesktopRuntimes() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full text-xs text-faint">Loading…</div>;
-  if (error && runtimes.length === 0) return <div className="flex items-center justify-center h-full text-xs text-danger">{error}</div>;
+  if (loading) return <div role="status" aria-live="polite" className="flex items-center justify-center h-full text-xs text-faint">Loading…</div>;
+  if (error && runtimes.length === 0) return <div role="alert" className="flex items-center justify-center h-full text-xs text-danger">{error}</div>;
 
   const verifiedCount = runtimes.filter((r) => r.verified).length;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
+    <div className="flex h-full flex-col gap-4 overflow-auto p-4" role="region" aria-label="Desktop Runtimes">
       <div className="flex flex-wrap items-center gap-3">
         <Stat label="Total Runtimes" value={runtimes.length} />
         <Stat label="Verified" value={verifiedCount} tone="ok" />
@@ -58,6 +58,7 @@ export default function DesktopRuntimes() {
         <button
           onClick={handleDiscover}
           disabled={discovering}
+          aria-label="Discover Runtimes"
           className="ml-auto rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
         >
           {discovering ? "Discovering…" : "Discover Runtimes"}
@@ -65,7 +66,7 @@ export default function DesktopRuntimes() {
       </div>
 
       {discoveryResult && discoveryResult.errors.length > 0 && (
-        <div className="rounded-lg border border-warn/40 bg-warn/5 px-4 py-2 text-xs text-warn">
+        <div role="alert" className="rounded-lg border border-warn/40 bg-warn/5 px-4 py-2 text-xs text-warn">
           {discoveryResult.errors.join("; ")}
         </div>
       )}
@@ -82,7 +83,7 @@ export default function DesktopRuntimes() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{rt.name}</span>
-                      <Badge tone={rt.verified ? "ok" : "warn"}>{rt.verified ? "Verified" : "Unverified"}</Badge>
+                      <span role="status"><Badge tone={rt.verified ? "ok" : "warn"}>{rt.verified ? "Verified" : "Unverified"}</Badge></span>
                       <Badge>{rt.runtime_type}</Badge>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-faint">

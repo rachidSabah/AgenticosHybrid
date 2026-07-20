@@ -1,0 +1,14 @@
+{
+  "name": "screenshot-generator",
+  "private": true,
+  "scripts": {
+    "generate": "npx tsx generate.ts"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
