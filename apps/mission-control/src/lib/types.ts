@@ -460,3 +460,74 @@ export interface MCPRegisteredPrompt {
   tags: string[];
   enabled: boolean;
 }
+
+// ── Swarm Orchestration (Phase 4, M4) ──
+
+export interface SwarmProfile {
+  name: string;
+  topology: string;
+  max_agents: number;
+  timeout_seconds: number;
+  tags: string[];
+}
+
+export interface SwarmSummary {
+  id: string;
+  name: string;
+  topology: string;
+  agent_count: number;
+  status: string;
+  created_at: string;
+}
+
+export interface SwarmDetail extends SwarmSummary {
+  leader_id: string | null;
+  goal: string | null;
+  tags: string[];
+  state: Record<string, string>;
+}
+
+export interface SwarmAgentInfo {
+  agent_id: string;
+  name: string;
+  role: string;
+  status: string;
+  capabilities: string[];
+  health: string;
+}
+
+export interface SwarmTaskSummary {
+  id: string;
+  goal: string;
+  status: string;
+  agent_id: string | null;
+  pattern: string;
+  created_at: string;
+}
+
+export interface SwarmPlanSummary {
+  id: string;
+  goal: string;
+  task_count: number;
+  status: string;
+  created_at: string;
+}
+
+export interface SwarmConsensusSummary {
+  round_id: string;
+  topic: string;
+  status: string;
+  votes_cast: number;
+  agents: number;
+}
+
+export interface SwarmMetricsSummary {
+  total_swarms: number;
+  active_swarms: number;
+  total_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  total_cost: number;
+  avg_latency_ms: number;
+  agents_online: number;
+}

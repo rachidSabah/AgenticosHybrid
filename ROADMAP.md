@@ -141,6 +141,49 @@ engine. The kernel never depends on a specific AI coding assistant.**
 - **Tests** — 107 MCP-specific tests (domain: 67, registry: 40), all passing.
 - **Performance** — Domain ops <5 µs, registry ops <60 µs, serialization <10 µs.
 
+## ✅ Phase 4 — Universal Execution Framework (v0.8.0, Milestone 4)
+
+**Milestone 4 — Swarm Orchestration Engine (done):**
+- **Swarm domain models** (`domain/orchestration.py`) — 30+ frozen dataclass entities
+  (SwarmSpec, AgentTask, OrchestrationPlan, ConsensusResult, ExecutionStage, etc.),
+  11 StrEnums (SwarmTopology, AgentRole, CoordinationPattern, ConsensusStatus, etc.).
+- **Port interfaces** (`ports/orchestration.py`) — 16 runtime-checkable Protocols
+  (SwarmManagerPort, TaskOrchestratorPort, PlannerPort, SchedulerPort, SupervisorPort,
+  ResultMergerPort, ValidationPort, ConsensusStrategy, etc.).
+- **Core orchestration framework** (`core/orchestration/`) — 21 modules:
+  - `OrchestrationFramework` — composition root wiring all subsystems
+  - `SwarmManager` — swarm CRUD, membership, leader election
+  - `TaskOrchestrator` — goal decomposition, plan execution
+  - `SwarmPlanner` — goal analysis, dependency resolution, parallelization
+  - `SwarmScheduler` — topological sort, agent assignment, dispatch
+  - `SwarmSupervisor` — monitoring, failure/deadlock detection, restart/reassign
+  - `AgentSelector` — capability matching, confidence scoring, best-agent selection
+  - `SwarmIntelligenceEngine` — consensus (simple-majority + weighted voting), leader election
+  - `CoordinationEngine` — 6 patterns (sequential, parallel, fan-out, fan-in, hierarchical, voting)
+  - `CommunicationBus` — inter-agent messaging (p2p, broadcast, request-response)
+  - `ResultMerger` — 7 merge strategies (weighted, priority, consensus, voting, best-of-n, concatenate, semantic)
+  - `ValidationEngine` — output, plan, security, policy validation, quality scoring
+  - `CheckpointManager` — save/restore/list/delete execution checkpoints
+  - `RetryManager` — exponential backoff with jitter, exhaustion tracking
+  - `FailureRecovery` — task/plan recovery from checkpoints, rollback
+  - `MetricsEngine` + `CostTracker` + `PerformanceAnalyzer` — metrics collection, cost tracking
+  - `OrchestrationTelemetry` — event ring buffer, per-agent/per-swarm stats
+  - `OrchestrationEventPublisher` — 50+ swarm/orchestration lifecycle events
+  - 2 strategy modules (consensus: SimpleMajority, Weighted; decomposition: RuleBased, TemplateBased, LLM)
+- **REST API** — 48 endpoints at `/api/swarm/*` covering profiles, swarms, planner,
+  scheduler, supervisor, merge, validation, checkpoints, agent selection, metrics,
+  cost, recovery, retry, goals, plans, and tasks.
+- **EventBus** — 50+ swarm-specific topics (swarm lifecycle, coordination, consensus,
+  voting, communication, planner, scheduler, supervisor, merger, validation,
+  retry, recovery, checkpoint, metrics, agent selection, execution stages).
+- **Swarm SDK** (`sdk/swarm/`) — `SwarmClient` with create_swarm, run_goal,
+  get_plan, cancel_plan, list_swarms methods.
+- **Mission Control** — Multi-tab Swarm Dashboard (Dashboard, Swarms, Agents, Tasks, Execution).
+- **Configuration** — 12 orchestration settings (enabled, topology, strategy, timeouts,
+  telemetry limits, leader election, consensus quorum).
+- **Tests** — 14 orchestration/swarm test files covering all subsystems.
+- **Benchmarks** — Event publishing: <5 µs, Plan creation: <10 µs, Agent selection: <15 µs.
+
 ## 🔮 Phase 5+ — Ecosystem
 
 - **Plugin Marketplace** — discoverable, signed community plugins.

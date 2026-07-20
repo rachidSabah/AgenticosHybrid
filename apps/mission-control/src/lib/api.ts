@@ -270,4 +270,69 @@ export const api = {
   },
   mcpSearchPrompts: (query: string) =>
     get<import("./types").MCPRegisteredPrompt[]>(`/api/mcp/prompts/registry/search?query=${encodeURIComponent(query)}`),
+
+  // ── Swarm Orchestration (Phase 4, M4) ──
+
+  swarmProfiles: () =>
+    get<import("./types").SwarmProfile[]>("/api/swarm/profiles"),
+  createSwarmProfile: (body: Record<string, unknown>) =>
+    post<import("./types").SwarmProfile>("/api/swarm/profiles", body),
+  deleteSwarmProfile: (name: string) =>
+    del<{ deleted: string }>(`/api/swarm/profiles/${encodeURIComponent(name)}`),
+
+  swarmList: () =>
+    get<import("./types").SwarmSummary[]>("/api/swarm/swarms"),
+  createSwarm: (body: Record<string, unknown>) =>
+    post<import("./types").SwarmDetail>("/api/swarm/swarms", body),
+  swarmDetail: (swarmId: string) =>
+    get<import("./types").SwarmDetail>(`/api/swarm/swarms/${encodeURIComponent(swarmId)}`),
+  deleteSwarm: (swarmId: string) =>
+    del<{ deleted: string }>(`/api/swarm/swarms/${encodeURIComponent(swarmId)}`),
+
+  swarmAgents: () =>
+    get<import("./types").SwarmAgentInfo[]>("/api/swarm/agents"),
+  swarmAgentDetail: (agentId: string) =>
+    get<import("./types").SwarmAgentInfo>(`/api/swarm/agents/${encodeURIComponent(agentId)}`),
+
+  swarmGoals: () =>
+    get<{ goals: Array<{ id: string; description: string; status: string }> }>("/api/swarm/goals"),
+  createSwarmGoal: (body: { description: string; swarm_id?: string }) =>
+    post<import("./types").SwarmTaskSummary>("/api/swarm/goals", body),
+
+  swarmPlans: (planId?: string) => {
+    const path = planId ? `/api/swarm/plans/${encodeURIComponent(planId)}` : "/api/swarm/plans";
+    return get<import("./types").SwarmPlanSummary | import("./types").SwarmPlanSummary[]>(path);
+  },
+  swarmTasks: () =>
+    get<import("./types").SwarmTaskSummary[]>("/api/swarm/tasks"),
+
+  swarmConsensus: (roundId?: string) => {
+    const path = roundId ? `/api/consensus/${encodeURIComponent(roundId)}` : "/api/consensus";
+    return get(path);
+  },
+
+  swarmMetrics: () =>
+    get<import("./types").SwarmMetricsSummary>("/api/swarm/metrics"),
+  swarmTimeline: (planId: string) =>
+    get<{ timeline: Array<{ timestamp: string; event: string }> }>(`/api/swarm/metrics/timeline/${encodeURIComponent(planId)}`),
+  swarmCost: (planId: string) =>
+    get<Record<string, unknown>>(`/api/swarm/cost/${encodeURIComponent(planId)}`),
+  swarmPerformance: (planId: string) =>
+    get<Record<string, unknown>>(`/api/swarm/performance/${encodeURIComponent(planId)}`),
+
+  swarmAnalyzeGoal: (body: { description: string }) =>
+    post<{ analysis: Record<string, unknown> }>("/api/swarm/planner/analyze", body),
+  swarmCreatePlan: (body: { goal: string }) =>
+    post<{ plan: Record<string, unknown> }>("/api/swarm/planner/plan", body),
+
+  swarmSupervisorMonitor: (planId: string) =>
+    post<{ status: string }>(`/api/swarm/supervisor/monitor`, { plan_id: planId }),
+  swarmValidateOutput: (body: Record<string, unknown>) =>
+    post<{ valid: boolean; score: number }>("/api/swarm/validate/output", body),
+  swarmMerge: (body: Record<string, unknown>) =>
+    post<{ merged: Record<string, unknown> }>("/api/swarm/merge", body),
+  swarmRecover: (taskId: string) =>
+    post<{ recovered: string }>(`/api/swarm/recovery/task/${encodeURIComponent(taskId)}`),
+  swarmRetry: (taskId: string) =>
+    post<{ retry: boolean; delay: number }>(`/api/swarm/retry/should`, { task_id: taskId }),
 };

@@ -16,6 +16,7 @@ import {
   Settings,
   Gauge,
   Search,
+  Globe,
 } from "lucide-react";
 
 export interface NavItem {
@@ -41,6 +42,7 @@ export const NAV: NavItem[] = [
   { id: "timeline", label: "Task Timeline", hint: "T", icon: History, group: "observe" },
   { id: "monitor", label: "System Monitor", hint: "Y", icon: Gauge, group: "observe" },
   { id: "discovery", label: "Discovery", hint: "D", icon: Search, group: "observe" },
+  { id: "swarm", label: "Swarm Orchestration", hint: "S", icon: Globe, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

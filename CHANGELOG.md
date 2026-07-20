@@ -4,6 +4,43 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-07-20
+
+### Added — Phase 4, Milestone 4: Swarm Orchestration Engine
+
+- **Swarm SDK** (`sdk/swarm/`) — `SwarmClient` class with create_swarm, run_goal,
+  get_plan, cancel_plan, list_swarms, get_swarm, delete_swarm methods.
+- **Mission Control Swarm Dashboard** (`apps/mission-control/`) — Multi-tab view
+  (Dashboard, Swarms, Agents, Tasks, Execution) with real-time metrics,
+  agent lists, task queues, and execution plan monitoring.
+- **Swarm types + API client** — Full frontend type definitions and API client
+  methods for all 48 swarm REST endpoints.
+- **Navigation** — "Swarm Orchestration" entry in the Mission Control sidebar
+  (core group) with globe icon.
+
+### Enhanced — Swarm Orchestration Backend
+
+- **REST API** — 48 endpoints at `/api/swarm/*` (profiles, swarms, planner,
+  scheduler, supervisor, merge, validation, checkpoints, agent selection,
+  metrics, cost, recovery, retry, goals, plans, tasks).
+- **Swarm Intelligence** — Consensus engine with simple-majority and weighted
+  voting, leader election, 6 coordination patterns.
+- **Validation Pipeline** — Output, plan, security, policy validation with
+  quality scoring.
+- **Result Merger** — 7 merge strategies (weighted, priority, consensus,
+  voting, best-of-n, concatenate, semantic).
+- **Recovery & Resilience** — Checkpoint-based recovery, retry with exponential
+  backoff, failure/deadlock detection, task reassignment.
+- **Metrics & Cost** — Per-plan/agent/stage cost tracking, timeline recording,
+  performance analysis.
+- **Swarm Agent Registry** — Bridges RuntimeManager engines as swarm agents,
+  capability-based agent matching.
+- **EventBus** — 50+ swarm-specific topics (swarm lifecycle, coordination,
+  consensus, communication, planner, scheduler, supervisor, merger, validation,
+  retry, recovery, checkpoint, metrics, agent selection).
+- **Tests** — 14 orchestration/swarm test files covering all subsystems.
+- **Configuration** — 12 orchestration settings in config.py.
+
 ## [0.7.0] — 2026-07-19
 
 ### Added — Phase 4, Milestone 3: MCP Runtime Foundation

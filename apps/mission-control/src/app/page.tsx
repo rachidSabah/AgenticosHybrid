@@ -47,6 +47,9 @@ const SystemMonitor = lazy(() =>
 const DiscoveryDashboard = lazy(() =>
   import("@/views/discovery-dashboard").then((m) => ({ default: m.DiscoveryDashboard }))
 );
+const SwarmDashboard = lazy(() =>
+  import("@/views/swarm-dashboard").then((m) => ({ default: m.SwarmDashboard }))
+);
 
 const VIEWS: Record<string, () => ReactNode> = {
   overview: () => (
@@ -144,6 +147,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Discovery" fallback={<ViewSkeleton title="Discovery" />}>
       <Suspense fallback={<ViewSkeleton title="Discovery" />}>
         <DiscoveryDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  swarm: () => (
+    <ErrorBoundary viewName="Swarm Orchestration" fallback={<ViewSkeleton title="Swarm Orchestration" />}>
+      <Suspense fallback={<ViewSkeleton title="Swarm Orchestration" />}>
+        <SwarmDashboard />
       </Suspense>
     </ErrorBoundary>
   ),
