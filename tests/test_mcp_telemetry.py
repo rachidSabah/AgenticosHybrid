@@ -1,6 +1,5 @@
 """Tests for MCP Telemetry."""
 
-
 import pytest
 
 from agentic_os.core.mcp.telemetry import MCPTelemetry

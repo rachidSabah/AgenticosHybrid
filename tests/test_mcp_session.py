@@ -1,6 +1,5 @@
 """Tests for MCP Session Manager."""
 
-
 import pytest
 
 from agentic_os.core.mcp.session import MCPSessionManager
