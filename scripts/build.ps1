@@ -63,6 +63,43 @@ if ($missing.Count -gt 0) {
     }
 }
 
+# ---- MinGW toolchain detection (x86_64-pc-windows-gnu) ----
+if (-not $SkipRust -and (Get-Command cargo -ErrorAction SilentlyContinue)) {
+    $mingwFound = $false
+    $mingwCandidates = @(
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin"
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\llvm-mingw-20260616-ucrt-x86_64\bin"
+        "C:\mingw64\bin"
+    )
+    foreach ($candidate in $mingwCandidates) {
+        $gccPath = Join-Path $candidate "x86_64-w64-mingw32-gcc.exe"
+        if (Test-Path $gccPath) {
+            Write-Host "  MinGW toolchain: $candidate" -ForegroundColor Green
+            $env:PATH = "$candidate;$env:PATH"
+            $mingwFound = $true
+            $MinGWPath = $candidate
+            break
+        }
+    }
+    # WinLibs installs windres/dlltool WITHOUT the target prefix that
+    # tauri-winres looks for, so create prefixed copies on demand.
+    if ($mingwFound) {
+        foreach ($tool in @("windres", "dlltool")) {
+            $bare = Join-Path $MinGWPath "$tool.exe"
+            $prefixed = Join-Path $MinGWPath "x86_64-w64-mingw32-$tool.exe"
+            if ((Test-Path $bare) -and -not (Test-Path $prefixed)) {
+                Copy-Item $bare $prefixed -Force
+                Write-Host "  added x86_64-w64-mingw32-$tool alias" -ForegroundColor Gray
+            }
+        }
+    }
+    if (-not $mingwFound) {
+        $rustTarget = & rustc -vV 2>$null | Select-String "host:" | ForEach-Object { $_ -replace "host: ", "" }
+        Write-Host "  rustc host: $rustTarget" -ForegroundColor Gray
+        Write-Host "  no MinGW in PATH; install WinLibs MinGW to bundle x86_64-pc-windows-gnu." -ForegroundColor Gray
+    }
+}
+
 # ---- Version Metadata ----
 Write-Host "`n[2/5] Reading version metadata..." -ForegroundColor Yellow
 $tauriConfigPath = Join-Path $TauriDir "tauri.conf.json"
@@ -174,6 +211,13 @@ if (Test-Path $BundleDir) {
         New-Item -ItemType Directory -Force -Path $PortableDir | Out-Null
 
         Copy-Item $BinaryPath (Join-Path $PortableDir "agentic-os.exe") -Force
+
+        # Copy WebView2Loader.dll next to the binary (required for portable runtime)
+        $WebView2Loader = Join-Path $TauriDir "target\$ReleaseDir\WebView2Loader.dll"
+        if (Test-Path $WebView2Loader) {
+            Copy-Item $WebView2Loader $PortableDir -Force
+            Write-Host "    + WebView2Loader.dll" -ForegroundColor Gray
+        }
 
         # Copy resources if any exist
         $ResDir = Join-Path $TauriDir "target\$ReleaseDir\resources"

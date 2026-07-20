@@ -1,0 +1,4 @@
+[target.x86_64-pc-windows-gnu]
+# Use WinLibs GCC-based MinGW-w64 (SEH exception handling)
+# This provides the full libgcc with DWARF unwind support that Rust requires
+linker = "x86_64-w64-mingw32-gcc"
