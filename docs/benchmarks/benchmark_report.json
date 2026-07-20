@@ -1,0 +1,133 @@
+{
+  "timestamp": "2026-07-20T13:23:37.075719+00:00",
+  "version": "1.0.0-rc1",
+  "platform": "nt",
+  "python_version": "3.14.0 (main, Nov 19 2025, 22:43:52) [MSC v.1944 64 bit (AMD64)]",
+  "startup_times": {
+    "instantiation": 8.999999408842996e-06,
+    "startup_validation": 0.00031230000240611844,
+    "integrity_check": 0.002238599998236168,
+    "self_diagnostics": 0.0005728999967686832,
+    "thread_monitoring": 2.0099996618228033e-05
+  },
+  "memory_usage": {
+    "thread_count": 1,
+    "note": "psutil not available, limited metrics"
+  },
+  "runtime_discovery": {
+    "discovery_duration_seconds": 2.454,
+    "total_discovered": 7,
+    "runtimes": [
+      {
+        "runtime_type": "python",
+        "name": "python",
+        "version": "Python 3.14.0",
+        "path": "D:\\AAIOS AGENTIC\\.venv\\Scripts\\python.EXE",
+        "executable": "python",
+        "capabilities": [
+          "execution",
+          "scripting",
+          "package_management"
+        ],
+        "detected_at": "2026-07-20T13:23:37.209719+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      },
+      {
+        "runtime_type": "git",
+        "name": "git",
+        "version": "git version 2.55.0.windows.3",
+        "path": "C:\\Program Files\\Git\\cmd\\git.EXE",
+        "executable": "git",
+        "capabilities": [
+          "version_control",
+          "clone",
+          "commit"
+        ],
+        "detected_at": "2026-07-20T13:23:37.246993+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      },
+      {
+        "runtime_type": "node",
+        "name": "node",
+        "version": "v24.14.1",
+        "path": "C:\\Program Files\\nodejs\\node.EXE",
+        "executable": "node",
+        "capabilities": [
+          "execution",
+          "package_management"
+        ],
+        "detected_at": "2026-07-20T13:23:37.296088+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      },
+      {
+        "runtime_type": "claude_code",
+        "name": "claude",
+        "version": "2.1.215 (Claude Code)",
+        "path": "C:\\Users\\piopi\\.local\\bin\\claude.EXE",
+        "executable": "claude",
+        "capabilities": [
+          "ai_assistant",
+          "code_generation"
+        ],
+        "detected_at": "2026-07-20T13:23:37.472368+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      },
+      {
+        "runtime_type": "opencode",
+        "name": "opencode",
+        "version": "1.17.4",
+        "path": "C:\\Users\\piopi\\AppData\\Roaming\\npm\\opencode.CMD",
+        "executable": "opencode",
+        "capabilities": [
+          "ai_coding",
+          "agentic"
+        ],
+        "detected_at": "2026-07-20T13:23:38.060306+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      },
+      {
+        "runtime_type": "gemini_cli",
+        "name": "gemini",
+        "version": "0.46.0",
+        "path": "C:\\Users\\piopi\\AppData\\Roaming\\npm\\gemini.CMD",
+        "executable": "gemini",
+        "capabilities": [],
+        "detected_at": "2026-07-20T13:23:39.547694+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      },
+      {
+        "runtime_type": "codex_cli",
+        "name": "codex",
+        "version": "codex-cli 0.144.3",
+        "path": "C:\\Users\\piopi\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.EXE",
+        "executable": "codex",
+        "capabilities": [],
+        "detected_at": "2026-07-20T13:23:39.582351+00:00",
+        "verified": true,
+        "source": "auto",
+        "metadata": {}
+      }
+    ]
+  },
+  "update_system": {
+    "check_duration_seconds": 0.505,
+    "releases_found": 4,
+    "current_version": "0.9.5"
+  },
+  "first_run": {
+    "full_wizard_duration_seconds": 0.0,
+    "completed": true
+  }
+}

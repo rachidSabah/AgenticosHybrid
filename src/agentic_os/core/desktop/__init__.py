@@ -10,6 +10,7 @@ from agentic_os.core.desktop.diagnostics import DesktopDiagnosticsManager
 from agentic_os.core.desktop.dragdrop import NativeDragDropService
 from agentic_os.core.desktop.file_integration import NativeFileIntegration
 from agentic_os.core.desktop.first_run import FirstRunWizard
+from agentic_os.core.desktop.hardening import DesktopHardeningManager
 from agentic_os.core.desktop.installer import DesktopInstallerManager
 from agentic_os.core.desktop.logging import DesktopLogging
 from agentic_os.core.desktop.manager import DesktopRuntimeManager
@@ -58,4 +59,5 @@ __all__ = [
     "DeltaUpdateEngine",
     "SignatureVerification",
     "WindowsPlatformIntegration",
+    "DesktopHardeningManager",
 ]

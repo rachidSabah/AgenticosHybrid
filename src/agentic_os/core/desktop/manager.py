@@ -15,6 +15,7 @@ from agentic_os.core.desktop.diagnostics import DesktopDiagnosticsManager
 from agentic_os.core.desktop.dragdrop import NativeDragDropService
 from agentic_os.core.desktop.file_integration import NativeFileIntegration
 from agentic_os.core.desktop.first_run import FirstRunWizard
+from agentic_os.core.desktop.hardening import DesktopHardeningManager
 from agentic_os.core.desktop.installer import DesktopInstallerManager
 from agentic_os.core.desktop.logging import DesktopLogging
 from agentic_os.core.desktop.menu import NativeMenuManager
@@ -84,6 +85,9 @@ class DesktopRuntimeManager:
         self.signature = SignatureVerification()
         self.windows_platform = WindowsPlatformIntegration()
 
+        # Phase 4 M6 Part 3 — Production Hardening
+        self.hardening = DesktopHardeningManager()
+
         # Keyboard shortcuts
         self._shortcuts: dict[str, KeyboardShortcut] = {}
         self._default_shortcuts: list[KeyboardShortcut] = [
@@ -147,6 +151,14 @@ class DesktopRuntimeManager:
         self._status = DesktopRuntimeStatus.STARTING
         self._started_at = datetime.now(UTC)
 
+        # Run startup validation
+        if self.hardening._config.validate_on_startup:
+            validation = await self.hardening.validate_startup()
+            if not validation.success:
+                log.warning(
+                    "Startup validation failed, continuing anyway", errors=validation.errors
+                )
+
         # Initialize database
         try:
             await self.database.initialize()
@@ -175,6 +187,8 @@ class DesktopRuntimeManager:
 
     async def stop(self) -> None:
         self._status = DesktopRuntimeStatus.STOPPING
+        await self.hardening.plan_shutdown()
+        await self.hardening.cleanup_resources()
         await self.performance.stop_monitoring()
         await self.database.close()
         self._status = DesktopRuntimeStatus.STOPPED

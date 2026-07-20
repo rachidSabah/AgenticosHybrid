@@ -144,3 +144,52 @@ class DesktopEventPublisher:
 
     async def publish_first_run_completed(self) -> None:
         await self._publish(DesktopEventType.FIRST_RUN_COMPLETED, {})
+
+    # ── Production Hardening events ──
+
+    async def publish_hardening_started(self) -> None:
+        await self._publish(DesktopEventType.HARDENING_STARTED, {})
+
+    async def publish_hardening_completed(self, result: dict[str, Any]) -> None:
+        await self._publish(DesktopEventType.HARDENING_COMPLETED, result)
+
+    async def publish_hardening_failed(self, error: str) -> None:
+        await self._publish(DesktopEventType.HARDENING_FAILED, {"error": error})
+
+    async def publish_integrity_check_passed(self, check_id: str) -> None:
+        await self._publish(DesktopEventType.INTEGRITY_CHECK_PASSED, {"check_id": check_id})
+
+    async def publish_integrity_check_failed(self, check_id: str, errors: list[str]) -> None:
+        await self._publish(
+            DesktopEventType.INTEGRITY_CHECK_FAILED, {"check_id": check_id, "errors": errors}
+        )
+
+    async def publish_recovery_started(self, mode: str) -> None:
+        await self._publish(DesktopEventType.RECOVERY_STARTED, {"mode": mode})
+
+    async def publish_recovery_completed(self, success: bool) -> None:
+        await self._publish(DesktopEventType.RECOVERY_COMPLETED, {"success": success})
+
+    async def publish_recovery_failed(self, error: str) -> None:
+        await self._publish(DesktopEventType.RECOVERY_FAILED, {"error": error})
+
+    async def publish_memory_leak_detected(self, report: dict[str, Any]) -> None:
+        await self._publish(DesktopEventType.MEMORY_LEAK_DETECTED, report)
+
+    async def publish_thread_anomaly_detected(self, report: dict[str, Any]) -> None:
+        await self._publish(DesktopEventType.THREAD_ANOMALY_DETECTED, report)
+
+    async def publish_cleanup_started(self) -> None:
+        await self._publish(DesktopEventType.CLEANUP_STARTED, {})
+
+    async def publish_cleanup_completed(self, result: dict[str, Any]) -> None:
+        await self._publish(DesktopEventType.CLEANUP_COMPLETED, result)
+
+    async def publish_graceful_shutdown(self, plan: dict[str, Any]) -> None:
+        await self._publish(DesktopEventType.GRACEFUL_SHUTDOWN, plan)
+
+    async def publish_recovery_mode_entered(self) -> None:
+        await self._publish(DesktopEventType.RECOVERY_MODE_ENTERED, {})
+
+    async def publish_recovery_mode_exited(self) -> None:
+        await self._publish(DesktopEventType.RECOVERY_MODE_EXITED, {})

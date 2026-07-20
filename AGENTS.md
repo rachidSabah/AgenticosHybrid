@@ -20,7 +20,7 @@
 - Per-file ruff ignore for E402 in test files: `"tests/test_sd_*.py" = ["E402"]`
 
 ## Key Info
-- Version: 0.9.1
+- Version: 1.0.0-rc1
 - Remote branch protection on `main` is REMOVED (direct pushes allowed via token)
 - All commands use `uv` (not pip/npm for Python)
 - `pythonpath = ["src"]` in pyproject.toml (repo root NOT in sys.path by default)

@@ -1,380 +1,708 @@
-# Agentic OS
+# AgenticOS v1.0.0-rc1
 
-A **local-first, event-bus-driven AI Agent Operating System**. Runs on Windows via
-WSL2, fully containerized, modular, and plugin-based. Every component communicates
-through an abstract **Event Bus** and is replaceable behind a port interface.
+A **desktop operating system for AI agents** that lets non-technical users install, run, and use local AI models, MCP tools, and plugins without ever touching a terminal.
 
-> Status: **Phase 4 — Desktop Runtime (v0.10.0, M6 in progress)**. Phases
-> 1–3 delivered a headless hexagonal backend with EventBus, Provider Management,
-> Capability Engine, Memory System, Security Framework, and Phase 3's Mission
-> Control interface with Workflow/Pipeline engines, Observability Framework, MCP
-> Framework, and Plugin SDK. **Phase 4, M1–M5** shipped the Universal Execution
-> Engine, Runtime Discovery, MCP Runtime, Swarm Orchestration, and Learning Engine.
-> **Windows Development Validation** is complete — the full system runs natively on
-> Windows 11 with Python 3.14, Node.js 24, and Rust 1.97. CORS middleware is
-> enabled for cross-origin frontend-backend communication.
+[GitHub](https://github.com/rachidSabah/AgenticOS) | [Changelog](CHANGELOG.md) | [Architecture](ARCHITECTURE.md) | [Security](SECURITY.md) | [Roadmap](ROADMAP.md)
 
-## Project Vision
+---
 
-A local-first operating system for AI agents: modular, observable, and secure
-by construction. Agents are composed from capabilities at runtime, providers are
-swappable behind ports, and every action flows through an event bus that any
-dashboard or subsystem can observe.
+## Overview
 
-## Mission
+AgenticOS is a complete desktop environment purpose-built for running AI agents locally. It replaces the need for command-line tooling, manual Python environment setup, and complex configuration with a polished native application that works out of the box.
 
-Make autonomous, multi-agent systems **trustworthy and extensible** without
-sacrificing simplicity. AgenticOS proves each architectural idea with one
-production-ready, fully tested vertical slice before expanding scope.
+Whether you want to run local LLMs via Ollama, connect to cloud providers like Anthropic or OpenAI, use MCP (Model Context Protocol) tools, or orchestrate multi-agent swarms, AgenticOS manages every aspect of the lifecycle — installation, configuration, runtime discovery, updates, and diagnostics — through a graphical interface.
+
+Built on a hexagonal (clean) architecture with an event bus at its core, AgenticOS is modular, observable, and secure by construction. It runs on Windows, Linux, and macOS, and is fully containerizable for server deployments.
 
 ## Features
 
-- **Hexagonal kernel** — ports before implementations; swap any adapter without
-  touching business logic.
-- **Pluggable Event Bus** — Local (dev), Redis Streams (prod), NATS JetStream
-  (alt prod).
-- **Provider Management** — multi-provider catalog, encrypted secrets, health,
-  routing (latency/cost/round-robin) with failover, cost + rate tracking.
-- **Capability Engine** — agents composed from 11 built-in capabilities;
-  sensitive capabilities require human approval.
-- **Memory System** — scoped, searchable (lexical + semantic), self-grooming
-  via retention policies.
-- **Security Framework** — RBAC (deny-by-default), workspace isolation, approval
-  gate, append-only audit log.
-- **MCP Runtime** — Full MCP server lifecycle (registry, client, manager, security)
-  with 3 transport protocols (stdio, SSE, Streamable HTTP) and 5 built-in adapters.
-- **MCP SDK** — 15-module SDK for building MCP applications: server management, tools,
-  resources, prompts, auth, config, registration, validation, and testing fakes.
-- **Live dashboard** — WebSocket event stream; REST control plane.
-- **Workflow Engine** — DAG-based workflow execution with versioning, replay,
-  approval gates, and topological sort ordering.
-- **Pipeline Engine** — Stage-based pipeline execution with scheduling, retry
-  policies, rollback support, and parallel stage execution.
-- **Observability Framework** — OpenTelemetry tracing (W3C TraceContext), Prometheus
-  metrics, structured logging with correlation IDs. In-memory implementations for
-  dev/test.
-- **Plugin SDK** — TypeScript/Python interfaces for external plugin developers:
-  agent, tool, provider, MCP, workflow node, and pipeline stage base classes.
-- **Mission Control (Phase 3)** — Next.js + React 19 immersive OS UI: AI Brain,
-  Agent Constellation, Execution Graph, Provider Control Center, Memory Explorer,
-  Workflow/Pipeline studios, command palette, dark/light, 120Hz motion.
-- **Quality gates** — ruff, `ty` (strict), pytest, **and** Next.js
-  typecheck/lint/test/build enforced in CI.
+- **Desktop Runtime** — A native Tauri v2 application with native windows, menus, system tray, notifications, keyboard shortcuts, clipboard integration, drag-and-drop, and file associations.
+- **Mission Control** — An immersive Next.js 15 dashboard with WebSocket-driven real-time views for every subsystem.
+- **Runtime Discovery** — Automatic detection of Python, Node.js, Docker, Ollama, LM Studio, llama.cpp, Git, WSL, VS Code, JetBrains, and other runtimes on your system.
+- **Automatic Updates** — Checks GitHub releases, downloads, verifies checksums, installs, and supports rollback for failed updates across stable, beta, and nightly channels.
+- **Offline Mode** — Full functionality without internet; events are queued locally and auto-synced when connectivity returns.
+- **Plugin System** — Extend AgenticOS with third-party plugins for agents, tools, providers, MCP servers, workflows, and pipeline stages.
+- **MCP Support** — Full Model Context Protocol runtime with 3 transport protocols (stdio, SSE, Streamable HTTP) and 5 built-in adapters (filesystem, git, HTTP, SQLite, terminal).
+- **Workspace Management** — Multiple named workspaces with tabs, panels, layouts, and persistent state.
+- **Provider Management** — Multi-provider catalog with encrypted API key vault, health monitoring, cost tracking, rate limiting, and latency/cost/round-robin routing with failover.
+- **Capability Engine** — Compose agents from 11 built-in capabilities; sensitive operations require human approval.
+- **Memory System** — Scoped memory (working, conversation, project, shared, long-term) with lexical search, semantic recall, and knowledge graph relations.
+- **Security Framework** — Role-based access control (deny-by-default), workspace isolation, approval gate, and append-only audit log.
+- **Workflow Engine** — DAG-based execution with versioning, replay, approval gates, and topological sort.
+- **Pipeline Engine** — Stage-based execution with scheduling, retry policies, rollback, and parallel stages.
+- **Swarm Orchestration** — Multi-agent coordination with 6 patterns (sequential, parallel, fan-out, fan-in, hierarchical, voting), goal decomposition, and fault-tolerant execution.
+- **Learning & Optimization** — Performance tracking, model selection, prompt optimization, routing optimization, and cost analysis.
+- **Diagnostics** — System health checks, integrity verification, memory leak detection, thread monitoring, and performance metrics.
+- **Portable Mode** — Run AgenticOS from a USB drive without installation.
 
-## Technology Stack
+## Architecture
 
-Python 3.13+ · FastAPI · asyncio / AnyIO · Pydantic v2 · pydantic-settings ·
-structlog · Prometheus client · httpx · `cryptography` (Fernet) · uv ·
-Rust / Tauri v2 (desktop) · Docker / WSL2 (optional).
-
-**Mission Control frontend:** Next.js 15 (App Router) · React 19 · TypeScript ·
-TailwindCSS · Framer Motion · React Flow · Zustand · Monaco Editor · Vitest.
-
-## Architecture (hexagonal / clean)
+AgenticOS is built on a strict **hexagonal (clean) architecture**. Business logic depends on interfaces (ports); concrete infrastructure lives behind those ports as adapters. The composition root (`kernel.py`) is the only place that knows about concrete classes.
 
 ```
-                 ┌──────────────────────────────────────────────────┐
-   User/UI  ───▶ │                  API (FastAPI)                     │
-                 │        REST + WebSocket live dashboard            │
-                 └───────────────┬──────────────────────────────────┘
-                                 │ ports (interfaces)
-        ┌────────────────────────┼────────────────────────────────┐
-        │                        │                                  │
-  ┌─────▼─────┐          ┌───────▼────────┐                ┌───────▼───────┐
-  │  CORE     │          │  DOMAIN        │                │  ADAPTERS     │
-  │ Orchestrator          │ Agent/Task/    │                │ Local/Redis/  │
-  │ Registry   │          │ Role/Provider  │◀── ports ────▶│ NATS Bus      │
-  │ Scheduler  │          │ EventEnvelope  │                │ Provider(s)  │
-  │ Health/Rec │          └────────────────┘               │ Plugins      │
-  └────────────┘                                            └───────────────┘
+User / Mission Control / CLI
+      │  ports (interfaces)
+      ▼
+┌────────────────────────────────────────────┐
+│  API (FastAPI) — REST + WebSocket           │
+└───────────────┬────────────────────────────┘
+                │
+   ┌────────────┼──────────────────────────┐
+   │  CORE       │ orchestrator, registry,   │
+   │            │ scheduler, health,         │
+   │            │ recovery, providers,       │
+   │            │ capability, memory,        │
+   │            │ security, mcp, swarm,      │
+   │            │ learning                   │
+   ├────────────┼──────────────────────────┤
+   │  DOMAIN    │ Pydantic v2 entities:      │
+   │            │ Agent, Task, Provider,     │
+   │            │ Model, MCP, Orchestration  │
+   ├────────────┼──────────────────────────┤
+   │  PORTS     │ EventBus, ProviderAdapter, │
+   │            │ Plugin, + all subsystem    │
+   │            │ interfaces (Protocol)      │
+   ├────────────┼──────────────────────────┤
+   │  ADAPTERS  │ bus (local/redis/nats),    │
+   │            │ providers, MCP, plugins,   │
+   │            │ memory, security           │
+   └────────────┴──────────────────────────┘
 ```
 
-See [`docs/adr/`](docs/adr) for Architecture Decision Records and
-[`docs/c4/`](docs/c4) for C4 diagrams.
+**Event Bus** — One abstract port, three interchangeable adapters:
+- `LocalBus` — in-process asyncio (dev/CI, zero infrastructure)
+- `RedisStreamsBus` — Redis Streams (production, persistent, replayable)
+- `NatsJetStreamBus` — NATS JetStream (production alt, strong routing)
 
-## Event Bus
+Every bus message is wrapped in an `EventEnvelope` (id, type, source, timestamp, topic, payload). Topics are centralized in `domain/events.py`.
 
-One abstract `EventBus` port with three interchangeable adapters:
+**Desktop Runtime** — The desktop runtime layer (Phase 4, M6) adds native OS integration via Tauri v2: windows, workspaces, menus, notifications, system tray, keyboard shortcuts, clipboard, file drag-and-drop, terminal integration, and process management. All desktop subsystems communicate through the same EventBus.
 
-| Adapter | Use | Default in |
-|---------|-----|-----------|
-| `LocalBus` | in-process asyncio; dev, tests, slicing | dev / CI |
-| `RedisStreamsBus` | Redis Streams; persistent, replayable, consumer groups | **production** |
-| `NatsJetStreamBus` | NATS JetStream; strong routing + replay + KV | production (alt) |
+## Quick Start
 
-Set `BUS_TYPE=local|redis|nats`. The system boots on `local` with zero infra.
+The fastest way to try AgenticOS:
 
-## Vertical slice (this release)
+1. **Download** the installer for your platform from the [GitHub Releases](https://github.com/rachidSabah/AgenticOS/releases) page.
+2. **Run** the installer and launch AgenticOS.
+3. **Use** the Mission Control dashboard at the automatically opened window.
 
-```
-User Request ─▶ Planner ─▶ Task Dispatcher ─▶ Claude Code Adapter
-                                                          │
-                                                    Abstract Event Bus
-                                                          │
-                                   Supervisor ◀──▶ Health Monitor ──▶ Recovery Manager
-                                                          │
-                                                  WebSocket Dashboard (live)
-```
+That's it. No terminal, no package managers, no configuration files.
 
-Demonstrates: task creation, event publish/consume, orchestration, monitoring,
-automatic recovery, structured logging, metrics, and live dashboard updates.
+## Windows Installation
 
-## Phase 2 subsystems (this release)
+### Requirements
 
-All four subsystems expose their interfaces through **ports before concrete
-implementations** (hexagonal architecture) and ship with default in-memory /
-encrypted backends plus a REST surface.
+- Windows 10 22H2 or later (Windows 11 recommended)
+- 8 GB RAM (16 GB recommended)
+- WebView2 Runtime (installed automatically with the app on Windows 11; available via Windows Update on Windows 10)
+- 1 GB free disk space
 
-| Subsystem | Ports | Default impl | Key APIs |
-|-----------|-------|-------------|----------|
-| **Provider Management** | `ProviderManager`, `ModelManager`, `SecretStore`, `ApiKeyVault`, `ProviderHealthMonitor`, `RoutingPolicy`, `CostTracker`, `RateLimitMonitor`, `FailoverPolicy` | encrypted Fernet vault, OpenAI-compatible adapter | `/api/providers`, `/api/provider-configs`, `/api/provider-health`, `/api/cost`, `/api/rate-limits`, `/api/routing/policy` |
-| **Memory System** | `MemoryStore`, `VectorStore`, `KnowledgeGraph`, `MemoryManager` | in-memory store + brute-force cosine vector + adjacency graph | `/api/memory`, `/api/memory/{scope}`, `/api/memory/{scope}/recall`, `/api/memory/retention` |
-| **Capability Engine** | `Capability`, `CapabilityRegistry`, `AgentComposer` | 11 built-in capabilities, intent→capability composer | `/api/capabilities`, `/api/agents/compose`, `/api/agents/compose-for-task` |
-| **Security Framework** | `SecretsManager`, `AccessControl`, `WorkspaceIsolation`, `ToolPermissions`, `ApprovalGate`, `AuditLog` | RBAC + workspace isolation + human approval gate + append-only audit | `/api/security/authorize`, `/api/security/approval/...`, `/api/security/audit`, `/api/security/workspace/{agent_id}` |
+### Steps
 
-Public interfaces are **frozen** once validated — see ADRs `0006`–`0009`.
+1. Download the latest `AgenticOS-Setup-x64.exe` or `AgenticOS-Setup-x64.msi` from the [Releases page](https://github.com/rachidSabah/AgenticOS/releases).
+2. Double-click the installer and follow the on-screen instructions.
+3. AgenticOS launches automatically after installation.
 
-## WSL2 Installation
+A portable ZIP version (`AgenticOS-Portable-x64.zip`) is also available — extract and run `AgenticOS.exe` with no installation required.
+
+## Linux Installation
+
+AgenticOS is available as an AppImage (universal), DEB (Debian/Ubuntu), and RPM (Fedora/RHEL).
+
+### Requirements
+
+- glibc 2.28+
+- WebKit2GTK 4.1+
+- 8 GB RAM (16 GB recommended)
+
+### AppImage (all distributions)
 
 ```bash
-# Inside WSL2 (Ubuntu/Debian), from the repo root
-sudo apt-get update && sudo apt-get install -y docker.io
-curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv
-uv python install 3.13
-cp .env.example .env
-docker compose up --build        # starts AgenticOS + Redis
-# open http://localhost:8000
+chmod +x AgenticOS-x86_64.AppImage
+./AgenticOS-x86_64.AppImage
 ```
 
-## Docker Installation
+### DEB (Debian, Ubuntu, Mint)
 
 ```bash
-# from E:\AAIOS (or /mnt/e/AAIOS inside WSL2)
-cp .env.example .env
-docker compose up --build
-# open http://localhost:8000  → live dashboard at ws://localhost:8000/ws/dashboard
+sudo apt install -y ./agentic-os_1.0.0-rc1_amd64.deb
+agentic-os
 ```
 
-## Quick Start (local dev, no Docker)
+### RPM (Fedora, RHEL, Rocky Linux)
 
 ```bash
-uv python install 3.13
-uv sync
-uv run agentic-os serve          # or: BUS_TYPE=local uv run python -m agentic_os
+sudo dnf install -y ./agentic-os-1.0.0-rc1.x86_64.rpm
+agentic-os
 ```
 
-Trigger the slice:
+### Docker (any distribution)
 
 ```bash
-curl -X POST http://localhost:8000/api/tasks \
-  -H 'content-type: application/json' \
-  -d '{"title":"Write a hello-world function","role":"coding"}'
+docker run -d -p 8000:8000 ghcr.io/rachidsabah/agentic-os:latest
+# Open http://localhost:8000
 ```
 
-### Mission Control (frontend)
+## macOS Installation
+
+### Requirements
+
+- macOS 12 (Monterey) or later
+- 8 GB RAM (16 GB recommended)
+
+### DMG
+
+1. Download `AgenticOS-x64.dmg` or `AgenticOS-arm64.dmg` for Apple Silicon.
+2. Open the DMG and drag AgenticOS to your Applications folder.
+3. Launch AgenticOS from Applications.
+
+### PKG
 
 ```bash
-# backend (control plane + /ws/dashboard)
-uv run agentic-os serve
-
-# in another terminal
-cd apps/mission-control
-npm install --legacy-peer-deps
-npm run dev        # http://localhost:3000
+sudo installer -pkg agentic-os-1.0.0-rc1.pkg -target /
+open /Applications/AgenticOS.app
 ```
 
-The UI connects to the backend via `NEXT_PUBLIC_API_BASE` (default
-`http://localhost:8000`) and renders live EventBus data. Quality gate:
+## Offline Mode
+
+AgenticOS is designed to work fully offline. When no internet connection is available:
+
+- **Local AI models** (Ollama, LM Studio, llama.cpp) continue to work without interruption.
+- **Event queuing** — API calls and actions are queued locally as `OfflineEvent` objects.
+- **Auto-sync** — When connectivity is restored, queued events are automatically replayed and synced.
+- **Cached auth tokens** — API keys and tokens are cached securely for offline use.
+- **Configurable** — Cache size, sync interval, and auto-sync behavior are adjustable in Settings.
+
+The offline state machine transitions through `ONLINE → OFFLINE → RECONNECTING → SYNCHRONIZING → ONLINE` with appropriate UI indicators in Mission Control.
+
+## Mission Control
+
+Mission Control is the primary user interface — a real-time, WebSocket-driven dashboard built with Next.js 15, React 19, TypeScript, and TailwindCSS.
+
+### 15+ Built-in Views
+
+| View | Description |
+|------|-------------|
+| **Mission Overview** | At-a-glance status of all agents, tasks, and system health |
+| **AI Brain** | Live neural pulse visualization reacting to EventBus events |
+| **Agent Constellation** | Interactive React Flow topology of all registered agents |
+| **Execution Graph** | Real-time task execution flow with status indicators |
+| **Provider Control Center** | Manage AI providers, API keys, models, health, and routing |
+| **Memory Explorer** | Browse, search, and manage scoped memory across agents |
+| **MCP Manager** | Register, configure, and monitor MCP servers and tools |
+| **Workflow Studio** | Visual DAG editor for building and executing workflows |
+| **Pipeline Builder** | Visual stage-based pipeline editor with scheduling |
+| **Swarm Dashboard** | Create swarms, monitor execution, and manage coordination |
+| **Plugin Marketplace** | Browse, install, and manage plugins |
+| **Workspace Explorer** | Manage multiple workspaces with tabs and layouts |
+| **Task Timeline** | Chronological view of all task activity |
+| **System Monitor** | CPU, memory, GPU, disk, and process metrics |
+| **Discovery Dashboard** | View detected runtimes, run discovery scans, configure providers |
+
+All views are backed by real REST API responses and WebSocket event streams — no fabricated data.
+
+## Plugin Installation
+
+Plugins extend AgenticOS with new agents, tools, providers, MCP servers, workflows, and pipeline stages.
+
+### From the Plugin Marketplace (Mission Control)
+
+1. Open **Plugin Marketplace** from the sidebar in Mission Control.
+2. Browse or search available plugins.
+3. Click **Install** on any plugin.
+4. The plugin is downloaded, validated, and activated immediately.
+
+### Manual Installation
+
+Drop a plugin directory or `.whl` file into the plugins directory:
+
+```
+Windows: %APPDATA%/AgenticOS/plugins/
+Linux:   ~/.config/AgenticOS/plugins/
+macOS:   ~/Library/Application Support/AgenticOS/plugins/
+```
+
+Plugins implement the `Plugin` port (name, load, unload) and receive a `PluginContext` with agent and provider registries.
+
+### Plugin SDK
+
+The Plugin SDK provides TypeScript and Python base classes for building plugins:
+
+- Agent plugins
+- Tool plugins
+- Provider plugins
+- MCP server plugins
+- Workflow node plugins
+- Pipeline stage plugins
+
+See [`PLUGIN_SDK.md`](PLUGIN_SDK.md) for the full specification.
+
+## Runtime Discovery
+
+Runtime Discovery automatically finds AI runtimes and developer tools installed on your system, making them available to agents without manual configuration.
+
+### Discoverable Runtimes
+
+| Runtime | Detection Method |
+|---------|-----------------|
+| Python | PATH scanning, known install directories, Windows Registry |
+| Node.js | PATH scanning |
+| Docker | Docker socket check, PATH scanning |
+| Ollama | PATH scanning, known install directories |
+| LM Studio | Known install directories, Windows Registry |
+| llama.cpp | PATH scanning |
+| Git | PATH scanning |
+| WSL | WSL API, Windows Registry |
+| VS Code | Known install directories, Windows Registry |
+| JetBrains IDEs | Known install directories, Windows Registry |
+| Claude Code | PATH scanning |
+| OpenCode | PATH scanning |
+| MCP Servers | Config file, env vars, filesystem scanning |
+
+### How It Works
+
+1. **Scanning** — The Discovery Framework runs 10+ discovery providers (path, registry, WSL, Docker, filesystem, config file, env var, VS Code, JetBrains, known install dirs).
+2. **Validation** — Discovered runtimes are validated (executable exists, version detected, capability match, permissions).
+3. **Profiling** — Each runtime is profiled for capabilities, performance, and compatibility.
+4. **Registration** — Validated runtimes are automatically registered as execution engines, available for task dispatch.
+5. **Hot Reload** — The discovery framework supports hot-reloading: it watches for changes and re-scans automatically.
+
+### Manual Discovery
+
+Trigger a scan at any time from Mission Control's Discovery Dashboard or via the API:
 
 ```bash
-npm run typecheck && npm run lint && npm run test && npm run build
+curl -X POST http://localhost:8000/api/discovery/scan
 ```
 
-## Repository Structure
+## Automatic Updates
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full layered design and the
-`docs/adr/` decision records. Source layout:
+AgenticOS checks for updates automatically and can update itself without user intervention.
 
+### Update Channels
+
+| Channel | Description |
+|---------|-------------|
+| **Stable** | Production-ready releases (default) |
+| **Beta** | Release candidates for early adopters |
+| **Nightly** | Latest builds from main branch |
+
+### Update Flow
+
+1. **Detection** — The update manager polls GitHub Releases at configurable intervals (default: every 6 hours).
+2. **Download** — Updates are downloaded in the background with checksum verification (SHA-256).
+3. **Verification** — Downloaded packages are cryptographically verified before installation.
+4. **Installation** — Updates are applied automatically; the app restarts after installation.
+5. **Rollback** — If an update fails, AgenticOS automatically rolls back to the previous version.
+6. **History** — A complete update history with versions, timestamps, and status is maintained.
+
+### Configuration
+
+Update behavior can be configured in Settings:
+- Enable/disable automatic checks
+- Select update channel (stable, beta, nightly)
+- Manual check for updates
+
+## Troubleshooting
+
+### AgenticOS won't start
+
+- **Windows**: Ensure WebView2 Runtime is installed. Run `AgenticOS.exe --reset` to reset the configuration.
+- **Linux**: Ensure WebKit2GTK 4.1+ is installed (`sudo apt install libwebkit2gtk-4.1-dev`).
+- **macOS**: Ensure the app is in the Applications folder, not quarantined (`xattr -dr com.apple.quarantine /Applications/AgenticOS.app`).
+
+### Mission Control shows "Connecting..."
+
+- Ensure the backend is running on port 8000.
+- Check firewall rules — port 8000 must be accessible to localhost.
+- Restart the desktop app.
+
+### Runtime Discovery finds nothing
+
+- Ensure runtimes (Python, Node.js, Ollama, etc.) are installed and on PATH.
+- Run a manual scan from Discovery Dashboard.
+- Check the diagnostics report for system information.
+
+### Updates fail to install
+
+- Check internet connectivity.
+- Ensure sufficient disk space.
+- Try switching to a different update channel.
+- Run diagnostics and check the update history for error details.
+
+### High memory usage
+
+- Open System Monitor in Mission Control to identify the source.
+- Reduce the number of active agents or MCP servers.
+- Restart the desktop runtime from Settings.
+
+## Diagnostics
+
+AgenticOS includes a comprehensive diagnostics system accessible from Mission Control.
+
+### System Information
+
+- OS name, version, architecture
+- Python, Node.js, Rust, and Tauri versions
+- Display resolution and monitor count
+- Locale, language, and timezone
+
+### Performance Metrics
+
+- CPU usage (percent and per-process)
+- Memory usage (used, total, percent)
+- GPU name and memory
+- Disk usage (free, total, percent)
+- Workspace storage usage
+- Process count and thread count
+- Application uptime
+
+### Health Checks
+
+- **Startup validation** — Verifies all subsystems initialize correctly
+- **Integrity checks** — Periodic validation of application files and configuration
+- **Memory leak detection** — Monitors memory growth over time
+- **Thread monitoring** — Detects thread deadlocks and anomalies
+- **Resource cleanup** — Ensures proper cleanup on shutdown
+
+### Running Diagnostics
+
+From Mission Control: Open **System Monitor** and click **Run Diagnostics**.
+
+From the CLI:
+
+```bash
+agentic-os doctor
 ```
-src/agentic_os/
-  domain/      entities + value objects (Pydantic v2)
-  ports/       interfaces (EventBus, ProviderAdapter, Plugin, + 4 subsystem ports)
-  core/        orchestrator, registries, health, recovery, scheduler,
-               providers/, capability/, memory/, security/
-  adapters/    bus, provider, capability, memory, security implementations
-  api/         FastAPI app (REST + WebSocket)
-  kernel.py    composition root → Platform bundle
-  cli.py       entrypoint
-tests/         unit + integration (incl. live kernel API smoke tests)
-docs/adr/      Architecture Decision Records (0001–0015)
-docs/c4/       C4 diagrams (mermaid)
+
+From the API:
+
+```bash
+curl http://localhost:8000/api/desktop/diagnostics
 ```
 
-## Plugin System
-
-Agents and providers are discovered via the plugin loader
-(`adapters/plugins/loader.py`). A plugin exposes a `Plugin` port
-(`name`, `load()`, `unload()`) and registers providers/agents into the
-registries at kernel start. See `ROADMAP.md` — the formal `PLUGIN_SDK.md` lands
-with the Phase 3 plugin marketplace.
-
-## Provider System
-
-Providers implement the frozen `ProviderAdapter` port (`info`, `execute()`,
-`healthcheck()`). The Provider Management subsystem adds a catalog, model
-registry, encrypted vault, health monitor, multi-policy router with failover,
-cost tracker, and rate limiter. Add a provider at runtime via
-`POST /api/provider-configs`; it becomes immediately selectable by the router.
-
-## Memory System
-
-Memory is partitioned into scopes (working / conversation / project / shared /
-long-term). `MemoryStore` provides CRUD + lexical search, `VectorStore` adds
-semantic recall, `KnowledgeGraph` adds relations. `MemoryManager` applies per-scope
-TTL + max-size retention and emits `MEMORY_WRITTEN` / `MEMORY_EVICTED` events.
-
-## Capability Engine
-
-Capabilities are the unit of agent definition. The engine seeds 11 built-ins;
-sensitive ones (`terminal`, `git`, `docker`, `filesystem`) set
-`requires_approval=True` so the Security Framework can intercept them. The
-composer derives an `AgentSpec` from a task's intent. See `docs/adr/0007`.
-
-## Security Framework
-
-RBAC with deny-by-default least-privilege grants, workspace isolation (traversal
-safe), capability→permission mapping, a human approval gate, and an append-only
-audit log. `SecurityFramework.authorize()` runs RBAC → (if pending) approval gate
-→ audit, and emits `TOOL_DENIED` on denial. See `docs/adr/0009`.
-
-## Project layout
-
-```
-src/agentic_os/
-  domain/      # entities + value objects (Pydantic v2): agent, provider_mgmt,
-              #   capability, memory, security, events
-  ports/       # interfaces (EventBus, ProviderAdapter, Plugin, and the four
-              #   Phase-2 subsystem ports: provider_management, memory,
-              #   capability, security)
-  core/        # orchestrator kernel, registries, health, recovery, scheduler,
-              #   providers/, capability/engine, memory/, security/
-  adapters/    # bus, provider, capability, memory, security implementations
-  api/         # FastAPI app, REST + WebSocket
-  kernel.py    # composition root → Platform bundle
-  cli.py       # entrypoint
-tests/         # unit + integration (incl. live kernel API smoke tests)
-docs/adr/      # Architecture Decision Records (0001–0009)
-docs/c4/       # C4 diagrams (mermaid)
-```
-
-## Development Setup (Windows)
+## Development Guide
 
 ### Prerequisites
 
-1. **Python 3.13+** — Install from [python.org](https://www.python.org/downloads/) or use `uv` (which manages its own Python):
-   ```powershell
-   uv python install 3.14
-   ```
+- Python 3.14+
+- Node.js 18+ (22+ recommended)
+- Rust 1.77+ (for Tauri desktop builds)
+- MSVC Build Tools (Windows) or GCC/Clang (Linux/macOS)
 
-2. **Node.js 18+** — Install from [nodejs.org](https://nodejs.org/) (LTS recommended).
+### Setup
 
-3. **Rust** (for Tauri desktop builds) — Install from [rustup.rs](https://rustup.rs/):
-   ```powershell
-   rustup-init.exe -y --default-toolchain stable
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/rachidSabah/AgenticOS.git
+cd AgenticOS
 
-4. **Visual Studio Build Tools** (C++ workload, required by Rust) — Download from
-   [visualstudio.microsoft.com/downloads](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022).
-   Run the installer and select the "Desktop development with C++" workload, or install
-   only the MSVC tools:
-   ```powershell
-   vs_BuildTools.exe --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --wait
-   ```
+# Install Python dependencies
+uv sync
 
-5. **Git** — Install from [git-scm.com](https://git-scm.com/).
+# Install frontend dependencies
+cd apps/mission-control
+npm install
+cd ../..
 
-### Verifying the toolchain
+# Start the backend
+uv run python -m agentic_os serve
 
-```powershell
-python --version          # 3.13+ (or use `uv run python --version`)
-node --version            # 18+
-npm --version
-rustc --version; cargo --version
-git --version
+# In another terminal, start the frontend
+cd apps/mission-control
+npm run dev
 ```
 
-> **Note:** Rust's `cargo` and `rustc` need MSVC tools (`link.exe`) on PATH. Run
-> the **"Developer PowerShell for VS 2022"** shortcut, or initialise the environment
-> manually:
-> ```powershell
-> & "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-> ```
+The backend API runs at `http://localhost:8000` and the frontend at `http://localhost:3000`.
 
-### Backend (Python)
+### Running Tests
 
-```powershell
-uv sync                          # Install Python dependencies + create .venv
-uv run python -m agentic_os serve   # Start API on http://localhost:8000
+```bash
+# Python backend tests
+uv run pytest -v --tb=short
+
+# Frontend tests
+cd apps/mission-control && npm run test
+
+# Type checking
+uv run ty
+
+# Linting
+uv run ruff check && uv run ruff format --check
 ```
 
-Verify the API is running:
-```powershell
-curl.exe http://localhost:8000/healthz
-# → {"status":"ok","bus":"local"}
+### Building
+
+```bash
+# Build the Python package
+uv build
+
+# Build the frontend
+cd apps/mission-control && npm run build
+
+# Build the desktop app (requires Tauri CLI)
+cargo tauri build
 ```
 
-### Frontend (Mission Control)
+### Project Structure
 
-```powershell
-cd apps\mission-control
-npm install                      # Install Node dependencies
-npm run dev                      # Start dev server on http://localhost:3000
+```
+src/agentic_os/       # Python backend package
+  domain/             # Pydantic v2 entities and value objects
+  ports/              # Abstract interfaces (Protocol)
+  core/               # Business logic and orchestration
+  adapters/           # Concrete infrastructure implementations
+  api/                # FastAPI REST + WebSocket endpoints
+  sdk/                # MCP, Swarm, and Learning SDKs
+  kernel.py           # Composition root
+  cli.py              # CLI entrypoint
+apps/mission-control/ # Next.js 15 frontend
+services/             # Standalone service modules
+tests/                # Python test suite
+docs/                 # Documentation and ADRs
 ```
 
-Both servers must run simultaneously. The frontend proxies `/api/*` and `/ws/*`
-requests to the backend at port 8000.
+## API Guide
 
-### Running tests
+AgenticOS exposes a comprehensive REST API and WebSocket endpoint for programmatic access.
 
-```powershell
-uv run pytest -v                           # Python backend tests
-cd apps\mission-control; npm run test      # Frontend tests
+### REST API
+
+**Base URL:** `http://localhost:8000`
+
+#### System
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/healthz` | Health check |
+| GET | `/metrics` | Prometheus metrics |
+
+#### Tasks & Agents
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tasks` | List all tasks |
+| POST | `/api/tasks` | Create a task |
+| GET | `/api/agents` | List all agents |
+
+#### Providers
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/providers` | List providers |
+| GET | `/api/provider-configs` | List provider configs |
+| POST | `/api/provider-configs` | Add/update provider config |
+| DELETE | `/api/provider-configs/{name}` | Delete provider |
+| POST | `/api/providers/{name}/api-key` | Store API key |
+| POST | `/api/providers/{name}/test` | Test provider health |
+| GET | `/api/models` | List models |
+| POST | `/api/models` | Register a model |
+| GET | `/api/provider-health` | Provider health status |
+| GET | `/api/cost` | Cost report |
+| POST | `/api/routing/policy` | Set routing policy |
+
+#### MCP
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/mcp/servers` | List MCP servers |
+| POST | `/api/mcp/servers` | Register MCP server |
+| GET | `/api/mcp/servers/{id}` | Get server details |
+| PUT | `/api/mcp/servers/{id}` | Update server |
+| DELETE | `/api/mcp/servers/{id}` | Delete server |
+| POST | `/api/mcp/servers/{id}/start` | Start server |
+| POST | `/api/mcp/servers/{id}/stop` | Stop server |
+| POST | `/api/mcp/servers/{id}/restart` | Restart server |
+| GET | `/api/mcp/servers/{id}/tools` | List server tools |
+
+#### Swarm Orchestration
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/swarm/profiles` | Create swarm profile |
+| POST | `/api/swarm/planner/analyze` | Analyze a goal |
+| POST | `/api/swarm/planner/plan` | Create a plan |
+| POST | `/api/swarm/scheduler/schedule` | Schedule tasks |
+| POST | `/api/swarm/supervisor/monitor` | Monitor execution |
+| POST | `/api/swarm/merger/merge` | Merge results |
+| POST | `/api/swarm/validation/validate` | Validate output |
+| POST | `/api/swarm/checkpoints` | Manage checkpoints |
+| GET | `/api/swarm/metrics` | Query metrics |
+
+#### Workflows & Pipelines
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/workflows` | List/create workflows |
+| PUT/DELETE | `/api/workflows/{id}` | Update/delete workflow |
+| POST | `/api/workflows/{id}/execute` | Execute workflow |
+| POST | `/api/workflows/{id}/replay` | Replay workflow |
+| GET/POST | `/api/pipelines` | List/create pipelines |
+| POST | `/api/pipelines/{id}/execute` | Execute pipeline |
+| POST | `/api/pipelines/{id}/schedule` | Schedule pipeline |
+
+#### Full reference
+
+See the API router in `src/agentic_os/api/app.py` for the complete list of 100+ endpoints.
+
+### WebSocket
+
+**Endpoint:** `ws://localhost:8000/ws`
+
+The WebSocket streams every EventBus event in real time, including:
+- Task lifecycle events (created, dispatched, completed, failed)
+- Agent status changes
+- Provider health updates
+- Memory operations
+- Security authorization decisions
+- MCP server lifecycle events
+- Swarm orchestration events
+- Desktop runtime events
+
+All messages are JSON-formatted `EventEnvelope` objects.
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws');
+ws.onmessage = (event) => {
+  const envelope = JSON.parse(event.data);
+  console.log(envelope.topic, envelope.payload);
+};
 ```
 
-### Local CI
+## SDK Guide
 
-```powershell
-.\scripts\ci.ps1       # Windows (PowerShell) — runs ruff, ty, pytest
+AgenticOS includes three Python SDKs for programmatic interaction.
+
+### MCP SDK (`sdk/mcp/`)
+
+Build, register, and manage MCP servers programmatically.
+
+```python
+from agentic_os.sdk.mcp.server import McpServerSdk
+from agentic_os.sdk.mcp.tool import ToolSdk
+
+# Create an MCP server
+server = McpServerSdk(
+    name="my-server",
+    transport="stdio",
+    command="python",
+    args=["-m", "my_mcp_server"]
+)
+await server.start()
+
+# Build a tool
+tool = ToolSdk(name="search", input_schema={
+    "type": "object",
+    "properties": {"query": {"type": "string"}}
+})
 ```
 
-## Testing
+**Modules:** `server.py`, `tool.py`, `resource.py`, `prompt.py`, `auth.py`, `config.py`, `registration.py`, `validation.py`, `testing.py`
 
-## Roadmap
+### Learning SDK (`sdk/learning/`)
 
-- ✅ Phase 1 — Foundation + Vertical Slice (v0.1.0)
-- ✅ Phase 2 — Core 4 Subsystems (v0.2.0)
-- ✅ Phase 3 — MCP Framework, Mission Control dashboard, Workflow Engine
-- ✅ Phase 4, M1–M5 — Execution Engine, Discovery, MCP Runtime, Swarm, Learning
-- 🔄 Phase 4, M6 — Desktop Runtime (Tauri v2, MSI installer, offline/local AI)
-- 🔮 Phase 4, M7 — Plugin Marketplace
-- 🔮 Phase 4, M8 — Production Validation
-- 🔮 Phase 5 — Cloud Control Plane
+Access the Learning & Optimization Engine for performance tracking, model selection, and routing optimization.
 
-See [`ROADMAP.md`](ROADMAP.md) for detail.
+```python
+from agentic_os.sdk.learning.client import LearningClient
+
+client = LearningClient(base_url="http://localhost:8000")
+metrics = await client.get_performance_metrics()
+recommendation = await client.recommend_model(task_type="coding")
+```
+
+### Swarm SDK (`sdk/swarm/`)
+
+Create and manage multi-agent swarms.
+
+```python
+from agentic_os.sdk.swarm.client import SwarmClient
+
+client = SwarmClient(base_url="http://localhost:8000")
+
+# Create a swarm
+swarm = await client.create_swarm(
+    name="research-team",
+    topology="hierarchical",
+    max_agents=3
+)
+
+# Run a goal
+result = await client.run_goal(
+    swarm_id=swarm.id,
+    goal="Research and summarize the latest AI papers"
+)
+```
+
+**Available methods:** `create_swarm`, `run_goal`, `get_plan`, `cancel_plan`, `list_swarms`, `get_swarm`, `delete_swarm`
+
+## FAQ
+
+**Q: Do I need an internet connection to use AgenticOS?**
+A: No. AgenticOS works fully offline with local AI models. Internet is only needed for cloud provider API calls, plugin downloads, and automatic updates.
+
+**Q: Which AI providers are supported?**
+A: All OpenAI-compatible APIs, Anthropic Claude, Ollama (local), LM Studio (local), llama.cpp (local), and any custom provider via the Provider SDK.
+
+**Q: Can I use my existing Ollama models?**
+A: Yes. Runtime Discovery automatically detects Ollama installations and registered models. They appear in Mission Control without any configuration.
+
+**Q: What is the MCP (Model Context Protocol)?**
+A: MCP is an open protocol that standardizes how applications provide context and tools to LLMs. AgenticOS includes a full MCP runtime with support for stdio, SSE, and Streamable HTTP transports.
+
+**Q: Is AgenticOS free?**
+A: Yes, AgenticOS is open source under the MIT License. It is free to use, modify, and distribute.
+
+**Q: Can I run AgenticOS on a server without a display?**
+A: Yes. AgenticOS runs as a headless server via `python -m agentic_os serve` or Docker, exposing the REST API and WebSocket endpoint on port 8000.
+
+**Q: How do I migrate from the previous version?**
+A: Automatic updates handle migration. Manual backups are available via the Settings > Backup panel. Workspace data, provider configs, and plugin settings are preserved across updates.
+
+**Q: What data does AgenticOS collect?**
+A: No data is collected by default. Telemetry is opt-in and can be enabled in Settings. Update checks query GitHub Releases API for version information.
+
+## Support
+
+- **Documentation** — See [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md), and the `docs/` directory.
+- **GitHub Issues** — Report bugs and request features at [github.com/rachidSabah/AgenticOS/issues](https://github.com/rachidSabah/AgenticOS/issues).
+- **Security Issues** — Report vulnerabilities privately to security@agenticos.dev (see [SECURITY.md](SECURITY.md)).
+- **Discussions** — Join the conversation on [GitHub Discussions](https://github.com/rachidSabah/AgenticOS/discussions).
 
 ## Contributing
 
-Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`ARCHITECTURE.md`](ARCHITECTURE.md).
-All contributions must pass the CI quality gates and include tests + docs.
+We welcome contributions of all sizes — bug fixes, features, documentation, and testing.
+
+### Getting Started
+
+1. Read [CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+2. Fork the repository and create a feature branch.
+3. Follow the hexagonal architecture principles: ports before implementations.
+4. Write tests for all new code (unit + integration).
+5. Ensure CI quality gates pass:
+   ```bash
+   uv run ruff check && uv run ruff format --check
+   uv run ty
+   uv run pytest -v --tb=short
+   ```
+6. Open a pull request targeting `main`.
+
+### Commit Conventions
+
+We use Conventional Commits:
+- `feat:` — new capability or feature
+- `fix:` — bug fix
+- `refactor:` — no behavior change
+- `docs:` — documentation only
+- `test:` — test additions or changes
+- `chore:` — tooling or version bumps
+
+### Code of Conduct
+
+All contributors must adhere to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-Released under the [MIT License](LICENSE).
+AgenticOS is released under the [MIT License](LICENSE).
 
-## Links
-
-- Architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- Decisions: [`docs/adr/`](docs/adr)
-- C4 diagrams: [`docs/c4/diagrams.md`](docs/c4/diagrams.md)
-- Security: [`SECURITY.md`](SECURITY.md)
-- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+Copyright (c) 2026 AgenticOS contributors. See [LICENSE](LICENSE) for the full license text.

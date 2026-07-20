@@ -170,6 +170,21 @@ class DesktopEventType(StrEnum):
     RESTORE_COMPLETED = "desktop.restore.completed"
     FIRST_RUN_COMPLETED = "desktop.first_run.completed"
     INSTALLER_PROGRESS = "desktop.installer.progress"
+    HARDENING_STARTED = "desktop.hardening.started"
+    HARDENING_COMPLETED = "desktop.hardening.completed"
+    HARDENING_FAILED = "desktop.hardening.failed"
+    INTEGRITY_CHECK_PASSED = "desktop.integrity.passed"
+    INTEGRITY_CHECK_FAILED = "desktop.integrity.failed"
+    RECOVERY_STARTED = "desktop.recovery.started"
+    RECOVERY_COMPLETED = "desktop.recovery.completed"
+    RECOVERY_FAILED = "desktop.recovery.failed"
+    MEMORY_LEAK_DETECTED = "desktop.memory_leak.detected"
+    THREAD_ANOMALY_DETECTED = "desktop.thread_anomaly.detected"
+    CLEANUP_STARTED = "desktop.cleanup.started"
+    CLEANUP_COMPLETED = "desktop.cleanup.completed"
+    GRACEFUL_SHUTDOWN = "desktop.graceful_shutdown"
+    RECOVERY_MODE_ENTERED = "desktop.recovery_mode.entered"
+    RECOVERY_MODE_EXITED = "desktop.recovery_mode.exited"
 
 
 class UpdateChannel(StrEnum):
@@ -1497,6 +1512,317 @@ class DesktopEvent:
         }
 
 
+# ── Production Hardening Models ──
+
+
+class IntegrityStatus(StrEnum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+class ShutdownStepStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class ServiceHealthStatus(StrEnum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNHEALTHY = "unhealthy"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class HardeningConfig:
+    validate_on_startup: bool = True
+    integrity_check_interval_seconds: int = 300
+    enable_memory_leak_detection: bool = True
+    enable_thread_monitoring: bool = True
+    enable_resource_cleanup: bool = True
+    enable_auto_repair: bool = True
+    enable_recovery_mode: bool = True
+    startup_profiling: bool = True
+    memory_leak_threshold_mb: int = 50
+    thread_count_threshold: int = 200
+    max_startup_time_seconds: int = 30
+    graceful_shutdown_timeout_seconds: int = 30
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "validate_on_startup": self.validate_on_startup,
+            "integrity_check_interval_seconds": self.integrity_check_interval_seconds,
+            "enable_memory_leak_detection": self.enable_memory_leak_detection,
+            "enable_thread_monitoring": self.enable_thread_monitoring,
+            "enable_resource_cleanup": self.enable_resource_cleanup,
+            "enable_auto_repair": self.enable_auto_repair,
+            "enable_recovery_mode": self.enable_recovery_mode,
+            "startup_profiling": self.startup_profiling,
+            "memory_leak_threshold_mb": self.memory_leak_threshold_mb,
+            "thread_count_threshold": self.thread_count_threshold,
+            "max_startup_time_seconds": self.max_startup_time_seconds,
+            "graceful_shutdown_timeout_seconds": self.graceful_shutdown_timeout_seconds,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class StartupValidationResult:
+    success: bool = False
+    started_at: datetime = field(default_factory=_utcnow)
+    duration_seconds: float = 0.0
+    checks: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "started_at": self.started_at.isoformat(),
+            "duration_seconds": self.duration_seconds,
+            "checks": self.checks,
+            "warnings": self.warnings,
+            "errors": self.errors,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class IntegrityCheckResult:
+    status: IntegrityStatus = IntegrityStatus.UNKNOWN
+    checked_at: datetime = field(default_factory=_utcnow)
+    duration_seconds: float = 0.0
+    checks: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "checked_at": self.checked_at.isoformat(),
+            "duration_seconds": self.duration_seconds,
+            "checks": self.checks,
+            "warnings": self.warnings,
+            "errors": self.errors,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class MemoryLeakReport:
+    detected: bool = False
+    detected_at: datetime = field(default_factory=_utcnow)
+    current_memory_mb: float = 0.0
+    baseline_memory_mb: float = 0.0
+    growth_rate_mb_per_minute: float = 0.0
+    suspicious_allocations: list[dict[str, Any]] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "detected": self.detected,
+            "detected_at": self.detected_at.isoformat(),
+            "current_memory_mb": self.current_memory_mb,
+            "baseline_memory_mb": self.baseline_memory_mb,
+            "growth_rate_mb_per_minute": self.growth_rate_mb_per_minute,
+            "suspicious_allocations": self.suspicious_allocations,
+            "recommendations": self.recommendations,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class ThreadReport:
+    total_threads: int = 0
+    active_threads: int = 0
+    blocked_threads: int = 0
+    deadlocked_threads: int = 0
+    threshold_exceeded: bool = False
+    threshold: int = 200
+    sampled_at: datetime = field(default_factory=_utcnow)
+    threads: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_threads": self.total_threads,
+            "active_threads": self.active_threads,
+            "blocked_threads": self.blocked_threads,
+            "deadlocked_threads": self.deadlocked_threads,
+            "threshold_exceeded": self.threshold_exceeded,
+            "threshold": self.threshold,
+            "sampled_at": self.sampled_at.isoformat(),
+            "threads": self.threads,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class RecoveryModeConfig:
+    enabled: bool = True
+    auto_recover: bool = True
+    max_retries: int = 3
+    retry_delay_seconds: float = 2.0
+    preserve_workspaces: bool = True
+    clear_cache_on_recovery: bool = False
+    notify_user: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "auto_recover": self.auto_recover,
+            "max_retries": self.max_retries,
+            "retry_delay_seconds": self.retry_delay_seconds,
+            "preserve_workspaces": self.preserve_workspaces,
+            "clear_cache_on_recovery": self.clear_cache_on_recovery,
+            "notify_user": self.notify_user,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class CleanupResult:
+    success: bool = False
+    started_at: datetime = field(default_factory=_utcnow)
+    duration_seconds: float = 0.0
+    items_cleaned: int = 0
+    space_freed_mb: float = 0.0
+    actions: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "started_at": self.started_at.isoformat(),
+            "duration_seconds": self.duration_seconds,
+            "items_cleaned": self.items_cleaned,
+            "space_freed_mb": self.space_freed_mb,
+            "actions": self.actions,
+            "errors": self.errors,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class SelfDiagnosticsReport:
+    status: IntegrityStatus = IntegrityStatus.UNKNOWN
+    generated_at: datetime = field(default_factory=_utcnow)
+    services: list[dict[str, Any]] = field(default_factory=list)
+    checks: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "generated_at": self.generated_at.isoformat(),
+            "services": self.services,
+            "checks": self.checks,
+            "warnings": self.warnings,
+            "errors": self.errors,
+            "recommendations": self.recommendations,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class ResourceUsageSummary:
+    cpu_percent: float = 0.0
+    memory_mb: float = 0.0
+    thread_count: int = 0
+    open_handles: int = 0
+    network_connections: int = 0
+    disk_io_bytes_per_sec: float = 0.0
+    sampled_at: datetime = field(default_factory=_utcnow)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cpu_percent": self.cpu_percent,
+            "memory_mb": self.memory_mb,
+            "thread_count": self.thread_count,
+            "open_handles": self.open_handles,
+            "network_connections": self.network_connections,
+            "disk_io_bytes_per_sec": self.disk_io_bytes_per_sec,
+            "sampled_at": self.sampled_at.isoformat(),
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class RepairAction:
+    action: str = ""
+    target: str = ""
+    status: str = "pending"
+    duration_seconds: float = 0.0
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "action": self.action,
+            "target": self.target,
+            "status": self.status,
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class RepairResult:
+    success: bool = False
+    repaired: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+    actions: list[RepairAction] = field(default_factory=list)
+    duration_seconds: float = 0.0
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "success": self.success,
+            "repaired": self.repaired,
+            "failed": self.failed,
+            "actions": [a.to_dict() for a in self.actions],
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class ShutdownPlan:
+    initiated_at: datetime = field(default_factory=_utcnow)
+    timeout_seconds: int = 30
+    force: bool = False
+    save_workspaces: bool = True
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "initiated_at": self.initiated_at.isoformat(),
+            "timeout_seconds": self.timeout_seconds,
+            "force": self.force,
+            "save_workspaces": self.save_workspaces,
+            "steps": self.steps,
+            "metadata": self.metadata,
+        }
+
+
 __all__ = [
     "DesktopRuntimeStatus",
     "WindowState",
@@ -1567,4 +1893,19 @@ __all__ = [
     "RestoreConfig",
     "FirstRunState",
     "RuntimeDiscoveryResult",
+    "HardeningConfig",
+    "StartupValidationResult",
+    "IntegrityCheckResult",
+    "IntegrityStatus",
+    "SelfDiagnosticsReport",
+    "MemoryLeakReport",
+    "ThreadReport",
+    "RecoveryModeConfig",
+    "CleanupResult",
+    "ShutdownPlan",
+    "ShutdownStepStatus",
+    "ResourceUsageSummary",
+    "ServiceHealthStatus",
+    "RepairAction",
+    "RepairResult",
 ]
