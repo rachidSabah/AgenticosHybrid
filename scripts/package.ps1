@@ -22,7 +22,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 $MissionDir = Join-Path $RepoRoot "apps\mission-control"
 $TauriDir = Join-Path $MissionDir "src-tauri"
 
@@ -59,10 +59,10 @@ foreach ($r in $required) {
     if (Test-Path $path) {
         $size = (Get-Item $path).Length
         $sizeStr = if ($size -gt 1MB) { "{0:N2} MB" -f ($size / 1MB) } else { "{0:N0} KB" -f ($size / 1KB) }
-        Write-Host "  ✓ $r ($sizeStr)" -ForegroundColor Green
+        Write-Host "  + $r ($sizeStr)" -ForegroundColor Green
     }
     else {
-        Write-Host "  ✗ $r (missing)" -ForegroundColor Red
+        Write-Host "  - $r (missing)" -ForegroundColor Red
         $missing += $r
     }
 }
@@ -76,17 +76,18 @@ $checksumsPath = Join-Path $ArtifactsDir "SHA256SUMS.txt"
 if (Test-Path $checksumsPath) {
     Write-Host "`nValidating SHA256 checksums..." -ForegroundColor Yellow
     Get-Content $checksumsPath | ForEach-Object {
-        if ($_ -match "^([a-f0-9]+)\s+(.+)$") {
-            $expectedHash = $matches[1]
-            $fileName = $matches[2]
+        $parts = $_ -split "\s+"
+        if ($parts.Count -ge 2) {
+            $expectedHash = $parts[0]
+            $fileName = $parts[1]
             $filePath = Join-Path $OutDir $fileName
             if (Test-Path $filePath) {
                 $actualHash = (Get-FileHash $filePath -Algorithm SHA256).Hash.ToLower()
                 if ($actualHash -eq $expectedHash) {
-                    Write-Host "  ✓ $fileName" -ForegroundColor Green
+                    Write-Host "  + $fileName" -ForegroundColor Green
                 }
                 else {
-                    Write-Host "  ✗ $fileName (hash mismatch)" -ForegroundColor Red
+                    Write-Host "  - $fileName (hash mismatch)" -ForegroundColor Red
                 }
             }
         }

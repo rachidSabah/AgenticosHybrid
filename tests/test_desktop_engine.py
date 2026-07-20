@@ -436,15 +436,18 @@ class TestDesktopEventPublisher:
     async def test_publish_started(self, mock_bus: AsyncMock) -> None:
         pub = DesktopEventPublisher(mock_bus)
         await pub.publish_started()
-        mock_bus.publish.assert_awaited_with("desktop.started", {})
+        assert mock_bus.publish.awaited
+        envelope = mock_bus.publish.await_args[0][0]
+        assert envelope.topic == "desktop.started"
 
     @pytest.mark.asyncio
     async def test_publish_workspace_created(self, mock_bus: AsyncMock) -> None:
         pub = DesktopEventPublisher(mock_bus)
         await pub.publish_workspace_created("ws-1", "Test")
-        mock_bus.publish.assert_awaited_with(
-            "desktop.workspace.created", {"workspace_id": "ws-1", "name": "Test"}
-        )
+        assert mock_bus.publish.awaited
+        envelope = mock_bus.publish.await_args[0][0]
+        assert envelope.topic == "desktop.workspace.created"
+        assert envelope.payload == {"workspace_id": "ws-1", "name": "Test"}
 
     @pytest.mark.asyncio
     async def test_publish_notification_created(self, mock_bus: AsyncMock) -> None:

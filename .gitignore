@@ -66,6 +66,12 @@ temp/
 *.sqlite
 *.sqlite3
 
+# ── Build & Packaging Artifacts ──
+*.spec
+ci-log.txt
+apps/mission-control/src-tauri/resources/
+docs/build-report.md
+
 # ── Temporary / OS files ──
 .DS_Store
 Thumbs.db

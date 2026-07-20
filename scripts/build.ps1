@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$RepoRoot = Split-Path -Parent $PSScriptRoot
 $MissionDir = Join-Path $RepoRoot "apps\mission-control"
 $TauriDir = Join-Path $MissionDir "src-tauri"
 
@@ -58,7 +58,7 @@ if ($missing.Count -gt 0) {
     Write-Warning "  Node.js: https://nodejs.org"
     if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
         # Non-fatal for now since CI handles Rust builds
-        Write-Warning "Rust/Cargo not found — will skip Tauri build step."
+        Write-Warning "Rust/Cargo not found - will skip Tauri build step."
         $SkipRust = $true
     }
 }
@@ -75,7 +75,7 @@ if (-not $SkipRust -and (Get-Command cargo -ErrorAction SilentlyContinue)) {
         $gccPath = Join-Path $candidate "x86_64-w64-mingw32-gcc.exe"
         if (Test-Path $gccPath) {
             Write-Host "  MinGW toolchain: $candidate" -ForegroundColor Green
-            $env:PATH = "$candidate;$env:PATH"
+            $env:PATH = $candidate + ";" + $env:PATH
             $mingwFound = $true
             $MinGWPath = $candidate
             break
@@ -152,11 +152,43 @@ else {
 # ---- Rust/Tauri build ----
 if (-not $SkipRust) {
     Write-Host "`n[5/5] Building Rust/Tauri backend..." -ForegroundColor Yellow
+
+    # Step A: Build embedded Python backend (agentic_os.exe)
+    Write-Host "  [5A] Compiling standalone backend executable (agentic_os.exe)..." -ForegroundColor Gray
+    Push-Location $RepoRoot
+    try {
+        $prevErr = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        & uv run --with pyinstaller pyinstaller --noconfirm --onefile --name agentic_os --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols --hidden-import=uvicorn.protocols.http --hidden-import=uvicorn.protocols.http.auto --hidden-import=uvicorn.protocols.websockets --hidden-import=uvicorn.protocols.websockets.auto --hidden-import=uvicorn.lifespan --hidden-import=uvicorn.lifespan.on src/agentic_os/__main__.py 2>&1 | Out-Null
+        $ErrorActionPreference = $prevErr
+    }
+    finally {
+        Pop-Location
+    }
+
+    # Step B: Copy backend executable to Tauri resources
+    $ResBackendDir = Join-Path $TauriDir "resources\backend"
+    New-Item -ItemType Directory -Force -Path $ResBackendDir | Out-Null
+    $CompiledBackend = Join-Path $OutDir "agentic_os.exe"
+    if (Test-Path $CompiledBackend) {
+        Copy-Item $CompiledBackend (Join-Path $ResBackendDir "agentic_os.exe") -Force
+        Write-Host "  + Bundled backend into resources: $ResBackendDir\agentic_os.exe" -ForegroundColor Green
+    } else {
+        throw "Failed to compile embedded backend executable: $CompiledBackend not found"
+    }
+
+    # Step C: Pre-copy WebView2Loader.dll if available from target or system
+    $ResDir = Join-Path $TauriDir "resources"
+    $TargetRelease = Join-Path $TauriDir "target\$ReleaseDir"
+    $WV2Path = Join-Path $TargetRelease "WebView2Loader.dll"
+    if (Test-Path $WV2Path) {
+        Copy-Item $WV2Path (Join-Path $ResDir "WebView2Loader.dll") -Force
+        Write-Host "  + Bundled WebView2Loader.dll into resources" -ForegroundColor Green
+    }
+
     Push-Location $TauriDir
     try {
-        $ConfigArg = if ($Config -eq "Release") { "" } else { "--debug" }
-
-        Write-Host "  Running cargo tauri build (Config: $Config)..." -ForegroundColor Gray
+        Write-Host "  [5B] Running cargo tauri build (Config: $Config)..." -ForegroundColor Gray
 
         # Determine Tauri CLI
         $TauriCli = "npx"
@@ -165,10 +197,19 @@ if (-not $SkipRust) {
             $TauriArgs += "--debug"
         }
 
-        & $TauriCli $TauriArgs 2>&1 | ForEach-Object { Write-Host "    $_" }
+        $prevErr = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        & $TauriCli $TauriArgs
+        $buildExit = $LASTEXITCODE
+        $ErrorActionPreference = $prevErr
 
-        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
-            throw "Tauri build failed with exit code $LASTEXITCODE"
+        if ($buildExit -ne 0 -and $buildExit -ne $null) {
+            throw "Tauri build failed with exit code $buildExit"
+        }
+
+        # Step D: Ensure WebView2Loader.dll is in resources & beside binary in target
+        if (Test-Path $WV2Path) {
+            Copy-Item $WV2Path (Join-Path $ResDir "WebView2Loader.dll") -Force
         }
 
         Write-Host "  Tauri build complete." -ForegroundColor Green

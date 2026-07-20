@@ -20,7 +20,15 @@ class DesktopEventPublisher:
         self, event_type: DesktopEventType, payload: dict[str, Any] | None = None
     ) -> None:
         try:
-            await self._bus.publish(event_type.value, payload or {})
+            from agentic_os.domain.events import EventEnvelope
+
+            event = EventEnvelope(
+                type="desktop_event",
+                source="desktop_runtime",
+                topic=event_type.value,
+                payload=payload or {},
+            )
+            await self._bus.publish(event)
             log.debug("Desktop event published", event_type=event_type.value)
         except Exception as exc:
             log.warning(

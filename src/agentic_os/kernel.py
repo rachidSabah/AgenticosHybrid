@@ -503,14 +503,18 @@ class Kernel:
         )
 
 
-async def run_serve() -> None:
+async def run_serve(host: str | None = None, port: int | None = None) -> None:
+    h = host or settings.http_host
+    p = port or settings.http_port
+    settings.http_host = h
+    settings.http_port = p
     kernel = Kernel()
     await kernel.start()
     app = _build_app(kernel)
     import uvicorn
 
     config = uvicorn.Config(
-        app, host=settings.http_host, port=settings.http_port, log_level="warning"
+        app, host=h, port=p, log_level="warning"
     )
     server = uvicorn.Server(config)
     await server.serve()
