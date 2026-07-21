@@ -52,10 +52,10 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
         command = self._config.extra.get("command_template", "{goal}").format(goal=goal)
         if self._process and self._process.returncode is None:
             request = json.dumps({"method": "execute", "params": {"command": command}}) + "\n"
-            assert self._process.stdin is not None
+            if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
             self._process.stdin.write(request.encode())
             await self._process.stdin.drain()
-            assert self._process.stdout is not None
+            if self._process.stdout is None: raise RuntimeError("Process stdout is not available")
             response = await asyncio.wait_for(
                 self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 300)
             )
@@ -66,7 +66,7 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
         if not self._process:
             return False
         cancel_request = json.dumps({"method": "cancel", "params": {"task_id": task_id}}) + "\n"
-        assert self._process.stdin is not None
+        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(cancel_request.encode())
         await self._process.stdin.drain()
         return True

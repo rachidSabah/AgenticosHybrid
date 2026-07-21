@@ -224,8 +224,11 @@ class TerminalAdapter(BaseMCPAdapter):
 
         self._validate_command(command)
 
-        proc = await asyncio.create_subprocess_shell(
-            command,
+        import shlex
+
+        cmd_list = shlex.split(command)
+        proc = await asyncio.create_subprocess_exec(
+            *cmd_list,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

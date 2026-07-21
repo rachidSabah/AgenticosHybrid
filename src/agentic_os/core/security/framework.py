@@ -9,6 +9,7 @@ final :class:`Decision`.
 
 from __future__ import annotations
 
+from agentic_os.adapters.security.secrets_manager import SecretStoreSecretsManager
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.security import (
     AuditEntry,
@@ -50,10 +51,6 @@ class SecurityFramework:
         self.audit: AuditLog = audit or AuditLogImpl()
         self.gate: ApprovalGate = gate or ApprovalGateImpl(bus, self.audit)
         self.tools: ToolPermissions = tools or ToolPermissionsImpl(self.ac)
-        from agentic_os.adapters.security.secrets_manager import (
-            SecretStoreSecretsManager,
-        )
-
         self.secrets: SecretsManager = secrets or SecretStoreSecretsManager(secret_store)
 
     async def authorize(self, principal: Principal, request: ToolRequest) -> Decision:

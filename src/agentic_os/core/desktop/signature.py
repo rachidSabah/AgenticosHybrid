@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentic_os.infrastructure.logging import get_logger
+
+log = get_logger("desktop.signature")
+
 
 class SignatureVerification:
     """Verifies cryptographic signatures, certificate chains, and checksums of packages."""
@@ -21,7 +25,7 @@ class SignatureVerification:
     async def verify_signature(
         self, data: bytes, signature: str, public_key: str | None = None
     ) -> bool:
-        # In-memory stub — real implementation uses GPG or Windows Authenticode
+        log.warning("Signature verification not implemented — stub always returns True")
         return True
 
     async def get_checksum(self, file_path: str, algorithm: str = "sha256") -> dict[str, Any]:

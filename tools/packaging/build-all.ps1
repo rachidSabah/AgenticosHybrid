@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $MissionControl = Join-Path $RepoRoot "apps/mission-control"
+$TauriDir = Join-Path $MissionControl "src-tauri"
 $OutDir = Join-Path $RepoRoot "dist"
 
 Write-Host "=== AgenticOS Windows Build Script ===" -ForegroundColor Cyan
@@ -41,7 +42,6 @@ if (Test-Path $vcvars) {
 # Step 2.5: Build PyInstaller backend binary and setup resources
 Write-Host "`n[2.5/4] Building standalone backend executable & copying resources..." -ForegroundColor Yellow
 Push-Location $RepoRoot
-Push-Location $RepoRoot
 Write-Host "  Running PyInstaller..."
 $pyiOut = & uv run --with pyinstaller pyinstaller --noconfirm --onefile --name agentic_os --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols --hidden-import=uvicorn.protocols.http --hidden-import=uvicorn.protocols.http.auto --hidden-import=uvicorn.protocols.websockets --hidden-import=uvicorn.protocols.websockets.auto --hidden-import=uvicorn.lifespan --hidden-import=uvicorn.lifespan.on src/agentic_os/__main__.py 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -52,7 +52,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 Pop-Location
 
-$TauriDir = Join-Path $MissionControl "src-tauri"
 $ResBackendDir = Join-Path $TauriDir "resources\backend"
 New-Item -ItemType Directory -Force -Path $ResBackendDir | Out-Null
 
@@ -103,7 +102,7 @@ if ($Target -in @("all", "portable")) {
     if (Test-Path $zipPath) { Remove-Item $zipPath }
     
     if (Test-Path $exePath) {
-        $portableItems = @($exePath, "$MissionControl/out")
+        $portableItems = @($exePath)
         $backendDir = "$TauriDir/resources/backend"
         if (Test-Path $backendDir) {
             $portableItems += $backendDir

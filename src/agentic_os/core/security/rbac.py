@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from agentic_os.domain.security import (
     PERMISSIONS,
     Permission,
@@ -58,7 +60,10 @@ class WorkspaceIsolationImpl(WorkspaceIsolation):
 
     def workspace_for(self, agent_id: str) -> str:
         if agent_id not in self._cache:
-            # Deterministic, path-traversal-safe subdir (no ".." from caller).
-            safe = agent_id.replace("..", "").strip("/\\")
-            self._cache[agent_id] = f"{self._base}/{safe}"
+            safe_id = agent_id.replace("..", "").strip("/\\")
+            base = Path(self._base).resolve()
+            candidate = (base / safe_id).resolve()
+            if not str(candidate).startswith(str(base)):
+                raise ValueError(f"agent_id {agent_id!r} escapes workspace root")
+            self._cache[agent_id] = str(candidate)
         return self._cache[agent_id]

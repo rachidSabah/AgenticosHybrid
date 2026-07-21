@@ -1,8 +1,9 @@
 "use client";
 
 import { useContext, Suspense, lazy, type ReactNode } from "react";
+import { ReactFlowProvider } from "reactflow";
 import { ActiveViewCtx } from "@/lib/active-view";
-import { ErrorBoundary, withErrorBoundary } from "@/components/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { ViewSkeleton, ViewSkeletonMinimal } from "@/components/view-skeleton";
 
 const MissionOverview = lazy(() =>
@@ -87,32 +88,40 @@ const VIEWS: Record<string, () => ReactNode> = {
     </ErrorBoundary>
   ),
   constellation: () => (
-    <ErrorBoundary viewName="Agent Constellation" fallback={<ViewSkeletonMinimal title="Agent Constellation" />}>
-      <Suspense fallback={<ViewSkeletonMinimal title="Agent Constellation" />}>
-        <AgentConstellation />
-      </Suspense>
-    </ErrorBoundary>
+    <ReactFlowProvider>
+      <ErrorBoundary viewName="Agent Constellation" fallback={<ViewSkeletonMinimal title="Agent Constellation" />}>
+        <Suspense fallback={<ViewSkeletonMinimal title="Agent Constellation" />}>
+          <AgentConstellation />
+        </Suspense>
+      </ErrorBoundary>
+    </ReactFlowProvider>
   ),
   execution: () => (
-    <ErrorBoundary viewName="Execution Graph" fallback={<ViewSkeletonMinimal title="Execution Graph" />}>
-      <Suspense fallback={<ViewSkeletonMinimal title="Execution Graph" />}>
-        <ExecutionGraph />
-      </Suspense>
-    </ErrorBoundary>
+    <ReactFlowProvider>
+      <ErrorBoundary viewName="Execution Graph" fallback={<ViewSkeletonMinimal title="Execution Graph" />}>
+        <Suspense fallback={<ViewSkeletonMinimal title="Execution Graph" />}>
+          <ExecutionGraph />
+        </Suspense>
+      </ErrorBoundary>
+    </ReactFlowProvider>
   ),
   workflow: () => (
-    <ErrorBoundary viewName="Workflow Studio" fallback={<ViewSkeleton title="Workflow Studio" />}>
-      <Suspense fallback={<ViewSkeleton title="Workflow Studio" />}>
-        <WorkflowStudio />
-      </Suspense>
-    </ErrorBoundary>
+    <ReactFlowProvider>
+      <ErrorBoundary viewName="Workflow Studio" fallback={<ViewSkeleton title="Workflow Studio" />}>
+        <Suspense fallback={<ViewSkeleton title="Workflow Studio" />}>
+          <WorkflowStudio />
+        </Suspense>
+      </ErrorBoundary>
+    </ReactFlowProvider>
   ),
   pipeline: () => (
-    <ErrorBoundary viewName="Pipeline Builder" fallback={<ViewSkeleton title="Pipeline Builder" />}>
-      <Suspense fallback={<ViewSkeleton title="Pipeline Builder" />}>
-        <PipelineBuilder />
-      </Suspense>
-    </ErrorBoundary>
+    <ReactFlowProvider>
+      <ErrorBoundary viewName="Pipeline Builder" fallback={<ViewSkeleton title="Pipeline Builder" />}>
+        <Suspense fallback={<ViewSkeleton title="Pipeline Builder" />}>
+          <PipelineBuilder />
+        </Suspense>
+      </ErrorBoundary>
+    </ReactFlowProvider>
   ),
   providers: () => (
     <ErrorBoundary viewName="Provider Control Center" fallback={<ViewSkeleton title="Provider Control Center" />}>

@@ -174,6 +174,23 @@ unzip AgenticOS-Portable-x64.zip -d ~/AgenticOS
 
 ---
 
+### 4.4 CLI Entry Point (All Platforms)
+
+AgenticOS ships with a `agentic-os` CLI command for headless/backend usage:
+
+```bash
+# Start the backend API server
+agentic-os serve
+
+# Show help
+agentic-os --help
+
+# Show version
+agentic-os --version
+```
+
+---
+
 ## 5. Verifying the Installation
 
 All installer packages include SHA256 checksums published alongside the release assets.

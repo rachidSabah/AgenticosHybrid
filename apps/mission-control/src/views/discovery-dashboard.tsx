@@ -54,12 +54,13 @@ function DiscoveryDashboardTab() {
   const [hotReload, setHotReload] = useState<HotReloadStatus | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api.discoveryProviders().then(setProviders).catch(() => {});
-    api.discoveryCache().then(setCache).catch(() => {});
-    api.discoveryStats().then(setStats).catch(() => {});
-    api.hotReloadStatus().then(setHotReload).catch(() => {});
+    api.discoveryProviders().then(setProviders).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.discoveryCache().then(setCache).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.discoveryStats().then(setStats).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.hotReloadStatus().then(setHotReload).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -193,9 +194,10 @@ function DiscoveryDashboardTab() {
 function DiscoveryHistoryTab() {
   const [history, setHistory] = useState<DiscoveryHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.discoveryHistory(100).then(setHistory).catch(() => {}).finally(() => setLoading(false));
+    api.discoveryHistory(100).then(setHistory).catch((err) => { console.error("API error:", err); setError(String(err)); }).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -242,9 +244,10 @@ function DiscoveryProfilesTab() {
   const [profiles, setProfiles] = useState<DiscoveryProfileEntry[]>([]);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api.discoveryProfiles().then(setProfiles).catch(() => {});
+    api.discoveryProfiles().then(setProfiles).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -354,6 +357,7 @@ function DiscoveryProfilesTab() {
 
 function DiscoveryValidationTab() {
   const [validations, setValidations] = useState<DiscoveryValidationEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.discoveryHistory(50).then(async (history) => {
@@ -373,7 +377,7 @@ function DiscoveryValidationTab() {
         }
       }
       setValidations(results);
-    }).catch(() => {});
+    }).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   return (

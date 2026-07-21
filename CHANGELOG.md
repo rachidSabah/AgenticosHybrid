@@ -4,6 +4,70 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-rc1] — 2026-07-21
+
+### Fixed — Enterprise Audit Pass (Zero-Regression, ~450 files inspected)
+
+**Security fixes (6 critical/high):**
+- `config.py`: Default http_host `0.0.0.0` → `127.0.0.1` (prevents external network exposure)
+- `api/app.py`: Added API key auth middleware + restricted CORS origins
+- `adapters/mcp/terminal.py:227`: `create_subprocess_shell` → `create_subprocess_exec` (command injection)
+- `services/execution_engine/adapters/local_engine_adapter.py:45`: `shell=True` → `subprocess.run(cmd_list)`
+- `core/plugin/loader.py:95`: Removed `importlib` from sandbox builtins (sandbox escape)
+- `core/security/rbac.py`: Path traversal bypass replaced with Path.resolve + bounds check
+
+**Runtime crash fixes (68 bare assert → RuntimeError in core/orchestration/):**
+- All `assert self.<attr> is not None` converted to proper `if ... is None: raise RuntimeError` guards
+- Prevents silent failures when assertions are stripped in Python -O mode
+
+**Runtime crash fixes (32 bare assert → RuntimeError in services/execution_engine/):**
+- All 32 `assert self._process.<stream> is not None` across 10 adapter files fixed
+- Prevents silent failures when `_process.stdout`/`_process.stdin` is `None`
+
+**Child process leak (1 critical):**
+- `apps/mission-control/src-tauri/src/lib.rs`: Added `Drop for BackendState`, `ExitRequested` handler, `cleanup_child()` method — ensures backend Python process is killed + waited on shutdown
+
+**Asyncio deprecations (20 fixes across 5 files):**
+- `adapters/mcp/sqlite.py`, `core/mcp/client.py`, `core/mcp/health.py`, `core/mcp/pool.py`, `services/runtime_discovery/manager.py`
+- `asyncio.get_event_loop()` → `asyncio.get_running_loop()` in async contexts, `asyncio.run()` in sync
+
+**Frontend crash fixes (4 graph views + 7 view error handling):**
+- `page.tsx`: Moved `<ReactFlowProvider>` to wrap 4 lazy-loaded views (fixes `useReactFlow()` crash on mount)
+- Removed duplicate `<ReactFlowProvider>` wrappers from individual view files
+- 7 views: Fixed 28 empty `.catch(() => {})` → proper error logging with `setError`
+
+**CI/Packaging fixes:**
+- `.github/workflows/release.yml`: All 3 platform jobs now bundle Python source into Tauri resources before build
+- `apps/mission-control/package.json`: next.js 15.1.6→15.5.20 (fixes 2 critical CVEs)
+- `tools/packaging/build-all.ps1`: Fixed `$TauriDir` use-before-definition, removed redundant `out/` from portable ZIP
+- `apps/mission-control/src-tauri/src/lib.rs`: Added Strategy 3b (uv + Python source from resource dir)
+- `pyproject.toml`: Added `[project.scripts]` entry point (`agentic-os = "agentic_os.__main__:main"`)
+
+**Version unification:**
+- Unified `1.0.0-rc1` across all 7 config files: `Cargo.toml`, `tauri.conf.json`, `package.json`, `app.py`, `lib.rs`, `pyproject.toml`, `CHANGELOG.md`
+- `app.py`: Hardcoded fallback 0.9.5→1.0.0-rc1
+- `lib.rs`: Hardcoded string → `env!("CARGO_PKG_VERSION")`
+
+**Dead code / type fixes:**
+- `page.tsx`: Removed unused `withErrorBoundary` import
+- `nav.ts`: Removed 4 unused icon imports + dead `ALL_ICONS` export
+- `store.ts`: Removed duplicate `case "agent.failed"` in switch statement
+
+**Local SQLite blocking I/O fixes:**
+- `adapters/security/encrypted_store.py`: `self._persist()` → `await asyncio.to_thread(self._persist())`
+- `core/desktop/database.py`: Wrapped sync `sqlite3` operations in `asyncio.to_thread()`
+
+**Docker:**
+- `Dockerfile`: Python 3.13→3.14
+
+**All validation clean:**
+- pytest: 2194/2194 passed (0 failures, 1 async mock warning)
+- ruff check: All pass
+- ruff format --check: 325 files already formatted
+- vitest: 10/10 passed (0 warnings)
+- tsc --noEmit: Clean
+- npm lint: Clean
+
 ## [1.0.0-rc1] — 2026-07-20
 
 ### Added — Phase 4, Milestone 6: Desktop Runtime Production Release

@@ -29,6 +29,9 @@ dependencies = [
     "opentelemetry-exporter-prometheus>=0.45.0",
 ]
 
+[project.scripts]
+agentic-os = "agentic_os.__main__:main"
+
 [project.optional-dependencies]
 mcp-docker = ["docker>=7.0.0"]
 mcp-postgres = ["asyncpg>=0.29.0"]

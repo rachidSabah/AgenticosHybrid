@@ -20,9 +20,10 @@ export function AIBrain() {
   const [compose, setCompose] = useState(false);
   const [spec, setSpec] = useState<Partial<AgentSpec>>({ name: "", capabilities: [], provider: "", model: "" });
   const [result, setResult] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.capabilities().then(setCaps).catch(() => {});
+    api.capabilities().then(setCaps).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   // A pulse is "fresh" within the last 1.2s; the brain lights up accordingly.

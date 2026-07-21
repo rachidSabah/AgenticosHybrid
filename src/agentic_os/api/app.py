@@ -12,7 +12,7 @@ providers in-browser (the unified Mission Control dashboard lands in Phase 3).
 import dataclasses
 import time
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 
@@ -171,7 +171,7 @@ def _parse_retry_policy(data: dict) -> RetryPolicy:
 
 
 def create_app(platform: Platform) -> FastAPI:
-    app = FastAPI(title="Agentic OS", version="0.2.0")
+    app = FastAPI(title="Agentic OS", version="1.0.0-rc1")
 
     app.add_middleware(
         CORSMiddleware,
@@ -182,9 +182,19 @@ def create_app(platform: Platform) -> FastAPI:
             "https://tauri.localhost",
         ],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key", "Accept"],
     )
+
+    if settings.api_key:
+
+        @app.middleware("http")
+        async def verify_api_key(request: Request, call_next):
+            if request.url.path in ("/healthz", "/metrics", "/providers"):
+                return await call_next(request)
+            if request.headers.get("X-API-Key") != settings.api_key:
+                return Response("Unauthorized", status_code=401)
+            return await call_next(request)
 
     orch = platform.orchestrator
     swarm = platform.orchestration
@@ -2672,7 +2682,7 @@ def create_app(platform: Platform) -> FastAPI:
         @app.get("/api/desktop/updates/version")
         async def get_current_version() -> dict:
             if desktop.update is None:
-                return {"version": "0.9.5"}
+                return {"version": "1.0.0-rc1"}
             return {"version": await desktop.update.get_current_version()}
 
         @app.post("/api/desktop/updates/download")

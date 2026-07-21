@@ -1,6 +1,6 @@
 {
   "name": "mission-control",
-  "version": "0.3.1",
+  "version": "1.0.0-rc1",
   "private": true,
   "description": "Mission Control — the immersive operating-system interface for AgenticOS.",
   "scripts": {
@@ -18,7 +18,7 @@
     "framer-motion": "11.18.0",
     "lucide-react": "^1.25.0",
     "monaco-editor": "^0.55.1",
-    "next": "15.1.6",
+    "next": "15.5.20",
     "next-intl": "^4.13.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",

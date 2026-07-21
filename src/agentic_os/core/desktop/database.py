@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import sqlite3
@@ -85,39 +86,46 @@ class LocalDatabaseManager:
         log.info("Local database initialized", path=self._db_path)
 
     async def _run_migrations(self) -> None:
-        assert self._conn is not None
-        cursor = self._conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='migration_log'"
-        )
-        if not cursor.fetchone():
-            sql = (
-                "CREATE TABLE IF NOT EXISTS migration_log ("
-                "id TEXT PRIMARY KEY, name TEXT NOT NULL, "
-                "applied_at TEXT NOT NULL, checksum TEXT NOT NULL, "
-                "success INTEGER NOT NULL DEFAULT 1, duration_ms REAL DEFAULT 0, error TEXT)"
-            )
-            self._conn.execute(sql)
+        if self._conn is None:
+            raise RuntimeError("database not initialized")
+        conn = self._conn
 
-        for migration in MIGRATIONS:
-            checksum = hashlib.sha256(migration["sql"].encode()).hexdigest()
-            cursor = self._conn.execute(
-                "SELECT id FROM migration_log WHERE name = ? AND success = 1", (migration["name"],)
+        def _migrate() -> None:
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='migration_log'"
             )
-            if cursor.fetchone():
-                continue
-            self._conn.executescript(migration["sql"])
-            self._conn.execute(
-                "INSERT INTO migration_log (id, name, applied_at, checksum, success, duration_ms) "
-                "VALUES (?, ?, ?, ?, 1, 0)",
-                (
-                    hashlib.md5(migration["name"].encode()).hexdigest(),
-                    migration["name"],
-                    datetime.now(UTC).isoformat(),
-                    checksum,
-                ),
-            )
-            self._conn.commit()
-            log.info("Migration applied", name=migration["name"])
+            if not cursor.fetchone():
+                sql = (
+                    "CREATE TABLE IF NOT EXISTS migration_log ("
+                    "id TEXT PRIMARY KEY, name TEXT NOT NULL, "
+                    "applied_at TEXT NOT NULL, checksum TEXT NOT NULL, "
+                    "success INTEGER NOT NULL DEFAULT 1, duration_ms REAL DEFAULT 0, error TEXT)"
+                )
+                conn.execute(sql)
+
+            for migration in MIGRATIONS:
+                checksum = hashlib.sha256(migration["sql"].encode()).hexdigest()
+                cursor = conn.execute(
+                    "SELECT id FROM migration_log WHERE name = ? AND success = 1",
+                    (migration["name"],),
+                )
+                if cursor.fetchone():
+                    continue
+                conn.executescript(migration["sql"])
+                conn.execute(
+                    "INSERT INTO migration_log (id, name, applied_at, checksum, success, "
+                    "duration_ms) VALUES (?, ?, ?, ?, 1, 0)",
+                    (
+                        hashlib.md5(migration["name"].encode()).hexdigest(),
+                        migration["name"],
+                        datetime.now(UTC).isoformat(),
+                        checksum,
+                    ),
+                )
+                conn.commit()
+                log.info("Migration applied", name=migration["name"])
+
+        await asyncio.to_thread(_migrate)
 
     async def close(self) -> None:
         if self._conn:

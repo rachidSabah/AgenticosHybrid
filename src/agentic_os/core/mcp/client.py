@@ -203,7 +203,7 @@ class MCPClient:
         if not self._process or not self._process.stdout:
             return
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         while self._connected and self._process.poll() is None:
             try:
                 line = await loop.run_in_executor(None, self._process.stdout.readline)
@@ -336,13 +336,13 @@ class MCPClient:
         if params is not None:
             request["params"] = params
 
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
 
         try:
             message = json.dumps(request) + "\n"
             self._process.stdin.write(message)
-            await asyncio.get_event_loop().run_in_executor(None, self._process.stdin.flush)
+            await asyncio.get_running_loop().run_in_executor(None, self._process.stdin.flush)
         except Exception:
             self._pending_requests.pop(request_id, None)
             raise
@@ -369,7 +369,7 @@ class MCPClient:
 
         message = json.dumps(notification) + "\n"
         self._process.stdin.write(message)
-        await asyncio.get_event_loop().run_in_executor(None, self._process.stdin.flush)
+        await asyncio.get_running_loop().run_in_executor(None, self._process.stdin.flush)
 
     # ── SSE request/notification ────────────────────────────────────────
 
@@ -389,7 +389,7 @@ class MCPClient:
         if params is not None:
             request["params"] = params
 
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
 
         try:
@@ -437,7 +437,7 @@ class MCPClient:
         if params is not None:
             request["params"] = params
 
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
         self._pending_requests[request_id] = future
 
         try:
@@ -528,9 +528,9 @@ class MCPClient:
             return {"healthy": False, "error": "Not connected"}
 
         try:
-            start = asyncio.get_event_loop().time()
+            start = asyncio.get_running_loop().time()
             await self._send_request("ping", {})
-            latency = (asyncio.get_event_loop().time() - start) * 1000
+            latency = (asyncio.get_running_loop().time() - start) * 1000
 
             return {
                 "healthy": True,
@@ -644,10 +644,10 @@ class MCPClient:
             try:
                 if self._process.poll() is None:
                     self._process.terminate()
-                    await asyncio.get_event_loop().run_in_executor(None, self._process.wait, 5.0)
+                    await asyncio.get_running_loop().run_in_executor(None, self._process.wait, 5.0)
             except subprocess.TimeoutExpired:
                 self._process.kill()
-                await asyncio.get_event_loop().run_in_executor(None, self._process.wait)
+                await asyncio.get_running_loop().run_in_executor(None, self._process.wait)
             except Exception as e:
                 log.warning(f"Error terminating MCP process: {e}")
             finally:

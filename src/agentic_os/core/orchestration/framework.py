@@ -143,7 +143,8 @@ class OrchestrationFramework:
         self._build_subsystems()
 
         # Initial sync from runtime
-        assert self.agent_registry is not None
+        if self.agent_registry is None:
+            raise RuntimeError("agent_registry cannot be None")
         await self.agent_registry.sync_from_runtime()
         agent_count = await self.agent_registry.count_agents()
         log.info("Orchestration framework started", agents=agent_count)
@@ -179,7 +180,8 @@ class OrchestrationFramework:
         status: str | None = None,
     ) -> list[AgentDescriptor]:
         """Discover agents from the runtime, optionally filtered."""
-        assert self.agent_registry is not None
+        if self.agent_registry is None:
+            raise RuntimeError("agent_registry cannot be None")
         engine_cap = EngineCapability(capability) if capability else None
         return await self.agent_registry.list_agents(
             capability=engine_cap,
@@ -188,12 +190,14 @@ class OrchestrationFramework:
 
     async def get_agent(self, agent_id: str) -> AgentDescriptor | None:
         """Get a single agent descriptor."""
-        assert self.agent_registry is not None
+        if self.agent_registry is None:
+            raise RuntimeError("agent_registry cannot be None")
         return await self.agent_registry.get_agent(agent_id)
 
     async def list_agents(self) -> list[AgentDescriptor]:
         """List all available agents."""
-        assert self.agent_registry is not None
+        if self.agent_registry is None:
+            raise RuntimeError("agent_registry cannot be None")
         return await self.agent_registry.list_agents()
 
     async def find_agents_by_capability(
@@ -202,7 +206,8 @@ class OrchestrationFramework:
         min_confidence: float = 0.0,
     ) -> list[AgentDescriptor]:
         """Find agents matching a capability."""
-        assert self.agent_registry is not None
+        if self.agent_registry is None:
+            raise RuntimeError("agent_registry cannot be None")
         return await self.agent_registry.find_agents_by_capability(
             EngineCapability(capability),
             min_confidence,
@@ -220,7 +225,8 @@ class OrchestrationFramework:
         metadata: dict[str, Any] | None = None,
     ) -> SwarmSpec:
         """Create a new swarm."""
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         from agentic_os.domain.orchestration import SwarmTopology
 
         try:
@@ -239,38 +245,46 @@ class OrchestrationFramework:
         return await self.swarm_manager.create_swarm(spec)
 
     async def get_swarm(self, swarm_id: str) -> SwarmSpec | None:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.get_swarm(swarm_id)
 
     async def list_swarms(self) -> list[SwarmSpec]:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.list_swarms()
 
     async def delete_swarm(self, swarm_id: str) -> bool:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.delete_swarm(swarm_id)
 
     async def add_agent_to_swarm(self, swarm_id: str, agent_id: str) -> SwarmSpec | None:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         try:
             return await self.swarm_manager.add_agent_to_swarm(swarm_id, agent_id)
         except ValueError:
             return None
 
     async def remove_agent_from_swarm(self, swarm_id: str, agent_id: str) -> SwarmSpec | None:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.remove_agent_from_swarm(swarm_id, agent_id)
 
     async def get_swarm_state(self, swarm_id: str) -> Any:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.get_swarm_state(swarm_id)
 
     async def elect_leader(self, swarm_id: str) -> LeaderElectionResult | None:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.elect_leader(swarm_id)
 
     async def get_swarm_leader(self, swarm_id: str) -> AgentDescriptor | None:
-        assert self.swarm_manager is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
         return await self.swarm_manager.get_leader(swarm_id)
 
     # ── Task Orchestration ──
@@ -281,7 +295,8 @@ class OrchestrationFramework:
         swarm_id: str,
     ) -> OrchestrationPlan | None:
         """Full pipeline: create goal → assign to swarm → execute plan."""
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         await self.task_orchestrator.create_goal(goal)
         plan = await self.task_orchestrator.assign_to_swarm(goal.id, swarm_id)
         if plan is None:
@@ -295,7 +310,8 @@ class OrchestrationFramework:
         context: dict[str, Any] | None = None,
         swarm_id: str | None = None,
     ) -> OrchestrationGoal:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         goal = OrchestrationGoal(
             title=title,
             description=description,
@@ -305,23 +321,28 @@ class OrchestrationFramework:
         return await self.task_orchestrator.create_goal(goal)
 
     async def get_goal(self, goal_id: str) -> OrchestrationGoal | None:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         return await self.task_orchestrator.get_goal(goal_id)
 
     async def list_goals(self, status: str | None = None) -> list[OrchestrationGoal]:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         return await self.task_orchestrator.list_goals(status)
 
     async def cancel_goal(self, goal_id: str) -> OrchestrationGoal | None:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         return await self.task_orchestrator.cancel_goal(goal_id)
 
     async def get_plan(self, plan_id: str) -> OrchestrationPlan | None:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         return await self.task_orchestrator.get_plan(plan_id)
 
     async def get_task(self, task_id: str) -> AgentTask | None:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         return await self.task_orchestrator.get_task(task_id)
 
     async def list_tasks(
@@ -329,7 +350,8 @@ class OrchestrationFramework:
         goal_id: str | None = None,
         status: str | None = None,
     ) -> list[AgentTask]:
-        assert self.task_orchestrator is not None
+        if self.task_orchestrator is None:
+            raise RuntimeError("task_orchestrator cannot be None")
         return await self.task_orchestrator.list_tasks(goal_id, status)
 
     # ── Swarm Intelligence ──
@@ -341,8 +363,10 @@ class OrchestrationFramework:
         proposals: list[dict[str, Any]] | None = None,
     ) -> ConsensusResult | None:
         """Conduct a consensus round among all agents in a swarm."""
-        assert self.swarm_manager is not None
-        assert self.intelligence_engine is not None
+        if self.swarm_manager is None:
+            raise RuntimeError("swarm_manager cannot be None")
+        if self.intelligence_engine is None:
+            raise RuntimeError("intelligence_engine cannot be None")
         agents = await self.swarm_manager.get_agents_in_swarm(swarm_id)
         if not agents:
             return None
@@ -362,7 +386,8 @@ class OrchestrationFramework:
         rationale: str = "",
         weight: float = 1.0,
     ) -> ConsensusResult | None:
-        assert self.intelligence_engine is not None
+        if self.intelligence_engine is None:
+            raise RuntimeError("intelligence_engine cannot be None")
         from agentic_os.domain.orchestration import VoteValue
 
         try:
@@ -387,7 +412,8 @@ class OrchestrationFramework:
         payload: dict[str, Any],
         message_type: str = "direct",
     ) -> Any:
-        assert self.communication_bus is not None
+        if self.communication_bus is None:
+            raise RuntimeError("communication_bus cannot be None")
         from agentic_os.domain.orchestration import AgentMessage
 
         msg = AgentMessage(
@@ -405,7 +431,8 @@ class OrchestrationFramework:
         swarm_id: str,
         payload: dict[str, Any],
     ) -> Any:
-        assert self.communication_bus is not None
+        if self.communication_bus is None:
+            raise RuntimeError("communication_bus cannot be None")
         return await self.communication_bus.broadcast(
             source_agent_id=source_agent_id,
             swarm_id=swarm_id,
@@ -418,7 +445,8 @@ class OrchestrationFramework:
         swarm_id: str | None = None,
         agent_id: str | None = None,
     ) -> list[Any]:
-        assert self.communication_bus is not None
+        if self.communication_bus is None:
+            raise RuntimeError("communication_bus cannot be None")
         return await self.communication_bus.get_history(
             limit=limit,
             swarm_id=swarm_id,
@@ -429,7 +457,8 @@ class OrchestrationFramework:
 
     def get_stats(self) -> dict[str, Any]:
         """Get aggregated orchestration statistics."""
-        assert self.telemetry is not None
+        if self.telemetry is None:
+            raise RuntimeError("telemetry cannot be None")
         return self.telemetry.get_stats()
 
     def get_telemetry_entries(
@@ -438,7 +467,8 @@ class OrchestrationFramework:
         event_type: str | None = None,
         swarm_id: str | None = None,
     ) -> list[Any]:
-        assert self.telemetry is not None
+        if self.telemetry is None:
+            raise RuntimeError("telemetry cannot be None")
         return self.telemetry.get_entries(
             limit=limit,
             event_type=event_type,
@@ -453,7 +483,8 @@ class OrchestrationFramework:
 
     async def analyze_goal(self, goal: OrchestrationGoal) -> dict[str, Any]:
         """Analyze a goal for complexity, required capabilities, and topology suggestion."""
-        assert self.planner is not None
+        if self.planner is None:
+            raise RuntimeError("planner cannot be None")
         return await self.planner.analyze_goal(goal)
 
     async def create_plan(
@@ -463,19 +494,22 @@ class OrchestrationFramework:
         profile: SwarmProfile | None = None,
     ) -> OrchestrationPlan:
         """Create a full execution plan from a goal."""
-        assert self.planner is not None
+        if self.planner is None:
+            raise RuntimeError("planner cannot be None")
         return await self.planner.create_plan(goal, swarm, profile)
 
     async def resolve_dependencies(self, plan: OrchestrationPlan) -> OrchestrationPlan:
         """Resolve and validate all task dependencies in a plan."""
-        assert self.planner is not None
+        if self.planner is None:
+            raise RuntimeError("planner cannot be None")
         return await self.planner.resolve_dependencies(plan)
 
     async def parallelize_plan(
         self, plan: OrchestrationPlan, max_parallel: int = 5
     ) -> OrchestrationPlan:
         """Identify tasks that can be parallelized and annotate them."""
-        assert self.planner is not None
+        if self.planner is None:
+            raise RuntimeError("planner cannot be None")
         return await self.planner.parallelize_plan(plan, max_parallel)
 
     # ── Scheduler ──
@@ -487,46 +521,54 @@ class OrchestrationFramework:
         policy: RetryPolicy | None = None,
     ) -> OrchestrationPlan:
         """Schedule all tasks in a plan, topologically sorted and agent-assigned."""
-        assert self.scheduler is not None
+        if self.scheduler is None:
+            raise RuntimeError("scheduler cannot be None")
         return await self.scheduler.schedule_tasks(plan, agents, policy)
 
     async def dispatch_task(self, task: AgentTask, agent: AgentDescriptor) -> AgentTask:
         """Dispatch a single task to an agent for execution."""
-        assert self.scheduler is not None
+        if self.scheduler is None:
+            raise RuntimeError("scheduler cannot be None")
         return await self.scheduler.dispatch_task(task, agent)
 
     async def get_schedule(self, plan_id: str) -> list[AgentTask]:
         """Get the current ordered schedule for a plan."""
-        assert self.scheduler is not None
+        if self.scheduler is None:
+            raise RuntimeError("scheduler cannot be None")
         return await self.scheduler.get_schedule(plan_id)
 
     # ── Supervisor ──
 
     async def monitor_execution(self, plan: OrchestrationPlan) -> OrchestrationPlan:
         """Monitor ongoing execution and detect failures/deadlocks."""
-        assert self.supervisor is not None
+        if self.supervisor is None:
+            raise RuntimeError("supervisor cannot be None")
         return await self.supervisor.monitor_execution(plan)
 
     async def detect_failures(self, plan: OrchestrationPlan) -> list[AgentTask]:
         """Detect failed or hung tasks in a plan."""
-        assert self.supervisor is not None
+        if self.supervisor is None:
+            raise RuntimeError("supervisor cannot be None")
         return await self.supervisor.detect_failures(plan)
 
     async def detect_deadlocks(self, plan: OrchestrationPlan) -> list[str]:
         """Detect deadlocked dependency chains."""
-        assert self.supervisor is not None
+        if self.supervisor is None:
+            raise RuntimeError("supervisor cannot be None")
         return await self.supervisor.detect_deadlocks(plan)
 
     async def restart_task(
         self, task: AgentTask, agent: AgentDescriptor | None = None
     ) -> AgentTask:
         """Restart a failed task, optionally on a different agent."""
-        assert self.supervisor is not None
+        if self.supervisor is None:
+            raise RuntimeError("supervisor cannot be None")
         return await self.supervisor.restart_task(task, agent)
 
     async def reassign_task(self, task: AgentTask, new_agent_id: str) -> AgentTask:
         """Reassign a task to a different agent."""
-        assert self.supervisor is not None
+        if self.supervisor is None:
+            raise RuntimeError("supervisor cannot be None")
         return await self.supervisor.reassign_task(task, new_agent_id)
 
     # ── Result Merger ──
@@ -537,17 +579,20 @@ class OrchestrationFramework:
         strategy: MergeStrategy = MergeStrategy.CONSENSUS,
     ) -> MergedResult:
         """Merge results from multiple completed tasks."""
-        assert self.result_merger is not None
+        if self.result_merger is None:
+            raise RuntimeError("result_merger cannot be None")
         return await self.result_merger.merge(tasks, strategy)
 
     async def resolve_merge_conflicts(self, merged_result: MergedResult) -> MergedResult:
         """Resolve conflicts in a merged result."""
-        assert self.result_merger is not None
+        if self.result_merger is None:
+            raise RuntimeError("result_merger cannot be None")
         return await self.result_merger.resolve_conflicts(merged_result)
 
     async def score_confidence(self, merged_result: MergedResult) -> float:
         """Score the confidence of a merged result."""
-        assert self.result_merger is not None
+        if self.result_merger is None:
+            raise RuntimeError("result_merger cannot be None")
         return await self.result_merger.score_confidence(merged_result)
 
     # ── Validation ──
@@ -558,22 +603,26 @@ class OrchestrationFramework:
         schema: dict[str, Any] | None = None,
     ) -> ValidationResult:
         """Validate a task's output."""
-        assert self.validation_engine is not None
+        if self.validation_engine is None:
+            raise RuntimeError("validation_engine cannot be None")
         return await self.validation_engine.validate_output(task, schema)
 
     async def validate_plan(self, plan: OrchestrationPlan) -> ValidationResult:
         """Validate a plan's structure and dependencies."""
-        assert self.validation_engine is not None
+        if self.validation_engine is None:
+            raise RuntimeError("validation_engine cannot be None")
         return await self.validation_engine.validate_plan(plan)
 
     async def validate_security(self, task: AgentTask, agent: AgentDescriptor) -> ValidationResult:
         """Validate security constraints for a task-agent assignment."""
-        assert self.validation_engine is not None
+        if self.validation_engine is None:
+            raise RuntimeError("validation_engine cannot be None")
         return await self.validation_engine.validate_security(task, agent)
 
     async def validate_policy(self, task: AgentTask, policies: dict[str, Any]) -> ValidationResult:
         """Validate a task against execution policies."""
-        assert self.validation_engine is not None
+        if self.validation_engine is None:
+            raise RuntimeError("validation_engine cannot be None")
         return await self.validation_engine.validate_policy(task, policies)
 
     # ── Checkpoints ──
@@ -585,22 +634,26 @@ class OrchestrationFramework:
         metadata: dict[str, Any] | None = None,
     ) -> Checkpoint:
         """Save a checkpoint of the current execution state."""
-        assert self.checkpoint_manager is not None
+        if self.checkpoint_manager is None:
+            raise RuntimeError("checkpoint_manager cannot be None")
         return await self.checkpoint_manager.save_checkpoint(plan, stage, metadata)
 
     async def restore_checkpoint(self, checkpoint_id: str) -> OrchestrationPlan | None:
         """Restore execution state from a checkpoint."""
-        assert self.checkpoint_manager is not None
+        if self.checkpoint_manager is None:
+            raise RuntimeError("checkpoint_manager cannot be None")
         return await self.checkpoint_manager.restore_checkpoint(checkpoint_id)
 
     async def list_checkpoints(self, plan_id: str) -> list[Checkpoint]:
         """List all checkpoints for a plan."""
-        assert self.checkpoint_manager is not None
+        if self.checkpoint_manager is None:
+            raise RuntimeError("checkpoint_manager cannot be None")
         return await self.checkpoint_manager.list_checkpoints(plan_id)
 
     async def delete_checkpoint(self, checkpoint_id: str) -> bool:
         """Delete a checkpoint."""
-        assert self.checkpoint_manager is not None
+        if self.checkpoint_manager is None:
+            raise RuntimeError("checkpoint_manager cannot be None")
         return await self.checkpoint_manager.delete_checkpoint(checkpoint_id)
 
     # ── Agent Selection ──
@@ -611,7 +664,8 @@ class OrchestrationFramework:
         available_agents: list[AgentDescriptor] | None = None,
     ) -> AgentDescriptor | None:
         """Select the best agent for a task."""
-        assert self.agent_selector is not None
+        if self.agent_selector is None:
+            raise RuntimeError("agent_selector cannot be None")
         return await self.agent_selector.select_agent(task, available_agents)
 
     async def match_capabilities(
@@ -620,46 +674,54 @@ class OrchestrationFramework:
         required_capabilities: list[str],
     ) -> list[AgentDescriptor]:
         """Find agents matching required capabilities."""
-        assert self.agent_selector is not None
+        if self.agent_selector is None:
+            raise RuntimeError("agent_selector cannot be None")
         return await self.agent_selector.match_capabilities(goal, required_capabilities)
 
     # ── Metrics & Cost ──
 
     async def collect_metrics(self, plan: OrchestrationPlan) -> ExecutionMetrics:
         """Collect execution metrics for a plan."""
-        assert self.metrics_engine is not None
+        if self.metrics_engine is None:
+            raise RuntimeError("metrics_engine cannot be None")
         return await self.metrics_engine.collect_metrics(plan)
 
     async def record_timeline(self, entry: ExecutionTimeline) -> None:
         """Record a timeline entry."""
-        assert self.metrics_engine is not None
+        if self.metrics_engine is None:
+            raise RuntimeError("metrics_engine cannot be None")
         await self.metrics_engine.record_timeline(entry)
 
     async def get_timeline(self, plan_id: str, limit: int = 100) -> list[ExecutionTimeline]:
         """Get the execution timeline for a plan."""
-        assert self.metrics_engine is not None
+        if self.metrics_engine is None:
+            raise RuntimeError("metrics_engine cannot be None")
         return await self.metrics_engine.get_timeline(plan_id, limit)
 
     async def estimate_cost(self, plan: OrchestrationPlan) -> ExecutionCost:
         """Estimate the cost of executing a plan."""
-        assert self.cost_tracker is not None
+        if self.cost_tracker is None:
+            raise RuntimeError("cost_tracker cannot be None")
         return await self.cost_tracker.estimate_cost(plan)
 
     async def track_cost(
         self, plan_id: str, agent_id: str, cost: float, stage_id: str | None = None
     ) -> ExecutionCost:
         """Track actual cost incurred."""
-        assert self.cost_tracker is not None
+        if self.cost_tracker is None:
+            raise RuntimeError("cost_tracker cannot be None")
         return await self.cost_tracker.track_cost(plan_id, agent_id, cost, stage_id)
 
     async def get_costs(self, plan_id: str) -> ExecutionCost | None:
         """Get accumulated costs for a plan."""
-        assert self.cost_tracker is not None
+        if self.cost_tracker is None:
+            raise RuntimeError("cost_tracker cannot be None")
         return await self.cost_tracker.get_costs(plan_id)
 
     async def analyze_performance(self, plan_id: str) -> dict[str, Any]:
         """Generate a performance analysis report."""
-        assert self.performance_analyzer is not None
+        if self.performance_analyzer is None:
+            raise RuntimeError("performance_analyzer cannot be None")
         return await self.performance_analyzer.analyze_plan(plan_id)
 
     # ── Recovery ──
@@ -670,7 +732,8 @@ class OrchestrationFramework:
         available_agents: list[AgentDescriptor],
     ) -> AgentTask:
         """Recover a failed task by retrying on a suitable agent."""
-        assert self.failure_recovery is not None
+        if self.failure_recovery is None:
+            raise RuntimeError("failure_recovery cannot be None")
         return await self.failure_recovery.recover_task(task, available_agents)
 
     async def recover_plan(
@@ -679,26 +742,30 @@ class OrchestrationFramework:
         checkpoint: Checkpoint | None = None,
     ) -> OrchestrationPlan:
         """Recover a plan from checkpoint or from scratch."""
-        assert self.failure_recovery is not None
+        if self.failure_recovery is None:
+            raise RuntimeError("failure_recovery cannot be None")
         return await self.failure_recovery.recover_plan(plan, checkpoint)
 
     async def rollback_plan(
         self, plan: OrchestrationPlan, checkpoint: Checkpoint
     ) -> OrchestrationPlan:
         """Rollback a plan to a specific checkpoint."""
-        assert self.failure_recovery is not None
+        if self.failure_recovery is None:
+            raise RuntimeError("failure_recovery cannot be None")
         return await self.failure_recovery.rollback_plan(plan, checkpoint)
 
     # ── Retry ──
 
     async def should_retry(self, task: AgentTask, policy: RetryPolicy | None = None) -> bool:
         """Determine if a task should be retried."""
-        assert self.retry_manager is not None
+        if self.retry_manager is None:
+            raise RuntimeError("retry_manager cannot be None")
         return await self.retry_manager.should_retry(task, policy)
 
     async def reset_retry_count(self, task_id: str) -> None:
         """Reset retry count for a task."""
-        assert self.retry_manager is not None
+        if self.retry_manager is None:
+            raise RuntimeError("retry_manager cannot be None")
         self.retry_manager.reset_retry_count(task_id)
 
     # ── Internal ──
@@ -870,7 +937,8 @@ class OrchestrationFramework:
             try:
                 await asyncio.sleep(self.config.agent_sync_interval_seconds)
                 if self._running:
-                    assert self.agent_registry is not None
+                    if self.agent_registry is None:
+                        raise RuntimeError("agent_registry cannot be None")
                     await self.agent_registry.sync_from_runtime()
             except asyncio.CancelledError:
                 break

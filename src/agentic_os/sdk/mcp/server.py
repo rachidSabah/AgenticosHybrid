@@ -109,7 +109,8 @@ class McpServerSdk:
                         tags=self._tags,
                     )
 
-        assert self._config is not None
+        if self._config is None:
+            raise RuntimeError("server not initialized")
 
         self._detail = MCPServerDetail(
             config=self._config,
@@ -167,7 +168,8 @@ class McpServerSdk:
         if self._config is None:
             await self.initialize()
 
-        assert self._config is not None  # initialized above
+        if self._config is None:
+            raise RuntimeError("server not initialized")
         self._detail = await self._registry.start_server(self._config.id)
         self._detail = self._detail.with_status(MCPServerStatus.RUNNING)
         logger.info("mcp server started", server_id=self._config.id)

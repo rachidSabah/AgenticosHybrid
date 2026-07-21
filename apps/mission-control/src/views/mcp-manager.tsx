@@ -81,10 +81,11 @@ function McpServersTab() {
   const [newArgs, setNewArgs] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.mcpServers().then(setServers).catch(() => {}).finally(() => setLoading(false));
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); }).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -309,9 +310,10 @@ function McpToolsTab() {
   const [callArgs, setCallArgs] = useState("{}");
   const [callResult, setCallResult] = useState<MCPToolResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadServers = useCallback(() => {
-    api.mcpServers().then(setServers).catch(() => {});
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { loadServers(); }, [loadServers]);
@@ -472,9 +474,10 @@ function McpPermissionsTab() {
   const [newDesc, setNewDesc] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadServers = useCallback(() => {
-    api.mcpServers().then(setServers).catch(() => {});
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { loadServers(); }, [loadServers]);
@@ -615,10 +618,11 @@ function McpPermissionsTab() {
 function McpHealthTab() {
   const [servers, setServers] = useState<MCPServerDetail[]>([]);
   const [summary, setSummary] = useState<MCPHealthSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api.mcpServers().then(setServers).catch(() => {});
-    api.mcpHealthSummary().then(setSummary).catch(() => {});
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.mcpHealthSummary().then(setSummary).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -696,10 +700,11 @@ function McpHealthTab() {
 function McpSessionsTab() {
   const [sessions, setSessions] = useState<MCPSessionMap | null>(null);
   const [servers, setServers] = useState<MCPServerDetail[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api.mcpSessions().then(setSessions).catch(() => {});
-    api.mcpServers().then(setServers).catch(() => {});
+    api.mcpSessions().then(setSessions).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -755,9 +760,10 @@ function McpResourcesTab() {
   const [servers, setServers] = useState<MCPServerDetail[]>([]);
   const [selectedServer, setSelectedServer] = useState<string>("");
   const [resources, setResources] = useState<Array<{ uri: string; name: string; description?: string }>>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const loadServers = useCallback(() => {
-    api.mcpServers().then(setServers).catch(() => {});
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { loadServers(); }, [loadServers]);
@@ -820,9 +826,10 @@ function McpPromptsTab() {
   const [servers, setServers] = useState<MCPServerDetail[]>([]);
   const [selectedServer, setSelectedServer] = useState<string>("");
   const [prompts, setPrompts] = useState<MCPPrompt[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const loadServers = useCallback(() => {
-    api.mcpServers().then(setServers).catch(() => {});
+    api.mcpServers().then(setServers).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { loadServers(); }, [loadServers]);

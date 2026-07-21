@@ -14,9 +14,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     nats_url: str = "nats://localhost:4222"
 
-    http_host: str = "0.0.0.0"
+    http_host: str = "127.0.0.1"
     http_port: int = 8000
     log_level: str = "INFO"
+    api_key: str = ""
 
     provider_default: str = "mock"  # mock | claude_code | <registered>
     routing_policy: str = "latency"  # latency | cost | round_robin

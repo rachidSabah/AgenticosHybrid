@@ -92,7 +92,6 @@ class PluginSandbox:
             "AttributeError": AttributeError,
             "RuntimeError": RuntimeError,
             "NotImplementedError": NotImplementedError,
-            "importlib": importlib,
             "json": json,
             "datetime": datetime,
             "pathlib": pathlib,

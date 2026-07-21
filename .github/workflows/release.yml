@@ -55,6 +55,20 @@ jobs:
         with:
           workspaces: apps/mission-control/src-tauri
 
+      - name: Install Python + uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Bundle backend source
+        shell: bash
+        run: |
+          mkdir -p apps/mission-control/src-tauri/resources/backend/src
+          cp -r src/agentic_os apps/mission-control/src-tauri/resources/backend/src/
+          cp pyproject.toml apps/mission-control/src-tauri/resources/backend/
+          [ -f uv.lock ] && cp uv.lock apps/mission-control/src-tauri/resources/backend/
+          ls -la apps/mission-control/src-tauri/resources/backend/src/agentic_os/
+
       - name: Install npm dependencies
         run: npm ci --legacy-peer-deps
 
@@ -119,6 +133,21 @@ jobs:
         with:
           workspaces: apps/mission-control/src-tauri
 
+      - name: Install Python + uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Bundle backend source
+        shell: pwsh
+        run: |
+          $resourcesDir = "apps/mission-control/src-tauri/resources/backend"
+          New-Item -ItemType Directory -Force -Path "$resourcesDir/src" | Out-Null
+          Copy-Item -Recurse "src/agentic_os" "$resourcesDir/src/" -Force
+          Copy-Item "pyproject.toml" "$resourcesDir/" -Force
+          if (Test-Path "uv.lock") { Copy-Item "uv.lock" "$resourcesDir/" -Force }
+          Get-ChildItem -Recurse "$resourcesDir" | Select-Object -First 20
+
       - name: Install npm dependencies
         run: npm ci --legacy-peer-deps
 
@@ -142,6 +171,13 @@ jobs:
           # Copy binary
           if (Test-Path $Binary) {
             Copy-Item $Binary "$PortableDir/agentic-os.exe" -Force
+          }
+
+          # Copy backend source
+          $backendSrc = "src-tauri/resources/backend"
+          if (Test-Path $backendSrc) {
+            New-Item -ItemType Directory -Force -Path "$PortableDir/backend" | Out-Null
+            Copy-Item -Recurse "$backendSrc/*" "$PortableDir/backend/" -Force
           }
 
           # Create launcher scripts
@@ -212,6 +248,20 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/mission-control/src-tauri
+
+      - name: Install Python + uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+
+      - name: Bundle backend source
+        shell: bash
+        run: |
+          mkdir -p apps/mission-control/src-tauri/resources/backend/src
+          cp -r src/agentic_os apps/mission-control/src-tauri/resources/backend/src/
+          cp pyproject.toml apps/mission-control/src-tauri/resources/backend/
+          [ -f uv.lock ] && cp uv.lock apps/mission-control/src-tauri/resources/backend/
+          ls -la apps/mission-control/src-tauri/resources/backend/src/agentic_os/
 
       - name: Install npm dependencies
         run: npm ci --legacy-peer-deps

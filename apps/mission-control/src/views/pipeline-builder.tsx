@@ -137,8 +137,9 @@ function validatePipeline(nodes: Node[], edges: Edge[], providers: ProviderInfo[
 // genuine. The graph is edited locally in 3A; Phase 3B persists it to the engine.
 export function PipelineBuilder() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    api.providers().then(setProviders).catch(() => {});
+    api.providers().then(setProviders).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes(providers));

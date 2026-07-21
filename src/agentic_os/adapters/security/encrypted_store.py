@@ -8,6 +8,7 @@ path is configured (dev/tests).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -58,12 +59,14 @@ class EncryptedSecretStore:
         except Exception:
             import hashlib
 
+            log.warning("Invalid Fernet key format, falling back to SHA256 hashing")
             digest = hashlib.sha256(raw.encode()).digest()
             return base64.urlsafe_b64encode(digest)
 
     # ── persistence ──
     def _load(self) -> None:
-        assert self._path is not None
+        if self._path is None:
+            raise RuntimeError("encrypted store path not set")
         try:
             blob = json.loads(self._path.read_text())
             for k, v in blob.items():
@@ -84,14 +87,14 @@ class EncryptedSecretStore:
     # ── SecretStore protocol ──
     async def put(self, key: str, value: str) -> None:
         self._mem[key] = value
-        self._persist()
+        await asyncio.to_thread(self._persist)
 
     async def get(self, key: str) -> str | None:
         return self._mem.get(key)
 
     async def delete(self, key: str) -> None:
         self._mem.pop(key, None)
-        self._persist()
+        await asyncio.to_thread(self._persist)
 
     async def exists(self, key: str) -> bool:
         return key in self._mem

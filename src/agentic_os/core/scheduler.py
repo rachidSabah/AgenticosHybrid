@@ -12,6 +12,10 @@ from __future__ import annotations
 
 import asyncio
 
+from agentic_os.infrastructure.logging import get_logger
+
+log = get_logger("core.scheduler")
+
 
 class Scheduler:
     def __init__(self) -> None:
@@ -45,6 +49,6 @@ class Scheduler:
                 except asyncio.CancelledError:
                     break
                 except Exception:
-                    pass
+                    log.exception("Scheduled task failed")
 
         self._tasks.append(asyncio.create_task(_loop()))

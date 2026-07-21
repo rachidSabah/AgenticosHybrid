@@ -16,6 +16,7 @@ export function MemoryExplorer() {
   const [query, setQuery] = useState("");
   const memoryEvents = useStore((s) => s.memory);
   const [status, setStatus] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -66,9 +67,9 @@ export function MemoryExplorer() {
             placeholder="recall query…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
+              onKeyDown={(e) => {
               if (e.key === "Enter" && query)
-                api.recallMemory(scope, query).then(setItems).catch(() => {});
+                api.recallMemory(scope, query).then(setItems).catch((err) => { console.error("API error:", err); setError(String(err)); });
             }}
           />
         }
@@ -81,7 +82,7 @@ export function MemoryExplorer() {
                 <Badge tone="info">{m.scope}</Badge>
                 <button
                   className="ml-auto text-[11px] text-faint hover:text-danger"
-                  onClick={() => api.forgetMemory(m.id).then(refresh).catch(() => {})}
+                  onClick={() => api.forgetMemory(m.id).then(refresh).catch((err) => { console.error("API error:", err); setError(String(err)); })}
                 >
                   forget
                 </button>

@@ -160,11 +160,11 @@ class MCPHealthMonitor:
                 error="No health check callback registered",
             )
 
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
 
         try:
             result = await asyncio.wait_for(callback(), timeout=self._timeout)
-            latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+            latency_ms = (asyncio.get_running_loop().time() - start_time) * 1000
 
             if isinstance(result, tuple) and len(result) == 2:
                 status, details = result

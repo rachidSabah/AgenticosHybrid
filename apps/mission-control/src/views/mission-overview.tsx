@@ -17,11 +17,12 @@ export function MissionOverview() {
   const [providersData, setProvidersData] = useState<ProviderHealthRecord[]>([]);
   const [caps, setCaps] = useState<CapabilityInfo[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.providerHealth().then(setProvidersData).catch(() => {});
-    api.capabilities().then(setCaps).catch(() => {});
-    api.audit().then(setAudit).catch(() => {});
+    api.providerHealth().then(setProvidersData).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.capabilities().then(setCaps).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.audit().then(setAudit).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   const healthy = Object.values(providers).filter((p) => p.status === "healthy").length;

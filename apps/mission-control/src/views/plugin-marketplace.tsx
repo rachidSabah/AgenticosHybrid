@@ -11,10 +11,11 @@ import type { CapabilityInfo, ProviderInfo } from "@/lib/types";
 export function PluginMarketplace() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [caps, setCaps] = useState<CapabilityInfo[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.providers().then(setProviders).catch(() => {});
-    api.capabilities().then(setCaps).catch(() => {});
+    api.providers().then(setProviders).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.capabilities().then(setCaps).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   return (

@@ -13,6 +13,17 @@ struct BackendState {
     startup_log: PathBuf,
 }
 
+impl Drop for BackendState {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.child.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn configure_dll_directory(res_dir: &Path) {
     use std::os::windows::ffi::OsStrExt;
@@ -167,6 +178,34 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         }
     }
 
+    // Strategy 3b: Try uv from resource dir (installed mode, Python source)
+    if launch_method.is_none() {
+        match app.path().resource_dir() {
+            Ok(res_dir) => {
+                let pyproject = res_dir.join("backend").join("pyproject.toml");
+                if pyproject.exists() {
+                    let uv_check = Command::new("uv")
+                        .arg("--version")
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
+                        .spawn();
+                    if let Ok(mut child) = uv_check {
+                        if let Ok(status) = child.wait() {
+                            if status.success() {
+                                log_startup_event(
+                                    &startup_log,
+                                    "✓ STRATEGY 3b: uv + backend source from resource dir",
+                                );
+                                launch_method = Some(format!("uv::{}", res_dir.join("backend").to_string_lossy()));
+                            }
+                        }
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
     // Strategy 4: Try system python -m agentic_os serve
     if launch_method.is_none() {
         for python_cmd in &["python", "python3"] {
@@ -218,32 +257,40 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         .open(&backend_log_path)
         .ok();
 
-    let mut cmd = match launch_method.as_str() {
-        "uv" => {
-            let mut c = Command::new("uv");
-            c.args(["--project", "backend", "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
-            if let Some(ref dir) = exe_dir {
-                c.current_dir(dir);
+    let mut cmd = if launch_method.starts_with("uv::") {
+        let backend_dir = &launch_method[4..];
+        let mut c = Command::new("uv");
+        c.args(["--project", backend_dir, "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+        c.current_dir(backend_dir);
+        c
+    } else {
+        match launch_method.as_str() {
+            "uv" => {
+                let mut c = Command::new("uv");
+                c.args(["--project", "backend", "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+                if let Some(ref dir) = exe_dir {
+                    c.current_dir(dir);
+                }
+                c
             }
-            c
-        }
-        "python" | "python3" => {
-            let mut c = Command::new(&launch_method);
-            c.args(["-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
-            if let Some(ref dir) = exe_dir {
-                c.current_dir(dir);
+            "python" | "python3" => {
+                let mut c = Command::new(&launch_method);
+                c.args(["-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+                if let Some(ref dir) = exe_dir {
+                    c.current_dir(dir);
+                }
+                c
             }
-            c
-        }
-        _ => {
-            // Binary path (PyInstaller or other EXE)
-            let exe_path = PathBuf::from(&launch_method);
-            let mut c = Command::new(&exe_path);
-            c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
-            if let Some(ref dir) = exe_dir {
-                c.current_dir(dir);
+            _ => {
+                // Binary path (PyInstaller or other EXE)
+                let exe_path = PathBuf::from(&launch_method);
+                let mut c = Command::new(&exe_path);
+                c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
+                if let Some(ref dir) = exe_dir {
+                    c.current_dir(dir);
+                }
+                c
             }
-            c
         }
     };
 
@@ -324,7 +371,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
 
 #[tauri::command]
 fn get_app_version() -> String {
-    "1.0.0-rc1 (build 1)".to_string()
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 #[derive(serde::Serialize)]
@@ -390,8 +437,19 @@ fn get_startup_diagnostics(app: tauri::AppHandle) -> DiagnosticReport {
     }
 }
 
+fn cleanup_child(app_handle: &tauri::AppHandle) {
+    if let Some(state) = app_handle.try_state::<BackendState>() {
+        if let Ok(mut guard) = state.child.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+}
+
 pub fn run() {
-    if let Err(e) = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -409,11 +467,15 @@ pub fn run() {
             get_backend_status,
             get_startup_diagnostics,
         ])
-        .run(tauri::generate_context!())
-    {
-        // Log the error and exit gracefully instead of panicking.
-        // This prevents a crash-restart loop on Windows.
-        eprintln!("AgenticOS Desktop Runtime failed to start: {e}");
-        std::process::exit(1);
-    }
+        .build(tauri::generate_context!())
+        .unwrap_or_else(|e| {
+            eprintln!("AgenticOS Desktop Runtime failed to start: {e}");
+            std::process::exit(1);
+        });
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            cleanup_child(app_handle);
+        }
+    });
 }

@@ -11,19 +11,15 @@ import {
   Network,
   FolderTree,
   History,
-  Bell,
-  Command,
   Settings,
   Gauge,
   Search,
   Globe,
   Monitor,
   MonitorDot,
-  MonitorUp,
   Wifi,
   RefreshCw,
   Shield,
-  HardDrive,
 } from "lucide-react";
 
 export interface NavItem {
@@ -66,4 +62,4 @@ export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [
   { id: "desktop", label: "Desktop" },
 ];
 
-export const ALL_ICONS = { Command, Settings, Bell };
+

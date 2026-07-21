@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/refs/heads/dev/crates/tauri-cli/config.schema.json",
   "productName": "AgenticOS",
-  "version": "1.0.0-1",
+  "version": "1.0.0-rc1",
   "identifier": "com.agenticos.desktop",
   "build": {
     "frontendDist": "../out",
@@ -74,7 +74,7 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": ["resources/**"],
+    "resources": ["resources/**/*"],
     "externalBin": [],
     "copyright": "Agentic OS Contributors",
     "category": "DeveloperTool",

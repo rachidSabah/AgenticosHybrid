@@ -132,13 +132,15 @@ class MCPRegistryImpl(MCPRegistryPort):
         if data.transport == "stdio":
             if not data.command:
                 raise ValueError("command is required for stdio transport")
-            assert data.command is not None  # narrow for type checker, validated above
+            if data.command is None:
+                raise ValueError("command is required for stdio transport")
         existing = self._registry.get_server_by_name(data.name)
         if existing:
             raise ValueError(f"Server '{data.name}' already registered")
 
         if data.transport == "stdio":
-            assert data.command is not None  # type checker narrowing across if-block
+            if data.command is None:
+                raise ValueError("command is required for stdio transport")
             config = MCPServerConfig.create_stdio(
                 name=data.name,
                 command=data.command,

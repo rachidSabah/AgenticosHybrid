@@ -14,7 +14,10 @@ from __future__ import annotations
 import asyncio
 
 from agentic_os.domain.events import EventEnvelope
+from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus, Handler
+
+log = get_logger("bus.local")
 
 
 class LocalBus:
@@ -52,8 +55,7 @@ class LocalBus:
         try:
             await handler(event)
         except Exception:
-            # Isolation: one bad subscriber must not kill the fan-out.
-            pass
+            log.exception("Dispatch failed for topic %s", event.topic)
 
     async def subscribe(self, topic: str, handler: Handler) -> str:
         sub_id = f"{topic}:{id(handler)}"

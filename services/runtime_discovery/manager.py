@@ -447,7 +447,7 @@ class RuntimeDiscoveryManager:
 
     def get_runtime(self, runtime_id: str) -> Runtime | None:
 
-        return asyncio.get_event_loop().run_until_complete(self._registry.get(runtime_id))
+        return asyncio.run(self._registry.get(runtime_id))
 
     async def get_runtime_async(self, runtime_id: str) -> Runtime | None:
         return await self._registry.get(runtime_id)

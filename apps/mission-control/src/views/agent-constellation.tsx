@@ -27,7 +27,7 @@ export function AgentConstellation() {
   const agents = useStore((s) => s.agents);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { setNodes, getNode, setCenter, fitView } = useReactFlow();
+  const { setNodes, getNode, setCenter } = useReactFlow();
 
   const { nodes, edges } = useMemo(() => {
     const list = Object.values(agents);

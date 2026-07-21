@@ -267,6 +267,7 @@ export const useStore = create<StoreState>((set, get) => ({
             health: e.topic === "agent.failed" ? "down" : e.topic === "agent.recovered" ? "degraded" : "healthy",
           };
           telemetry.agents = Object.keys(agents).length;
+          if (e.topic === "agent.failed") telemetry.errors += 1;
           break;
         }
         case "task.created":
@@ -316,8 +317,7 @@ export const useStore = create<StoreState>((set, get) => ({
           telemetry.pipelines += 1;
           break;
         }
-        case "tool.denied":
-        case "agent.failed": {
+        case "tool.denied": {
           telemetry.errors += 1;
           break;
         }

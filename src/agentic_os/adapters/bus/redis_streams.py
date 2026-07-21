@@ -38,7 +38,8 @@ class RedisStreamsBus:
             await self._client.aclose()
 
     async def _ensure_group(self, topic: str) -> None:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Redis not started")
         try:
             await self._client.xgroup_create(topic, CONSUMER_GROUP, id="0", mkstream=True)
         except redis.ResponseError as exc:  # group may already exist
@@ -46,7 +47,8 @@ class RedisStreamsBus:
                 raise
 
     async def publish(self, event: EventEnvelope) -> None:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Redis not started")
         await self._client.xadd(event.topic, {"payload": event.model_dump_json()})
 
     async def subscribe(self, topic: str, handler: Handler) -> str:
@@ -66,7 +68,8 @@ class RedisStreamsBus:
     async def _read_loop(self, topic: str) -> None:
         from typing import Any
 
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Redis not started")
         handler = self._handlers[topic]
         while True:
             try:

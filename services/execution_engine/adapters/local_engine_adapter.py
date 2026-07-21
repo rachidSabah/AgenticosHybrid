@@ -42,8 +42,10 @@ class LocalEngineAdapter(BaseExecutionEngineAdapter):
         _log.info("Executing locally: %s", goal[:100])
         if isinstance(goal, str) and goal.startswith(("ls", "echo", "pwd", "whoami")):
             try:
+                import shlex
+                cmd_list = shlex.split(goal)
                 result = subprocess.run(
-                    goal, shell=True, capture_output=True, text=True, timeout=30
+                    cmd_list, capture_output=True, text=True, timeout=30
                 )
                 return {
                     "stdout": result.stdout,

@@ -246,6 +246,7 @@ class TestWindowsRegistryDiscovery:
 # ============================================================================
 
 
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 class TestWslDiscovery:
     @pytest.fixture
     def provider(self):

@@ -38,7 +38,8 @@ class NatsJetStreamBus:
             await self._nc.drain()
 
     async def publish(self, event: EventEnvelope) -> None:
-        assert self._js is not None
+        if self._js is None:
+            raise RuntimeError("NATS JetStream not started")
         await self._js.publish(event.topic, event.model_dump_json().encode())
 
     async def subscribe(self, topic: str, handler: Handler) -> str:
@@ -49,7 +50,8 @@ class NatsJetStreamBus:
         return sub_id
 
     async def _consume(self, topic: str) -> None:
-        assert self._js is not None
+        if self._js is None:
+            raise RuntimeError("NATS JetStream not started")
         handler = self._handlers[topic]
         sub = await self._js.subscribe(topic, durable=_DURABLE, manual_ack=True)
 

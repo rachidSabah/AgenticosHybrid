@@ -85,10 +85,10 @@ class ClaudeCodeAdapter(BaseExecutionEngineAdapter):
         if not self._process:
             return {"goal": goal, "result": "mock_claude_execution", "mock": True}
         request = json.dumps({"method": "execute_task", "params": {"goal": goal}}) + "\n"
-        assert self._process.stdin is not None
+        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(request.encode())
         await self._process.stdin.drain()
-        assert self._process.stdout is not None
+        if self._process.stdout is None: raise RuntimeError("Process stdout is not available")
         response = await asyncio.wait_for(
             self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 300)
         )
@@ -100,7 +100,7 @@ class ClaudeCodeAdapter(BaseExecutionEngineAdapter):
         cancel_request = (
             json.dumps({"method": "cancel_task", "params": {"task_id": task_id}}) + "\n"
         )
-        assert self._process.stdin is not None
+        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(cancel_request.encode())
         await self._process.stdin.drain()
         return True
@@ -111,10 +111,10 @@ class ClaudeCodeAdapter(BaseExecutionEngineAdapter):
             yield {"goal": goal, "result": "mock_stream", "mock": True}
             return
         request = json.dumps({"method": "stream_task", "params": {"goal": goal}}) + "\n"
-        assert self._process.stdin is not None
+        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(request.encode())
         await self._process.stdin.drain()
-        assert self._process.stdout is not None
+        if self._process.stdout is None: raise RuntimeError("Process stdout is not available")
         while True:
             line = await self._process.stdout.readline()
             if not line:

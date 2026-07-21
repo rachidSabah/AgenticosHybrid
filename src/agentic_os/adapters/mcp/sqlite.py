@@ -258,7 +258,7 @@ class SQLiteAdapter(BaseMCPAdapter):
 
         import asyncio
 
-        return await asyncio.get_event_loop().run_in_executor(None, _query)
+        return await asyncio.get_running_loop().run_in_executor(None, _query)
 
     async def _execute_statement(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self._allow_write:
@@ -281,7 +281,7 @@ class SQLiteAdapter(BaseMCPAdapter):
 
         import asyncio
 
-        return await asyncio.get_event_loop().run_in_executor(None, _statement)
+        return await asyncio.get_running_loop().run_in_executor(None, _statement)
 
     async def _list_tables(self, args: dict[str, Any]) -> list[str]:
         db_path = self._resolve_db(args["db_path"])
@@ -298,7 +298,7 @@ class SQLiteAdapter(BaseMCPAdapter):
 
         import asyncio
 
-        return await asyncio.get_event_loop().run_in_executor(None, _tables)
+        return await asyncio.get_running_loop().run_in_executor(None, _tables)
 
     async def _describe_table(self, args: dict[str, Any]) -> list[dict[str, Any]]:
         table = args["table"]
@@ -315,4 +315,4 @@ class SQLiteAdapter(BaseMCPAdapter):
 
         import asyncio
 
-        return await asyncio.get_event_loop().run_in_executor(None, _describe)
+        return await asyncio.get_running_loop().run_in_executor(None, _describe)

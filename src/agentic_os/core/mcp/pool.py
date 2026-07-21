@@ -118,7 +118,7 @@ class MCPConnectionPool:
 
         Returns a connection that must be released using release_connection().
         """
-        start_time = asyncio.get_event_loop().time()
+        start_time = asyncio.get_running_loop().time()
         server_id = server_config.id
 
         async with self._get_lock(server_id):
@@ -148,7 +148,7 @@ class MCPConnectionPool:
                 idle_conn.in_use = True
                 self._acquire_times[idle_conn.id] = datetime.now(UTC)
 
-        wait_time_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+        wait_time_ms = (asyncio.get_running_loop().time() - start_time) * 1000
         self._wait_times.append(wait_time_ms)
         if len(self._wait_times) > 1000:
             self._wait_times = self._wait_times[-1000:]
@@ -234,7 +234,7 @@ class MCPConnectionPool:
 
         while elapsed < timeout:
             await asyncio.sleep(poll_interval)
-            elapsed = asyncio.get_event_loop().time() - start_time
+            elapsed = asyncio.get_running_loop().time() - start_time
 
             pool = self._pools.get(server_config.id, [])
             for conn in pool:

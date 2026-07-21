@@ -12,15 +12,16 @@ export function ProviderControlCenter() {
   const [configs, setConfigs] = useState<ProviderInfo[]>([]);
   const [models, setModels] = useState<Record<string, ModelInfo[]>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.providerHealth().then(setHealth).catch(() => {});
-    api.providers().then(setConfigs).catch(() => {});
+    api.providerHealth().then(setHealth).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.providers().then(setConfigs).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => {
     if (!selected) return;
-    api.models(selected).then((m) => setModels((prev) => ({ ...prev, [selected]: m }))).catch(() => {});
+    api.models(selected).then((m) => setModels((prev) => ({ ...prev, [selected]: m }))).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, [selected]);
 
   const rows = health.length ? health : Object.values(providersLive);
