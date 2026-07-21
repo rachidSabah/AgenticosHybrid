@@ -58,7 +58,7 @@ function DiscoveryDashboardTab() {
 
   const load = useCallback(() => {
     api.discoveryProviders().then(setProviders).catch((err) => { console.error("API error:", err); setError(String(err)); });
-    api.discoveryCache().then(setCache).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.discoveryCache().then((res) => { const data = res as unknown as { entries: DiscoveryCacheEntry[]; total: number }; setCache(data.entries || []); }).catch((err) => { console.error("API error:", err); setError(String(err)); });
     api.discoveryStats().then(setStats).catch((err) => { console.error("API error:", err); setError(String(err)); });
     api.hotReloadStatus().then(setHotReload).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);

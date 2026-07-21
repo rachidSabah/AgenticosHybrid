@@ -51,6 +51,9 @@ const DiscoveryDashboard = lazy(() =>
 const SwarmDashboard = lazy(() =>
   import("@/views/swarm-dashboard").then((m) => ({ default: m.SwarmDashboard }))
 );
+const MissionOrchestrator = lazy(() =>
+  import("@/views/mission-orchestrator").then((m) => ({ default: m.MissionOrchestrator }))
+);
 
 // Desktop views (Phase 4, M6)
 const DesktopOverview = lazy(() =>
@@ -183,6 +186,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Swarm Orchestration" fallback={<ViewSkeleton title="Swarm Orchestration" />}>
       <Suspense fallback={<ViewSkeleton title="Swarm Orchestration" />}>
         <SwarmDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  missions: () => (
+    <ErrorBoundary viewName="Mission Orchestrator" fallback={<ViewSkeleton title="Mission Orchestrator" />}>
+      <Suspense fallback={<ViewSkeleton title="Mission Orchestrator" />}>
+        <MissionOrchestrator />
       </Suspense>
     </ErrorBoundary>
   ),

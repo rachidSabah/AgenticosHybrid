@@ -18,11 +18,11 @@ log = get_logger("provider.claude_code")
 
 
 class ClaudeCodeProvider:
-    def __init__(self, bin_path: str = "claude", api_key: str = "") -> None:
+    def __init__(self, bin_path: str = "claude", api_key: str = "", name: str = "claude_code") -> None:
         self._bin = bin_path
         self._api_key = api_key
         self.info = ProviderInfo(
-            name="claude_code", kind="claude_code", supports_streaming=True, supports_tools=True
+            name=name, kind="claude_code", supports_streaming=True, supports_tools=True
         )
 
     async def execute(self, agent: Agent, task: Task) -> str:

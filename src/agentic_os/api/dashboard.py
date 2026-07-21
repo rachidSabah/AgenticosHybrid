@@ -3,8 +3,12 @@
 Bridges the event bus to live WebSocket clients. Subscribes to all operational
 topics and fans each event out to connected dashboards. This is the final hop of
 the vertical slice: live updates in the browser.
+
+Maintains an in-memory ring buffer of the last 256 events so newly-connected
+clients can replay recent history via REST.
 """
 
+from collections import deque
 from typing import Any
 
 import anyio
@@ -91,11 +95,14 @@ _DASHBOARD_TOPICS = [
     Topic.LEARN_EXPERIENCE_RECORDED,
 ]
 
+_MAX_HISTORY = 256
+
 
 class DashboardBroadcaster:
     def __init__(self, bus: EventBus) -> None:
         self._bus = bus
         self._clients: set[MemoryObjectSendStream] = set()
+        self._history: deque[dict[str, Any]] = deque(maxlen=_MAX_HISTORY)
 
     async def start(self) -> None:
         for topic in _DASHBOARD_TOPICS:
@@ -112,8 +119,14 @@ class DashboardBroadcaster:
     def remove_client(self, send: MemoryObjectSendStream) -> None:
         self._clients.discard(send)
 
+    def get_recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Return the most recent events from the ring buffer (REST replay)."""
+        events = list(self._history)
+        return events[-limit:]
+
     async def _on_event(self, event: EventEnvelope) -> None:
         snapshot = event.model_dump(mode="json")
+        self._history.append(snapshot)
         for client in list(self._clients):
             try:
                 await client.send(snapshot)

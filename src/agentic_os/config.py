@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     routing_policy: str = "latency"  # latency | cost | round_robin
     claude_code_bin: str = "claude"
     anthropic_api_key: str = ""
+    hermes_config: str = ""
 
     # Supervision tuning
     health_interval_seconds: float = 2.0

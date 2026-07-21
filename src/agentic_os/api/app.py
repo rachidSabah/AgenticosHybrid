@@ -11,6 +11,7 @@ providers in-browser (the unified Mission Control dashboard lands in Phase 3).
 
 import dataclasses
 import time
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
-from agentic_os.domain.agent import Task
+from agentic_os.domain.agent import Agent, Role, Task
+from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
 from agentic_os.domain.orchestration import (
@@ -43,6 +45,7 @@ from agentic_os.domain.pipeline import (
     PipelineStatus,
 )
 from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
+from agentic_os.domain.mission import Attachment, ExecutionMode, Mission, MissionPriority, MissionStatus
 from agentic_os.domain.workflow import (
     WorkflowEdge,
     WorkflowExecutionStatus,
@@ -230,6 +233,10 @@ def create_app(platform: Platform) -> FastAPI:
     if learning is None:
         raise RuntimeError("LearningManager is required but was not initialised on the Platform")
 
+    mission_planner = platform.mission_planner
+    if mission_planner is None:
+        raise RuntimeError("MissionPlanner is required but was not initialised on the Platform")
+
     @app.middleware("http")
     async def _metrics(request, call_next):
         start = time.perf_counter()
@@ -383,12 +390,173 @@ def create_app(platform: Platform) -> FastAPI:
             provider=body.get("provider", ""),
             model=body.get("model", ""),
         )
+        # Register agent in the runtime so it shows in Agent Constellation
+        provider_name = spec.provider or settings.provider_default
+        if not provider_name:
+            provider_name = "mock"
+        # Ensure the role exists
+        if not orch.registry.get_role(spec.name):
+            orch.registry.register_role(
+                Role(name=spec.name, description=f"Composed agent: {spec.name}")
+            )
+        agent = orch.registry.spawn(
+            role=spec.name,
+            provider=provider_name,
+            model=spec.model,
+            name=spec.name,
+        )
+        # Emit agent.composed event → WebSocket → Agent Constellation
+        await orch.bus.publish(
+            EventEnvelope(
+                type="agent.composed",
+                source="api",
+                topic=Topic.AGENT_COMPOSED.value,
+                payload=spec.model_dump(),
+            )
+        )
+        # Emit agent.started event → Zustand store creates agent entry
+        await orch.bus.publish(
+            EventEnvelope(
+                type="agent.started",
+                source="api",
+                topic=Topic.AGENT_STARTED.value,
+                payload={
+                    "id": agent.id,
+                    "role": agent.role,
+                    "provider": agent.provider,
+                    "status": "idle",
+                    "capabilities": spec.capabilities,
+                },
+            )
+        )
         return spec.model_dump(mode="json")
 
     @app.post("/api/agents/compose-for-task")
     async def compose_for_task(task: Task) -> dict:
         spec = await capability.compose_and_emit(task)
         return spec.model_dump(mode="json")
+
+    # ── Mission Orchestrator API (Phase Ψ) ──
+    # In-memory store (persisted upgrade in Phase Ψ+1)
+    _missions: dict[str, Mission] = {}
+
+    @app.post("/api/missions")
+    async def create_mission(body: dict) -> dict:
+        mission = Mission(
+            title=body.get("title", ""),
+            description=body.get("description", ""),
+            prompt=body.get("prompt", ""),
+            objectives=body.get("objectives", []),
+            deliverables=body.get("deliverables", []),
+            priority=MissionPriority(body.get("priority", "medium")),
+            execution_mode=ExecutionMode(body.get("execution_mode", "hybrid")),
+            constraints=body.get("constraints", []),
+            deadline=datetime.fromisoformat(body["deadline"]) if body.get("deadline") else None,
+            tags=body.get("tags", []),
+            attachments=[
+                Attachment(**a) if isinstance(a, dict) else a
+                for a in body.get("attachments", [])
+            ],
+        )
+        _missions[mission.id] = mission
+        await orch.bus.publish(
+            EventEnvelope(type="mission.created", source="api", topic=Topic.MISSION_CREATED.value, payload=mission.to_dict())
+        )
+        return mission.to_dict()
+
+    @app.get("/api/missions")
+    async def list_missions() -> list[dict]:
+        return [m.to_dict() for m in sorted(
+            _missions.values(), key=lambda x: x.created_at, reverse=True
+        )]
+
+    @app.get("/api/missions/{mission_id}")
+    async def get_mission(mission_id: str) -> dict:
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        return m.to_dict()
+
+    @app.put("/api/missions/{mission_id}")
+    async def update_mission(mission_id: str, body: dict) -> dict:
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        for key in ("title", "description", "prompt", "priority", "execution_mode", "constraints", "tags"):
+            if key in body:
+                setattr(m, key, body[key])
+        if "objectives" in body:
+            m.objectives = body["objectives"]
+        if "deliverables" in body:
+            m.deliverables = body["deliverables"]
+        if "deadline" in body and body["deadline"]:
+            m.deadline = datetime.fromisoformat(body["deadline"])
+        if "attachments" in body:
+            m.attachments = [Attachment(**a) if isinstance(a, dict) else a for a in body["attachments"]]
+        m.updated_at = datetime.now(UTC)
+        await orch.bus.publish(
+            EventEnvelope(type="mission.updated", source="api", topic=Topic.MISSION_UPDATED.value, payload=m.to_dict())
+        )
+        return m.to_dict()
+
+    @app.delete("/api/missions/{mission_id}")
+    async def delete_mission(mission_id: str) -> dict:
+        m = _missions.pop(mission_id, None)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        await orch.bus.publish(
+            EventEnvelope(type="mission.deleted", source="api", topic=Topic.MISSION_DELETED.value, payload={"id": mission_id})
+        )
+        return {"deleted": mission_id}
+
+    @app.post("/api/missions/{mission_id}/plan")
+    async def plan_mission(mission_id: str) -> dict:
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        m.status = MissionStatus.PLANNING
+        plan = await mission_planner.analyze(m)
+        m.plan = plan
+        m.status = MissionStatus.PLANNED
+        return plan.to_dict()
+
+    @app.post("/api/missions/{mission_id}/start")
+    async def start_mission(mission_id: str) -> dict:
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        if not m.plan:
+            raise HTTPException(400, "Mission has no plan — call /plan first")
+        m.status = MissionStatus.EXECUTING
+        m.updated_at = datetime.now(UTC)
+        await orch.bus.publish(
+            EventEnvelope(type="mission.started", source="api", topic=Topic.MISSION_STARTED.value, payload=m.to_dict())
+        )
+        return m.to_dict()
+
+    @app.post("/api/missions/{mission_id}/pause")
+    async def pause_mission(mission_id: str) -> dict:
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        m.status = MissionStatus.PAUSED
+        m.updated_at = datetime.now(UTC)
+        await orch.bus.publish(
+            EventEnvelope(type="mission.paused", source="api", topic=Topic.MISSION_PAUSED.value, payload=m.to_dict())
+        )
+        return m.to_dict()
+
+    @app.post("/api/missions/{mission_id}/cancel")
+    async def cancel_mission(mission_id: str) -> dict:
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        m.status = MissionStatus.CANCELLED
+        m.updated_at = datetime.now(UTC)
+        await orch.bus.publish(
+            EventEnvelope(type="mission.cancelled", source="api", topic=Topic.MISSION_CANCELLED.value, payload=m.to_dict())
+        )
+        return m.to_dict()
 
     # ── Memory System API (Phase 2, Subsystem 2) ──
     @app.post("/api/memory")
@@ -1701,6 +1869,34 @@ def create_app(platform: Platform) -> FastAPI:
 
     # ── Metrics & Cost ──
 
+    @app.get("/api/swarm/metrics")
+    async def get_swarm_metrics() -> dict:
+        """Aggregated swarm metrics for the dashboard."""
+        swarms = await swarm.list_swarms()
+        total_swarms = len(swarms)
+        active_swarms = sum(1 for s in swarms if getattr(s, "status", "") == "active")
+        total_tasks = 0
+        completed_tasks = 0
+        failed_tasks = 0
+        agents_online = 0
+        # Attempt to collect from the registry
+        reg = getattr(swarm, "registry", None) or getattr(orch, "registry", None)
+        if reg is not None:
+            agents = reg.agents()
+            agents_online = sum(1 for a in agents if getattr(a, "status", "") == "idle" or getattr(a, "status", "") == "active")
+            tasks = reg.tasks()
+            total_tasks = len(tasks)
+            completed_tasks = sum(1 for t in tasks if getattr(t, "status", "") == "completed")
+            failed_tasks = sum(1 for t in tasks if getattr(t, "status", "") == "failed")
+        return {
+            "total_swarms": total_swarms,
+            "active_swarms": active_swarms,
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "failed_tasks": failed_tasks,
+            "agents_online": agents_online,
+        }
+
     @app.post("/api/swarm/metrics/collect")
     async def collect_execution_metrics(body: dict) -> dict:
         """Collect execution metrics for a plan."""
@@ -2663,8 +2859,11 @@ def create_app(platform: Platform) -> FastAPI:
         @app.get("/api/desktop/updates/status")
         async def get_update_status() -> dict:
             if desktop.update is None:
-                return {"status": "idle"}
-            return {"status": (await desktop.update.get_update_status()).value}
+                return {"status": "idle", "version": "1.0.0-rc1"}
+            return {
+                "status": (await desktop.update.get_update_status()).value,
+                "version": await desktop.update.get_current_version(),
+            }
 
         @app.get("/api/desktop/updates/history")
         async def get_update_history(limit: int = 50) -> list[dict]:
@@ -2744,13 +2943,10 @@ def create_app(platform: Platform) -> FastAPI:
             return result.to_dict()
 
         @app.get("/api/desktop/rollback/available")
-        async def get_rollback_versions() -> dict:
+        async def get_rollback_versions() -> list[str]:
             if desktop.rollback is None:
-                return {"versions": [], "can_rollback": False}
-            return {
-                "versions": list(await desktop.rollback.get_available_versions()),
-                "can_rollback": await desktop.rollback.can_rollback(),
-            }
+                return []
+            return list(await desktop.rollback.get_available_versions())
 
         # -- Installer --
 
@@ -2977,6 +3173,11 @@ def create_app(platform: Platform) -> FastAPI:
             )
             result = await desktop.dragdrop.handle_drop(payload)
             return result
+
+    # ── Event history (REST replay for frontend cold-start) ──
+    @app.get("/api/events/recent")
+    async def get_recent_events(limit: int = 50) -> list[dict]:
+        return platform.dashboard.get_recent_events(limit)
 
     # ── Minimal provider management UI page (Phase 3 builds Mission Control) ──
     @app.get("/providers", response_class=HTMLResponse)

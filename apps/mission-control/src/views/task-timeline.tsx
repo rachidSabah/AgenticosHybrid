@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useStore } from "@/lib/store";
 import { Panel, StatusDot, Empty } from "@/components/ui/primitives";
 import type { EventEnvelope } from "@/lib/types";
@@ -18,7 +19,21 @@ const TASK_TOPICS = new Set([
 // Chronological timeline of task/agent lifecycle events. Pure EventBus history.
 export function TaskTimeline() {
   const events = useStore((s) => s.events);
+  const ingest = useStore((s) => s.ingest);
   const items = events.filter((e) => TASK_TOPICS.has(e.topic));
+
+  // Hydrate from REST on mount so the timeline shows past events
+  React.useEffect(() => {
+    fetch("/api/events/recent?limit=50")
+      .then((r) => r.json())
+      .then((list) => {
+        if (!Array.isArray(list)) return;
+        for (const ev of list) {
+          if (TASK_TOPICS.has(ev.topic)) ingest(ev as EventEnvelope);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="h-full p-4">

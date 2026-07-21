@@ -40,6 +40,127 @@ const NODE_TYPES: NodeTypes = {};
 
 const STORAGE_KEY = "mc.workflow.draft";
 
+// ── Workflow templates ──────────────────────────────────────────────
+
+interface WorkflowTemplate {
+  name: string;
+  description: string;
+  nodes: Node[];
+  edges: Edge[];
+}
+
+function wfNode(id: string, step: Step, label: string, x: number, y: number): Node {
+  return {
+    id,
+    position: { x, y },
+    data: { label, step },
+    style: {
+      background: "rgba(15,18,28,0.85)",
+      border: `1px solid ${NODE_COLOR[step]}`,
+      borderRadius: 10,
+      color: "#e6e8ee",
+      fontSize: 12,
+      padding: "6px 10px",
+    },
+  };
+}
+
+const WF_EDGE = (id: string, source: string, target: string): Edge => ({
+  id,
+  source,
+  target,
+  animated: true,
+  style: { stroke: "#6366f1" },
+});
+
+const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  {
+    name: "CI/CD Pipeline",
+    description: "trigger → plan → agent → gate → output",
+    nodes: [
+      wfNode("t1", "trigger", "trigger:git-push", 80, 200),
+      wfNode("t2", "plan", "plan:build-steps", 280, 200),
+      wfNode("t3", "agent", "agent:deploy-tool", 480, 200),
+      wfNode("t4", "gate", "gate:quality-check", 680, 200),
+      wfNode("t5", "output", "output:deployment", 880, 200),
+    ],
+    edges: [
+      WF_EDGE("e1-2", "t1", "t2"),
+      WF_EDGE("e2-3", "t2", "t3"),
+      WF_EDGE("e3-4", "t3", "t4"),
+      WF_EDGE("e4-5", "t4", "t5"),
+    ],
+  },
+  {
+    name: "Code Review",
+    description: "trigger → plan → agent → agent → gate → output",
+    nodes: [
+      wfNode("c1", "trigger", "trigger:pr-opened", 80, 200),
+      wfNode("c2", "plan", "plan:review-plan", 280, 200),
+      wfNode("c3", "agent", "agent:code-review", 480, 200),
+      wfNode("c4", "agent", "agent:security-scan", 680, 200),
+      wfNode("c5", "gate", "gate:approval", 880, 200),
+      wfNode("c6", "output", "output:report", 1080, 200),
+    ],
+    edges: [
+      WF_EDGE("c1-2", "c1", "c2"),
+      WF_EDGE("c2-3", "c2", "c3"),
+      WF_EDGE("c3-4", "c3", "c4"),
+      WF_EDGE("c4-5", "c4", "c5"),
+      WF_EDGE("c5-6", "c5", "c6"),
+    ],
+  },
+  {
+    name: "Research Synthesis",
+    description: "trigger → agent → agent → output",
+    nodes: [
+      wfNode("r1", "trigger", "trigger:query", 80, 200),
+      wfNode("r2", "agent", "agent:research", 300, 200),
+      wfNode("r3", "agent", "agent:summarize", 520, 200),
+      wfNode("r4", "output", "output:synthesis", 740, 200),
+    ],
+    edges: [
+      WF_EDGE("r1-2", "r1", "r2"),
+      WF_EDGE("r2-3", "r2", "r3"),
+      WF_EDGE("r3-4", "r3", "r4"),
+    ],
+  },
+  {
+    name: "Documentation",
+    description: "trigger → agent → agent → gate → output",
+    nodes: [
+      wfNode("d1", "trigger", "trigger:source-change", 80, 200),
+      wfNode("d2", "agent", "agent:analyze-code", 280, 200),
+      wfNode("d3", "agent", "agent:write-docs", 480, 200),
+      wfNode("d4", "gate", "gate:review", 680, 200),
+      wfNode("d5", "output", "output:documentation", 880, 200),
+    ],
+    edges: [
+      WF_EDGE("d1-2", "d1", "d2"),
+      WF_EDGE("d2-3", "d2", "d3"),
+      WF_EDGE("d3-4", "d3", "d4"),
+      WF_EDGE("d4-5", "d4", "d5"),
+    ],
+  },
+  {
+    name: "Bug Fix",
+    description: "trigger → plan → agent → agent → output",
+    nodes: [
+      wfNode("b1", "trigger", "trigger:bug-report", 80, 200),
+      wfNode("b2", "plan", "plan:fix-plan", 280, 200),
+      wfNode("b3", "agent", "agent:fix-code", 480, 200),
+      wfNode("b4", "agent", "agent:run-tests", 680, 200),
+      wfNode("b5", "output", "output:fix-applied", 880, 200),
+    ],
+    edges: [
+      WF_EDGE("b1-2", "b1", "b2"),
+      WF_EDGE("b2-3", "b2", "b3"),
+      WF_EDGE("b3-4", "b3", "b4"),
+      WF_EDGE("b4-5", "b4", "b5"),
+    ],
+  },
+];
+
 interface ValidationIssue {
   type: "error" | "warning";
   message: string;
@@ -137,6 +258,13 @@ export function WorkflowStudio() {
 
   const validationIssues = useMemo(() => validateWorkflow(nodes, edges), [nodes, edges]);
   const hasErrors = validationIssues.some((i) => i.type === "error");
+
+  const applyTemplate = useCallback((template: WorkflowTemplate) => {
+    setNodes(template.nodes);
+    setEdges(template.edges);
+    setSelectedId(null);
+    setShowValidation(false);
+  }, [setNodes, setEdges]);
 
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, animated: true, style: { stroke: "#6366f1" } }, eds)),
@@ -299,16 +427,30 @@ export function WorkflowStudio() {
           </div>
         }
       >
-        <div className="h-full">
+        <div className="h-full flex flex-col">
+          {!showCode && (
+            <div className="flex gap-2 px-4 py-2 overflow-x-auto border-b border-border/30 shrink-0">
+              {WORKFLOW_TEMPLATES.map((t) => (
+                <button
+                  key={t.name}
+                  onClick={() => applyTemplate(t)}
+                  className="flex flex-col items-start gap-0.5 rounded-lg border border-border/40 bg-surface/30 px-3 py-1.5 text-left hover:bg-surface/60 hover:border-accent/40 transition-colors shrink-0 min-w-[130px]"
+                >
+                  <span className="text-xs font-medium text-foreground">{t.name}</span>
+                  <span className="text-[10px] text-faint leading-tight">{t.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {nodes.length === 0 && !showCode ? (
-            <Empty title="Empty canvas" hint="Add a step node, then drag between nodes to wire the pipeline." />
+            <Empty title="Empty canvas" hint="Choose a template above, or add a step node to start building." />
           ) : showCode ? (
             <div className="h-full" role="region" aria-label="Workflow JSON code">
               <MonacoEditor value={JSON.stringify(spec, null, 2)} language="json" readOnly={false} onChange={handleCodeChange} />
             </div>
           ) : (
             <>
-              <div ref={containerRef} className="h-full" role="application" aria-label="Workflow graph editor" tabIndex={0}>
+              <div ref={containerRef} className="flex-1 min-h-0" role="application" aria-label="Workflow graph editor" tabIndex={0}>
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}

@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { useStore, selectMetrics } from "@/lib/store";
+import { useShallow } from "zustand/react/shallow";
 import { api } from "@/lib/api";
 import type { ProviderHealthRecord, CapabilityInfo, AuditEntry } from "@/lib/types";
 
 export function MissionOverview() {
-  const m = useStore(selectMetrics);
+  const m = useStore(useShallow(selectMetrics));
   const agents = useStore((s) => s.agents);
   const tasks = useStore((s) => s.tasks);
   const providers = useStore((s) => s.providers);

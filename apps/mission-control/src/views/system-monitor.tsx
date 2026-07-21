@@ -1,13 +1,31 @@
 "use client";
 
+import { useShallow } from "zustand/react/shallow";
 import { Panel, Stat, StatusDot, Empty } from "@/components/ui/primitives";
 import { useStore, selectMetrics } from "@/lib/store";
+import { useMemo } from "react";
 
 export function SystemMonitor() {
-  const m = useStore(selectMetrics);
+  const m = useStore(useShallow(selectMetrics));
   const connected = useStore((s) => s.connected);
   const events = useStore((s) => s.events);
-  const rates = useRates(events);
+  const rates = useMemo(() => {
+    const now = Date.now();
+    const windowMs = 60_000;
+    const recent = events.filter((e) => now - new Date(e.timestamp).getTime() < windowMs);
+    const buckets = new Array(60).fill(0);
+    for (const e of recent) {
+      const ts = new Date(e.timestamp).getTime();
+      const idx = Math.min(59, Math.max(0, Math.floor((now - ts) / 1000)));
+      buckets[59 - idx] += 1;
+    }
+    const perSec = recent.length / 60;
+    const counts: Record<string, number> = {};
+    for (const e of recent) counts[e.topic] = (counts[e.topic] ?? 0) + 1;
+    const byTopic = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 12);
+    const maxTopic = byTopic[0]?.[1] ?? 1;
+    return { buckets, perSec, byTopic, maxTopic };
+  }, [events]);
 
   return (
     <div className="grid h-full grid-cols-12 grid-rows-6 gap-4 p-4">

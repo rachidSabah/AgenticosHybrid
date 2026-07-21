@@ -55,6 +55,9 @@ from agentic_os.core.discovery.validation import (
 )
 from agentic_os.core.health import HealthMonitorImpl
 
+# Mission Orchestrator
+from agentic_os.core.mission import MissionPlannerImpl
+
 # Phase 5: Learning & Optimization Engine
 from agentic_os.core.learning import LearningManager
 
@@ -91,6 +94,33 @@ from agentic_os.infrastructure.logging import configure_logging, get_logger
 from agentic_os.ports.execution import DiscoveryProvider
 
 log = get_logger("kernel")
+
+def _ensure_env() -> None:
+    """Generate .env from .env.example if .env doesn't exist yet.
+
+    This ensures first-time users get a ready-to-edit configuration without
+    manual file copying. Existing .env files are never overwritten.
+    """
+    import os
+    from pathlib import Path
+
+    env_path = Path(".env")
+    example_path = Path(".env.example")
+
+    if env_path.exists():
+        log.debug("env_check.present", path=str(env_path))
+        return
+
+    if not example_path.exists():
+        log.warning("env_check.no_template", path=str(example_path))
+        return
+
+    try:
+        content = example_path.read_text(encoding="utf-8")
+        env_path.write_text(content, encoding="utf-8")
+        log.info("env_check.generated", path=str(env_path), source=str(example_path))
+    except OSError as exc:
+        log.error("env_check.failed", error=str(exc))
 
 
 @dataclass
@@ -134,6 +164,8 @@ class Platform:
     learning: LearningManager | None = None
     # Phase 4, M6: Desktop Runtime Foundation
     desktop: DesktopRuntimeManager | None = None
+    # Mission Orchestrator
+    mission_planner: MissionPlannerImpl | None = None
 
 
 class Kernel:
@@ -192,6 +224,7 @@ class Kernel:
         self.mcp_ws = MCPBroadcaster(self.bus)
 
         self.capability = CapabilityEngine(self.bus)
+        self.mission_planner = MissionPlannerImpl(self.bus, settings)
         self._plugins: list = []
 
         # Phase 4: Runtime Manager — universal execution engine framework
@@ -223,6 +256,7 @@ class Kernel:
         self.desktop = DesktopRuntimeManager(self.bus)
 
     async def start(self) -> None:
+        _ensure_env()
         await self.bus.start()
         self._plugins = load_plugins(self.registry, self.providers)
         # Seed provider manager from the Phase-1 plugin-loaded providers.
@@ -500,6 +534,7 @@ class Kernel:
             mcp_ws=self.mcp_ws,
             desktop=self.desktop,
             learning=self.learning,
+            mission_planner=self.mission_planner,
         )
 
 

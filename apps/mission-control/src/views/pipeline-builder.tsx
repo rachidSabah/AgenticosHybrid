@@ -42,6 +42,92 @@ const nodeTypes: NodeTypes = {};
 
 const STORAGE_KEY = "mc.pipeline.draft";
 
+// ── Pipeline templates ──────────────────────────────────────────────
+
+interface PipelineTemplate {
+  name: string;
+  description: string;
+  nodes: Node[];
+  edges: Edge[];
+}
+
+function pipeNode(id: string, stage: Stage, label: string, x: number, y: number): Node {
+  return {
+    id,
+    position: { x, y },
+    data: { label, stage },
+    style: {
+      background: "rgba(15,18,28,0.85)",
+      border: `1px solid ${STAGE_COLOR[stage]}`,
+      borderRadius: 10,
+      color: "#e6e8ee",
+      fontSize: 12,
+      padding: "6px 10px",
+    },
+  };
+}
+
+const PIPE_EDGE = (id: string, source: string, target: string): Edge => ({
+  id,
+  source,
+  target,
+  animated: true,
+  style: { stroke: "#6366f1" },
+});
+
+const PIPELINE_TEMPLATES: PipelineTemplate[] = [
+  {
+    name: "Basic LLM Call",
+    description: "input → route → provider → output",
+    nodes: [
+      pipeNode("p1", "input", "input:user-prompt", 80, 200),
+      pipeNode("p2", "route", "route:llm-route", 280, 200),
+      pipeNode("p3", "provider", "provider:gpt-4o", 480, 200),
+      pipeNode("p4", "output", "output:response", 680, 200),
+    ],
+    edges: [
+      PIPE_EDGE("p1-2", "p1", "p2"),
+      PIPE_EDGE("p2-3", "p2", "p3"),
+      PIPE_EDGE("p3-4", "p3", "p4"),
+    ],
+  },
+  {
+    name: "Multi-Model",
+    description: "input → route → dual providers → output",
+    nodes: [
+      pipeNode("m1", "input", "input:prompt", 80, 200),
+      pipeNode("m2", "route", "route:split", 280, 200),
+      pipeNode("m3", "provider", "provider:reasoning-model", 500, 120),
+      pipeNode("m4", "provider", "provider:coding-model", 500, 280),
+      pipeNode("m5", "output", "output:merged-result", 720, 200),
+    ],
+    edges: [
+      PIPE_EDGE("m1-2", "m1", "m2"),
+      PIPE_EDGE("m2-3", "m2", "m3"),
+      PIPE_EDGE("m2-4", "m2", "m4"),
+      PIPE_EDGE("m3-5", "m3", "m5"),
+      PIPE_EDGE("m4-5", "m4", "m5"),
+    ],
+  },
+  {
+    name: "Secure Pipeline",
+    description: "input → route → provider → memory → output",
+    nodes: [
+      pipeNode("s1", "input", "input:request", 80, 200),
+      pipeNode("s2", "route", "route:secure-route", 260, 200),
+      pipeNode("s3", "provider", "provider:gpt-4o", 440, 200),
+      pipeNode("s4", "memory", "memory:context-store", 620, 200),
+      pipeNode("s5", "output", "output:response", 800, 200),
+    ],
+    edges: [
+      PIPE_EDGE("s1-2", "s1", "s2"),
+      PIPE_EDGE("s2-3", "s2", "s3"),
+      PIPE_EDGE("s3-4", "s3", "s4"),
+      PIPE_EDGE("s4-5", "s4", "s5"),
+    ],
+  },
+];
+
 interface ValidationIssue {
   type: "error" | "warning";
   message: string;
@@ -158,6 +244,13 @@ export function PipelineBuilder() {
 
   const validationIssues = useMemo(() => validatePipeline(nodes, edges, providers), [nodes, edges, providers]);
   const hasErrors = validationIssues.some((i) => i.type === "error");
+
+  const applyTemplate = useCallback((template: PipelineTemplate) => {
+    setNodes(template.nodes);
+    setEdges(template.edges);
+    setSelectedId(null);
+    setShowValidation(false);
+  }, [setNodes, setEdges]);
 
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, animated: true, style: { stroke: "#6366f1" } }, eds)),
@@ -307,19 +400,44 @@ export function PipelineBuilder() {
             >
               {showCode ? "Graph" : "Code"}
             </button>
+            {providers.length > 0 ? (
+              <span className="rounded bg-ok/12 px-2 py-0.5 text-[10px] text-ok whitespace-nowrap">
+                {providers.length} provider{providers.length !== 1 ? "s" : ""}
+              </span>
+            ) : error ? (
+              <span className="rounded bg-danger/12 px-2 py-0.5 text-[10px] text-danger whitespace-nowrap">
+                API error
+              </span>
+            ) : (
+              <span className="text-[10px] text-faint whitespace-nowrap px-1">Loading providers…</span>
+            )}
           </div>
         }
       >
-        <div className="h-full">
+        <div className="h-full flex flex-col">
+          {!showCode && (
+            <div className="flex gap-2 px-4 py-2 overflow-x-auto border-b border-border/30 shrink-0">
+              {PIPELINE_TEMPLATES.map((t) => (
+                <button
+                  key={t.name}
+                  onClick={() => applyTemplate(t)}
+                  className="flex flex-col items-start gap-0.5 rounded-lg border border-border/40 bg-surface/30 px-3 py-1.5 text-left hover:bg-surface/60 hover:border-accent/40 transition-colors shrink-0 min-w-[130px]"
+                >
+                  <span className="text-xs font-medium text-foreground">{t.name}</span>
+                  <span className="text-[10px] text-faint leading-tight">{t.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {nodes.length === 0 && !showCode ? (
-            <Empty title="Empty pipeline" hint="Add routing stages; connect them to define the flow." />
+            <Empty title="Empty pipeline" hint="Choose a template above, or add stages to build your pipeline." />
           ) : showCode ? (
             <div className="h-full" role="region" aria-label="Pipeline JSON code">
               <MonacoEditor value={JSON.stringify(spec, null, 2)} language="json" readOnly={false} onChange={handleCodeChange} />
             </div>
           ) : (
             <>
-              <div ref={containerRef} className="h-full" role="application" aria-label="Pipeline graph editor" tabIndex={0}>
+              <div ref={containerRef} className="flex-1 min-h-0" role="application" aria-label="Pipeline graph editor" tabIndex={0}>
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}

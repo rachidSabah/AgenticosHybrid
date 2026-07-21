@@ -230,11 +230,10 @@ export const useStore = create<StoreState>((set, get) => ({
         ...s.notifications,
       ].slice(0, MAX_NOTIFS);
 
-      const agents = { ...s.agents };
-      const tasks = { ...s.tasks };
-      const providers = { ...s.providers };
-      const telemetry = { ...s.telemetry };
-      telemetry.pulses = [{ topic: e.topic, at: Date.now() }, ...telemetry.pulses].slice(0, 80);
+      let agents = s.agents;
+      let tasks = s.tasks;
+      let providers = s.providers;
+      let telemetry = s.telemetry;
 
       const p = e.payload as Record<string, any>;
       switch (e.topic) {
@@ -243,6 +242,7 @@ export const useStore = create<StoreState>((set, get) => ({
         case "agent.failed":
         case "agent.recovered": {
           const id = String(p.id ?? p.agent_id ?? "agent");
+          agents = { ...s.agents };
           const prev = agents[id] ?? {
             id,
             role: String(p.role ?? "agent"),
@@ -266,6 +266,7 @@ export const useStore = create<StoreState>((set, get) => ({
             status: statusMap[e.topic] ?? prev.status,
             health: e.topic === "agent.failed" ? "down" : e.topic === "agent.recovered" ? "degraded" : "healthy",
           };
+          telemetry = { ...s.telemetry };
           telemetry.agents = Object.keys(agents).length;
           if (e.topic === "agent.failed") telemetry.errors += 1;
           break;
@@ -275,12 +276,14 @@ export const useStore = create<StoreState>((set, get) => ({
         case "task.dispatched":
         case "task.assigned": {
           const id = String(p.id ?? "task");
+          tasks = { ...s.tasks };
           tasks[id] = {
             id,
             title: String(p.title ?? ""),
             role: String(p.role ?? ""),
             status: e.topic.replace("task.", "") as TaskNode["status"],
           };
+          telemetry = { ...s.telemetry };
           telemetry.tasks = Object.keys(tasks).length;
           break;
         }
@@ -288,40 +291,53 @@ export const useStore = create<StoreState>((set, get) => ({
         case "provider.registered":
         case "provider.failover": {
           const name = String(p.name ?? p.provider ?? "provider");
+          providers = { ...s.providers };
           providers[name] = {
             provider: name,
             status: (p.status ?? providers[name]?.status ?? "unknown") as ProviderHealthRecord["status"],
             latency_ms: Number(p.latency_ms ?? providers[name]?.latency_ms ?? 0),
             error: p.error ?? providers[name]?.error,
           };
+          telemetry = { ...s.telemetry };
           telemetry.providers = Object.keys(providers).length;
           break;
         }
         case "provider.failed": {
           const name = String(p.name ?? p.provider ?? "provider");
+          providers = { ...s.providers };
           providers[name] = {
             provider: name,
             status: "down",
             latency_ms: 0,
             error: p.error,
           };
+          telemetry = { ...s.telemetry };
           telemetry.providers = Object.keys(providers).length;
           telemetry.errors += 1;
           break;
         }
         case "cost.recorded": {
+          telemetry = { ...s.telemetry };
           telemetry.cost += Number(p.amount ?? 0);
           break;
         }
         case "agent.composed": {
+          telemetry = { ...s.telemetry };
           telemetry.pipelines += 1;
           break;
         }
         case "tool.denied": {
+          telemetry = { ...s.telemetry };
           telemetry.errors += 1;
           break;
         }
       }
+
+      // Always clone telemetry to add the pulse
+      if (telemetry === s.telemetry) {
+        telemetry = { ...s.telemetry };
+      }
+      telemetry.pulses = [{ topic: e.topic, at: Date.now() }, ...telemetry.pulses].slice(0, 80);
 
       return { events, notifications, agents, tasks, providers, telemetry };
     });

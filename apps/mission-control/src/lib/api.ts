@@ -8,6 +8,8 @@ import type {
   CostRecord,
   MemoryItem,
   MemoryScope,
+  MissionPlanType,
+  MissionType,
   ModelInfo,
   ProviderConfig,
   ProviderHealthRecord,
@@ -378,7 +380,7 @@ export const api = {
   // Updates
   updateStatus: () => get<{ version: string; status: string }>("/api/desktop/updates/status"),
   checkUpdates: (channel?: string) =>
-    post<import("./desktop-types").ReleaseInfo[]>(
+    get<import("./desktop-types").ReleaseInfo[]>(
       `/api/desktop/updates/check${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`,
     ),
   updateHistory: () =>
@@ -400,7 +402,20 @@ export const api = {
     get<string[]>("/api/desktop/rollback/available"),
   rollback: () => post<import("./desktop-types").UpdateResult>("/api/desktop/rollback"),
 
-  // Backup
+  // ── Mission Orchestrator API ──
+  missions: () => get<MissionType[]>("/api/missions"),
+  createMission: (body: Record<string, unknown>) =>
+    post<MissionType>("/api/missions", body),
+  getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),
+  updateMission: (id: string, body: Record<string, unknown>) =>
+    put<MissionType>(`/api/missions/${id}`, body),
+  deleteMission: (id: string) => del<{ deleted: string }>(`/api/missions/${id}`),
+  planMission: (id: string) => post<MissionPlanType>(`/api/missions/${id}/plan`),
+  startMission: (id: string) => post<MissionType>(`/api/missions/${id}/start`),
+  pauseMission: (id: string) => post<MissionType>(`/api/missions/${id}/pause`),
+  cancelMission: (id: string) => post<MissionType>(`/api/missions/${id}/cancel`),
+
+  // ── Exports for mission types ──
   createBackup: (body?: import("./desktop-types").BackupConfig) =>
     post<import("./desktop-types").BackupResult>("/api/desktop/backup", body ?? {}),
   listBackups: () =>

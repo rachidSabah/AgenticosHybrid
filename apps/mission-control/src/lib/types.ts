@@ -531,3 +531,63 @@ export interface SwarmMetricsSummary {
   avg_latency_ms: number;
   agents_online: number;
 }
+
+// ── Mission Orchestrator types ──
+
+export interface MissionType {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  objectives: string[];
+  deliverables: string[];
+  priority: string;
+  execution_mode: string;
+  constraints: string[];
+  deadline: string | null;
+  tags: string[];
+  attachments: MissionAttachment[];
+  status: string;
+  plan: MissionPlanType | null;
+  created_at: string;
+  updated_at: string | null;
+  completed_at: string | null;
+  error: string;
+}
+
+export interface MissionAttachment {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  path: string;
+  description: string;
+}
+
+export interface MissionTaskType {
+  id: string;
+  mission_id: string;
+  title: string;
+  description: string;
+  status: string;
+  assigned_role: string | null;
+  assigned_provider: string;
+  dependencies: string[];
+  estimated_minutes: number;
+  output: string;
+  error: string;
+  started_at: string | null;
+  completed_at: string | null;
+  attachments: string[];
+}
+
+export interface MissionPlanType {
+  id: string;
+  mission_id: string;
+  summary: string;
+  complexity: string;
+  estimated_total_minutes: number;
+  risk_level: string;
+  tasks: MissionTaskType[];
+  task_count: number;
+}

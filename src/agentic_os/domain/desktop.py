@@ -1140,8 +1140,9 @@ class DesktopConfig:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        theme_val = self.theme.value if isinstance(self.theme, ThemeMode) else str(self.theme)
         return {
-            "theme": self.theme.value,
+            "theme": theme_val,
             "language": self.language,
             "auto_start": self.auto_start,
             "minimize_to_tray": self.minimize_to_tray,
