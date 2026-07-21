@@ -21,6 +21,14 @@ npm run build
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
 Pop-Location
 
+# Step 1.5: Ensure resources directory exists with at least one file for the bundler glob
+$TauriResDir = Join-Path $TauriDir "resources"
+if (-not (Test-Path $TauriResDir) -or -not (Get-ChildItem $TauriResDir -ErrorAction SilentlyContinue)) {
+    New-Item -ItemType Directory -Force -Path $TauriResDir | Out-Null
+    # Sentinel file so resources/* glob doesn't fail on empty directory
+    Set-Content -Path (Join-Path $TauriResDir ".bundled") -Value "" -NoNewline
+}
+
 # Step 2: Initialize MSVC environment
 Write-Host "`n[2/4] Initializing MSVC environment..." -ForegroundColor Yellow
 $vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
@@ -78,8 +86,13 @@ if ($Target -in @("all", "portable")) {
     if (Test-Path $zipPath) { Remove-Item $zipPath }
     
     if (Test-Path $exePath) {
+        $portableItems = @($exePath, "$MissionControl/out")
+        $backendDir = "$TauriDir/resources/backend"
+        if (Test-Path $backendDir) {
+            $portableItems += $backendDir
+        }
         $compress = @{
-            Path = $exePath, "$MissionControl/out"
+            Path = $portableItems
             DestinationPath = $zipPath
             CompressionLevel = "Optimal"
         }

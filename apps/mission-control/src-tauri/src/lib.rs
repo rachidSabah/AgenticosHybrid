@@ -96,18 +96,51 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         }
     }
 
+    // Fallback: search alongside the running EXE (portable mode)
+    if backend_path.is_none() {
+        if let Some(ref curr) = current {
+            if let Some(exe_dir) = curr.parent() {
+                let fallback_candidates = [
+                    exe_dir.join("backend").join("agentic_os.exe"),
+                    exe_dir.join("backend").join("agentic-os.exe"),
+                    exe_dir.join("agentic_os.exe"),
+                    exe_dir.join("agentic-os.exe"),
+                ];
+                for candidate in &fallback_candidates {
+                    if candidate.exists() && candidate != curr {
+                        log_startup_event(
+                            &startup_log,
+                            &format!(
+                                "✓ Backend found alongside EXE (portable mode): {}",
+                                candidate.display()
+                            ),
+                        );
+                        backend_path = Some(candidate.clone());
+                        break;
+                    }
+                }
+                if backend_path.is_none() {
+                    log_startup_event(
+                        &startup_log,
+                        "✗ No backend found alongside EXE either",
+                    );
+                }
+            }
+        }
+    }
+
     let exe_path = match backend_path {
         Some(p) => {
             log_startup_event(
                 &startup_log,
-                &format!("✓ Embedded Backend Executable Found: {}", p.display()),
+                &format!("✓ Launching Backend: {}", p.display()),
             );
             p
         }
         None => {
             log_startup_event(
                 &startup_log,
-                "✗ Embedded backend binary not found in resources/backend/",
+                "✗ Backend binary not found in resources/backend/ or alongside EXE",
             );
             return (None, backend_log_path, startup_log);
         }

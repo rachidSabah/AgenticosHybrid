@@ -74,7 +74,7 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": ["resources/**"],
+    "resources": ["resources/*"],
     "externalBin": [],
     "copyright": "Agentic OS Contributors",
     "category": "DeveloperTool",
