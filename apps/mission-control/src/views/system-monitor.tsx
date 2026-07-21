@@ -4,7 +4,9 @@ import { useShallow } from "zustand/react/shallow";
 import { Panel, Stat, StatusDot, Empty } from "@/components/ui/primitives";
 import { useStore, selectMetrics } from "@/lib/store";
 import { api } from "@/lib/api";
-import { useMemo, useEffect, useCallback, useState } from "react";
+import { useMemo, useEffect, useCallback, useState, useRef } from "react";
+import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
+import AutoSizer from "react-virtualized-auto-sizer";
 import type { DesktopPerformanceMetrics } from "@/lib/desktop-types";
 
 // ── Polling hook for live resource metrics ──
@@ -77,6 +79,30 @@ function Gauge({
         <span>{used.toFixed(1)} used</span>
         <span>{total.toFixed(1)} total</span>
       </div>
+    </div>
+  );
+}
+
+// ── Virtualized Event Row ──
+
+interface EventRowData {
+  events: Array<{ id: string; topic: string; source: string; timestamp: string }>;
+}
+
+function EventRow({ index, style, data }: ListChildComponentProps<EventRowData>) {
+  const e = data.events[index];
+  return (
+    <div style={style} className="flex items-center gap-3 px-4 py-1.5">
+      <StatusDot
+        status={
+          e.topic.includes("fail") || e.topic.includes("denied")
+            ? "danger"
+            : "healthy"
+        }
+      />
+      <span className="w-44 shrink-0 truncate text-faint">{e.topic}</span>
+      <span className="flex-1 truncate text-muted">{e.source}</span>
+      <span className="text-faint">{new Date(e.timestamp).toLocaleTimeString()}</span>
     </div>
   );
 }
@@ -280,35 +306,32 @@ export function SystemMonitor() {
       <Panel
         title="Recent Events"
         subtitle="Raw EventBus envelope stream"
-        className="col-span-12 lg:col-span-8"
+        className="col-span-12 lg:col-span-8 min-h-0 flex-1"
         contentClassName="p-0"
       >
-        <div className="divide-y divide-border/40 font-mono text-xs h-full overflow-y-auto">
-          {events.slice(0, 30).map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center gap-3 px-4 py-1.5"
-            >
-              <StatusDot
-                status={
-                  e.topic.includes("fail") || e.topic.includes("denied")
-                    ? "danger"
-                    : "healthy"
-                }
-              />
-              <span className="w-44 shrink-0 truncate text-faint">
-                {e.topic}
-              </span>
-              <span className="flex-1 truncate text-muted">
-                {e.source}
-              </span>
-              <span className="text-faint">
-                {new Date(e.timestamp).toLocaleTimeString()}
-              </span>
-            </div>
-          ))}
-          {events.length === 0 && <Empty title="Awaiting stream…" />}
-        </div>
+        {events.length === 0 ? (
+          <div className="p-4">
+            <Empty title="Awaiting stream…" />
+          </div>
+        ) : (
+          <div className="h-full w-full">
+            <AutoSizer>
+              {({ height, width }) => (
+                <List<EventRowData>
+                  height={height}
+                  width={width}
+                  itemCount={events.length}
+                  itemSize={36}
+                  itemData={{ events }}
+                  className="divide-y divide-border/40 font-mono text-xs"
+                  overscanCount={20}
+                >
+                  {EventRow}
+                </List>
+              )}
+            </AutoSizer>
+          </div>
+        )}
       </Panel>
     </div>
   );

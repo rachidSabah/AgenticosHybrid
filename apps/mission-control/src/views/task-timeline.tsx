@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Panel, StatusDot, Empty, Stat } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
@@ -13,43 +13,17 @@ import {
   StopCircle,
   CheckCircle2,
   XCircle,
-  Clock,
   Search,
-  Filter,
   ChevronDown,
   ChevronRight,
   GitBranch,
-  GitCommit,
-  GitPullRequest,
-  AlertCircle,
-  Zap,
   Bot,
-  FileText,
-  FileCode,
-  File,
-  Folder,
-  Database,
   Server,
-  Network,
-  Wifi,
-  Shield,
-  Settings,
   RefreshCw,
-  ListFilter,
   ListChecks,
   ListTodo,
-  ListEnd,
-  ListStart,
-  List,
-  Calendar,
-  History,
-  Tag,
   User,
-  Users,
-  Cpu,
-  MemoryStick,
-  HardDrive,
-  Thermometer,
+  GitPullRequest,
 } from "lucide-react";
 
 // ── Types ──
@@ -65,7 +39,6 @@ interface TimelineEvent {
   at: number;
   duration?: number;
   tags?: string[];
-  icon?: React.ReactNode;
 }
 
 interface FilterState {
@@ -79,16 +52,16 @@ interface FilterState {
 
 function statusToLevel(status: TimelineEvent["status"]) {
   return {
-    created: "info",
-    planned: "info",
-    dispatched: "info",
-    assigned: "info",
-    running: "ok",
-    completed: "ok",
-    failed: "danger",
-    paused: "warn",
-    cancelled: "warn",
-    recovered: "ok",
+    created: "info" as const,
+    planned: "info" as const,
+    dispatched: "info" as const,
+    assigned: "info" as const,
+    running: "ok" as const,
+    completed: "ok" as const,
+    failed: "danger" as const,
+    paused: "warn" as const,
+    cancelled: "warn" as const,
+    recovered: "ok" as const,
   }[status];
 }
 
@@ -113,6 +86,93 @@ function typeToIcon(type: TimelineEvent["type"]) {
     agent: <Bot size={14} />,
     system: <Server size={14} />,
   }[type];
+}
+
+// ── Virtualized Row ──
+
+interface TimelineRowData {
+  filteredEvents: TimelineEvent[];
+  expanded: Record<string, boolean>;
+  onToggle: (id: string) => void;
+}
+
+function TimelineRow({ index, style, data }: ListChildComponentProps<TimelineRowData>) {
+  const event = data.filteredEvents[index];
+  const isExpanded = data.expanded[event.id] ?? false;
+  const Icon = statusToIcon(event.status);
+  const TypeIcon = typeToIcon(event.type);
+  const level = statusToLevel(event.status);
+
+  return (
+    <div style={style}>
+      <div className="flex items-start gap-3 p-3 hover:bg-surface/5 transition">
+        <div className="shrink-0">
+          <StatusDot status={level} pulse={event.status === "running"} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <div className="text-[11px] font-medium truncate">{event.title}</div>
+            <div className="flex items-center gap-1 text-[9px] text-faint shrink-0">
+              {TypeIcon}
+              <span>{event.type}</span>
+            </div>
+            <div className="flex items-center gap-1 text-[9px] text-faint shrink-0">
+              {Icon}
+              <span>{event.status}</span>
+            </div>
+            {event.tags?.map((tag) => (
+              <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint shrink-0">
+                {tag}
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-faint mt-0.5">
+            {new Date(event.at).toLocaleTimeString()} • {event.duration ? `${Math.round(event.duration / 1000)}s` : "-"}
+          </div>
+          <div className="text-[10px] text-muted mt-1 line-clamp-1">
+            {event.detail}
+          </div>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="mt-2 border-t border-border/30 pt-2 text-[10px] text-faint"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="font-medium">Task ID</div>
+                  <div>{event.taskId}</div>
+                </div>
+                {event.agentId && (
+                  <div>
+                    <div className="font-medium">Agent ID</div>
+                    <div>{event.agentId}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="font-medium">Timestamp</div>
+                  <div>{new Date(event.at).toISOString()}</div>
+                </div>
+                {event.duration && (
+                  <div>
+                    <div className="font-medium">Duration</div>
+                    <div>{Math.round(event.duration / 1000)}s</div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </div>
+        <button
+          onClick={() => data.onToggle(event.id)}
+          className="shrink-0 rounded-full p-1 hover:bg-surface/20 transition"
+        >
+          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ── Main Component ──
@@ -141,8 +201,8 @@ export function TaskTimeline() {
         status: "created",
         title: `Task created: ${task.title || task.id}`,
         detail: `Role: ${task.role || "unspecified"}`,
-        at: Date.now() - 1000 * 60 * 5, // Mock time
-        tags: [task.role],
+        at: Date.now() - 1000 * 60 * 5,
+        tags: task.role ? [task.role] : undefined,
       });
       if (task.status === "planned") {
         list.push({
@@ -153,7 +213,7 @@ export function TaskTimeline() {
           title: `Task planned: ${task.title || task.id}`,
           detail: `Execution plan generated`,
           at: Date.now() - 1000 * 60 * 4,
-          tags: [task.role],
+          tags: task.role ? [task.role] : undefined,
         });
       }
       if (task.status === "dispatched") {
@@ -165,7 +225,7 @@ export function TaskTimeline() {
           title: `Task dispatched: ${task.title || task.id}`,
           detail: `Assigned to agent pool`,
           at: Date.now() - 1000 * 60 * 3,
-          tags: [task.role],
+          tags: task.role ? [task.role] : undefined,
         });
       }
       if (task.status === "assigned") {
@@ -177,7 +237,7 @@ export function TaskTimeline() {
           title: `Task assigned: ${task.title || task.id}`,
           detail: `Agent: ${task.role}`,
           at: Date.now() - 1000 * 60 * 2,
-          tags: [task.role],
+          tags: task.role ? [task.role] : undefined,
         });
       }
       if (task.status === "completed") {
@@ -190,7 +250,7 @@ export function TaskTimeline() {
           detail: `All steps executed successfully`,
           at: Date.now() - 1000 * 60 * 1,
           duration: 60 * 1000,
-          tags: [task.role],
+          tags: task.role ? [task.role] : undefined,
         });
       }
       if (task.status === "failed") {
@@ -202,7 +262,7 @@ export function TaskTimeline() {
           title: `Task failed: ${task.title || task.id}`,
           detail: `Error: ${task.role || "unknown error"}`,
           at: Date.now() - 1000 * 30,
-          tags: [task.role],
+          tags: task.role ? [task.role] : undefined,
         });
       }
     });
@@ -218,7 +278,7 @@ export function TaskTimeline() {
         title: `Agent started: ${agent.role}`,
         detail: `Provider: ${agent.provider || "unknown"}`,
         at: Date.now() - 1000 * 60 * 5,
-        tags: [agent.provider, agent.role],
+        tags: [agent.provider, agent.role].filter(Boolean) as string[],
       });
       if (agent.status === "completed") {
         list.push({
@@ -231,7 +291,7 @@ export function TaskTimeline() {
           detail: `Task: ${agent.current_task || "system task"}`,
           at: Date.now() - 1000 * 60 * 1,
           duration: 60 * 1000,
-          tags: [agent.provider, agent.role],
+          tags: [agent.provider, agent.role].filter(Boolean) as string[],
         });
       }
       if (agent.status === "failed") {
@@ -244,7 +304,7 @@ export function TaskTimeline() {
           title: `Agent failed: ${agent.role}`,
           detail: `Error: ${agent.health === "down" ? "Provider unavailable" : "Internal error"}`,
           at: Date.now() - 1000 * 30,
-          tags: [agent.provider, agent.role],
+          tags: [agent.provider, agent.role].filter(Boolean) as string[],
         });
       }
     });
@@ -295,9 +355,9 @@ export function TaskTimeline() {
     });
   }, [events, filters]);
 
-  const toggleExpand = (id: string) => {
+  const toggleExpand = useCallback((id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  }, []);
 
   const toggleStatusFilter = (status: string) => {
     setFilters((prev) => ({
@@ -325,6 +385,18 @@ export function TaskTimeline() {
       sort: "newest",
     });
   };
+
+  const listRef = useRef<List>(null);
+  const itemData: TimelineRowData = useMemo(
+    () => ({ filteredEvents, expanded, onToggle: toggleExpand }),
+    [filteredEvents, expanded, toggleExpand],
+  );
+
+  // Reset expanded when filter changes change visible items
+  useEffect(() => {
+    setExpanded({});
+    listRef.current?.scrollTo(0);
+  }, [filters]);
 
   return (
     <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
@@ -403,7 +475,7 @@ export function TaskTimeline() {
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setFilters((prev) => ({ ...prev, sort: item.id as any }))}
+                    onClick={() => setFilters((prev) => ({ ...prev, sort: item.id as FilterState["sort"] }))}
                     className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
                       filters.sort === item.id
                         ? "bg-accent/20 text-accent"
@@ -444,61 +516,26 @@ export function TaskTimeline() {
         >
           {filteredEvents.length === 0 ? (
             <div className="p-4">
-              {filteredEvents.length === 0 ? (
-                <div className="p-4">
-                  <Empty title="No events match filters" hint="Try adjusting your filters or search query" />
-                </div>
-              ) : (
-                <div className="h-full w-full">
-                  <AutoSizer>
-                    {({ height, width }) => (
-                      <List
-                        height={height}
-                        width={width}
-                        itemCount={filteredEvents.length}
-                        itemSize={isExpanded ? 160 : 80} // Adjust based on expanded state
-                        itemData={{ filteredEvents, expanded, toggleExpand }}
-                        className="divide-y divide-border/30"
-                      >
-                        {TimelineRow}
-                      </List>
-                    )}
-                  </AutoSizer>
-                </div>
-              )}
-                                <div className="font-medium">Task ID</div>
-                                <div>{event.taskId}</div>
-                              </div>
-                              {event.agentId && (
-                                <div>
-                                  <div className="font-medium">Agent ID</div>
-                                  <div>{event.agentId}</div>
-                                </div>
-                              )}
-                              <div>
-                                <div className="font-medium">Timestamp</div>
-                                <div>{new Date(event.at).toISOString()}</div>
-                              </div>
-                              {event.duration && (
-                                <div>
-                                  <div className="font-medium">Duration</div>
-                                  <div>{Math.round(event.duration / 1000)}s</div>
-                                </div>
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => toggleExpand(event.id)}
-                        className="shrink-0 rounded-full p-1 hover:bg-surface/20 transition"
-                      </motion.div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            );
-          }
+              <Empty title="No events match filters" hint="Try adjusting your filters or search query" />
+            </div>
+          ) : (
+            <div className="h-full w-full">
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List<TimelineRowData>
+                    ref={listRef}
+                    height={height}
+                    width={width}
+                    itemCount={filteredEvents.length}
+                    itemSize={72}
+                    itemData={itemData}
+                    className="divide-y divide-border/30"
+                    overscanCount={20}
+                  >
+                    {TimelineRow}
+                  </List>
+                )}
+              </AutoSizer>
             </div>
           )}
         </Panel>

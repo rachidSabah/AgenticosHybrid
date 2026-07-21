@@ -26,6 +26,9 @@ _ENGINE_BINARIES: dict[EngineType, list[str]] = {
     EngineType.CONTINUE: ["continue", "continue-cli"],
     EngineType.CLINE: ["cline"],
     EngineType.ROO_CODE: ["roo", "roo-cli", "roo-code"],
+    EngineType.OPENCODE: ["opencode", "opencode-ai"],
+    EngineType.AGY_CLI: ["agy"],
+    EngineType.OLLAMA: ["ollama"],
 }
 
 # Common install directories (per-platform)
@@ -134,6 +137,9 @@ def _get_version(binary_path: Path, engine_type: EngineType) -> str | None:
             EngineType.CODEX_CLI: ["--version"],
             EngineType.HERMES: ["--version"],
             EngineType.AIDER: ["--version"],
+            EngineType.OPENCODE: ["--version"],
+            EngineType.AGY_CLI: ["--version"],
+            EngineType.OLLAMA: ["--version"],
         }
         flags = version_flags.get(engine_type, ["--version"])
         result = subprocess.run(

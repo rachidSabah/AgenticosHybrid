@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
+import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
+import AutoSizer from "react-virtualized-auto-sizer";
 import { api } from "@/lib/api";
 import type {
   MCPHealthSummary,
@@ -300,6 +302,36 @@ function McpServersTab() {
   );
 }
 
+// ── Virtualized MCP Tool Row ──
+
+interface McpToolRowData {
+  tools: MCPTool[];
+}
+
+function McpToolRow({ index, style, data }: ListChildComponentProps<McpToolRowData>) {
+  const t = data.tools[index];
+  return (
+    <div style={style} className="px-1 py-1">
+      <div className="rounded-xl border border-border/60 px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{t.name}</span>
+        </div>
+        {t.description && (
+          <div className="mt-0.5 text-[11px] text-faint">{t.description}</div>
+        )}
+        {t.input_schema && (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-[11px] text-faint hover:text-muted">Input schema</summary>
+            <pre className="mt-1 overflow-auto rounded bg-surface/20 p-2 text-[10px] text-faint">
+              {JSON.stringify(t.input_schema, null, 2)}
+            </pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Sub-tab: Tools ──
 
 function McpToolsTab() {
@@ -384,29 +416,27 @@ function McpToolsTab() {
 
       {selectedServer && (
         <>
-          <Panel title="Discovered Tools" subtitle={`${tools.length} tools`} className="col-span-12 lg:col-span-6 min-h-0 flex-1">
+          <Panel title="Discovered Tools" subtitle={`${tools.length} tools`} className="col-span-12 lg:col-span-6 min-h-0 flex-1" contentClassName="p-0">
             {tools.length === 0 ? (
-              <Empty title="No tools discovered" hint='Click "Discover Tools" to list available tools.' />
+              <div className="p-4">
+                <Empty title="No tools discovered" hint='Click "Discover Tools" to list available tools.' />
+              </div>
             ) : (
-              <div className="space-y-2 h-full overflow-y-auto">
-                {tools.map((t) => (
-                  <div key={t.name} className="rounded-xl border border-border/60 px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{t.name}</span>
-                    </div>
-                    {t.description && (
-                      <div className="mt-0.5 text-[11px] text-faint">{t.description}</div>
-                    )}
-                    {t.input_schema && (
-                      <details className="mt-1">
-                        <summary className="cursor-pointer text-[11px] text-faint hover:text-muted">Input schema</summary>
-                        <pre className="mt-1 overflow-auto rounded bg-surface/20 p-2 text-[10px] text-faint">
-                          {JSON.stringify(t.input_schema, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                ))}
+              <div className="h-full w-full">
+                <AutoSizer>
+                  {({ height, width }) => (
+                    <List<McpToolRowData>
+                      height={height}
+                      width={width}
+                      itemCount={tools.length}
+                      itemSize={80}
+                      itemData={{ tools }}
+                      overscanCount={10}
+                    >
+                      {McpToolRow}
+                    </List>
+                  )}
+                </AutoSizer>
               </div>
             )}
           </Panel>

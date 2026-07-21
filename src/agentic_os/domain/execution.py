@@ -48,8 +48,10 @@ class EngineType(StrEnum):
     OPEN_INTERPRETER = "open_interpreter"
     CLINE = "cline"
     ROO_CODE = "roo_code"
+    OLLAMA = "ollama"
+    OPENCODE = "opencode"
+    AGY_CLI = "agy_cli"
     CUSTOM = "custom"
-
 
 class EngineStatus(StrEnum):
     """Runtime lifecycle status of an execution engine."""

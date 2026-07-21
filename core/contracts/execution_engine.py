@@ -32,6 +32,9 @@ class EngineType(StrEnum):
     CONTINUE = "continue"
     CLINE = "cline"
     ROO_CODE = "roo_code"
+    OPENCODE = "opencode"
+    AGY_CLI = "agy_cli"
+    OLLAMA = "ollama"
     LOCAL = "local"
     CUSTOM = "custom"
 
