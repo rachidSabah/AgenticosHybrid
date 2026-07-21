@@ -139,14 +139,15 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
                 .stderr(Stdio::null())
                 .spawn();
             if let Ok(mut child) = check {
-                let _ = child.wait();
-                if child.status().map_or(false, |s| s.success()) {
-                    log_startup_event(
-                        &startup_log,
-                        &format!("✓ agentic_os importable via '{}' — spawning backend", python_cmd),
-                    );
-                    backend_path = Some(PathBuf::from(python_cmd));
-                    break;
+                if let Ok(status) = child.wait() {
+                    if status.success() {
+                        log_startup_event(
+                            &startup_log,
+                            &format!("✓ agentic_os importable via '{}' — spawning backend", python_cmd),
+                        );
+                        backend_path = Some(PathBuf::from(python_cmd));
+                        break;
+                    }
                 }
             }
         }
@@ -163,14 +164,14 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
                             .stderr(Stdio::null())
                             .spawn();
                         if let Ok(mut child) = uv_check {
-                            let _ = child.wait();
-                            if child.status().map_or(false, |s| s.success()) {
-                                log_startup_event(
-                                    &startup_log,
-                                    "✓ Found uv — will use uv run with bundled backend source",
-                                );
-                                backend_path = Some(PathBuf::from("uv"));
-                                break;
+                            if let Ok(status) = child.wait() {
+                                if status.success() {
+                                    log_startup_event(
+                                        &startup_log,
+                                        "✓ Found uv — will use uv run with bundled backend source",
+                                    );
+                                    backend_path = Some(PathBuf::from("uv"));
+                                }
                             }
                         }
                     }
@@ -245,14 +246,45 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
     }
 
     match cmd.spawn() {
-        Ok(child) => {
+        Ok(mut child) => {
+            let pid = child.id();
             log_startup_event(
                 &startup_log,
-                &format!(
-                    "✓ Backend Process Spawned (PID: {}) on 127.0.0.1:8000",
-                    child.id()
-                ),
+                &format!("✓ Backend Process Spawned (PID: {}) on 127.0.0.1:8000", pid),
             );
+
+            // Wait for backend TCP port to accept connections (up to 15s)
+            let addr: std::net::SocketAddr =
+                "127.0.0.1:8000".parse().expect("Invalid address");
+            let mut healthy = false;
+            for i in 0..30 {
+                if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
+                    healthy = true;
+                    log_startup_event(
+                        &startup_log,
+                        &format!("✓ Backend listening after {}ms (poll {})", (i + 1) * 500, i + 1),
+                    );
+                    break;
+                }
+                // Check if child exited
+                if let Ok(Some(code)) = child.try_wait() {
+                    log_startup_event(
+                        &startup_log,
+                        &format!("✗ Backend exited prematurely (exit code: {})", code),
+                    );
+                    return (None, backend_log_path, startup_log);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+
+            if !healthy {
+                log_startup_event(
+                    &startup_log,
+                    "✗ Backend did not respond on TCP 8000 within 15 seconds",
+                );
+                return (None, backend_log_path, startup_log);
+            }
+
             (Some(child), backend_log_path, startup_log)
         }
         Err(e) => {
