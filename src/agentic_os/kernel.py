@@ -513,9 +513,7 @@ async def run_serve(host: str | None = None, port: int | None = None) -> None:
     app = _build_app(kernel)
     import uvicorn
 
-    config = uvicorn.Config(
-        app, host=h, port=p, log_level="warning"
-    )
+    config = uvicorn.Config(app, host=h, port=p, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()
 
