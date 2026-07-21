@@ -51,87 +51,124 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
 
     log_startup_event(&startup_log, "Desktop Runtime Starting...");
 
-    let res_dir = match app.path().resource_dir() {
-        Ok(dir) => dir,
-        Err(e) => {
+    let current = current_exe().ok();
+    let exe_dir = current.as_ref().and_then(|c| c.parent().map(|p| p.to_path_buf()));
+
+    // Log where we are running from
+    if let Some(ref dir) = exe_dir {
+        log_startup_event(&startup_log, &format!("✓ Running from: {}", dir.display()));
+    } else {
+        log_startup_event(&startup_log, "✗ Could not determine exe directory");
+    }
+
+    // Strategy 1: Try uv run with bundled backend source (most portable, avoids
+    // PyInstaller binary extraction issues with Windows Defender)
+    let mut launch_method: Option<String> = None;
+    if let Some(ref dir) = exe_dir {
+        let pyproject_path = dir.join("backend").join("pyproject.toml");
+        let src_path = dir.join("backend").join("src");
+        if pyproject_path.exists() || src_path.exists() {
             log_startup_event(
                 &startup_log,
-                &format!("✗ Failed to resolve resource directory: {}", e),
+                &format!("✓ Bundled backend source found — pyproject: {}", pyproject_path.exists()),
             );
-            return (None, backend_log_path, startup_log);
-        }
-    };
-
-    log_startup_event(
-        &startup_log,
-        &format!("✓ Resource Directory: {}", res_dir.display()),
-    );
-    configure_dll_directory(&res_dir);
-
-    let backend_dir = res_dir.join("backend");
-    let candidates = [
-        backend_dir.join("agentic_os.exe"),
-        backend_dir.join("agentic-os.exe"),
-    ];
-
-    let current = current_exe().ok();
-
-    let mut backend_path: Option<PathBuf> = None;
-    for candidate in &candidates {
-        if candidate.exists() {
-            if let Some(ref curr) = current {
-                if candidate == curr {
-                    log_startup_event(
-                        &startup_log,
-                        &format!(
-                            "✗ Candidate {} is the running executable — skipping to prevent self-launch",
-                            candidate.display()
-                        ),
-                    );
-                    continue;
+            // Check if uv is available
+            let uv_check = Command::new("uv")
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+            if let Ok(mut child) = uv_check {
+                if let Ok(status) = child.wait() {
+                    if status.success() {
+                        log_startup_event(&startup_log, "✓ STRATEGY 1: Spawning via uv run --project backend");
+                        launch_method = Some("uv".to_string());
+                    } else {
+                        log_startup_event(&startup_log, "  uv check: installed but returned non-zero");
+                    }
                 }
+            } else {
+                log_startup_event(&startup_log, "  uv check: failed to spawn");
             }
-            backend_path = Some(candidate.clone());
-            break;
+        } else {
+            log_startup_event(&startup_log, &format!(
+                "  No bundled source — pyproject exists: {}, src exists: {}",
+                pyproject_path.exists(), src_path.exists()
+            ));
         }
     }
 
-    // Fallback: search alongside the running EXE (portable mode)
-    if backend_path.is_none() {
-        if let Some(ref curr) = current {
-            if let Some(exe_dir) = curr.parent() {
-                let fallback_candidates = [
-                    exe_dir.join("backend").join("agentic_os.exe"),
-                    exe_dir.join("backend").join("agentic-os.exe"),
-                    exe_dir.join("agentic_os.exe"),
-                    exe_dir.join("agentic-os.exe"),
+    // Strategy 2: Try PyInstaller binary alongside EXE (portable ZIP mode)
+    if launch_method.is_none() {
+        if let Some(ref dir) = exe_dir {
+            let portable_candidates = [
+                dir.join("backend").join("agentic_os.exe"),
+                dir.join("backend").join("agentic-os.exe"),
+                dir.join("agentic_os.exe"),
+                dir.join("agentic-os.exe"),
+            ];
+            for candidate in &portable_candidates {
+                log_startup_event(
+                    &startup_log,
+                    &format!("  Checking portable candidate: {} (exists: {})", candidate.display(), candidate.exists()),
+                );
+                if candidate.exists() {
+                    if let Some(ref curr) = current {
+                        if candidate == curr {
+                            log_startup_event(&startup_log, "    Same as running EXE — skipping");
+                            continue;
+                        }
+                    }
+                    log_startup_event(
+                        &startup_log,
+                        &format!("✓ STRATEGY 2: PyInstaller binary alongside EXE: {}", candidate.display()),
+                    );
+                    launch_method = Some(candidate.to_string_lossy().to_string());
+                    break;
+                }
+            }
+        }
+    }
+
+    // Strategy 3: Try PyInstaller binary from Tauri resource dir (installed mode)
+    if launch_method.is_none() {
+        match app.path().resource_dir() {
+            Ok(res_dir) => {
+                log_startup_event(&startup_log, &format!("✓ Resource directory: {}", res_dir.display()));
+                configure_dll_directory(&res_dir);
+                let resource_candidates = [
+                    res_dir.join("backend").join("agentic_os.exe"),
+                    res_dir.join("backend").join("agentic-os.exe"),
                 ];
-                for candidate in &fallback_candidates {
-                    if candidate.exists() && candidate != curr {
+                for candidate in &resource_candidates {
+                    log_startup_event(
+                        &startup_log,
+                        &format!("  Checking resource candidate: {} (exists: {})", candidate.display(), candidate.exists()),
+                    );
+                    if candidate.exists() {
+                        if let Some(ref curr) = current {
+                            if candidate == curr {
+                                log_startup_event(&startup_log, "    Same as running EXE — skipping");
+                                continue;
+                            }
+                        }
                         log_startup_event(
                             &startup_log,
-                            &format!(
-                                "✓ Backend found alongside EXE (portable mode): {}",
-                                candidate.display()
-                            ),
+                            &format!("✓ STRATEGY 3: PyInstaller binary from resources: {}", candidate.display()),
                         );
-                        backend_path = Some(candidate.clone());
+                        launch_method = Some(candidate.to_string_lossy().to_string());
                         break;
                     }
                 }
-                if backend_path.is_none() {
-                    log_startup_event(
-                        &startup_log,
-                        "✗ No backend found alongside EXE either",
-                    );
-                }
+            }
+            Err(e) => {
+                log_startup_event(&startup_log, &format!("✗ Failed to resolve resource directory: {}", e));
             }
         }
     }
 
-    // Fallback: try system Python
-    if backend_path.is_none() {
-        // First check if agentic_os is importable via system python
+    // Strategy 4: Try system python -m agentic_os serve
+    if launch_method.is_none() {
         for python_cmd in &["python", "python3"] {
             let check = Command::new(python_cmd)
                 .args(["-c", "import agentic_os; print('ok')"])
@@ -143,59 +180,32 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
                     if status.success() {
                         log_startup_event(
                             &startup_log,
-                            &format!("✓ agentic_os importable via '{}' — spawning backend", python_cmd),
+                            &format!("✓ STRATEGY 4: agentic_os importable via '{}'", python_cmd),
                         );
-                        backend_path = Some(PathBuf::from(python_cmd));
+                        launch_method = Some(python_cmd.to_string());
                         break;
                     }
                 }
             }
-        }
-        // If not importable, try uv run with local source if backend/ dir exists
-        if backend_path.is_none() {
-            if let Some(ref curr) = current {
-                if let Some(exe_dir) = curr.parent() {
-                    let backend_src = exe_dir.join("backend").join("src");
-                    let pyproject = exe_dir.join("backend").join("pyproject.toml");
-                    if backend_src.exists() || pyproject.exists() {
-                        let uv_check = Command::new("uv")
-                            .arg("--version")
-                            .stdout(Stdio::null())
-                            .stderr(Stdio::null())
-                            .spawn();
-                        if let Ok(mut child) = uv_check {
-                            if let Ok(status) = child.wait() {
-                                if status.success() {
-                                    log_startup_event(
-                                        &startup_log,
-                                        "✓ Found uv — will use uv run with bundled backend source",
-                                    );
-                                    backend_path = Some(PathBuf::from("uv"));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            log_startup_event(&startup_log, &format!("  python check '{}': not importable", python_cmd));
         }
     }
 
-    let exe_path = match backend_path {
-        Some(p) => {
-            log_startup_event(
-                &startup_log,
-                &format!("✓ Launching Backend: {}", p.display()),
-            );
-            p
+    let launch_method = match launch_method {
+        Some(m) => {
+            log_startup_event(&startup_log, &format!("✓ Launch method: {}", m));
+            m
         }
         None => {
             log_startup_event(
                 &startup_log,
-                "✗ Backend binary not found in resources/backend/, alongside EXE, or via system Python",
+                "✗ All launch strategies exhausted — cannot start backend",
             );
             return (None, backend_log_path, startup_log);
         }
     };
+
+    let exe_dir = current.as_ref().and_then(|c| c.parent().map(|p| p.to_path_buf()));
 
     let out_file = OpenOptions::new()
         .create(true)
@@ -208,29 +218,28 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         .open(&backend_log_path)
         .ok();
 
-    let exe_dir = current.as_ref().and_then(|c| c.parent().map(|p| p.to_path_buf()));
-
-    let mut cmd = if exe_path.exists() {
-        // Binary executable (PyInstaller or system binary)
-        let mut c = Command::new(&exe_path);
-        c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
-        if let Some(ref dir) = exe_dir {
-            c.current_dir(dir);
-        }
-        c
-    } else {
-        // System command (python or uv)
-        let cmd_name = exe_path.to_string_lossy().to_string();
-        if cmd_name == "uv" {
+    let mut cmd = match launch_method.as_str() {
+        "uv" => {
             let mut c = Command::new("uv");
             c.args(["--project", "backend", "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
             if let Some(ref dir) = exe_dir {
                 c.current_dir(dir);
             }
             c
-        } else {
-            let mut c = Command::new(&cmd_name);
+        }
+        "python" | "python3" => {
+            let mut c = Command::new(&launch_method);
             c.args(["-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+            if let Some(ref dir) = exe_dir {
+                c.current_dir(dir);
+            }
+            c
+        }
+        _ => {
+            // Binary path (PyInstaller or other EXE)
+            let exe_path = PathBuf::from(&launch_method);
+            let mut c = Command::new(&exe_path);
+            c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
             if let Some(ref dir) = exe_dir {
                 c.current_dir(dir);
             }
@@ -244,6 +253,11 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
     if let Some(f) = err_file {
         cmd.stderr(Stdio::from(f));
     }
+
+    log_startup_event(
+        &startup_log,
+        &format!("Spawning: {:?} with args: {:?} in dir: {:?}", cmd.get_program(), cmd.get_args(), cmd.get_current_dir()),
+    );
 
     match cmd.spawn() {
         Ok(mut child) => {
@@ -282,6 +296,17 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
                     &startup_log,
                     "✗ Backend did not respond on TCP 8000 within 15 seconds",
                 );
+                // Check final exit status
+                if let Ok(Some(code)) = child.try_wait() {
+                    log_startup_event(
+                        &startup_log,
+                        &format!("  Final exit code: {}", code),
+                    );
+                } else {
+                    log_startup_event(&startup_log, "  Process still running but not listening");
+                    // Kill the hung process
+                    let _ = child.kill();
+                }
                 return (None, backend_log_path, startup_log);
             }
 
