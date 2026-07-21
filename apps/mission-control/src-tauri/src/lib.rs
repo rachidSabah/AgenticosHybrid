@@ -207,21 +207,32 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         .open(&backend_log_path)
         .ok();
 
+    let exe_dir = current.as_ref().and_then(|c| c.parent().map(|p| p.to_path_buf()));
+
     let mut cmd = if exe_path.exists() {
         // Binary executable (PyInstaller or system binary)
         let mut c = Command::new(&exe_path);
         c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
+        if let Some(ref dir) = exe_dir {
+            c.current_dir(dir);
+        }
         c
     } else {
         // System command (python or uv)
         let cmd_name = exe_path.to_string_lossy().to_string();
         if cmd_name == "uv" {
             let mut c = Command::new("uv");
-            c.args(["run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+            c.args(["--project", "backend", "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+            if let Some(ref dir) = exe_dir {
+                c.current_dir(dir);
+            }
             c
         } else {
             let mut c = Command::new(&cmd_name);
             c.args(["-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+            if let Some(ref dir) = exe_dir {
+                c.current_dir(dir);
+            }
             c
         }
     };

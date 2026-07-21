@@ -41,18 +41,35 @@ if (Test-Path $vcvars) {
 # Step 2.5: Build PyInstaller backend binary and setup resources
 Write-Host "`n[2.5/4] Building standalone backend executable & copying resources..." -ForegroundColor Yellow
 Push-Location $RepoRoot
-$prevErr = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-& uv run --with pyinstaller pyinstaller --noconfirm --onefile --name agentic_os --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols --hidden-import=uvicorn.protocols.http --hidden-import=uvicorn.protocols.http.auto --hidden-import=uvicorn.protocols.websockets --hidden-import=uvicorn.protocols.websockets.auto --hidden-import=uvicorn.lifespan --hidden-import=uvicorn.lifespan.on src/agentic_os/__main__.py 2>&1 | Out-Null
-$ErrorActionPreference = $prevErr
+Push-Location $RepoRoot
+Write-Host "  Running PyInstaller..."
+$pyiOut = & uv run --with pyinstaller pyinstaller --noconfirm --onefile --name agentic_os --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols --hidden-import=uvicorn.protocols.http --hidden-import=uvicorn.protocols.http.auto --hidden-import=uvicorn.protocols.websockets --hidden-import=uvicorn.protocols.websockets.auto --hidden-import=uvicorn.lifespan --hidden-import=uvicorn.lifespan.on src/agentic_os/__main__.py 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  PyInstaller FAILED (exit code $LASTEXITCODE). Will bundle source instead."
+    Write-Host "  $pyiOut"
+} else {
+    Write-Host "  PyInstaller succeeded."
+}
 Pop-Location
 
 $TauriDir = Join-Path $MissionControl "src-tauri"
 $ResBackendDir = Join-Path $TauriDir "resources\backend"
 New-Item -ItemType Directory -Force -Path $ResBackendDir | Out-Null
+
+# Copy PyInstaller binary if built
 $CompiledBackend = Join-Path $OutDir "agentic_os.exe"
 if (Test-Path $CompiledBackend) {
     Copy-Item $CompiledBackend (Join-Path $ResBackendDir "agentic_os.exe") -Force
+    Write-Host "  + Bundled PyInstaller backend binary" -ForegroundColor Green
+}
+
+# Always copy Python source alongside binary for uv/python fallback
+$BackendSrcTarget = Join-Path $ResBackendDir "src"
+if (Test-Path (Join-Path $RepoRoot "src\agentic_os")) {
+    New-Item -ItemType Directory -Force -Path $BackendSrcTarget | Out-Null
+    Copy-Item (Join-Path $RepoRoot "src\agentic_os") (Join-Path $ResBackendDir "src\") -Recurse -Force
+    Copy-Item (Join-Path $RepoRoot "pyproject.toml") (Join-Path $ResBackendDir "pyproject.toml") -Force
+    Write-Host "  + Bundled Python source for uv/python fallback" -ForegroundColor Green
 }
 
 $WV2Path = Join-Path $TauriDir "target\release\WebView2Loader.dll"
