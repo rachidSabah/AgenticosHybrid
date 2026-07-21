@@ -20,6 +20,8 @@ import {
   Wifi,
   RefreshCw,
   Shield,
+  Terminal,
+  MessageSquarePlus,
 } from "lucide-react";
 
 export interface NavItem {
@@ -33,6 +35,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { id: "overview", label: "Mission Overview", hint: "O", icon: Activity, group: "core" },
   { id: "brain", label: "AI Brain", hint: "B", icon: Brain, group: "core" },
+  { id: "prompt-center", label: "Prompt Center", hint: "P", icon: MessageSquarePlus, group: "core" },
   { id: "constellation", label: "Agent Constellation", hint: "C", icon: Orbit, group: "core" },
   { id: "execution", label: "Execution Graph", hint: "E", icon: GitBranch, group: "core" },
   { id: "workflow", label: "Workflow Studio", hint: "W", icon: Workflow, group: "build" },
