@@ -180,13 +180,26 @@ if (-not $SkipRust) {
         throw "Failed to compile embedded backend executable: $CompiledBackend not found"
     }
 
-    # Step C: Pre-copy WebView2Loader.dll if available from target or system
+    # Step C: Locate and pre-copy WebView2Loader.dll from webview2-com-sys build artifacts
     $ResDir = Join-Path $TauriDir "resources"
     $TargetRelease = Join-Path $TauriDir "target\$ReleaseDir"
-    $WV2Path = Join-Path $TargetRelease "WebView2Loader.dll"
-    if (Test-Path $WV2Path) {
-        Copy-Item $WV2Path (Join-Path $ResDir "WebView2Loader.dll") -Force
+
+    # In GNU/MinGW toolchain, webview2-com-sys places WebView2Loader.dll in its build output,
+    # NOT in target/release/. Find and copy it so the Tauri build + bundler can include it.
+    $WV2BuildOut = Get-ChildItem -Path (Join-Path $TauriDir "target\$ReleaseDir\build\webview2-com-sys-*") `
+        -Filter "WebView2Loader.dll" -Recurse -ErrorAction SilentlyContinue `
+    | Where-Object { $_.FullName -match "\\x64\\" } | Select-Object -First 1
+
+    $WV2TargetPath = Join-Path $TargetRelease "WebView2Loader.dll"
+    if ($WV2BuildOut) {
+        Copy-Item $WV2BuildOut.FullName $WV2TargetPath -Force
+        Write-Host "  + Copied WebView2Loader.dll from $($WV2BuildOut.FullName)" -ForegroundColor Green
+    }
+    if (Test-Path $WV2TargetPath) {
+        Copy-Item $WV2TargetPath (Join-Path $ResDir "WebView2Loader.dll") -Force
         Write-Host "  + Bundled WebView2Loader.dll into resources" -ForegroundColor Green
+    } else {
+        Write-Host "  - WebView2Loader.dll not found in build artifacts; may be statically linked" -ForegroundColor Yellow
     }
 
     Push-Location $TauriDir
@@ -211,8 +224,8 @@ if (-not $SkipRust) {
         }
 
         # Step D: Ensure WebView2Loader.dll is in resources & beside binary in target
-        if (Test-Path $WV2Path) {
-            Copy-Item $WV2Path (Join-Path $ResDir "WebView2Loader.dll") -Force
+        if (Test-Path $WV2TargetPath) {
+            Copy-Item $WV2TargetPath (Join-Path $ResDir "WebView2Loader.dll") -Force
         }
 
         Write-Host "  Tauri build complete." -ForegroundColor Green

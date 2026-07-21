@@ -1,3 +1,4 @@
+use std::env::current_exe;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -67,16 +68,29 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
     );
     configure_dll_directory(&res_dir);
 
+    let backend_dir = res_dir.join("backend");
     let candidates = [
-        res_dir.join("backend").join("agentic_os.exe"),
-        res_dir.join("agentic_os.exe"),
-        res_dir.join("backend").join("agentic-os.exe"),
-        res_dir.join("agentic-os.exe"),
+        backend_dir.join("agentic_os.exe"),
+        backend_dir.join("agentic-os.exe"),
     ];
+
+    let current = current_exe().ok();
 
     let mut backend_path: Option<PathBuf> = None;
     for candidate in &candidates {
         if candidate.exists() {
+            if let Some(ref curr) = current {
+                if candidate == curr {
+                    log_startup_event(
+                        &startup_log,
+                        &format!(
+                            "✗ Candidate {} is the running executable — skipping to prevent self-launch",
+                            candidate.display()
+                        ),
+                    );
+                    continue;
+                }
+            }
             backend_path = Some(candidate.clone());
             break;
         }
@@ -93,10 +107,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         None => {
             log_startup_event(
                 &startup_log,
-                &format!(
-                    "✗ Embedded backend binary not found in candidates: {:?}",
-                    candidates
-                ),
+                "✗ Embedded backend binary not found in resources/backend/",
             );
             return (None, backend_log_path, startup_log);
         }
@@ -213,7 +224,7 @@ fn get_startup_diagnostics(app: tauri::AppHandle) -> DiagnosticReport {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    if let Err(e) = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -232,5 +243,10 @@ pub fn run() {
             get_startup_diagnostics,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running AgenticOS Desktop Runtime");
+    {
+        // Log the error and exit gracefully instead of panicking.
+        // This prevents a crash-restart loop on Windows.
+        eprintln!("AgenticOS Desktop Runtime failed to start: {e}");
+        std::process::exit(1);
+    }
 }
