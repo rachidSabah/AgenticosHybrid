@@ -123,6 +123,19 @@ def _ensure_env() -> None:
         log.error("env_check.failed", error=str(exc))
 
 
+# Startup diagnostics — written to stderr so the Tauri Rust launcher captures them
+_STARTUP_LOG_PREFIX = "[AgenticOS-Startup]"
+
+
+def _diag(stage: str, status: str, detail: str = "") -> None:
+    import sys
+
+    msg = f"{_STARTUP_LOG_PREFIX} {stage}: {status}"
+    if detail:
+        msg += f" — {detail}"
+    print(msg, file=sys.stderr, flush=True)
+
+
 @dataclass
 class Platform:
     """Bundle of every subsystem, handed to the API layer."""
@@ -170,8 +183,10 @@ class Platform:
 
 class Kernel:
     def __init__(self) -> None:
+        _diag("Configuration", "LOADED", f"bus={settings.bus_type} log_level={settings.log_level}")
         configure_logging(settings.log_level)
         self.bus = build_bus(settings)
+        _diag("EventBus", "CREATED", type(self.bus).__name__)
         self.registry = AgentRegistry()
         self.providers = ProviderRegistry()
         self.scheduler = Scheduler()
@@ -255,52 +270,105 @@ class Kernel:
         # Phase 4, M6: Desktop Runtime Foundation
         self.desktop = DesktopRuntimeManager(self.bus)
 
+        _diag("Kernel", "INITIALIZED", "all subsystems constructed")
+
     async def start(self) -> None:
         _ensure_env()
+        _diag("EventBus", "STARTING")
         await self.bus.start()
-        self._plugins = load_plugins(self.registry, self.providers)
+        _diag("EventBus", "STARTED")
+
+        _diag("Plugins", "LOADING")
+        try:
+            self._plugins = load_plugins(self.registry, self.providers)
+            _diag("Plugins", "LOADED", f"{len(self._plugins)} plugin(s)")
+        except Exception as exc:
+            _diag("Plugins", "FAILED", str(exc))
+            self._plugins = []
         # Seed provider manager from the Phase-1 plugin-loaded providers.
         for adapter in self.providers._providers.values():
             self.provider_mgr.register(adapter)
         self._seed_default_models()
+        _diag("Providers", "SEEDED")
+
+        _diag("Orchestrator", "STARTING")
         await self.orchestrator.start()
+        _diag("Orchestrator", "STARTED")
         await self.scheduler.start()
+        _diag("Scheduler", "STARTED")
         await self.health.start()
+        _diag("Health", "STARTED")
         await self.recovery.start()
+        _diag("Recovery", "STARTED")
         await self.provider_health.start()
+        _diag("ProviderHealth", "STARTED")
         await self.capability.start()
+        _diag("Capability", "STARTED")
         await self.dashboard.start()
+        _diag("Dashboard", "STARTED")
         await self.mcp_ws.start()
+        _diag("MCP-WS", "STARTED")
 
         # Phase 4: Initialize runtime and register generic engine
         if self.runtime:
-            generic = GenericExecutionEngine(name="generic", engine_type=EngineType.GENERIC)
-            await generic.initialize()
-            await self.runtime.register_from_adapter("generic", generic)
-            await self.runtime.initialize()
+            _diag("Runtime", "INITIALIZING")
+            try:
+                generic = GenericExecutionEngine(name="generic", engine_type=EngineType.GENERIC)
+                await generic.initialize()
+                await self.runtime.register_from_adapter("generic", generic)
+                await self.runtime.initialize()
+                _diag("Runtime", "INITIALIZED")
+            except Exception as exc:
+                _diag("Runtime", "FAILED", str(exc))
 
         # Phase 4, M2: Start discovery framework
         if self.discovery_framework:
-            await self.discovery_framework.start_auto_discovery()
-            if settings.discovery_hot_reload_enabled:
-                await self.discovery_framework.start_hot_reload()
+            _diag("Discovery", "STARTING")
+            try:
+                await self.discovery_framework.start_auto_discovery()
+                if settings.discovery_hot_reload_enabled:
+                    await self.discovery_framework.start_hot_reload()
+                _diag("Discovery", "STARTED")
+            except Exception as exc:
+                _diag("Discovery", "FAILED", str(exc))
 
         # Phase 4, M3: Start orchestration framework
         if self.orchestration:
-            await self.orchestration.start()
+            _diag("Orchestration", "STARTING")
+            try:
+                await self.orchestration.start()
+                _diag("Orchestration", "STARTED")
+            except Exception as exc:
+                _diag("Orchestration", "FAILED", str(exc))
 
         # Phase 4, M3: Start MCP runtime
         if self.mcp:
-            await self.mcp.start()
+            _diag("MCP", "STARTING")
+            try:
+                await self.mcp.start()
+                _diag("MCP", "STARTED")
+            except Exception as exc:
+                _diag("MCP", "FAILED", str(exc))
 
         # Phase 5: Start Learning & Optimization Engine
         if self.learning:
-            await self.learning.start()
+            _diag("Learning", "STARTING")
+            try:
+                await self.learning.start()
+                _diag("Learning", "STARTED")
+            except Exception as exc:
+                _diag("Learning", "FAILED", str(exc))
 
         # Phase 4, M6: Start Desktop Runtime
         if self.desktop and settings.desktop_enabled:
-            await self.desktop.start()
+            _diag("DesktopRuntime", "STARTING")
+            try:
+                await self.desktop.start()
+                _diag("DesktopRuntime", "STARTED")
+            except Exception as exc:
+                _diag("DesktopRuntime", "FAILED", str(exc))
 
+        _diag("Kernel", "STARTED", f"bus={settings.bus_type} plugins={len(self._plugins)}")
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
@@ -543,13 +611,44 @@ async def run_serve(host: str | None = None, port: int | None = None) -> None:
     p = port or settings.http_port
     settings.http_host = h
     settings.http_port = p
-    kernel = Kernel()
-    await kernel.start()
-    app = _build_app(kernel)
+    _diag("Backend", "INITIALIZING", f"host={h} port={p}")
+
+    kernel: Kernel | None = None
+    try:
+        kernel = Kernel()
+        _diag("Kernel", "CONSTRUCTED")
+    except Exception as exc:
+        import traceback as _tb
+
+        _diag("Kernel", "CONSTRUCTION_FAILED", f"{type(exc).__name__}: {exc}")
+        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        return
+
+    try:
+        await kernel.start()
+    except Exception as exc:
+        import traceback as _tb
+
+        _diag("Kernel", "START_FAILED", f"{type(exc).__name__}: {exc}")
+        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        return
+
+    try:
+        app = _build_app(kernel)
+        _diag("API", "BUILT")
+    except Exception as exc:
+        import traceback as _tb
+
+        _diag("API", "BUILD_FAILED", f"{type(exc).__name__}: {exc}")
+        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        return
+
+    _diag("REST-API", "STARTING", f"http://{h}:{p}")
     import uvicorn
 
     config = uvicorn.Config(app, host=h, port=p, log_level="warning")
     server = uvicorn.Server(config)
+    _diag("REST-API", "LISTENING", f"http://{h}:{p}")
     await server.serve()
 
 

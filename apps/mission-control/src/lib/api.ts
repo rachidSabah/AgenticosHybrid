@@ -16,8 +16,19 @@ import type {
   ProviderInfo,
 } from "./types";
 
-const BASE =
-  process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
+// Resolve the backend base URL.
+// In Tauri's custom-protocol shell the page origin is tauri://localhost, so
+// we cannot rely on a relative URL.  The embedded backend always runs on
+// 127.0.0.1:8000.  We detect the Tauri context via window.__TAURI__ (injected
+// by the Tauri runtime) and fall back to the build-time env var otherwise.
+function resolveBase(): string {
+  if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__) {
+    return "http://127.0.0.1:8000";
+  }
+  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
+}
+
+const BASE = resolveBase();
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { headers: { accept: "application/json" } });
@@ -372,6 +383,8 @@ export const api = {
   // Runtime Discovery
   runtimes: () =>
     get<import("./desktop-types").RuntimeInfo[]>("/api/desktop/runtimes"),
+  runtimeEngines: () =>
+    get<{engines: Record<string, unknown>[]; total: number}>("/api/runtime/engines"),
   discoverRuntimes: () =>
     post<import("./desktop-types").RuntimeDiscoveryResult>("/api/desktop/runtimes/discover"),
   getRuntime: (rt: string) =>

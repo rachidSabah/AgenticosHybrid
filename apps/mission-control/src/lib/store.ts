@@ -66,8 +66,9 @@ const MAX_NOTIFS = 60;
 
 // WebSocket reconnection config
 const WS_RECONNECT_BASE_DELAY = 1000; // 1s
-const WS_RECONNECT_MAX_DELAY = 30000; // 30s
-const WS_MAX_RETRIES = 10;
+const WS_RECONNECT_MAX_DELAY = 15000; // 15s (was 30s)
+const WS_MAX_RETRIES = 999; // effectively unlimited for desktop runtime
+
 
 function pushUnique<T extends { id: string }>(map: Record<string, T>, items: T[]): Record<string, T> {
   const next = { ...map };
@@ -153,9 +154,21 @@ export const useStore = create<StoreState>((set, get) => ({
     const connectImpl = () => {
       if (isIntentionalDisconnect) return;
 
+      // Determine the WebSocket URL.
+      // In a Tauri custom-protocol shell, location.protocol is "tauri:" — NOT
+      // "http:" — so we cannot derive the ws:// scheme from the page origin.
+      // We always connect directly to the embedded backend on 127.0.0.1:8000.
+      // In a browser dev environment (npm run dev) location.protocol is "http:"
+      // and the env-var base still resolves to localhost:8000, so this is safe.
+      let url: string;
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const base = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
-      const url = `${proto}://${new URL(base).host}/ws/dashboard`;
+      if (location.protocol === "tauri:") {
+        // Desktop runtime: always use the embedded backend address.
+        url = "ws://127.0.0.1:8000/ws/dashboard";
+      } else {
+        url = `${proto}://${new URL(base).host}/ws/dashboard`;
+      }
 
       try {
         ws = new WebSocket(url);

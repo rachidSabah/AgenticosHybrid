@@ -162,8 +162,36 @@ if (-not $SkipRust) {
     try {
         $prevErr = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        & uv run --with pyinstaller pyinstaller --noconfirm --onefile --name agentic_os --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols --hidden-import=uvicorn.protocols.http --hidden-import=uvicorn.protocols.http.auto --hidden-import=uvicorn.protocols.websockets --hidden-import=uvicorn.protocols.websockets.auto --hidden-import=uvicorn.lifespan --hidden-import=uvicorn.lifespan.on src/agentic_os/__main__.py 2>&1 | Out-Null
+
+        # Use the .spec file if it exists (it bundles all hidden imports declaratively)
+        $SpecFile = Join-Path $RepoRoot "agentic_os.spec"
+        if (Test-Path $SpecFile) {
+            Write-Host "  Using existing agentic_os.spec for PyInstaller build" -ForegroundColor Gray
+            & uv run --with pyinstaller pyinstaller --noconfirm --distpath (Join-Path $RepoRoot "dist") $SpecFile
+        } else {
+            & uv run --with pyinstaller pyinstaller `
+                --noconfirm --onefile --name agentic_os `
+                --distpath (Join-Path $RepoRoot "dist") `
+                --hidden-import=uvicorn.logging `
+                --hidden-import=uvicorn.loops `
+                --hidden-import=uvicorn.loops.auto `
+                --hidden-import=uvicorn.protocols `
+                --hidden-import=uvicorn.protocols.http `
+                --hidden-import=uvicorn.protocols.http.auto `
+                --hidden-import=uvicorn.protocols.websockets `
+                --hidden-import=uvicorn.protocols.websockets.auto `
+                --hidden-import=uvicorn.lifespan `
+                --hidden-import=uvicorn.lifespan.on `
+                --hidden-import=anyio._backends._asyncio `
+                --hidden-import=anyio._backends._trio `
+                --hidden-import=agentic_os.cli `
+                src/agentic_os/__main__.py
+        }
+        $pyiExit = $LASTEXITCODE
         $ErrorActionPreference = $prevErr
+        if ($pyiExit -ne 0) {
+            throw "PyInstaller failed with exit code $pyiExit"
+        }
     }
     finally {
         Pop-Location
@@ -172,42 +200,84 @@ if (-not $SkipRust) {
     # Step B: Copy backend executable to Tauri resources
     $ResBackendDir = Join-Path $TauriDir "resources\backend"
     New-Item -ItemType Directory -Force -Path $ResBackendDir | Out-Null
-    $CompiledBackend = Join-Path $OutDir "agentic_os.exe"
+    # PyInstaller puts the binary in dist/ by default
+    $CompiledBackend = Join-Path $RepoRoot "dist\agentic_os.exe"
+    if (-not (Test-Path $CompiledBackend)) {
+        # Fallback: check $OutDir in case build script re-routed output
+        $CompiledBackend = Join-Path $OutDir "agentic_os.exe"
+    }
     if (Test-Path $CompiledBackend) {
         Copy-Item $CompiledBackend (Join-Path $ResBackendDir "agentic_os.exe") -Force
         Write-Host "  + Bundled backend into resources: $ResBackendDir\agentic_os.exe" -ForegroundColor Green
     } else {
-        throw "Failed to compile embedded backend executable: $CompiledBackend not found"
+        throw "Failed to compile embedded backend executable. Searched: dist\agentic_os.exe and $OutDir\agentic_os.exe"
     }
 
-    # Step C: Locate and pre-copy WebView2Loader.dll from webview2-com-sys build artifacts
+    # Step C: Pre-copy WebView2Loader.dll to resources/ (BEFORE Tauri build bundles it)
     $ResDir = Join-Path $TauriDir "resources"
     $TargetRelease = Join-Path $TauriDir "target\$ReleaseDir"
+    $WV2Path = Join-Path $TargetRelease "WebView2Loader.dll"
+    $WV2ResourceDest = Join-Path $ResDir "WebView2Loader.dll"
 
-    # In GNU/MinGW toolchain, webview2-com-sys places WebView2Loader.dll in its build output,
-    # NOT in target/release/. Find and copy it so the Tauri build + bundler can include it.
-    $WV2BuildOut = Get-ChildItem -Path (Join-Path $TauriDir "target\$ReleaseDir\build\webview2-com-sys-*") `
-        -Filter "WebView2Loader.dll" -Recurse -ErrorAction SilentlyContinue `
-    | Where-Object { $_.FullName -match "\\x64\\" } | Select-Object -First 1
-
-    $WV2TargetPath = Join-Path $TargetRelease "WebView2Loader.dll"
-    if ($WV2BuildOut) {
-        Copy-Item $WV2BuildOut.FullName $WV2TargetPath -Force
-        Write-Host "  + Copied WebView2Loader.dll from $($WV2BuildOut.FullName)" -ForegroundColor Green
-    }
-    if (Test-Path $WV2TargetPath) {
-        Copy-Item $WV2TargetPath (Join-Path $ResDir "WebView2Loader.dll") -Force
-        Write-Host "  + Bundled WebView2Loader.dll into resources" -ForegroundColor Green
+    # Strategy 1: Copy from Tauri target directory (if previous Rust build exists)
+    if (Test-Path $WV2Path) {
+        Copy-Item $WV2Path $WV2ResourceDest -Force
+        Write-Host "  + WebView2Loader.dll: target -> resources" -ForegroundColor Green
     } else {
-        Write-Host "  - WebView2Loader.dll not found in build artifacts; may be statically linked" -ForegroundColor Yellow
+        # Strategy 2: Pre-build Rust to generate WebView2Loader.dll, then copy
+        Write-Host "  + Pre-building Rust target to generate WebView2Loader.dll..." -ForegroundColor Gray
+        Push-Location $TauriDir
+        try {
+            $prevErr = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            & cargo build --release 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $WV2Path)) {
+                Copy-Item $WV2Path $WV2ResourceDest -Force
+                Write-Host "  + WebView2Loader.dll: cargo build -> resources" -ForegroundColor Green
+            } else {
+                # Strategy 3: Check NuGet cache for WebView2Loader.dll
+                $nugetPaths = @(
+                    "$env:USERPROFILE\.cargo
+egistry\src\*\webview2-com-sys-*\lib\WebView2Loader.dll",
+                    "$env:LOCALAPPDATA\Microsoft\WebView2\*\WebView2Loader.dll",
+                    "C:\Program Files (x86)\Microsoft WebView2\*\WebView2Loader.dll"
+                )
+                $found = $false
+                foreach ($pattern in $nugetPaths) {
+                    $matches = Get-ChildItem -Path $pattern -ErrorAction SilentlyContinue
+                    if ($matches) {
+                        Copy-Item $matches[0].FullName $WV2ResourceDest -Force
+                        Write-Host "  + WebView2Loader.dll: NuGet/system -> resources" -ForegroundColor Green
+                        $found = $true
+                        break
+                    }
+                }
+                if (-not $found) {
+                    Write-Host "  ⚠ WebView2Loader.dll not found — installers will rely on Evergreen WebView2 Runtime" -ForegroundColor Yellow
+                }
+            }
+            $ErrorActionPreference = $prevErr
+        }
+        finally {
+            Pop-Location
+        }
     }
 
     Push-Location $TauriDir
     try {
         Write-Host "  [5B] Running cargo tauri build (Config: $Config)..." -ForegroundColor Gray
 
+        # Clean stale bundle artifacts to prevent version-mismatched EXE/MSI from
+        # prior builds being picked up by the artifact collector.
+        $BundleCleanDir = Join-Path $TauriDir "target\$ReleaseDir\bundle"
+        if (Test-Path $BundleCleanDir) {
+            Remove-Item -Recurse -Force $BundleCleanDir -ErrorAction SilentlyContinue
+            Write-Host "  + Cleaned stale bundle artifacts" -ForegroundColor Gray
+        }
+
         # Determine Tauri CLI
         $TauriCli = "npx"
+
         $TauriArgs = @("tauri", "build", "--bundles", "nsis,msi")
         if ($Config -eq "Debug") {
             $TauriArgs += "--debug"
@@ -223,9 +293,10 @@ if (-not $SkipRust) {
             throw "Tauri build failed with exit code $buildExit"
         }
 
-        # Step D: Ensure WebView2Loader.dll is in resources & beside binary in target
-        if (Test-Path $WV2TargetPath) {
-            Copy-Item $WV2TargetPath (Join-Path $ResDir "WebView2Loader.dll") -Force
+        # Step D: After build, ensure WebView2Loader.dll is in resources and next to binary
+        if (Test-Path $WV2Path) {
+            Copy-Item $WV2Path $WV2ResourceDest -Force
+            Write-Host "  + WebView2Loader.dll synced to resources" -ForegroundColor Green
         }
 
         Write-Host "  Tauri build complete." -ForegroundColor Green
@@ -270,10 +341,25 @@ if (Test-Path $BundleDir) {
         Copy-Item $BinaryPath (Join-Path $PortableDir "agentic-os.exe") -Force
 
         # Copy WebView2Loader.dll next to the binary (required for portable runtime)
-        $WebView2Loader = Join-Path $TauriDir "target\$ReleaseDir\WebView2Loader.dll"
-        if (Test-Path $WebView2Loader) {
-            Copy-Item $WebView2Loader $PortableDir -Force
-            Write-Host "    + WebView2Loader.dll" -ForegroundColor Gray
+        # Try multiple locations in priority order
+        $wv2Candidates = @(
+            (Join-Path $TauriDir "target\$ReleaseDir\WebView2Loader.dll"),
+            (Join-Path $TauriDir "resources\WebView2Loader.dll"),
+            (Join-Path $TauriDir "target\$ReleaseDir\bundle\nsis\WebView2Loader.dll"),
+            "$env:LOCALAPPDATA\Microsoft\WebView2\Evergreen\WebView2Loader.dll",
+            "$env:ProgramFiles (x86)\Microsoft\WebView2\Runtime\WebView2Loader.dll"
+        )
+        $wv2Copied = $false
+        foreach ($wv2Candidate in $wv2Candidates) {
+            if (Test-Path $wv2Candidate) {
+                Copy-Item $wv2Candidate (Join-Path $PortableDir "WebView2Loader.dll") -Force
+                Write-Host "    + WebView2Loader.dll (from $wv2Candidate)" -ForegroundColor Green
+                $wv2Copied = $true
+                break
+            }
+        }
+        if (-not $wv2Copied) {
+            Write-Host "    ⚠ WebView2Loader.dll not bundled — portable ZIP requires Evergreen WebView2 Runtime" -ForegroundColor Yellow
         }
 
         # Copy resources if any exist
@@ -285,13 +371,48 @@ if (Test-Path $BundleDir) {
         # Create launcher script
         $launcherContent = @'
 @echo off
-echo Starting AgenticOS Desktop Runtime...
+title AgenticOS Desktop Runtime
+echo ========================================
+echo  AgenticOS Desktop Runtime — Portable
+echo ========================================
+echo.
+echo Checking WebView2 Runtime...
+
+reg query "HKCU\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00FB3A3A6E2E}" /v pv >nul 2>nul
+if %errorlevel% neq 0 (
+    reg query "HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00FB3A3A6E2E}" /v pv >nul 2>nul
+)
+if %errorlevel% neq 0 (
+    echo WebView2 Runtime not detected. Attempting to install...
+    start /wait "" "%~dp0Microsoft.WebView2.Bootstrapper.exe" /silent /install
+    if %errorlevel% neq 0 (
+        echo Please install WebView2 Runtime manually from:
+        echo https://developer.microsoft.com/microsoft-edge/webview2/
+        pause
+        exit /b 1
+    )
+)
+echo Starting AgenticOS...
 start "" "%~dp0agentic-os.exe"
 '@
         Set-Content -Path (Join-Path $PortableDir "start.bat") -Value $launcherContent
 
         # Create PowerShell launcher
         $psLauncher = @'
+$wv2Check = Get-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00FB3A3A6E2E}" -Name "pv" -ErrorAction SilentlyContinue
+if (-not $wv2Check) {
+    $wv2Check = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00FB3A3A6E2E}" -Name "pv" -ErrorAction SilentlyContinue
+}
+if (-not $wv2Check) {
+    Write-Host "WebView2 Runtime not detected. Installing..." -ForegroundColor Yellow
+    $bootstrapper = "$PSScriptRoot\Microsoft.WebView2.Bootstrapper.exe"
+    if (Test-Path $bootstrapper) {
+        Start-Process -Wait -FilePath $bootstrapper -ArgumentList "/silent", "/install"
+    } else {
+        Write-Host "Please install WebView2 Runtime from: https://developer.microsoft.com/microsoft-edge/webview2/" -ForegroundColor Red
+        Read-Host "Press Enter to continue"
+    }
+}
 Write-Host "Starting AgenticOS Desktop Runtime..." -ForegroundColor Cyan
 Start-Process -FilePath "$PSScriptRoot\agentic-os.exe"
 '@

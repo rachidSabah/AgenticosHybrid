@@ -5,6 +5,38 @@ import { Panel, Stat, Badge, StatusDot, Empty } from "@/components/ui/primitives
 import { api } from "@/lib/api";
 import type { RuntimeInfo, RuntimeDiscoveryResult } from "@/lib/desktop-types";
 
+interface EngineView {
+  id: string;
+  name: string;
+  engine_type: string;
+  status: string;
+  version: string;
+  description: string;
+  endpoint: string | null;
+  capabilities: string[];
+  tags: string[];
+  metadata: Record<string, unknown> | null;
+  health: { status: string; latency_ms: number } | null;
+  created_at: string;
+}
+
+function engineToRuntimeInfo(e: EngineView): RuntimeInfo {
+  const meta: Record<string, unknown> = e.metadata ?? {};
+  const pathStr = typeof meta.path === "string" ? meta.path : "";
+  const cfgPath = typeof meta.config_path === "string" ? meta.config_path : "";
+  return {
+    runtime_type: e.engine_type,
+    name: e.name,
+    version: e.version || "unknown",
+    path: pathStr || cfgPath,
+    executable: e.endpoint ?? "",
+    capabilities: Array.isArray(e.capabilities) ? e.capabilities : [],
+    detected_at: e.created_at,
+    verified: e.status !== "error",
+    source: Array.isArray(e.tags) ? e.tags.join(" ") : e.engine_type,
+  };
+}
+
 export default function DesktopRuntimes() {
   const [runtimes, setRuntimes] = useState<RuntimeInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,8 +48,16 @@ export default function DesktopRuntimes() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.runtimes();
-      setRuntimes(data ?? []);
+      const [desktopRuntimes, engineData] = await Promise.all([
+        api.runtimes(),
+        api.runtimeEngines().catch(() => ({ engines: [], total: 0 })),
+      ]);
+      const desktop = desktopRuntimes ?? [];
+      const engines: EngineView[] = (engineData as { engines: EngineView[] }).engines ?? [];
+      const engineItems = engines.map(engineToRuntimeInfo);
+      const seen = new Set(engineItems.map((r) => r.runtime_type));
+      const merged = [...engineItems, ...desktop.filter((r) => !seen.has(r.runtime_type))];
+      setRuntimes(merged);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -31,9 +71,17 @@ export default function DesktopRuntimes() {
     setDiscovering(true);
     setDiscoveryResult(null);
     try {
-      const result = await api.discoverRuntimes();
+      const [result, engineData] = await Promise.all([
+        api.discoverRuntimes(),
+        api.runtimeEngines().catch(() => ({ engines: [], total: 0 })),
+      ]);
       setDiscoveryResult(result);
-      setRuntimes(result.runtimes ?? []);
+      const desktop = result.runtimes ?? [];
+      const engines: EngineView[] = (engineData as { engines: EngineView[] }).engines ?? [];
+      const engineItems = engines.map(engineToRuntimeInfo);
+      const seen = new Set(engineItems.map((r) => r.runtime_type));
+      const merged = [...engineItems, ...desktop.filter((r) => !seen.has(r.runtime_type))];
+      setRuntimes(merged);
     } catch (err) {
       setError(`Discovery failed: ${err}`);
     } finally {

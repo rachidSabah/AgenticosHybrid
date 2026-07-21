@@ -5,6 +5,7 @@ Scans the system PATH for known AI coding assistant executables.
 Returns EngineRegistration entries for each found executable.
 """
 
+import locale
 import os
 import platform
 import shlex
@@ -150,11 +151,21 @@ class PathDiscovery(DiscoveryProvider):
             result = subprocess.run(
                 [path, *shlex.split(flag)],
                 capture_output=True,
-                text=True,
                 timeout=5.0,
             )
             if result.returncode == 0:
-                first_line = result.stdout.strip().split("\n")[0]
+                raw = result.stdout
+                if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                    raw = raw.decode("utf-16", errors="replace")
+
+                elif b"\x00" in raw:
+                    raw = raw.decode("utf-16-le", errors="replace")
+
+                else:
+                    enc = locale.getpreferredencoding(False) or "utf-8"
+                    raw = raw.decode(enc, errors="replace")
+
+                first_line = raw.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
         except subprocess.TimeoutExpired, OSError, FileNotFoundError:

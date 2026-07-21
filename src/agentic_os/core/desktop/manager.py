@@ -165,6 +165,13 @@ class DesktopRuntimeManager:
         except Exception as exc:
             log.warning("Local database initialization failed", error=str(exc))
 
+        # Auto-discover system runtimes
+        try:
+            result = await self.runtime_discovery.discover_runtimes()
+            log.info("Runtimes auto-discovered", count=result.total_discovered)
+        except Exception as exc:
+            log.warning("Runtime auto-discovery failed", error=str(exc))
+
         # Create default workspace if none exist
         if await self.workspace.get_workspace_count() == 0:
             ws = await self.workspace.create_workspace("Default")

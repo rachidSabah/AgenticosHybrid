@@ -7,7 +7,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::Manager;
 
+
+#[allow(dead_code)]
 struct BackendState {
+    /// Held to keep the backend process alive for the application lifetime.
     child: Mutex<Option<Child>>,
     log_path: PathBuf,
     startup_log: PathBuf,
@@ -53,12 +56,38 @@ fn get_log_directory(app: &tauri::AppHandle) -> PathBuf {
         .unwrap_or_else(|_| std::env::temp_dir().join("AgenticOS").join("logs"))
 }
 
+fn wait_for_backend_health(timeout_secs: u64, startup_log: &Path) -> bool {
+    let start = std::time::Instant::now();
+    while start.elapsed().as_secs() < timeout_secs {
+        if TcpStream::connect("127.0.0.1:8000").is_ok() {
+            log_startup_event(startup_log, "✓ Backend health check passed (port 8000 open)");
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    log_startup_event(
+        startup_log,
+        &format!(
+            "✗ Backend health check timed out after {}s (port 8000 never opened)",
+            timeout_secs
+        ),
+    );
+    false
+}
+
 fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
     let log_dir = get_log_directory(app);
     let _ = create_dir_all(&log_dir);
 
     let startup_log = log_dir.join("startup.log");
     let backend_log_path = log_dir.join("backend.log");
+
+    // Clear previous startup log
+    let _ = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&startup_log);
 
     log_startup_event(&startup_log, "Desktop Runtime Starting...");
 
@@ -306,67 +335,67 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         &format!("Spawning: {:?} with args: {:?} in dir: {:?}", cmd.get_program(), cmd.get_args(), cmd.get_current_dir()),
     );
 
-    match cmd.spawn() {
-        Ok(mut child) => {
+    let mut child = match cmd.spawn() {
+        Ok(child) => {
             let pid = child.id();
             log_startup_event(
                 &startup_log,
                 &format!("✓ Backend Process Spawned (PID: {}) on 127.0.0.1:8000", pid),
             );
-
-            // Wait for backend TCP port to accept connections (up to 15s)
-            let addr: std::net::SocketAddr =
-                "127.0.0.1:8000".parse().expect("Invalid address");
-            let mut healthy = false;
-            for i in 0..30 {
-                if TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok() {
-                    healthy = true;
-                    log_startup_event(
-                        &startup_log,
-                        &format!("✓ Backend listening after {}ms (poll {})", (i + 1) * 500, i + 1),
-                    );
-                    break;
-                }
-                // Check if child exited
-                if let Ok(Some(code)) = child.try_wait() {
-                    log_startup_event(
-                        &startup_log,
-                        &format!("✗ Backend exited prematurely (exit code: {})", code),
-                    );
-                    return (None, backend_log_path, startup_log);
-                }
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
-
-            if !healthy {
-                log_startup_event(
-                    &startup_log,
-                    "✗ Backend did not respond on TCP 8000 within 15 seconds",
-                );
-                // Check final exit status
-                if let Ok(Some(code)) = child.try_wait() {
-                    log_startup_event(
-                        &startup_log,
-                        &format!("  Final exit code: {}", code),
-                    );
-                } else {
-                    log_startup_event(&startup_log, "  Process still running but not listening");
-                    // Kill the hung process
-                    let _ = child.kill();
-                }
-                return (None, backend_log_path, startup_log);
-            }
-
-            (Some(child), backend_log_path, startup_log)
+            child
+        }
         }
         Err(e) => {
             log_startup_event(
                 &startup_log,
                 &format!("✗ Failed to spawn backend process: {}", e),
             );
-            (None, backend_log_path, startup_log)
+            return (None, backend_log_path, startup_log);
+        }
+    };
+
+    // Wait for backend to become healthy (up to 30 seconds)
+    let healthy = wait_for_backend_health(30, &startup_log);
+
+    if !healthy {
+        // Check if process exited early — capture any startup log content
+        match child.try_wait() {
+            Ok(Some(exit_status)) => {
+                log_startup_event(
+                    &startup_log,
+                    &format!(
+                        "✗ Backend process exited prematurely with status: {}",
+                        exit_status
+                    ),
+                );
+                // Read last 20 lines of backend log for diagnostics
+                if let Ok(contents) = std::fs::read_to_string(&backend_log_path) {
+                    let lines: Vec<&str> = contents.lines().collect();
+                    let tail = if lines.len() > 20 {
+                        &lines[lines.len() - 20..]
+                    } else {
+                        &lines[..]
+                    };
+                    for line in tail {
+                        log_startup_event(&startup_log, &format!("  ┊ {}", line));
+                    }
+                }
+                return (None, backend_log_path, startup_log);
+            }
+            Ok(None) => {
+                // Process still running but port not open — might be slow startup
+                log_startup_event(&startup_log, "⚠ Backend process is running but port 8000 is not yet open. It may still be initializing.");
+            }
+            Err(e) => {
+                log_startup_event(
+                    &startup_log,
+                    &format!("✗ Error checking backend process status: {}", e),
+                );
+            }
         }
     }
+
+    (Some(child), backend_log_path, startup_log)
 }
 
 #[tauri::command]
@@ -455,6 +484,18 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             let (child, backend_log_path, startup_log) = launch_backend(app.handle());
+
+            // launch_backend() already waits up to 30 s for the backend port.
+            // Log the final outcome so the startup log is complete.
+            if child.is_some() {
+                log_startup_event(&startup_log, "✓ Desktop Runtime Ready — opening Mission Control");
+            } else {
+                log_startup_event(
+                    &startup_log,
+                    "⚠ No backend process — UI will open in offline mode.",
+                );
+            }
+
             app.manage(BackendState {
                 child: Mutex::new(child),
                 log_path: backend_log_path,

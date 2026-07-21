@@ -1,4 +1,9 @@
 [target.x86_64-pc-windows-gnu]
-# Use WinLibs GCC-based MinGW-w64 (SEH exception handling)
-# This provides the full libgcc with DWARF unwind support that Rust requires
+# The linker here may be either WinLibs GCC or LLVM-MinGW clang.
+# LLVM-MinGW uses LLD and ships libunwind.a instead of libgcc_eh.a.
+# Adding -lunwind satisfies the _Unwind_* symbol references that the Rust
+# standard library requires for stack unwinding on Windows-GNU targets.
+# WinLibs real-GCC builds already provide these symbols via libgcc; the
+# extra -lunwind flag is harmless there (libunwind just won't be used).
 linker = "x86_64-w64-mingw32-gcc"
+rustflags = ["-C", "link-arg=-lunwind"]

@@ -185,10 +185,17 @@ def create_app(platform: Platform) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
+            # Browser dev server
             "http://localhost:3000",
             "http://127.0.0.1:3000",
+            # Tauri v2 custom-protocol (WebView2 on Windows)
             "tauri://localhost",
             "https://tauri.localhost",
+            # Tauri v2 on some WebView2 builds emits http://tauri.localhost
+            "http://tauri.localhost",
+            # Requests from the embedded backend itself (health checks)
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
         ],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -208,9 +215,7 @@ def create_app(platform: Platform) -> FastAPI:
     orch = platform.orchestrator
     swarm = platform.orchestration
     if swarm is None:
-        raise RuntimeError(
-            "OrchestrationFramework is required but was not initialised on the Platform"
-        )
+        log.warning("OrchestrationFramework not available — swarm features disabled")
     pm = platform.provider_mgr
     vault = platform.vault
     phealth = platform.provider_health
@@ -219,25 +224,25 @@ def create_app(platform: Platform) -> FastAPI:
     router = platform.router
     capability = platform.capability
     if capability is None:
-        raise RuntimeError("CapabilityEngine is required but was not initialised on the Platform")
+        log.warning("CapabilityEngine not available — capability features disabled")
     memory = platform.memory
     if memory is None:
-        raise RuntimeError("MemoryManager is required but was not initialised on the Platform")
+        log.warning("MemoryManager not available — memory features disabled")
     security = platform.security
     if security is None:
-        raise RuntimeError("SecurityFramework is required but was not initialised on the Platform")
+        log.warning("SecurityFramework not available — security features disabled")
 
     workflow_engine = platform.workflow
     pipeline_engine = platform.pipeline
 
     if workflow_engine is None:
-        raise RuntimeError("WorkflowEngine is required but was not initialised on the Platform")
+        log.warning("WorkflowEngine not available — workflow features disabled")
     if pipeline_engine is None:
-        raise RuntimeError("PipelineEngine is required but was not initialised on the Platform")
+        log.warning("PipelineEngine not available — pipeline features disabled")
 
     learning = platform.learning
     if learning is None:
-        raise RuntimeError("LearningManager is required but was not initialised on the Platform")
+        log.warning("LearningManager not available — learning features disabled")
 
     mission_planner = platform.mission_planner
     if mission_planner is None:
@@ -252,7 +257,24 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict:
-        return {"status": "ok", "bus": settings.bus_type}
+        return {
+            "status": "ok",
+            "bus": settings.bus_type,
+            "services": {
+                "orchestrator": orch is not None,
+                "swarm": swarm is not None,
+                "capability": capability is not None,
+                "memory": memory is not None,
+                "security": security is not None,
+                "workflow": workflow_engine is not None,
+                "pipeline": pipeline_engine is not None,
+                "learning": learning is not None,
+                "desktop": platform.desktop is not None,
+                "runtime": platform.runtime is not None,
+                "discovery": platform.discovery_framework is not None,
+                "mcp": platform.mcp is not None,
+            },
+        }
 
     @app.get("/metrics")
     async def metrics() -> Response:
@@ -3236,8 +3258,18 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.websocket("/ws/dashboard")
     async def dashboard_ws(websocket: WebSocket) -> None:
+        dashboard = platform.dashboard
+        if dashboard is None:
+            await websocket.accept()
+            payload = {
+                "topic": "system.status",
+                "payload": {"status": "degraded", "message": "DashboardBroadcaster not available"},
+            }
+            await websocket.send_json(payload)
+            await websocket.close(code=1011, reason="Dashboard not available")
+            return
         await websocket.accept()
-        recv, send = platform.dashboard.add_client()
+        recv, send = dashboard.add_client()
         log.info("dashboard.connected")
         try:
             async with recv:
@@ -3246,7 +3278,7 @@ def create_app(platform: Platform) -> FastAPI:
         except WebSocketDisconnect:
             pass
         finally:
-            platform.dashboard.remove_client(send)
+            dashboard.remove_client(send)
             log.info("dashboard.disconnected")
 
     @app.websocket("/ws/mcp")
