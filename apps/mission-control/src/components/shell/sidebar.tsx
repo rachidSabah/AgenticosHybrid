@@ -74,7 +74,7 @@ export function Sidebar({
 
   return (
     <aside
-      className="glass-strong z-20 flex flex-col border-r border-border/60 transition-all duration-200 ease-out"
+      className="glass-strong z-20 flex h-full flex-col border-r border-border/60 transition-all duration-200 ease-out"
       style={{ width: `${width}px`, minWidth: `${MIN_WIDTH}px`, maxWidth: `${MAX_WIDTH}px` }}
     >
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border/60 flex-shrink-0">

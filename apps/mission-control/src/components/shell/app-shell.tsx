@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           animate={isMobile ? (sidebarOpen ? { x: 0, opacity: 1 } : { x: -300, opacity: 0 }) : { opacity: 1 }}
           exit={isMobile ? { x: -300, opacity: 0 } : { opacity: 0 }}
           transition={{ duration: 0.22, ease: "easeOut" }}
-          className={`z-30 ${isMobile ? "fixed inset-y-0 left-0" : ""}`}
+          className={`z-30 h-full ${isMobile ? "fixed inset-y-0 left-0" : ""}`}
         >
           <Sidebar active={active} onSelect={open} />
         </motion.aside>
