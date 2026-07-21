@@ -129,6 +129,56 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         }
     }
 
+    // Fallback: try system Python
+    if backend_path.is_none() {
+        // First check if agentic_os is importable via system python
+        for python_cmd in &["python", "python3"] {
+            let check = Command::new(python_cmd)
+                .args(["-c", "import agentic_os; print('ok')"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+            if let Ok(mut child) = check {
+                let _ = child.wait();
+                if child.status().map_or(false, |s| s.success()) {
+                    log_startup_event(
+                        &startup_log,
+                        &format!("✓ agentic_os importable via '{}' — spawning backend", python_cmd),
+                    );
+                    backend_path = Some(PathBuf::from(python_cmd));
+                    break;
+                }
+            }
+        }
+        // If not importable, try uv run with local source if backend/ dir exists
+        if backend_path.is_none() {
+            if let Some(ref curr) = current {
+                if let Some(exe_dir) = curr.parent() {
+                    let backend_src = exe_dir.join("backend").join("src");
+                    let pyproject = exe_dir.join("backend").join("pyproject.toml");
+                    if backend_src.exists() || pyproject.exists() {
+                        let uv_check = Command::new("uv")
+                            .arg("--version")
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .spawn();
+                        if let Ok(mut child) = uv_check {
+                            let _ = child.wait();
+                            if child.status().map_or(false, |s| s.success()) {
+                                log_startup_event(
+                                    &startup_log,
+                                    "✓ Found uv — will use uv run with bundled backend source",
+                                );
+                                backend_path = Some(PathBuf::from("uv"));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let exe_path = match backend_path {
         Some(p) => {
             log_startup_event(
@@ -140,7 +190,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         None => {
             log_startup_event(
                 &startup_log,
-                "✗ Backend binary not found in resources/backend/ or alongside EXE",
+                "✗ Backend binary not found in resources/backend/, alongside EXE, or via system Python",
             );
             return (None, backend_log_path, startup_log);
         }
@@ -157,8 +207,24 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
         .open(&backend_log_path)
         .ok();
 
-    let mut cmd = Command::new(&exe_path);
-    cmd.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
+    let mut cmd = if exe_path.exists() {
+        // Binary executable (PyInstaller or system binary)
+        let mut c = Command::new(&exe_path);
+        c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
+        c
+    } else {
+        // System command (python or uv)
+        let cmd_name = exe_path.to_string_lossy().to_string();
+        if cmd_name == "uv" {
+            let mut c = Command::new("uv");
+            c.args(["run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+            c
+        } else {
+            let mut c = Command::new(&cmd_name);
+            c.args(["-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
+            c
+        }
+    };
 
     if let Some(f) = out_file {
         cmd.stdout(Stdio::from(f));
