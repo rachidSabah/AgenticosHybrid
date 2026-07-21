@@ -263,7 +263,7 @@ class CapabilityMatchValidator:
             if not isinstance(cap, EngineCapability):
                 try:
                     EngineCapability(cap.value if hasattr(cap, "value") else str(cap))
-                except ValueError, TypeError:
+                except (ValueError, TypeError):
                     return ValidationResult.failed(
                         engine_id,
                         engine_name,

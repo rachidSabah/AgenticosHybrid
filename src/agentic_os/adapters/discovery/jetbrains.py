@@ -310,7 +310,7 @@ class JetBrainsDiscovery(DiscoveryProvider):
 
         try:
             entries = os.listdir(plugin_dir)
-        except OSError, PermissionError:
+        except (OSError, PermissionError):
             return []
 
         for entry_name in entries:
@@ -370,7 +370,7 @@ class JetBrainsDiscovery(DiscoveryProvider):
                 match = re.search(r'version="([^"]+)"', content)
                 if match:
                     return match.group(1)[:50]
-            except OSError, PermissionError:
+            except (OSError, PermissionError):
                 pass
 
         # Try package.json (for web-based plugins)
@@ -380,7 +380,7 @@ class JetBrainsDiscovery(DiscoveryProvider):
                 with open(pkg_path, encoding="utf-8") as f:
                     pkg = json.loads(f.read(65536))
                 return str(pkg.get("version", ""))[:50] or None
-            except json.JSONDecodeError, OSError:
+            except (json.JSONDecodeError, OSError):
                 pass
 
         return None
@@ -399,5 +399,5 @@ class JetBrainsDiscovery(DiscoveryProvider):
                 first_line = result.stdout.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
-        except subprocess.TimeoutExpired, OSError, FileNotFoundError:
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             return None

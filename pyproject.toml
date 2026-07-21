@@ -26,7 +26,7 @@ dependencies = [
     "opentelemetry-api>=1.25.0",
     "opentelemetry-sdk>=1.25.0",
     "opentelemetry-exporter-otlp>=1.25.0",
-    "opentelemetry-exporter-prometheus>=0.45.0",
+    "opentelemetry-exporter-prometheus>=0.45b0",
 ]
 
 [project.scripts]
@@ -55,7 +55,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 exclude = ["services/"]

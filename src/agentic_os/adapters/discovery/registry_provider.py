@@ -151,7 +151,7 @@ class WindowsRegistryDiscovery(DiscoveryProvider):
                     value, _ = reg_query(key, "")
                     if value and isinstance(value, str) and value.strip():
                         return value.strip()
-            except OSError, FileNotFoundError:
+            except (OSError, FileNotFoundError):
                 pass
 
             try:
@@ -159,7 +159,7 @@ class WindowsRegistryDiscovery(DiscoveryProvider):
                     value, _ = reg_query(key, "")
                     if value and isinstance(value, str) and value.strip():
                         return value.strip()
-            except OSError, FileNotFoundError:
+            except (OSError, FileNotFoundError):
                 pass
 
         return None
@@ -205,7 +205,7 @@ class WindowsRegistryDiscovery(DiscoveryProvider):
                 first_line = result.stdout.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
-        except subprocess.TimeoutExpired, OSError, FileNotFoundError:
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             return None
 
     @staticmethod

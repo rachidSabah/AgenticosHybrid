@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import * as monaco from "monaco-editor";
+import { useTheme } from "@/components/theme-provider";
 
 interface Props {
   value: string;
@@ -17,6 +18,7 @@ export function MonacoEditor({ value, language = "json", readOnly = false, onCha
   const isUpdatingRef = useRef(false);
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
+  const { theme } = useTheme();
 
   // Keep refs in sync without triggering re-renders
   useEffect(() => {
@@ -37,7 +39,7 @@ export function MonacoEditor({ value, language = "json", readOnly = false, onCha
       value: valueRef.current,
       language,
       readOnly,
-      theme: "vs-dark",
+      theme: theme === "dark" ? "vs-dark" : "vs",
       automaticLayout: true,
       minimap: { enabled: false },
       fontSize: 12,
@@ -75,6 +77,11 @@ export function MonacoEditor({ value, language = "json", readOnly = false, onCha
       isUpdatingRef.current = false;
     }
   }, [value]);
+
+  // Sync Monaco theme when user theme changes
+  useEffect(() => {
+    monaco.editor.setTheme(theme === "dark" ? "vs-dark" : "vs");
+  }, [theme]);
 
   return <div ref={editorRef} className={`h-full w-full ${className}`} />;
 }

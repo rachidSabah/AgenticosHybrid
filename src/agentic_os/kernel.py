@@ -17,6 +17,13 @@ from agentic_os.adapters.discovery.filesystem import FilesystemDiscovery
 from agentic_os.adapters.discovery.jetbrains import JetBrainsDiscovery
 from agentic_os.adapters.discovery.known_install_dirs import KnownInstallDirDiscovery
 from agentic_os.adapters.discovery.path import PathDiscovery
+from agentic_os.adapters.discovery.choco import ChocolateyDiscovery
+from agentic_os.adapters.discovery.npm import NpmDiscovery
+from agentic_os.adapters.discovery.cargo import CargoDiscovery
+from agentic_os.adapters.discovery.uv_provider import UvDiscovery
+from agentic_os.adapters.discovery.shell_profile import ShellProfileDiscovery
+from agentic_os.adapters.discovery.winget import WingetDiscovery
+from agentic_os.adapters.discovery.scoop import ScoopDiscovery
 
 # Discovery providers (M2)
 from agentic_os.adapters.discovery.registry_provider import WindowsRegistryDiscovery
@@ -247,6 +254,13 @@ class Kernel:
         discovery_engine = DiscoveryEngine()
         if settings.runtime_discovery_enabled:
             discovery_engine.add_provider(PathDiscovery())
+            discovery_engine.add_provider(ChocolateyDiscovery())
+            discovery_engine.add_provider(NpmDiscovery())
+            discovery_engine.add_provider(CargoDiscovery())
+            discovery_engine.add_provider(UvDiscovery())
+            discovery_engine.add_provider(ShellProfileDiscovery())
+            discovery_engine.add_provider(WingetDiscovery())
+            discovery_engine.add_provider(ScoopDiscovery())
         negotiator = CapabilityNegotiator()
         self.runtime = RuntimeManager(
             bus=self.bus,

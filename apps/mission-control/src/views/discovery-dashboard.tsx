@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
+import { useStore } from "@/lib/store";
 import type {
   DiscoveryCacheEntry,
   DiscoveryHistoryEntry,
@@ -64,6 +65,19 @@ function DiscoveryDashboardTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // EventBus live subscription — reload on discovery/scan events
+  const events = useStore((s) => s.events);
+  const connected = useStore((s) => s.connected);
+
+  const discoveryEventCount = useMemo(
+    () => events.filter((e) => e.topic?.startsWith("discovery.") || e.topic?.startsWith("provider.")).length,
+    [events]
+  );
+
+  useEffect(() => {
+    if (discoveryEventCount > 0) load();
+  }, [discoveryEventCount, load]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -135,6 +149,10 @@ function DiscoveryDashboardTab() {
         {scanResult && (
           <span className="text-xs text-muted">{scanResult}</span>
         )}
+        <div className="ml-auto flex items-center gap-2 text-[11px] text-faint">
+          <StatusDot status={connected ? "healthy" : "failed"} pulse={connected} />
+          <span>{connected ? "EventBus live" : "EventBus disconnected"}</span>
+        </div>
       </div>
 
       <div className="rflex gap-4 mt-4">

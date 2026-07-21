@@ -133,7 +133,7 @@ class DockerDiscovery(DiscoveryProvider):
             if result.returncode == 0:
                 return result.stdout.strip()[:50]
             return None
-        except FileNotFoundError, subprocess.TimeoutExpired, OSError:
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             return None
 
     @staticmethod

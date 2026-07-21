@@ -58,7 +58,7 @@ jobs:
       - name: Install Python + uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Bundle backend source
         shell: bash
@@ -76,7 +76,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx tauri build --bundles appimage,deb,rpm
+          run: npx tauri build --bundles appimage,deb,rpm
 
       - name: Collect artifacts
         shell: bash
@@ -136,7 +136,7 @@ jobs:
       - name: Install Python + uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Bundle backend source
         shell: pwsh
@@ -155,7 +155,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx tauri build --bundles nsis,msi
+          run: npx tauri build --bundles nsis,msi
 
       - name: Create portable ZIP
         shell: pwsh
@@ -182,15 +182,15 @@ jobs:
 
           # Create launcher scripts
           Set-Content -Path "$PortableDir/start.bat" -Value @'
-        @echo off
-        echo Starting AgenticOS Desktop Runtime...
-        start "" "%~dp0agentic-os.exe"
-        '@
+          @echo off
+          echo Starting AgenticOS Desktop Runtime...
+          start "" "%~dp0agentic-os.exe"
+          '@
 
           Set-Content -Path "$PortableDir/start.ps1" -Value @'
-        Write-Host "Starting AgenticOS Desktop Runtime..." -ForegroundColor Cyan
-        Start-Process -FilePath "$PSScriptRoot\agentic-os.exe"
-        '@
+          Write-Host "Starting AgenticOS Desktop Runtime..." -ForegroundColor Cyan
+          Start-Process -FilePath "$PSScriptRoot\agentic-os.exe"
+          '@
 
           # Create ZIP
           Compress-Archive -Path "$PortableDir/*" -DestinationPath "$ArtifactsDir/${Product}-Portable-x64.zip" -Force
@@ -252,7 +252,7 @@ jobs:
       - name: Install Python + uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Bundle backend source
         shell: bash
@@ -270,7 +270,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx tauri build --bundles dmg
+          run: npx tauri build --bundles dmg
 
       - name: Collect artifacts
         shell: bash
@@ -341,7 +341,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cat > final-assets/release-manifest.json << EOF
-        {
+          {
           "version": "$VERSION",
           "releaseDate": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
           "commit": "$(git rev-parse HEAD)",
@@ -362,8 +362,8 @@ jobs:
               "installers": ["AgenticOS-x86_64.dmg"]
             }
           }
-        }
-        EOF
+          }
+          EOF
 
       - name: Generate release notes
         shell: bash
@@ -373,31 +373,31 @@ jobs:
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
           COMMITS=$(git log --oneline "${LAST_TAG}..HEAD" 2>/dev/null || git log --oneline -20)
           cat > final-assets/release-notes.md << EOF
-        ## AgenticOS $VERSION
+          ## AgenticOS $VERSION
 
-        ### Installation
+          ### Installation
 
-        **Windows:**
-        - \`AgenticOS-Setup-x64.exe\` — NSIS installer
-        - \`AgenticOS-Setup-x64.msi\` — MSI installer
-        - \`AgenticOS-Portable-x64.zip\` — Portable (no install required)
+          **Windows:**
+          - \`AgenticOS-Setup-x64.exe\` — NSIS installer
+          - \`AgenticOS-Setup-x64.msi\` — MSI installer
+          - \`AgenticOS-Portable-x64.zip\` — Portable (no install required)
 
-        **Linux:**
-        - \`AgenticOS-x86_64.AppImage\` — AppImage (chmod +x and run)
-        - \`AgenticOS-x86_64.deb\` — Debian/Ubuntu package
-        - \`AgenticOS-x86_64.rpm\` — Fedora/RHEL package
+          **Linux:**
+          - \`AgenticOS-x86_64.AppImage\` — AppImage (chmod +x and run)
+          - \`AgenticOS-x86_64.deb\` — Debian/Ubuntu package
+          - \`AgenticOS-x86_64.rpm\` — Fedora/RHEL package
 
-        **macOS:**
-        - \`AgenticOS-x86_64.dmg\` — Apple Disk Image
+          **macOS:**
+          - \`AgenticOS-x86_64.dmg\` — Apple Disk Image
 
-        ### Changelog
+          ### Changelog
 
-        $COMMITS
+          $COMMITS
 
-        ### Checksums
+          ### Checksums
 
-        See \`SHA256SUMS.txt\` attached to this release.
-        EOF
+          See `SHA256SUMS.txt` attached to this release.
+          EOF
           cat final-assets/release-notes.md
 
       - name: Upload release
@@ -410,5 +410,5 @@ jobs:
             final-assets/*
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           generate_release_notes: false
-        env:
+          env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

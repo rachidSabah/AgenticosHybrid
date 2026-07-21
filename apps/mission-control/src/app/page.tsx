@@ -48,6 +48,9 @@ const SystemMonitor = lazy(() =>
 const DiscoveryDashboard = lazy(() =>
   import("@/views/discovery-dashboard").then((m) => ({ default: m.DiscoveryDashboard }))
 );
+const SelfHealingPanel = lazy(() =>
+  import("@/views/self-healing").then((m) => ({ default: m.SelfHealingPanel }))
+);
 const SwarmDashboard = lazy(() =>
   import("@/views/swarm-dashboard").then((m) => ({ default: m.SwarmDashboard }))
 );
@@ -179,6 +182,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Discovery" fallback={<ViewSkeleton title="Discovery" />}>
       <Suspense fallback={<ViewSkeleton title="Discovery" />}>
         <DiscoveryDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  healing: () => (
+    <ErrorBoundary viewName="Self-Healing" fallback={<ViewSkeleton title="Self-Healing" />}>
+      <Suspense fallback={<ViewSkeleton title="Self-Healing" />}>
+        <SelfHealingPanel />
       </Suspense>
     </ErrorBoundary>
   ),

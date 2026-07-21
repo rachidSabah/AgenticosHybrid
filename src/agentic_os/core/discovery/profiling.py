@@ -164,7 +164,7 @@ class ProfilingEngine:
             if result.returncode == 0:
                 return round(elapsed, 2)
             return round(elapsed * 2, 2)  # penalty for non-zero exit
-        except FileNotFoundError, subprocess.TimeoutExpired, OSError:
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             return 100.0  # conservative estimate on error
 
     @staticmethod

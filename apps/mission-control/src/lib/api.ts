@@ -63,6 +63,10 @@ async function del<T>(path: string): Promise<T> {
 }
 
 export const api = {
+  /** Generic request wrappers */
+  get: <T>(path: string) => get<T>(path),
+  post: <T>(path: string, body?: unknown) => post<T>(path, body),
+
   health: () => get<{ status: string; bus: string }>("/healthz"),
 
   providers: () => get<ProviderInfo[]>("/api/providers"),

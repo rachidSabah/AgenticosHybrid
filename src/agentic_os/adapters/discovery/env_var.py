@@ -205,7 +205,7 @@ class EnvVarDiscovery(DiscoveryProvider):
                 first_line = result.stdout.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
-        except subprocess.TimeoutExpired, OSError, FileNotFoundError:
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             return None
 
     @staticmethod

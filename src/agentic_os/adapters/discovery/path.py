@@ -31,10 +31,12 @@ class PathDiscovery(DiscoveryProvider):
 
     _known_executables: tuple[dict[str, Any], ...] = field(
         default_factory=lambda: (
+            # ── Primary AI Coding Assistants ──
             {
                 "name": "claude",
                 "binary": "claude",
                 "type": EngineType.CLAUDE_CODE,
+                "vendor": "Anthropic",
                 "capabilities": [
                     EngineCapability.CODING,
                     EngineCapability.REASONING,
@@ -42,40 +44,193 @@ class PathDiscovery(DiscoveryProvider):
                 ],
             },
             {
+                "name": "claude-code",
+                "binary": "claude-code",
+                "type": EngineType.CLAUDE_CODE,
+                "vendor": "Anthropic",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "hermes",
+                "binary": "hermes",
+                "type": EngineType.HERMES,
+                "vendor": "Nous Research",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                    EngineCapability.PLANNING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "opencode",
+                "binary": "opencode",
+                "type": EngineType.OPENCODE,
+                "vendor": "Sentry",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "codex",
+                "binary": "codex",
+                "type": EngineType.CODEX,
+                "vendor": "OpenAI",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                ],
+            },
+            {
+                "name": "gemini",
+                "binary": "gemini",
+                "type": EngineType.GEMINI_CLI,
+                "vendor": "Google",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                    EngineCapability.RESEARCH,
+                ],
+            },
+            {
+                "name": "aider",
+                "binary": "aider",
+                "type": EngineType.AIDER,
+                "vendor": "Aider AI",
+                "capabilities": [EngineCapability.CODING, EngineCapability.PLANNING],
+            },
+            {
+                "name": "goose",
+                "binary": "goose",
+                "type": EngineType.GOOSE,
+                "vendor": "Block",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.PLANNING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "cursor",
+                "binary": "cursor",
+                "type": EngineType.CURSOR,
+                "vendor": "Cursor",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.FILESYSTEM,
+                ],
+            },
+            {
+                "name": "qwen",
+                "binary": "qwen",
+                "type": EngineType.QWEN,
+                "vendor": "Alibaba Cloud",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                ],
+            },
+            {
+                "name": "deepseek",
+                "binary": "deepseek",
+                "type": EngineType.DEEPSEEK,
+                "vendor": "DeepSeek",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                ],
+            },
+            {
+                "name": "glm",
+                "binary": "glm",
+                "type": EngineType.GLM,
+                "vendor": "Zhipu AI",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                ],
+            },
+            {
+                "name": "open-interpreter",
+                "binary": "open-interpreter",
+                "type": EngineType.OPEN_INTERPRETER,
+                "vendor": "Open Interpreter",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.TERMINAL,
+                    EngineCapability.FILESYSTEM,
+                ],
+            },
+            {
+                "name": "open-interpreter",
+                "binary": "interpreter",
+                "type": EngineType.OPEN_INTERPRETER,
+                "vendor": "Open Interpreter",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "continue",
+                "binary": "continue",
+                "type": EngineType.CONTINUE,
+                "vendor": "Continue.dev",
+                "capabilities": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                ],
+            },
+            # ── Package Runtimes ──
+            {
                 "name": "docker",
                 "binary": "docker",
                 "type": EngineType.DOCKER,
+                "vendor": "Docker Inc.",
                 "capabilities": [EngineCapability.DOCKER],
             },
             {
                 "name": "wsl",
                 "binary": "wsl.exe",
                 "type": EngineType.WSL,
+                "vendor": "Microsoft",
                 "capabilities": [EngineCapability.TERMINAL],
                 "platform": "Windows",
             },
+            # ── Language Runtimes ──
             {
                 "name": "node",
                 "binary": "node",
                 "type": EngineType.CUSTOM,
+                "vendor": "OpenJS Foundation",
                 "capabilities": [EngineCapability.CODING],
             },
             {
                 "name": "python",
                 "binary": "python3",
                 "type": EngineType.CUSTOM,
+                "vendor": "Python Foundation",
                 "capabilities": [EngineCapability.CODING, EngineCapability.FILESYSTEM],
             },
             {
-                "name": "aider",
-                "binary": "aider",
-                "type": EngineType.AIDER,
-                "capabilities": [EngineCapability.CODING, EngineCapability.PLANNING],
+                "name": "python",
+                "binary": "python",
+                "type": EngineType.CUSTOM,
+                "vendor": "Python Foundation",
+                "capabilities": [EngineCapability.CODING, EngineCapability.FILESYSTEM],
             },
+            # ── Editors ──
             {
                 "name": "code",
                 "binary": "code",
                 "type": EngineType.CUSTOM,
+                "vendor": "Microsoft",
                 "capabilities": [EngineCapability.CODING, EngineCapability.FILESYSTEM],
                 "version_flag": "--version",
             },
@@ -168,7 +323,7 @@ class PathDiscovery(DiscoveryProvider):
                 first_line = raw.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
-        except subprocess.TimeoutExpired, OSError, FileNotFoundError:
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             return None
 
     @staticmethod

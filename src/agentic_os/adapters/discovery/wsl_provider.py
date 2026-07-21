@@ -177,7 +177,7 @@ class WslDiscovery(DiscoveryProvider):
                 path = result.stdout.strip()
                 return path if path else None
             return None
-        except subprocess.TimeoutExpired, OSError:
+        except (subprocess.TimeoutExpired, OSError):
             return None
 
     @staticmethod
@@ -194,7 +194,7 @@ class WslDiscovery(DiscoveryProvider):
                 first_line = result.stdout.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
-        except subprocess.TimeoutExpired, OSError:
+        except (subprocess.TimeoutExpired, OSError):
             return None
 
     @staticmethod

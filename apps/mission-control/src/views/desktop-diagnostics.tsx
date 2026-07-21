@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Panel, Stat, Badge, StatusDot, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
+import { useStore } from "@/lib/store";
 import type {
   DesktopDiagnosticsInfo,
   IntegrityCheckResult,
@@ -27,6 +28,16 @@ export default function DesktopDiagnostics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Live WebSocket state from the store ──
+  const connected = useStore((s) => s.connected);
+  const events = useStore((s) => s.events);
+  const providers = useStore((s) => s.providers);
+  const liveProviderCount = Object.keys(providers).length;
+  const liveProviderDown = Object.values(providers).filter((p) => p.status === "down").length;
+
+  // Poll interval ref for resource usage
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -44,7 +55,35 @@ export default function DesktopDiagnostics() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Load on mount + on reconnect
+  useEffect(() => {
+    load();
+  }, [load, connected]);
+
+  // Auto-poll resource usage every 10s when connected
+  useEffect(() => {
+    if (!connected) return;
+    const poll = async () => {
+      try {
+        const res = await api.resourceUsage();
+        setResources(res);
+      } catch { /* ignore silent poll failures */ }
+    };
+    poll(); // immediate
+    pollRef.current = setInterval(poll, 10_000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [connected]);
+
+  // Auto-trigger integrity check when connected state flips
+  // (mirrors the fact this view is "live" — we auto-run diagnostics once on mount)
+  useEffect(() => {
+    if (connected) {
+      // Lightweight auto-run: only fetch current diagnostics state
+      api.integrityCheck().then(setIntegrity).catch(() => {});
+    }
+  }, [connected]);
 
   const handleIntegrity = async () => {
     try {
@@ -107,6 +146,22 @@ export default function DesktopDiagnostics() {
         <div role="alert" className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
       )}
 
+      {/* ── Live event bar ── */}
+      <div className="col-span-12 flex items-center gap-3 text-xs text-muted">
+        <StatusDot status={connected ? "healthy" : "failed"} pulse={connected} />
+        <span>{connected ? "Live EventBus" : "Disconnected"}</span>
+        <span className="text-faint">·</span>
+        <span>{events.length} events in buffer</span>
+        <span className="text-faint">·</span>
+        <span>
+          {liveProviderCount} provider{liveProviderCount !== 1 ? "s" : ""}
+          {liveProviderDown > 0
+            ? <span className="ml-1 text-danger">({liveProviderDown} down)</span>
+            : null}
+        </span>
+      </div>
+
+      {/* ── System info stats ── */}
       <div className="col-span-12 flex flex-wrap items-center gap-3" aria-live="polite">
         <Stat label="System Info" value={diagnostics ? `${diagnostics.os_name} ${diagnostics.os_version}` : "—"} />
         {diagnostics && (
@@ -125,7 +180,8 @@ export default function DesktopDiagnostics() {
         )}
       </div>
 
-      <Panel title="Integrity Check" subtitle={integrity ? `Last: ${new Date(integrity.checked_at).toLocaleTimeString()}` : "Not yet checked"} className="col-span-6 row-span-2">
+      {/* ── Integrity Check ── */}
+      <Panel title="Integrity Check" subtitle={integrity ? `Last: ${new Date(integrity.checked_at).toLocaleTimeString()} · live` : "Auto-checks on connect"} className="col-span-6 row-span-2">
         <div className="space-y-3">
           <button
             onClick={handleIntegrity}
@@ -159,10 +215,11 @@ export default function DesktopDiagnostics() {
               )}
             </div>
           )}
-          {!integrity && <Empty title="Press the button to run" />}
+          {!integrity && <Empty title="Waiting for first check…" />}
         </div>
       </Panel>
 
+      {/* ── Self-Diagnostics ── */}
       <Panel title="Self-Diagnostics" subtitle="Services health report" className="col-span-6 row-span-2">
         <div className="space-y-3">
           <button
@@ -200,7 +257,8 @@ export default function DesktopDiagnostics() {
         </div>
       </Panel>
 
-      <Panel title="Memory Leak Detection" subtitle={memoryReport ? `${memoryReport.current_memory_mb.toFixed(0)} MB current` : "Not checked"} className="col-span-4 row-span-2">
+      {/* ── Memory Leak Detection ── */}
+      <Panel title="Memory Leak Detection" subtitle={memoryReport ? `${memoryReport.current_memory_mb.toFixed(0)} MB current` : "Click to check"} className="col-span-4 row-span-2">
         <div className="space-y-3">
           <button
             onClick={handleMemory}
@@ -226,7 +284,8 @@ export default function DesktopDiagnostics() {
         </div>
       </Panel>
 
-      <Panel title="Thread Monitoring" subtitle={threadReport ? `${threadReport.total_threads} total threads` : "Not checked"} className="col-span-4 row-span-2">
+      {/* ── Thread Monitoring ── */}
+      <Panel title="Thread Monitoring" subtitle={threadReport ? `${threadReport.total_threads} total threads` : "Click to check"} className="col-span-4 row-span-2">
         <div className="space-y-3">
           <button
             onClick={handleThreads}
@@ -249,7 +308,8 @@ export default function DesktopDiagnostics() {
         </div>
       </Panel>
 
-      <Panel title="Resource Usage" subtitle="Current utilization" className="col-span-4 row-span-2" aria-live="polite">
+      {/* ── Resource Usage (live) ── */}
+      <Panel title="Resource Usage" subtitle={connected ? "Polled every 10s · live" : "Not connected"} className="col-span-4 row-span-2" aria-live="polite">
         {resources ? (
           <div className="space-y-2 text-xs">
             <div className="flex justify-between"><span className="text-faint">CPU</span><span className="font-mono">{resources.cpu_percent.toFixed(1)}%</span></div>
@@ -260,10 +320,11 @@ export default function DesktopDiagnostics() {
             <div className="flex justify-between"><span className="text-faint">Disk I/O</span><span className="font-mono">{(resources.disk_io_bytes_per_sec / 1024).toFixed(1)} KB/s</span></div>
           </div>
         ) : (
-          <Empty title="No resource data" />
+          <Empty title={connected ? "Awaiting first poll…" : "Backend not connected"} />
         )}
       </Panel>
 
+      {/* ── Cleanup & Repair ── */}
       <Panel title="Cleanup & Repair" className="col-span-6 row-span-1">
         <div className="flex flex-wrap gap-3">
           <button
@@ -292,6 +353,7 @@ export default function DesktopDiagnostics() {
         </div>
       </Panel>
 
+      {/* ── Recovery Mode ── */}
       <Panel title="Recovery Mode" subtitle={recoveryMode ? "Currently active" : "Inactive"} className="col-span-6 row-span-1">
         <div className="flex items-center gap-4">
           <StatusDot status={recoveryMode ? "running" : "idle"} pulse={recoveryMode} />

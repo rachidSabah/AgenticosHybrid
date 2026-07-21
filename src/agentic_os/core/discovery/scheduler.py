@@ -52,7 +52,7 @@ class DiscoveryScheduler:
             task.cancel()
             try:
                 await task
-            except asyncio.CancelledError, Exception:
+            except (asyncio.CancelledError, Exception):
                 pass
         self._tasks.clear()
         log.info("Discovery scheduler stopped")
@@ -79,7 +79,7 @@ class DiscoveryScheduler:
             task.cancel()
             try:
                 await task
-            except asyncio.CancelledError, Exception:
+            except (asyncio.CancelledError, Exception):
                 pass
             log.info("Unscheduled profile scan", profile=profile_name)
 

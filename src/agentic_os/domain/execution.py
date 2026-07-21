@@ -9,6 +9,8 @@ cloud API) — is described by these types. The :class:`ExecutionEnginePort` in
 ``ports/execution.py`` is the single interface all engines must implement.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -32,11 +34,18 @@ class EngineType(StrEnum):
     WSL = "wsl"
     CLAUDE_CODE = "claude_code"
     HERMES = "hermes"
+    OPENCODE = "opencode"
     CODEX = "codex"
     GEMINI_CLI = "gemini_cli"
     OPENHANDS = "openhands"
     CONTINUE = "continue"
     AIDER = "aider"
+    GOOSE = "goose"
+    CURSOR = "cursor"
+    QWEN = "qwen"
+    DEEPSEEK = "deepseek"
+    GLM = "glm"
+    OPEN_INTERPRETER = "open_interpreter"
     CLINE = "cline"
     ROO_CODE = "roo_code"
     CUSTOM = "custom"

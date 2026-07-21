@@ -81,6 +81,10 @@ class Topic(StrEnum):
     MISSION_TASK_ASSIGNED = "mission.task_assigned"
     MISSION_TASK_COMPLETED = "mission.task_completed"
     MISSION_TASK_FAILED = "mission.task_failed"
+    # Self-Healing
+    SELF_HEALING_ISSUE = "self_healing.issue"
+    SELF_HEALING_ACTION = "self_healing.action"
+    CONNECTION_LOST = "connection.lost"
     # Pipeline (Phase 3B)
     PIPELINE_CREATED = "pipeline.created"
     PIPELINE_UPDATED = "pipeline.updated"

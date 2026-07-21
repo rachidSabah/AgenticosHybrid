@@ -22,7 +22,6 @@ class ToolBuilder:
             .build()
         )
     """
-
     def __init__(self, name: str) -> None:
         self._name = name
         self._description = ""

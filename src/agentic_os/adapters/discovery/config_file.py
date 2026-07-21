@@ -157,7 +157,7 @@ class ConfigFileDiscovery(DiscoveryProvider):
                 # Try each reader in order
                 if isinstance(content, str):
                     config_data = json.loads(content)
-        except json.JSONDecodeError, ValueError:
+        except (json.JSONDecodeError, ValueError):
             pass
 
         if config_data is None or not isinstance(config_data, dict):
@@ -249,7 +249,7 @@ class ConfigFileDiscovery(DiscoveryProvider):
                     if key:
                         result[key] = value
             return result if result else None
-        except ValueError, OSError:
+        except (ValueError, OSError):
             return None
 
     @staticmethod
@@ -278,5 +278,5 @@ class ConfigFileDiscovery(DiscoveryProvider):
                     elif key:
                         result[key] = value
             return result if result else None
-        except ValueError, OSError:
+        except (ValueError, OSError):
             return None

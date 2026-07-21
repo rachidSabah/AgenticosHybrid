@@ -256,7 +256,7 @@ class TestWatcher:
             task.cancel()
             try:
                 await task
-            except asyncio.CancelledError, Exception:
+            except (asyncio.CancelledError, Exception):
                 pass
 
     @pytest.mark.asyncio
@@ -285,7 +285,7 @@ class TestWatcher:
         task.cancel()
         try:
             await task
-        except asyncio.CancelledError, Exception:
+        except (asyncio.CancelledError, Exception):
             pass
         # Watcher handled the error gracefully
         assert True

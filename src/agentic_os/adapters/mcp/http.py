@@ -104,7 +104,7 @@ class HTTPAdapter(BaseMCPAdapter):
         if "application/json" in content_type:
             try:
                 data = json.loads(body_bytes)
-            except json.JSONDecodeError, ValueError:
+            except (json.JSONDecodeError, ValueError):
                 data = body_bytes.decode("utf-8", errors="replace")
         else:
             data = body_bytes.decode("utf-8", errors="replace")

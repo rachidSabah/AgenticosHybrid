@@ -144,11 +144,14 @@ export default function DesktopRuntimes() {
                     )}
                     {rt.capabilities && rt.capabilities.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
-                        {rt.capabilities.map((cap) => (
-                          <span key={cap} className="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] text-accent">
-                            {cap}
-                          </span>
-                        ))}
+                        {rt.capabilities.map((cap, i) => {
+                          const label = typeof cap === "string" ? cap : (cap as any).name ?? (cap as any).type ?? JSON.stringify(cap);
+                          return (
+                            <span key={typeof cap === "string" ? cap : i} className="rounded-md bg-accent/10 px-2 py-0.5 text-[10px] text-accent">
+                              {label}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

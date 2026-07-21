@@ -7,6 +7,8 @@ tasks, voting, consensus, messaging, and telemetry for multi-agent orchestration
 
 Agents are lightweight wrappers around the M1 ExecutionEngine domain models.
 """
+from __future__ import annotations
+
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime

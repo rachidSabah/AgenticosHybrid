@@ -203,7 +203,7 @@ class VSCodeDiscovery(DiscoveryProvider):
 
         try:
             entries = os.listdir(ext_dir)
-        except OSError, PermissionError:
+        except (OSError, PermissionError):
             return []
 
         for ext_name in entries:
@@ -261,7 +261,7 @@ class VSCodeDiscovery(DiscoveryProvider):
             with open(pkg_path, encoding="utf-8") as f:
                 pkg = json.loads(f.read(65536))
             return str(pkg.get("version", ""))[:50] or None
-        except json.JSONDecodeError, OSError, PermissionError:
+        except (json.JSONDecodeError, OSError, PermissionError):
             return None
 
     @staticmethod
@@ -278,5 +278,5 @@ class VSCodeDiscovery(DiscoveryProvider):
                 first_line = result.stdout.strip().split("\n")[0]
                 return first_line[:100] if first_line else None
             return None
-        except subprocess.TimeoutExpired, OSError, FileNotFoundError:
+        except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             return None
