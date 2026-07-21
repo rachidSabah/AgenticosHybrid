@@ -49,7 +49,6 @@ class EngineType(StrEnum):
     CLINE = "cline"
     ROO_CODE = "roo_code"
     OLLAMA = "ollama"
-    OPENCODE = "opencode"
     AGY_CLI = "agy_cli"
     CUSTOM = "custom"
 
