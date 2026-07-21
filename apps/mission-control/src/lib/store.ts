@@ -409,7 +409,42 @@ export const useStore = create<StoreState>((set, get) => ({
   updateMission: (m) =>
     set((s) => ({ missions: { ...s.missions, [m.id]: m }, missionUpdates: Date.now() })),
   clearNotifications: () => set({ notifications: [] }),
-}));
+  hydrate: async () => {
+    try {
+      const [agents, tasks, providers, missions] = await Promise.all([
+        api.getAgents(),
+        api.getTasks(),
+        api.getProviderConfigs(),
+        api.getMissions(),
+      ]);
+      set({
+        agents: agents.reduce((acc, agent) => {
+          acc[agent.id] = agent;
+          return acc;
+        }, {} as Record<string, AgentNode>),
+        tasks: tasks.reduce((acc, task) => {
+          acc[task.id] = task;
+          return acc;
+        }, {} as Record<string, TaskNode>),
+        providers: providers.reduce((acc, provider) => {
+          acc[provider.name] = {
+            name: provider.name,
+            health: provider.health,
+            latency: provider.latency,
+            lastSeen: provider.lastSeen,
+            status: provider.status,
+          };
+          return acc;
+        }, {} as Record<string, ProviderHealthRecord>),
+        missions: missions.reduce((acc, mission) => {
+          acc[mission.id] = mission;
+          return acc;
+        }, {} as Record<string, MissionType>),
+      });
+    } catch (e) {
+      console.error("Failed to hydrate store:", e);
+    }
+  },
 
 // Convenience selector for the System Monitor.
 export function selectMetrics(s: StoreState): SystemMetrics {

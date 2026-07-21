@@ -19,8 +19,8 @@ export function McpManager() {
   const [tab, setTab] = useState<McpTab>("servers");
 
   return (
-    <div className="scroll-page">
-      <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+      <div className="col-span-12 flex items-center gap-1 border-b border-border/60 px-0 pt-0">
         {(["servers", "tools", "permissions", "health", "sessions", "resources", "prompts", "telemetry", "versions"] as const).map((t) => (
           <button
             key={t}
@@ -51,7 +51,7 @@ export function McpManager() {
           </button>
         ))}
       </div>
-      <div className="p-4">
+      <div className="col-span-12 min-h-0 flex-1 overflow-auto">
         {tab === "servers" && <McpServersTab />}
         {tab === "tools" && <McpToolsTab />}
         {tab === "permissions" && <McpPermissionsTab />}
@@ -131,8 +131,8 @@ function McpServersTab() {
   const failed = servers.filter((s) => s.status === "failed").length;
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex gap-3">
+    <div className="col-span-12 grid h-full grid-cols-12 gap-4">
+      <div className="col-span-12 flex flex-wrap gap-3">
         <Stat label="Total Servers" value={servers.length} />
         <Stat label="Running" value={running} tone={running ? "ok" : "default"} />
         <Stat label="Failed" value={failed} tone={failed ? "danger" : "default"} />
@@ -155,7 +155,7 @@ function McpServersTab() {
       </div>
 
       {showCreate && (
-        <div className="mt-4 rounded-xl border border-border/60 bg-surface/20 p-4">
+        <div className="col-span-12 rounded-xl border border-border/60 bg-surface/20 p-4">
           <h3 className="mb-3 text-sm font-semibold">Register New MCP Server</h3>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <input
@@ -215,7 +215,7 @@ function McpServersTab() {
         </div>
       )}
 
-      <div className="mt-4">
+      <div className="col-span-12">
         <Panel title="MCP Servers" subtitle={`${servers.length} registered`}>
           {loading ? (
             <div className="flex items-center justify-center py-12 text-xs text-faint">Loading…</div>
@@ -359,8 +359,8 @@ function McpToolsTab() {
   };
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="col-span-12 grid h-full grid-cols-12 gap-4">
+      <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
           onChange={(e) => { setSelectedServer(e.target.value); setCallResult(null); }}
@@ -383,12 +383,12 @@ function McpToolsTab() {
       </div>
 
       {selectedServer && (
-        <div className="rflex gap-4 mt-4">
-          <Panel title="Discovered Tools" subtitle={`${tools.length} tools`} className="flex-1">
+        <>
+          <Panel title="Discovered Tools" subtitle={`${tools.length} tools`} className="col-span-12 lg:col-span-6 min-h-0 flex-1">
             {tools.length === 0 ? (
               <Empty title="No tools discovered" hint='Click "Discover Tools" to list available tools.' />
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 h-full overflow-y-auto">
                 {tools.map((t) => (
                   <div key={t.name} className="rounded-xl border border-border/60 px-3 py-2.5">
                     <div className="flex items-center gap-2">
@@ -411,7 +411,7 @@ function McpToolsTab() {
             )}
           </Panel>
 
-          <Panel title="Invoke Tool" subtitle="Execute a tool on the selected server" className="flex-1">
+          <Panel title="Invoke Tool" subtitle="Execute a tool on the selected server" className="col-span-12 lg:col-span-6 min-h-0 flex-1">
             <div className="space-y-3">
               <select
                 value={callToolName}
@@ -451,11 +451,11 @@ function McpToolsTab() {
               )}
             </div>
           </Panel>
-        </div>
+        </>
       )}
 
       {!selectedServer && (
-        <div className="mt-4">
+        <div className="col-span-12">
           <Empty title="Select a server" hint="Choose an MCP server from the dropdown to view its tools." />
         </div>
       )}
@@ -518,8 +518,8 @@ function McpPermissionsTab() {
   };
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
           onChange={(e) => { setSelectedServer(e.target.value); setSaveMsg(null); }}
@@ -534,8 +534,8 @@ function McpPermissionsTab() {
       </div>
 
       {selectedServer && (
-        <div className="rflex gap-4 mt-4">
-          <Panel title="Permission Mappings" subtitle={`${mappings.length} mappings`} className="flex-1">
+        <>
+          <Panel title="Permission Mappings" subtitle={`${mappings.length} mappings`} className="col-span-6">
             {mappings.length === 0 ? (
               <Empty title="No mappings" hint="Add tool-to-capability mappings below." />
             ) : (
@@ -563,7 +563,7 @@ function McpPermissionsTab() {
             )}
           </Panel>
 
-          <Panel title="Add Mapping" subtitle="Link a tool to a permission capability" className="flex-1">
+          <Panel title="Add Mapping" subtitle="Link a tool to a permission capability" className="col-span-6">
             <div className="space-y-3">
               <input
                 value={newTool}
@@ -601,11 +601,11 @@ function McpPermissionsTab() {
               </div>
             </div>
           </Panel>
-        </div>
+        </>
       )}
 
       {!selectedServer && (
-        <div className="mt-4">
+        <div className="col-span-12">
           <Empty title="Select a server" hint="Choose an MCP server to manage its permission mappings." />
         </div>
       )}
@@ -633,8 +633,8 @@ function McpHealthTab() {
   const unknownCount = servers.filter((s) => s.health === "unknown").length;
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex flex-wrap gap-3">
         <Stat label="Total" value={servers.length} />
         <Stat label="Healthy" value={healthyCount} tone="ok" />
         <Stat label="Degraded" value={degradedCount} tone={degradedCount ? "warn" : "default"} />
@@ -651,48 +651,46 @@ function McpHealthTab() {
       </div>
 
       {summary && (
-        <div className="mt-3">
-          <div className="rflex gap-3">
+        <div className="col-span-12">
+          <div className="flex flex-wrap gap-3">
             <Stat label="Running" value={summary.running} tone="ok" />
           </div>
         </div>
       )}
 
-      <div className="mt-4">
-        <Panel title="Server Health" subtitle="Health status per MCP server">
-          {servers.length === 0 ? (
-            <Empty title="No servers" hint="Register MCP servers to see their health status." />
-          ) : (
-            <div className="space-y-2">
-              {servers.map((sv) => {
-                const healthDot = sv.health === "healthy" ? "healthy" : sv.health === "degraded" ? "degraded" : sv.health === "unhealthy" ? "down" : "unknown";
-                return (
-                  <div key={sv.config.id} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
-                    <StatusDot status={healthDot} pulse={sv.health === "healthy"} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{sv.config.name}</span>
-                        <Badge tone={sv.health === "healthy" ? "ok" : sv.health === "degraded" ? "warn" : sv.health === "unhealthy" ? "danger" : "default"}>
-                          {sv.health}
-                        </Badge>
-                        <Badge tone="info">{sv.status}</Badge>
-                      </div>
-                      <div className="mt-0.5 flex gap-3 text-[11px] text-faint">
-                        <span>Tools: {sv.tools.length}</span>
-                        <span>Transport: {sv.config.transport}</span>
-                        {sv.last_health_check && (
-                          <span>Last check: {new Date(sv.last_health_check).toLocaleTimeString()}</span>
-                        )}
-                        {sv.error && <span className="text-danger">{sv.error}</span>}
-                      </div>
+      <Panel title="Server Health" subtitle="Health status per MCP server" className="col-span-12">
+        {servers.length === 0 ? (
+          <Empty title="No servers" hint="Register MCP servers to see their health status." />
+        ) : (
+          <div className="space-y-2">
+            {servers.map((sv) => {
+              const healthDot = sv.health === "healthy" ? "healthy" : sv.health === "degraded" ? "degraded" : sv.health === "unhealthy" ? "down" : "unknown";
+              return (
+                <div key={sv.config.id} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+                  <StatusDot status={healthDot} pulse={sv.health === "healthy"} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{sv.config.name}</span>
+                      <Badge tone={sv.health === "healthy" ? "ok" : sv.health === "degraded" ? "warn" : sv.health === "unhealthy" ? "danger" : "default"}>
+                        {sv.health}
+                      </Badge>
+                      <Badge tone="info">{sv.status}</Badge>
+                    </div>
+                    <div className="mt-0.5 flex gap-3 text-[11px] text-faint">
+                      <span>Tools: {sv.tools.length}</span>
+                      <span>Transport: {sv.config.transport}</span>
+                      {sv.last_health_check && (
+                        <span>Last check: {new Date(sv.last_health_check).toLocaleTimeString()}</span>
+                      )}
+                      {sv.error && <span className="text-danger">{sv.error}</span>}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </Panel>
-      </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -719,8 +717,8 @@ function McpSessionsTab() {
   const entries = sessions ? Object.entries(sessions.sessions) : [];
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
         <Stat label="Active Sessions" value={sessions?.total ?? 0} tone={sessions?.total ? "accent" : "default"} />
         <div className="ml-auto flex items-start gap-2">
           <button
@@ -732,28 +730,26 @@ function McpSessionsTab() {
         </div>
       </div>
 
-      <div className="mt-4">
-        <Panel title="Session Details" subtitle="server_id → session_id mappings">
-          {entries.length === 0 ? (
-            <Empty title="No active sessions" hint="Sessions are created when MCP servers establish connections." />
-          ) : (
-            <div className="space-y-1.5">
-              {entries.map(([serverId, sessionId]) => (
-                <div key={serverId} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
-                  <StatusDot status="running" pulse />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{serverName(serverId)}</span>
-                      <Badge tone="info">{serverId.slice(0, 12)}…</Badge>
-                    </div>
-                    <div className="mt-0.5 font-mono text-[11px] text-faint">Session: {sessionId}</div>
+      <Panel title="Session Details" subtitle="server_id → session_id mappings" className="col-span-12">
+        {entries.length === 0 ? (
+          <Empty title="No active sessions" hint="Sessions are created when MCP servers establish connections." />
+        ) : (
+          <div className="space-y-1.5">
+            {entries.map(([serverId, sessionId]) => (
+              <div key={serverId} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+                <StatusDot status="running" pulse />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{serverName(serverId)}</span>
+                    <Badge tone="info">{serverId.slice(0, 12)}…</Badge>
                   </div>
+                  <div className="mt-0.5 font-mono text-[11px] text-faint">Session: {sessionId}</div>
                 </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -780,8 +776,8 @@ function McpResourcesTab() {
   useEffect(() => { loadResources(); }, [loadResources]);
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
           onChange={(e) => setSelectedServer(e.target.value)}
@@ -800,28 +796,26 @@ function McpResourcesTab() {
         </button>
       </div>
 
-      <div className="mt-4">
-        <Panel title="Resources" subtitle={`${resources.length} resources`}>
-          {!selectedServer ? (
-            <Empty title="Select a server" hint="Choose an MCP server to view its resources." />
-          ) : resources.length === 0 ? (
-            <Empty title="No resources" hint="This server does not expose any resources." />
-          ) : (
-            <div className="space-y-2">
-              {resources.map((r) => (
-                <div key={r.uri} className="rounded-xl border border-border/60 px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Badge tone="accent">Resource</Badge>
-                    <span className="text-sm font-medium">{r.name}</span>
-                  </div>
-                  <div className="mt-1 font-mono text-[11px] text-faint">{r.uri}</div>
-                  {r.description && <div className="mt-0.5 text-[11px] text-faint">{r.description}</div>}
+      <Panel title="Resources" subtitle={`${resources.length} resources`} className="col-span-12">
+        {!selectedServer ? (
+          <Empty title="Select a server" hint="Choose an MCP server to view its resources." />
+        ) : resources.length === 0 ? (
+          <Empty title="No resources" hint="This server does not expose any resources." />
+        ) : (
+          <div className="space-y-2">
+            {resources.map((r) => (
+              <div key={r.uri} className="rounded-xl border border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Badge tone="accent">Resource</Badge>
+                  <span className="text-sm font-medium">{r.name}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+                <div className="mt-1 font-mono text-[11px] text-faint">{r.uri}</div>
+                {r.description && <div className="mt-0.5 text-[11px] text-faint">{r.description}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -848,8 +842,8 @@ function McpPromptsTab() {
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
           onChange={(e) => setSelectedServer(e.target.value)}
@@ -868,32 +862,30 @@ function McpPromptsTab() {
         </button>
       </div>
 
-      <div className="mt-4">
-        <Panel title="Prompts" subtitle={`${prompts.length} prompt templates`}>
-          {!selectedServer ? (
-            <Empty title="Select a server" hint="Choose an MCP server to view its prompt templates." />
-          ) : prompts.length === 0 ? (
-            <Empty title="No prompts" hint="This server does not expose any prompt templates." />
-          ) : (
-            <div className="space-y-2">
-              {prompts.map((p) => (
-                <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Badge tone="info">Prompt</Badge>
-                    <span className="text-sm font-medium">{p.name}</span>
-                  </div>
-                  {p.description && <div className="mt-0.5 text-[11px] text-faint">{p.description}</div>}
-                  {p.arguments && Array.isArray(p.arguments) && p.arguments.length > 0 && (
-                    <div className="mt-1 text-[11px] text-faint">
-                      Arguments: {p.arguments.map((a: unknown) => (a as { name?: string }).name).join(", ")}
-                    </div>
-                  )}
+      <Panel title="Prompts" subtitle={`${prompts.length} prompt templates`} className="col-span-12">
+        {!selectedServer ? (
+          <Empty title="Select a server" hint="Choose an MCP server to view its prompt templates." />
+        ) : prompts.length === 0 ? (
+          <Empty title="No prompts" hint="This server does not expose any prompt templates." />
+        ) : (
+          <div className="space-y-2">
+            {prompts.map((p) => (
+              <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Badge tone="info">Prompt</Badge>
+                  <span className="text-sm font-medium">{p.name}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+                {p.description && <div className="mt-0.5 text-[11px] text-faint">{p.description}</div>}
+                {p.arguments && Array.isArray(p.arguments) && p.arguments.length > 0 && (
+                  <div className="mt-1 text-[11px] text-faint">
+                    Arguments: {p.arguments.map((a: unknown) => (a as { name?: string }).name).join(", ")}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -923,8 +915,8 @@ function McpTelemetryTab() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
         <Stat label="Total Requests" value={summary?.total_requests ?? 0} />
         <Stat label="Successful" value={summary?.successful_requests ?? 0} tone="ok" />
         <Stat label="Failed" value={summary?.failed_requests ?? 0} tone={summary?.failed_requests ? "danger" : "default"} />
@@ -939,47 +931,45 @@ function McpTelemetryTab() {
         </div>
       </div>
 
-      <div className="rflex gap-4 mt-4">
-        <Panel title="Latency Distribution" subtitle="Request latency percentiles (ms)" className="flex-1">
-          {latency ? (
-            <div className="space-y-2">
-              {[
-                { label: "p50", value: latency.p50 },
-                { label: "p90", value: latency.p90 },
-                { label: "p95", value: latency.p95 },
-                { label: "p99", value: latency.p99 },
-                { label: "Min", value: latency.min },
-                { label: "Max", value: latency.max },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between">
-                  <span className="text-xs text-faint">{label}</span>
-                  <span className="font-mono text-xs">{value.toFixed(2)}ms</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty title="No latency data" hint="Latency data will appear as requests are made." />
-          )}
-        </Panel>
+      <Panel title="Latency Distribution" subtitle="Request latency percentiles (ms)" className="col-span-6">
+        {latency ? (
+          <div className="space-y-2">
+            {[
+              { label: "p50", value: latency.p50 },
+              { label: "p90", value: latency.p90 },
+              { label: "p95", value: latency.p95 },
+              { label: "p99", value: latency.p99 },
+              { label: "Min", value: latency.min },
+              { label: "Max", value: latency.max },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-xs text-faint">{label}</span>
+                <span className="font-mono text-xs">{value.toFixed(2)}ms</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No latency data" hint="Latency data will appear as requests are made." />
+        )}
+      </Panel>
 
-        <Panel title="Recent Errors" subtitle="Last 20 errors" className="flex-1">
-          {errors.length === 0 ? (
-            <Empty title="No errors" hint="No errors have been recorded." />
-          ) : (
-            <div className="space-y-1.5">
-              {errors.slice(0, 10).map((err, i) => (
-                <div key={i} className="rounded-lg border border-danger/20 bg-danger/5 px-2 py-1.5">
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <Badge tone="danger">Error</Badge>
-                    <span className="font-mono text-faint">{err.method}</span>
-                  </div>
-                  <div className="mt-0.5 truncate text-[10px] text-danger">{err.error}</div>
+      <Panel title="Recent Errors" subtitle="Last 20 errors" className="col-span-6">
+        {errors.length === 0 ? (
+          <Empty title="No errors" hint="No errors have been recorded." />
+        ) : (
+          <div className="space-y-1.5">
+            {errors.slice(0, 10).map((err, i) => (
+              <div key={i} className="rounded-lg border border-danger/20 bg-danger/5 px-2 py-1.5">
+                <div className="flex items-center gap-2 text-[11px]">
+                  <Badge tone="danger">Error</Badge>
+                  <span className="font-mono text-faint">{err.method}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </Panel>
-      </div>
+                <div className="mt-0.5 truncate text-[10px] text-danger">{err.error}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }
@@ -1011,8 +1001,8 @@ function McpVersionsTab() {
   }
 
   return (
-    <div className="no-hscroll">
-      <div className="rflex items-center gap-3">
+    <div className="grid h-full grid-cols-12 gap-4 p-4">
+      <div className="col-span-12 flex items-center gap-3">
         <button
           onClick={() => load()}
           className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20"
@@ -1021,53 +1011,51 @@ function McpVersionsTab() {
         </button>
       </div>
 
-      <div className="rflex gap-4 mt-4">
-        <Panel title="Protocol Versions" subtitle="Supported protocol versions" className="flex-1">
-          <div className="space-y-2">
-            {matrix && (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-faint">Recommended</span>
-                  <span className="font-mono text-xs text-ok">{matrix.recommended_version}</span>
-                </div>
-                <div className="border-t border-border/40 pt-2">
-                  <div className="mb-1 text-[11px] font-medium text-faint">Supported</div>
-                  {matrix.supported_versions.map((v) => (
-                    <div key={v} className="flex items-center gap-2 py-0.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-ok" />
-                      <span className="text-xs text-muted">{v}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-            {!matrix && <Empty title="No version info" hint="No protocol version data available." />}
-          </div>
-        </Panel>
-
-        <Panel title="Server Versions" subtitle="Version info per server" className="flex-1">
-          {Object.keys(versions).length === 0 ? (
-            <Empty title="No servers" hint="No MCP servers have version information." />
-          ) : (
-            <div className="space-y-2">
-              {Object.entries(versions).map(([sid, info]) => (
-                <div key={sid} className="rounded-xl border border-border/60 px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium">{sid}</span>
-                    <Badge tone={matrix?.servers[sid]?.compatible ? "ok" : "warn"}>
-                      {matrix?.servers[sid]?.compatible ? "Compatible" : "Incompatible"}
-                    </Badge>
+      <Panel title="Protocol Versions" subtitle="Supported protocol versions" className="col-span-6">
+        <div className="space-y-2">
+          {matrix && (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-faint">Recommended</span>
+                <span className="font-mono text-xs text-ok">{matrix.recommended_version}</span>
+              </div>
+              <div className="border-t border-border/40 pt-2">
+                <div className="mb-1 text-[11px] font-medium text-faint">Supported</div>
+                {matrix.supported_versions.map((v) => (
+                  <div key={v} className="flex items-center gap-2 py-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-ok" />
+                    <span className="text-xs text-muted">{v}</span>
                   </div>
-                  <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-faint">
-                    <span>Protocol: {info.protocol_version || "—"}</span>
-                    <span>Server: {info.server_version || "—"}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
-        </Panel>
-      </div>
+          {!matrix && <Empty title="No version info" hint="No protocol version data available." />}
+        </div>
+      </Panel>
+
+      <Panel title="Server Versions" subtitle="Version info per server" className="col-span-6">
+        {Object.keys(versions).length === 0 ? (
+          <Empty title="No servers" hint="No MCP servers have version information." />
+        ) : (
+          <div className="space-y-2">
+            {Object.entries(versions).map(([sid, info]) => (
+              <div key={sid} className="rounded-xl border border-border/60 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{sid}</span>
+                  <Badge tone={matrix?.servers[sid]?.compatible ? "ok" : "warn"}>
+                    {matrix?.servers[sid]?.compatible ? "Compatible" : "Incompatible"}
+                  </Badge>
+                </div>
+                <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-faint">
+                  <span>Protocol: {info.protocol_version || "—"}</span>
+                  <span>Server: {info.server_version || "—"}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }

@@ -300,11 +300,11 @@ export function SelfHealingPanel() {
       </div>
 
       {/* Active Issues */}
-      <Panel title="Active Issues" subtitle={`${unresolved.length} unresolved`} className="col-span-12 md:col-span-6 flex-1">
+      <Panel title="Active Issues" subtitle={`${unresolved.length} unresolved`} className="col-span-12 lg:col-span-6 flex-1 min-h-0">
         {unresolved.length === 0 ? (
           <Empty title="No active issues" hint="System is healthy. Run a system check to verify all subsystems." />
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 h-full overflow-y-auto">
             {unresolved.map((issue) => {
               const cfg = SEVERITY_CONFIG[issue.severity];
               const Icon = cfg.icon;
@@ -351,11 +351,11 @@ export function SelfHealingPanel() {
       </Panel>
 
       {/* Resolution History */}
-      <Panel title="History" subtitle={`${resolved.length} resolved`} className="col-span-12 md:col-span-6 flex-1">
+      <Panel title="History" subtitle={`${resolved.length} resolved`} className="col-span-12 lg:col-span-6 flex-1 min-h-0">
         {resolved.length === 0 ? (
           <Empty title="No history" hint="Resolved issues will appear here." />
         ) : (
-          <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+          <div className="space-y-1.5 h-full overflow-y-auto">
             {resolved.slice(0, 30).map((issue) => {
               const cfg = SEVERITY_CONFIG[issue.severity];
               return (

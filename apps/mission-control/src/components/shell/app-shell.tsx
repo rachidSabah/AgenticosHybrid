@@ -1,130 +1,238 @@
 "use client";
 
 import { useEffect, useState, useCallback, type ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { CommandPalette } from "./command-palette";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
 import { useStore } from "@/lib/store";
 import { NAV } from "./nav";
 import { ActiveViewCtx } from "@/lib/active-view";
-import { LayoutProvider } from "@/lib/layout";
+import { LoadingScreen } from "@/components/ui/primitives";
+import { useSidebar } from "@/lib/use-sidebar";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
+// Connect WebSocket
+function connect() {
+  // Implementation in store
+}
+
+function disconnect() {
+  // Implementation in store
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { isCollapsed, toggleCollapse } = useSidebar();
+  const { hydrated, hydrating } = useStore();
   const [active, setActive] = useState("overview");
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
-  const connect = useStore((s) => s.connect);
-  const disconnect = useStore((s) => s.disconnect);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    // Hydrate store on mount
+    useStore.getState().hydrate().then(() => {});
+    // Connect WebSocket
     connect();
     return () => disconnect();
-  }, [connect, disconnect]);
-
-  // Responsive sidebar
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 1024;
-      setIsMobile(mobile);
-      if (mobile) setSidebarOpen(false);
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Restore sidebar state
+  // Global keyboard shortcuts
   useEffect(() => {
-    if (isMobile) return;
-    const stored = localStorage.getItem("mc.sidebar.open");
-    if (stored !== null) setSidebarOpen(stored === "true");
-  }, [isMobile]);
-
-  const persistSidebar = useCallback((open: boolean) => {
-    setSidebarOpen(open);
-    if (!isMobile) localStorage.setItem("mc.sidebar.open", String(open));
-  }, [isMobile]);
-
-  // Keyboard shortcut: Cmd/Ctrl+K for command palette
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setPaletteOpen((p) => !p);
+        setPaletteOpen((v) => !v);
+        return;
       }
-      // Cmd/Ctrl+B to toggle sidebar
-      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-        e.preventDefault();
-        persistSidebar(!sidebarOpen);
-      }
+      // Single-key navigation when not typing
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey) return;
+      const item = NAV.find((n) => n.hint.toLowerCase() === e.key.toLowerCase());
+      if (item) setActive(item.id);
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [sidebarOpen, persistSidebar]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const open = useCallback((id: string) => {
+    setActive(id);
+  }, []);
+
+  if (!mounted) return null;
 
   return (
-    <LayoutProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-bg text-text">
-        {/* Overlay for mobile sidebar */}
-        <AnimatePresence>
-          {isMobile && sidebarOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-              onClick={() => setSidebarOpen(false)}
-            />
-          )}
-        </AnimatePresence>
-
+    <ActiveViewCtx.Provider value={active}>
+      <div className="grid h-screen w-screen grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
         {/* Sidebar */}
         <div
-          className="relative z-30 shrink-0"
-          data-layout="sidebar"
-          style={isMobile ? { position: "fixed", left: sidebarOpen ? 0 : -280, top: 0, bottom: 0, zIndex: 50 } : {}}
+          className={`relative z-20 flex h-screen flex-col border-r border-border/30 bg-surface/50 backdrop-blur-lg transition-all duration-300 ease-in-out $
+            ${isCollapsed ? "w-16" : "w-64"}
+          `}
         >
-          <Sidebar
-            active={active}
-            onSelect={(id) => {
-              setActive(id);
-              if (isMobile) setSidebarOpen(false);
-            }}
-          />
-        </div>
-
-        {/* Main area */}
-        <div className="flex flex-1 flex-col min-w-0">
-          {/* Top bar */}
-          <div data-layout="header">
-            <TopBar
-              active={active}
-              onCommand={() => setPaletteOpen(true)}
-              onMenuToggle={() => persistSidebar(!sidebarOpen)}
-              showMenuButton={isMobile || !sidebarOpen}
-            />
+          <div className="flex h-14 items-center justify-between border-b border-border/30 px-4">
+            {!isCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 }}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-lg bg-accent/20 flex items-center justify-center">
+                    <Bot size={16} className="text-accent" />
+                  </div>
+                  <span className="font-semibold text-sm">Mission Control</span>
+                </div>
+              </motion.div>
+            )}
+            <button
+              onClick={toggleCollapse}
+              className="rounded-lg p-1.5 hover:bg-surface/30 transition"
+            >
+              {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
           </div>
 
-          {/* Content area — single scroll container */}
-          <main className="flex-1 overflow-auto">
-            <ActiveViewCtx.Provider value={{ active, setActive }}>
-              {children}
-            </ActiveViewCtx.Provider>
-          </main>
+          <div className="flex-1 overflow-y-auto py-2">
+            <Sidebar active={active} onSelect={open} isCollapsed={isCollapsed} />
+          </div>
+
+          <div className="border-t border-border/30 p-2">
+            <SidebarFooter isCollapsed={isCollapsed} />
+          </div>
         </div>
 
-        {/* Command palette */}
-        <CommandPalette
-          open={paletteOpen}
-          onClose={() => setPaletteOpen(false)}
-          onSelect={(id) => {
-            setActive(id);
-            if (isMobile) setSidebarOpen(false);
-          }}
-        />
+        {/* Main Content */}
+        <div className="grid h-screen grid-rows-[auto_1fr_auto] overflow-hidden">
+          {/* Navbar */}
+          <div className="flex h-14 items-center justify-between border-b border-border/30 px-4">
+            <div className="flex items-center gap-2">
+              <Breadcrumb />
+            </div>
+            <div className="flex items-center gap-2">
+              <SystemStats />
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div className="relative overflow-hidden">
+            {/* Hydration Loading Screen */}
+            {hydrating && (
+              <motion.div
+                initial={{ opacity: 1 }}
+                animate={{ opacity: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="absolute inset-0 z-10 flex items-center justify-center bg-surface/80 backdrop-blur-sm"
+              >
+                <div className="flex flex-col items-center gap-4">
+                  <div className="h-12 w-12 rounded-full border-4 border-accent/30 border-t-accent animate-spin" />
+                  <div className="text-sm font-medium text-faint">Hydrating system state...</div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Main Content */}
+            <div className="h-full overflow-auto">
+              {children}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex h-8 items-center justify-between border-t border-border/30 px-4 text-[10px] text-faint">
+            <div className="flex items-center gap-2">
+              <span>© 2026 AgenticOS</span>
+              <span>·</span>
+              <span>v1.0.0-rc1</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok animate-pulse" />
+                LIVE
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
-    </LayoutProvider>
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onSelect={(id) => {
+          open(id);
+          setPaletteOpen(false);
+        }}
+      />
+    </ActiveViewCtx.Provider>
+  );
+}
+
+function SidebarFooter({ isCollapsed }: { isCollapsed: boolean }) {
+  const { telemetry } = useStore();
+
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      {!isCollapsed && (
+        <div className="flex items-center gap-2 text-[10px] text-faint">
+          <div className="flex items-center gap-1">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok" />
+            <span>{telemetry.agents} agents</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-warning" />
+            <span>{telemetry.tasks} tasks</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger" />
+            <span>{telemetry.errors} errors</span>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center justify-center gap-2">
+        <button className="rounded-lg p-1.5 hover:bg-surface/30 transition">
+          <Settings size={16} className="text-faint" />
+        </button>
+        <button className="rounded-lg p-1.5 hover:bg-surface/30 transition">
+          <Shield size={16} className="text-faint" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Breadcrumb() {
+  const active = useContext(ActiveViewCtx);
+  const navItem = NAV.find((n) => n.id === active) || NAV[0];
+
+  return (
+    <div className="flex items-center gap-2 text-sm font-medium">
+      <navItem.icon size={16} className="text-faint" />
+      <span>{navItem.title}</span>
+    </div>
+  );
+}
+
+function SystemStats() {
+  const { telemetry } = useStore();
+
+  return (
+    <div className="flex items-center gap-3 text-[10px] text-faint">
+      <div className="flex items-center gap-1">
+        <Cpu size={12} />
+        <span>{telemetry.cpu}%</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <MemoryStick size={12} />
+        <span>{telemetry.memory}MB</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <HardDrive size={12} />
+        <span>{telemetry.disk}GB</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Thermometer size={12} />
+        <span>{telemetry.temperature}°C</span>
+      </div>
+    </div>
   );
 }

@@ -116,9 +116,9 @@ export function SystemMonitor() {
   }, [events]);
 
   return (
-    <div className="grid h-full grid-cols-12 grid-rows-6 gap-4 p-4">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
       {/* Top stats bar */}
-      <div className="col-span-12 row-span-1 flex flex-wrap gap-3">
+      <div className="col-span-12 flex flex-wrap gap-3">
         <Stat
           label="Connection"
           value={connected ? "live" : "offline"}
@@ -155,7 +155,7 @@ export function SystemMonitor() {
               ? "unreachable"
               : "awaiting data…"
         }
-        className="col-span-4 row-span-3"
+        className="col-span-12 lg:col-span-4"
       >
         <div className="flex flex-col gap-3">
           {perf ? (
@@ -208,7 +208,7 @@ export function SystemMonitor() {
       <Panel
         title="Event Throughput"
         subtitle="Events per second (last 60s)"
-        className="col-span-8 row-span-3"
+        className="col-span-12 lg:col-span-8"
       >
         <ThroughputChart rates={rates.buckets} />
       </Panel>
@@ -217,7 +217,7 @@ export function SystemMonitor() {
       <Panel
         title="Topic Breakdown"
         subtitle="By live event count"
-        className="col-span-4 row-span-2"
+        className="col-span-12 lg:col-span-4"
       >
         <div className="space-y-1.5">
           {rates.byTopic.map(([topic, count]) => (
@@ -228,9 +228,11 @@ export function SystemMonitor() {
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface/50">
                 <div
                   className="h-full bg-accent/70"
-                  style={{
-                    width: `${(count / rates.maxTopic) * 100}%`,
-                  }}
+                  style={
+                    {
+                      width: `${(count / rates.maxTopic) * 100}%`,
+                    }
+                  }
                 />
               </div>
               <span className="w-8 text-right tabular-nums text-muted">
@@ -246,7 +248,7 @@ export function SystemMonitor() {
       <Panel
         title="Resource Details"
         subtitle="Process-level snapshot from backend"
-        className="col-span-4 row-span-2"
+        className="col-span-12 lg:col-span-4"
       >
         {perf ? (
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -278,10 +280,10 @@ export function SystemMonitor() {
       <Panel
         title="Recent Events"
         subtitle="Raw EventBus envelope stream"
-        className="col-span-8 row-span-2"
+        className="col-span-12 lg:col-span-8"
         contentClassName="p-0"
       >
-        <div className="divide-y divide-border/40 font-mono text-xs">
+        <div className="divide-y divide-border/40 font-mono text-xs h-full overflow-y-auto">
           {events.slice(0, 30).map((e) => (
             <div
               key={e.id}

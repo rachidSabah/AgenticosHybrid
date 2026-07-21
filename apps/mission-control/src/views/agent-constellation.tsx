@@ -125,180 +125,211 @@ function AgentNode({ data }: NodeProps) {
 
 const nodeTypes = { agent: AgentNode };
 
+import { ThreeDGraph } from "@/components/graphs/three-d-graph";
+
 // ── Main Component ──
 export function AgentConstellation() {
   const agents = useStore((s) => s.agents);
-  const providers = useStore((s) => s.providers);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { setNodes, getNode, setCenter } = useReactFlow();
+  const tasks = useStore((s) => s.tasks);
+  const telemetry = useStore((s) => s.telemetry);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "running" | "idle" | "failed">("all");
+  const [layout, setLayout] = useState<"force" | "hierarchy" | "circular">("force");
+  const [dimension, setDimension] = useState<"2d" | "3d">("3d");
+
+  const filteredAgents = useMemo(() => {
+    return Object.values(agents).filter((agent) => {
+      const searchMatch = search
+        ? agent.id.toLowerCase().includes(search.toLowerCase()) ||
+          agent.role.toLowerCase().includes(search.toLowerCase()) ||
+          agent.provider?.toLowerCase().includes(search.toLowerCase())
+        : true;
+      const filterMatch =
+        filter === "all" ||
+        (filter === "running" && agent.status === "running") ||
+        (filter === "idle" && agent.status === "idle") ||
+        (filter === "failed" && agent.status === "failed");
+      return searchMatch && filterMatch;
+    });
+  }, [agents, search, filter]);
 
   const { nodes, edges } = useMemo(() => {
-    // Use providers as constellation nodes when agents are empty
-    const provList = Object.values(providers);
-    const agentList = Object.values(agents);
-    const sources = agentList.length > 0 ? agentList.map(a => ({ ...a, label: a.role || a.provider || a.id })) : provList.map(p => ({
-      id: p.provider,
-      label: p.provider,
-      status: p.status,
-      provider: p.provider,
-      current_task: null,
-      role: p.provider,
-      latency_ms: p.latency_ms,
+    const agentNodes = filteredAgents.map((agent) => ({
+      id: agent.id,
+      type: "agent",
+      data: agent,
     }));
 
-    const constellationNodes: Node[] = sources.map((a, i) => {
-      const angle = (i / Math.max(1, sources.length)) * Math.PI * 2;
-      const r = sources.length <= 1 ? 0 : Math.min(280, 120 + sources.length * 20);
-      return {
-        id: a.id ?? a.provider ?? `agent-${i}`,
-        type: "agent",
-        position: { x: 400 + Math.cos(angle) * r, y: 300 + Math.sin(angle) * r },
-        data: {
-          label: a.label || a.provider,
-          status: a.status || "idle",
-          provider: a.provider || "unknown",
-          task: "current_task" in a ? (a as any).current_task || "—" : "—",
-          latency: "latency_ms" in a ? (a as any).latency_ms : undefined,
-        },
-      } as Node;
+    const taskNodes = Object.values(tasks)
+      .filter((task) => task.status === "running" || task.status === "assigned")
+      .map((task) => ({
+        id: task.id,
+        type: "task",
+        data: task,
+      }));
+
+    const allNodes = [...agentNodes, ...taskNodes];
+
+    const allEdges = filteredAgents.flatMap((agent) => {
+      if (agent.current_task) {
+        return [{
+          id: `edge-${agent.id}-${agent.current_task}`,
+          source: agent.id,
+          target: agent.current_task,
+          animated: agent.status === "running",
+        }];
+      }
+      return [];
     });
 
-    // Neural connections between ALL healthy agents (not just supervisor links)
-    const edges: Edge[] = [];
-    const healthyIds = constellationNodes.filter((n) => {
-      const s = n.data?.status;
-      return s === "running" || s === "healthy" || s === "thinking" || s === "coding";
-    }).map((n) => n.id);
+    return { nodes: allNodes, edges: allEdges };
+  }, [filteredAgents, tasks]);
 
-    for (let i = 0; i < healthyIds.length; i++) {
-      for (let j = i + 1; j < healthyIds.length; j++) {
-        edges.push({
-          id: `${healthyIds[i]}->${healthyIds[j]}`,
-          source: healthyIds[i],
-          target: healthyIds[j],
-          animated: true,
-          style: { stroke: "#6366f1", strokeOpacity: 0.35, strokeWidth: 1.5 },
-        });
-      }
-    }
+  const nodeTypes = useMemo(() => ({
+    agent: AgentNode,
+    task: TaskNode,
+  }), []);
 
-    return { nodes: constellationNodes, edges };
-  }, [agents, providers]);
-
-  // Keyboard navigation
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const nodeIds = nodes.map((n) => n.id);
-      if (nodeIds.length === 0) return;
-      const currentIndex = selectedId ? nodeIds.indexOf(selectedId) : -1;
-
-      switch (e.key) {
-        case "ArrowRight":
-        case "ArrowDown": {
-          e.preventDefault();
-          const nextIndex = (currentIndex + 1) % nodeIds.length;
-          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[nextIndex] })));
-          setSelectedId(nodeIds[nextIndex]);
-          break;
-        }
-        case "ArrowLeft":
-        case "ArrowUp": {
-          e.preventDefault();
-          const prevIndex = (currentIndex - 1 + nodeIds.length) % nodeIds.length;
-          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[prevIndex] })));
-          setSelectedId(nodeIds[prevIndex]);
-          break;
-        }
-        case "Home": {
-          e.preventDefault();
-          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[0] })));
-          setSelectedId(nodeIds[0]);
-          break;
-        }
-        case "End": {
-          e.preventDefault();
-          setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === nodeIds[nodeIds.length - 1] })));
-          setSelectedId(nodeIds[nodeIds.length - 1]);
-          break;
-        }
-        case "Enter":
-        case " ": {
-          if (selectedId) {
-            e.preventDefault();
-            const node = getNode(selectedId);
-            if (node) setCenter(node.position.x, node.position.y, { zoom: 1.5, duration: 300 });
-          }
-          break;
-        }
-      }
-    };
-
-    container.addEventListener("keydown", handleKeyDown);
-    return () => container.removeEventListener("keydown", handleKeyDown);
-  }, [nodes, selectedId, setNodes, getNode, setCenter]);
-
-  if (nodes.length === 0) {
-    return (
-      <div className="h-full p-4">
-        <Panel title="Agent Constellation" subtitle="Neural agent topology">
-          <Empty title="No agents in the constellation" hint="Compose or dispatch agents to populate the graph." />
-        </Panel>
-      </div>
-    );
-  }
-
-  const healthy = nodes.filter((n) => {
-    const s = n.data?.status;
-    return s === "running" || s === "healthy" || s === "thinking" || s === "coding";
-  }).length;
+  const edgeTypes = useMemo(() => ({
+    default: AnimatedEdge,
+  }), []);
 
   return (
-    <div className="h-full p-4">
-      <Panel
-        title="Agent Constellation"
-        subtitle={`${nodes.length} agents · ${edges.length} neural links · ${healthy} active`}
-        contentClassName="p-0"
-        className="h-full"
-        actions={
-          <span className="inline-flex items-center gap-1.5 text-[10px]">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok animate-pulse" />
-            LIVE
-          </span>
-        }
-      >
-        <div
-          ref={containerRef}
-          className="h-full"
-          role="application"
-          aria-label="Agent constellation graph"
-          tabIndex={0}
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+      {/* Left: Controls */}
+      <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+        <Panel title="Filters" className="flex-shrink-0">
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] font-medium text-faint">Search</label>
+              <div className="mt-1 relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
+                <input
+                  type="text"
+                  placeholder="Search agents..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-lg border border-border/40 bg-surface/10 pl-8 pr-2.5 py-1.5 text-[11px] focus:border-accent/50 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-faint">Status</label>
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "running", label: "Running" },
+                  { id: "idle", label: "Idle" },
+                  { id: "failed", label: "Failed" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setFilter(item.id as any)}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
+                      filter === item.id
+                        ? "bg-accent/20 text-accent"
+                        : "text-faint hover:text-text hover:bg-surface/20"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-faint">Layout</label>
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                {[
+                  { id: "force", label: "Force" },
+                  { id: "hierarchy", label: "Hierarchy" },
+                  { id: "circular", label: "Circular" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setLayout(item.id as any)}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
+                      layout === item.id
+                        ? "bg-accent/20 text-accent"
+                        : "text-faint hover:text-text hover:bg-surface/20"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-faint">Dimension</label>
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                {[
+                  { id: "2d", label: "2D" },
+                  { id: "3d", label: "3D" },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setDimension(item.id as any)}
+                    className={`rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition ${
+                      dimension === item.id
+                        ? "bg-accent/20 text-accent"
+                        : "text-faint hover:text-text hover:bg-surface/20"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Panel>
+        <Panel title="Stats" className="flex-shrink-0">
+          <div className="space-y-2">
+            <Stat label="Total Agents" value={Object.keys(agents).length} />
+            <Stat label="Filtered Agents" value={filteredAgents.length} />
+            <Stat label="Running Tasks" value={Object.values(tasks).filter((t) => t.status === "running").length} />
+            <Stat label="Active Edges" value={edges.length} />
+            <Stat label="Errors" value={telemetry.errors} tone={telemetry.errors > 0 ? "danger" : undefined} />
+          </div>
+        </Panel>
+        {selected && (
+          <Panel title="Details" className="flex-shrink-0">
+            <AgentDetails agent={agents[selected] || tasks[selected]} />
+          </Panel>
+        )}
+      </div>
+
+      {/* Right: Graph */}
+      <div className="col-span-12 lg:col-span-9 flex flex-col gap-4 h-full min-h-0">
+        <Panel
+          title="Agent Constellation"
+          subtitle="Live agent-task network"
+          className="flex-1 min-h-0"
+          contentClassName="p-0"
         >
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            fitView
-            proOptions={{ hideAttribution: true }}
-            minZoom={0.3}
-            maxZoom={3}
-            onNodeClick={(_e, node) => setSelectedId(node.id)}
-            aria-live="polite"
-            aria-label="Agent constellation: supervisors and agents"
-          >
-            <Background color="#1f2633" gap={24} />
-            <Controls showInteractive={false} />
-            <MiniMap
-              maskColor="rgba(8,10,16,0.7)"
-              style={{ background: "#0b0e16", border: "1px solid rgba(255,255,255,0.08)" }}
-              nodeColor={(n) => STATUS_COLOR[n.data?.status as string] ?? "#64748b"}
-            />
-          </ReactFlow>
-        </div>
-      </Panel>
+          {dimension === "2d" ? (
+            <div className="h-full w-full">
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                fitView
+                onNodeClick={(_, node) => setSelected(node.id)}
+                onEdgeClick={(_, edge) => setSelected(edge.source)}
+              >
+                <Background />
+                <Controls />
+              </ReactFlow>
+            </div>
+          ) : (
+            <div className="h-full w-full">
+              <Suspense fallback={<LoadingScreen />}>
+                <ThreeDGraph nodes={nodes} edges={edges} onNodeClick={(id) => setSelected(id)} />
+              </Suspense>
+            </div>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }

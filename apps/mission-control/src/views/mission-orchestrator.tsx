@@ -106,9 +106,9 @@ export function MissionOrchestrator() {
   }, [missionUpdates, missionStore, selectedMission]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
       {/* Left column */}
-      <div className="col-span-4 flex flex-col gap-4">
+      <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
         <AgentStatusList />
         <Panel
           title="Missions"
@@ -127,7 +127,7 @@ export function MissionOrchestrator() {
               </button>
             </div>
           }
-          className="flex-1"
+          className="flex-1 min-h-0"
         >
           {showCreate ? (
             <MissionForm
@@ -147,7 +147,7 @@ export function MissionOrchestrator() {
           ) : missions.length === 0 ? (
             <Empty title="No missions yet" hint="Click 'New' to create your first mission." />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 h-full overflow-y-auto">
               {missions.map((m) => (
                 <MissionCard
                   key={`${m.id}-${m.status}-${m.updated_at}`}
@@ -176,7 +176,7 @@ export function MissionOrchestrator() {
       </div>
 
       {/* Right column */}
-      <div className="col-span-8 flex flex-col gap-4">
+      <div className="col-span-12 lg:col-span-8 flex flex-col gap-4">
         {selectedMission ? (
           <>
             <MissionDetail mission={selectedMission} onRefresh={loadMissions} />
@@ -233,7 +233,7 @@ export function MissionOrchestrator() {
             </AnimatePresence>
           </>
         ) : (
-          <Panel title="Mission Detail" subtitle="Select a mission to view" className="flex-1">
+          <Panel title="Mission Detail" subtitle="Select a mission to view" className="flex-1 min-h-0">
             <Empty title="No mission selected" hint="Select a mission from the left panel." />
           </Panel>
         )}

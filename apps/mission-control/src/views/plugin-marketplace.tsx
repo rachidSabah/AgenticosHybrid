@@ -107,7 +107,7 @@ export function PluginMarketplace() {
       </div>
 
       {/* Installed Providers */}
-      <Panel title="Provider Plugins" subtitle={`${providers.length} loaded adapters`} className="col-span-6 row-span-1">
+      <Panel title="Provider Plugins" subtitle={`${providers.length} loaded adapters`} className="col-span-12 lg:col-span-6">
         <div className="grid grid-cols-2 gap-2">
           {providers.map((p) => (
             <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5 flex items-center gap-2.5">
@@ -127,7 +127,7 @@ export function PluginMarketplace() {
       </Panel>
 
       {/* Installed MCP Servers */}
-      <Panel title="MCP Servers" subtitle={`${mcps.length} registered`} className="col-span-6 row-span-1">
+      <Panel title="MCP Servers" subtitle={`${mcps.length} registered`} className="col-span-12 lg:col-span-6">
         {mcps.length > 0 ? (
           <div className="space-y-1.5">
             {mcps.map((m) => (
@@ -149,8 +149,8 @@ export function PluginMarketplace() {
       </Panel>
 
       {/* Featured Plugin Catalog */}
-      <Panel title="Plugin Catalog" subtitle={`${FEATURED.length} available`} className="col-span-12 row-span-2">
-        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+      <Panel title="Plugin Catalog" subtitle={`${FEATURED.length} available`} className="col-span-12">
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 h-full overflow-y-auto">
           {FEATURED.map((plugin, i) => {
             const installed = isInstalled(plugin);
             return (
@@ -195,8 +195,8 @@ export function PluginMarketplace() {
       </Panel>
 
       {/* Capability Catalog */}
-      <Panel title="Capability Catalog" subtitle={`${caps.length} registered`} className="col-span-12 row-span-1">
-        <div className="flex flex-wrap gap-2">
+      <Panel title="Capability Catalog" subtitle={`${caps.length} registered`} className="col-span-12">
+        <div className="flex flex-wrap gap-2 h-full overflow-y-auto">
           {caps.map((c) => (
             <div key={c.name} className="flex items-center gap-1.5 rounded-lg border border-border/50 px-2.5 py-1.5">
               <StatusDot status={c.requires_approval ? "degraded" : "healthy"} />
