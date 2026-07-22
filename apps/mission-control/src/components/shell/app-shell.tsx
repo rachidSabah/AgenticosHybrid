@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { CommandPalette } from "./command-palette";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
 import { useStore } from "@/lib/store";
 import { NAV } from "./nav";
 import { ActiveViewCtx } from "@/lib/active-view";
+import { LayoutProvider } from "@/lib/layout";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [active, setActive] = useState("overview");
@@ -34,85 +35,96 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // Global keyboard shortcuts.
+  // Restore sidebar state
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setPaletteOpen((v) => !v);
-        return;
-      }
-      // Single-key navigation when not typing.
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey) return;
-      const item = NAV.find((n) => n.hint.toLowerCase() === e.key.toLowerCase());
-      if (item) setActive(item.id);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const open = useCallback((id: string) => {
-    setActive(id);
-    if (isMobile) setSidebarOpen(false);
+    if (isMobile) return;
+    const stored = localStorage.getItem("mc.sidebar.open");
+    if (stored !== null) setSidebarOpen(stored === "true");
   }, [isMobile]);
 
-  const shell = (
-    <div className="relative h-screen w-screen overflow-hidden text-text">
-      <div className="app-backdrop" />
-      <div className="relative z-10 flex h-full">
-        <motion.aside
-          initial={isMobile && !sidebarOpen ? { x: -300, opacity: 0 } : { opacity: 0 }}
-          animate={isMobile ? (sidebarOpen ? { x: 0, opacity: 1 } : { x: -300, opacity: 0 }) : { opacity: 1 }}
-          exit={isMobile ? { x: -300, opacity: 0 } : { opacity: 0 }}
-          transition={{ duration: 0.22, ease: "easeOut" }}
-          className={`z-30 h-full ${isMobile ? "fixed inset-y-0 left-0" : ""}`}
-        >
-          <Sidebar active={active} onSelect={open} />
-        </motion.aside>
+  const persistSidebar = useCallback((open: boolean) => {
+    setSidebarOpen(open);
+    if (!isMobile) localStorage.setItem("mc.sidebar.open", String(open));
+  }, [isMobile]);
 
-        {isMobile && sidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-20 bg-black/40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-hidden="true"
-          />
-        )}
+  // Keyboard shortcut: Cmd/Ctrl+K for command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((p) => !p);
+      }
+      // Cmd/Ctrl+B to toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault();
+        persistSidebar(!sidebarOpen);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [sidebarOpen, persistSidebar]);
 
-        <div className="flex min-w-0 flex-1 flex-col lg:ml-0">
-          <TopBar
-            active={active}
-            onCommand={() => setPaletteOpen(true)}
-            onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-            showMenuButton={isMobile}
-          />
-          <main className="relative min-h-0 flex-1 overflow-hidden">
+  return (
+    <LayoutProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-bg text-text">
+        {/* Overlay for mobile sidebar */}
+        <AnimatePresence>
+          {isMobile && sidebarOpen && (
             <motion.div
-              layoutId="active-view"
-              key={active}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="h-full"
-            >
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Sidebar */}
+        <div
+          className="relative z-30 shrink-0"
+          data-layout="sidebar"
+          style={isMobile ? { position: "fixed", left: sidebarOpen ? 0 : -280, top: 0, bottom: 0, zIndex: 50 } : {}}
+        >
+          <Sidebar
+            active={active}
+            onSelect={(id) => {
+              setActive(id);
+              if (isMobile) setSidebarOpen(false);
+            }}
+          />
+        </div>
+
+        {/* Main area */}
+        <div className="flex flex-1 flex-col min-w-0">
+          {/* Top bar */}
+          <div data-layout="header">
+            <TopBar
+              active={active}
+              onCommand={() => setPaletteOpen(true)}
+              onMenuToggle={() => persistSidebar(!sidebarOpen)}
+              showMenuButton={isMobile || !sidebarOpen}
+            />
+          </div>
+
+          {/* Content area — single scroll container */}
+          <main className="flex-1 overflow-auto">
+            <ActiveViewCtx.Provider value={{ active, setActive }}>
               {children}
-            </motion.div>
+            </ActiveViewCtx.Provider>
           </main>
         </div>
-      </div>
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onSelect={(id) => {
-          open(id);
-          setPaletteOpen(false);
-        }}
-      />
-    </div>
-  );
 
-  return <ActiveViewCtx.Provider value={active}>{shell}</ActiveViewCtx.Provider>;
+        {/* Command palette */}
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          onSelect={(id) => {
+            setActive(id);
+            if (isMobile) setSidebarOpen(false);
+          }}
+        />
+      </div>
+    </LayoutProvider>
+  );
 }

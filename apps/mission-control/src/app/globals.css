@@ -29,6 +29,31 @@
     --chart-4: 70 150 224;
     --chart-5: 168 85 247;
 
+    /* Fluid typography — scales from 1366px to 2560px */
+    --text-xs: clamp(10px, 0.625rem + 0.1vw, 12px);
+    --text-sm: clamp(12px, 0.75rem + 0.1vw, 14px);
+    --text-base: clamp(14px, 0.875rem + 0.15vw, 16px);
+    --text-lg: clamp(16px, 1rem + 0.2vw, 20px);
+    --text-xl: clamp(20px, 1.25rem + 0.3vw, 28px);
+    --text-2xl: clamp(24px, 1.5rem + 0.4vw, 36px);
+
+    /* Layout tokens (set by LayoutProvider) */
+    --mc-vw: 1920px;
+    --mc-vh: 1080px;
+    --mc-sidebar-w: 248px;
+    --mc-header-h: 56px;
+    --mc-notif-w: 0px;
+    --mc-content-w: 1672px;
+    --mc-content-h: 1024px;
+    --mc-grid-cols: 12;
+
+    /* Spacing scale */
+    --space-xs: clamp(4px, 0.25rem, 8px);
+    --space-sm: clamp(8px, 0.5rem, 12px);
+    --space-md: clamp(12px, 0.75rem, 20px);
+    --space-lg: clamp(16px, 1rem, 28px);
+    --space-xl: clamp(24px, 1.5rem, 40px);
+
     /* Focus ring */
     --focus-ring: 79 108 255;
     --focus-ring-offset: 248 250 252;
