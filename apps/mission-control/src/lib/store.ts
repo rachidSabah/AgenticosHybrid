@@ -5,12 +5,14 @@
 // nothing here is simulated.
 
 import { create } from "zustand";
+import { api } from "./api";
 import type {
   AgentNode,
   AuditEntry,
   EventEnvelope,
   MemoryItem,
   ProviderHealthRecord,
+  ProviderHealthStatus,
   SystemMetrics,
   TaskNode,
 } from "./types";
@@ -412,32 +414,31 @@ export const useStore = create<StoreState>((set, get) => ({
   hydrate: async () => {
     try {
       const [agents, tasks, providers, missions] = await Promise.all([
-        api.getAgents(),
-        api.getTasks(),
-        api.getProviderConfigs(),
-        api.getMissions(),
+        api.get<unknown[]>("/api/agents"),
+        api.get<unknown[]>("/api/tasks"),
+        api.providers(),
+        api.missions(),
       ]);
       set({
-        agents: agents.reduce((acc, agent) => {
-          acc[agent.id] = agent;
+        agents: (agents as Array<{ id: string }>).reduce((acc, agent) => {
+          acc[agent.id] = agent as unknown as AgentNode;
           return acc;
         }, {} as Record<string, AgentNode>),
-        tasks: tasks.reduce((acc, task) => {
-          acc[task.id] = task;
+        tasks: (tasks as Array<{ id: string }>).reduce((acc, task) => {
+          acc[task.id] = task as unknown as TaskNode;
           return acc;
         }, {} as Record<string, TaskNode>),
-        providers: providers.reduce((acc, provider) => {
+        providers: (providers as Array<{ name: string; status?: string; latency?: number; lastSeen?: string }>).reduce((acc, provider) => {
           acc[provider.name] = {
-            name: provider.name,
-            health: provider.health,
-            latency: provider.latency,
-            lastSeen: provider.lastSeen,
-            status: provider.status,
+            provider: provider.name,
+            status: (provider.status as ProviderHealthStatus) || "unknown",
+            latency_ms: provider.latency || 0,
+            last_checked: provider.lastSeen || undefined,
           };
           return acc;
         }, {} as Record<string, ProviderHealthRecord>),
-        missions: missions.reduce((acc, mission) => {
-          acc[mission.id] = mission;
+        missions: (missions as Array<{ id: string }>).reduce((acc, mission) => {
+          acc[mission.id] = mission as unknown as MissionType;
           return acc;
         }, {} as Record<string, MissionType>),
       });
@@ -445,6 +446,7 @@ export const useStore = create<StoreState>((set, get) => ({
       console.error("Failed to hydrate store:", e);
     }
   },
+}));
 
 // Convenience selector for the System Monitor.
 export function selectMetrics(s: StoreState): SystemMetrics {

@@ -146,7 +146,7 @@ export interface TaskNode {
   id: string;
   title: string;
   role: string;
-  status: "pending" | "planned" | "dispatched" | "assigned" | "in_progress" | "completed" | "failed" | "recovered";
+  status: "pending" | "planned" | "dispatched" | "assigned" | "in_progress" | "running" | "completed" | "failed" | "recovered";
 }
 
 // ── Discovery types (Phase 4, M2) ──
@@ -592,60 +592,81 @@ export interface MissionPlanType {
   task_count: number;
 }
 
-// ── Runtime Discovery types (for Neural Visualization) ──
+// ── Gateway types ──────────────────────────────────────────────────────────
 
-export type RuntimeStatus = 
-  | 'discovered' | 'validating' | 'validated' | 'profiling' 
-  | 'binding' | 'bound' | 'active' | 'degraded' 
-  | 'unhealthy' | 'disabled' | 'unbound' | 'lost';
+export type GatewayStrategy =
+  | "fastest"
+  | "cheapest"
+  | "best_capability"
+  | "balanced"
+  | "reliability_first"
+  | "latency_first"
+  | "custom";
 
-export type RuntimeType = 
-  | 'claude_code' | 'gemini_cli' | 'codex_cli' | 'hermes' 
-  | 'openhands' | 'aider' | 'continue' | 'cline' | 'roo_code'
-  | 'ollama' | 'python' | 'nodejs' | 'docker' | 'git' 
-  | 'gh_cli' | 'mcp_server' | 'custom';
-
-export type RuntimeHealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
-
-export interface RuntimeInfo {
-  runtime_id: string;
-  runtime_type: RuntimeType;
-  name: string;
-  display_name: string;
-  version: string | null;
-  binary_path: string | null;
-  status: RuntimeStatus;
-  health_status: RuntimeHealthStatus;
-  capabilities: string[];
-  supports_streaming: boolean;
-  supports_mcp: boolean;
-  supports_tools: boolean;
-  supports_vision: boolean;
-  latency_ms: number;
-  cpu_percent: number;
-  memory_percent: number;
-  gpu_percent: number;
-  tasks_completed: number;
-  tasks_failed: number;
-  tasks_running: number;
-  current_model: string | null;
-  current_activity: 'idle' | 'thinking' | 'reasoning' | 'planning' | 'coding' | 'searching' | 'busy' | 'offline' | 'disconnected';
-  discovered_at: string;
-  last_seen_at: string;
-  confidence: number;
-  tags: string[];
-  vendor: string;
+export interface GatewayConfig {
+  default_strategy: GatewayStrategy;
+  cost_weight: number;
+  speed_weight: number;
+  capability_weight: number;
+  reliability_weight: number;
+  max_fallback_depth: number;
+  enable_parallel_routing: boolean;
+  min_confidence_for_auto_route: number;
 }
 
-export interface NeuralConnection {
-  id: string;
-  source_id: string;
-  target_id: string;
-  type: 'execution' | 'delegation' | 'memory' | 'mcp' | 'pipeline' | 'swarm' | 'heartbeat';
-  active: boolean;
-  message_count: number;
+export interface AgentRouteProfile {
+  agent_id: string;
+  agent_name: string;
+  provider: string;
+  capabilities: Record<string, number>;
+  cost_per_1k: number;
   latency_ms: number;
-  bandwidth: number; // messages/sec
-  last_message_at: string | null;
-  error_count: number;
+  reliability: number;
+}
+
+export interface TaskRouteAssignmentType {
+  task_id: string;
+  task_title: string;
+  assigned_agent_id: string;
+  assigned_agent_name: string;
+  provider: string;
+  strategy_used: GatewayStrategy;
+  composite_score: number;
+  cost_score: number;
+  speed_score: number;
+  capability_score: number;
+  reliability_score: number;
+  estimated_cost: number;
+  estimated_duration_ms: number;
+  status: string;
+  fallback_agent_id: string | null;
+  reasoning: string;
+}
+
+export interface MissionRoutePlanType {
+  id: string;
+  mission_id: string;
+  strategy: GatewayStrategy;
+  assignments: TaskRouteAssignmentType[];
+  total_estimated_cost: number;
+  total_estimated_duration_ms: number;
+  average_composite_score: number;
+  provider_usage: Record<string, number>;
+  created_at: string;
+}
+
+export interface OpenAIModelType {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
+export interface GatewayHealth {
+  status: "active" | "inactive" | "error";
+  uptime_seconds: number;
+  requests_served: number;
+  active_providers: number;
+  active_models: number;
+  last_request_at: string | null;
 }

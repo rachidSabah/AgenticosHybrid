@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Panel, Stat, Empty, StatusDot } from "@/components/ui/primitives";
+import { Panel, Stat, Empty, StatusDot, LoadingScreen } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { type TaskNode, type AgentNode } from "@/lib/types";
 import ReactFlow, {
@@ -22,19 +22,19 @@ import { Play, Pause, StopCircle, CheckCircle2, XCircle, Clock, Search, Filter, 
 
 // ── Types ──
 
-interface ExecutionNode extends Node {
+type ExecutionNode = Node & {
   data: {
     label: string;
-    status: "created" | "planned" | "dispatched" | "assigned" | "running" | "completed" | "failed" | "paused" | "cancelled";
+    status: "created" | "planned" | "dispatched" | "assigned" | "running" | "in_progress" | "completed" | "failed" | "paused" | "cancelled" | "pending" | "recovered" | "idle" | "recovering";
     type: "task" | "agent" | "system";
     startedAt?: number;
     completedAt?: number;
     duration?: number;
-    tags?: string[];
+    tags?: (string | undefined)[];
   };
 }
 
-interface ExecutionEdge extends Edge {
+type ExecutionEdge = Edge & {
   animated?: boolean;
   style?: {
     stroke?: string;
@@ -54,7 +54,7 @@ interface FilterState {
 // ── Custom Nodes ──
 
 function TaskNode({ data }: { data: ExecutionNode["data"] }) {
-  const color = {
+  const color: Record<string, string> = {
     created: "#64748b",
     planned: "#64748b",
     dispatched: "#64748b",
@@ -64,9 +64,10 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
     failed: "#ef4444",
     paused: "#f59e0b",
     cancelled: "#64748b",
-  }[data.status];
+  };
+  const nodeColor = color[data.status as string] || "#64748b";
 
-  const glow = {
+  const glow: Record<string, string> = {
     created: "rgba(100,116,139,0.15)",
     planned: "rgba(100,116,139,0.15)",
     dispatched: "rgba(100,116,139,0.15)",
@@ -76,7 +77,8 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
     failed: "rgba(239,68,68,0.2)",
     paused: "rgba(245,158,11,0.2)",
     cancelled: "rgba(100,116,139,0.15)",
-  }[data.status];
+  };
+  const nodeGlow = glow[data.status as string] || "rgba(100,116,139,0.15)";
 
   const isActive = data.status === "running";
 
@@ -86,8 +88,8 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
       style={
         {
           background: "rgba(12,14,22,0.92)",
-          borderColor: color,
-          boxShadow: `0 0 20px ${glow}, inset 0 0 20px ${glow}`,
+          borderColor: nodeColor,
+          boxShadow: `0 0 20px ${nodeGlow}, inset 0 0 20px ${nodeGlow}`,
         }
       }
       initial={{ scale: 0.9, opacity: 0 }}
@@ -98,12 +100,12 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
       {isActive && (
         <span
           className="absolute -inset-[2px] rounded-[14px] opacity-50 animate-pulse"
-          style={{ border: `1px solid ${color}`, boxShadow: `0 0 30px ${color}` }}
+          style={{ border: `1px solid ${nodeColor}`, boxShadow: `0 0 30px ${nodeColor}` }}
         />
       )}
 
-      <Handle type="target" position={Position.Left} style={{ background: color, width: 8, height: 8 }} />
-      <Handle type="source" position={Position.Right} style={{ background: color, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Left} style={{ background: nodeColor, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Right} style={{ background: nodeColor, width: 8, height: 8 }} />
 
       <div className="flex items-center gap-3">
         {/* Status dot with pulse */}
@@ -111,12 +113,12 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
           {isActive && (
             <span
               className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping"
-              style={{ backgroundColor: color }}
+              style={{ backgroundColor: nodeColor }}
             />
           )}
           <span
             className="relative inline-flex h-3 w-3 rounded-full"
-            style={{ backgroundColor: color }}
+            style={{ backgroundColor: nodeColor }}
           />
         </span>
 
@@ -125,12 +127,12 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
             <span className="text-sm font-semibold truncate">{data.label}</span>
             <span
               className="rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider"
-              style={{ backgroundColor: `${color}22`, color }}
+              style={{ backgroundColor: `${nodeColor}22`, color: nodeColor }}
             >
               {data.status}
             </span>
           </div>
-          {data.tags?.map((tag) => (
+          {data.tags?.map((tag: string) => (
             <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
               {tag}
             </div>
@@ -152,19 +154,21 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
 }
 
 function AgentNode({ data }: { data: ExecutionNode["data"] }) {
-  const color = {
+  const color: Record<string, string> = {
     running: "#8b5cf6",
     completed: "#10b981",
     failed: "#ef4444",
     idle: "#64748b",
-  }[data.status];
+  };
+  const nodeColor = color[data.status as string] || "#64748b";
 
-  const glow = {
+  const glow: Record<string, string> = {
     running: "rgba(139,92,246,0.2)",
     completed: "rgba(16,185,129,0.2)",
     failed: "rgba(239,68,68,0.2)",
     idle: "rgba(100,116,139,0.15)",
-  }[data.status];
+  };
+  const nodeGlow = glow[data.status as string] || "rgba(100,116,139,0.15)";
 
   const isActive = data.status === "running";
 
@@ -174,8 +178,8 @@ function AgentNode({ data }: { data: ExecutionNode["data"] }) {
       style={
         {
           background: "rgba(12,14,22,0.92)",
-          borderColor: color,
-          boxShadow: `0 0 20px ${glow}, inset 0 0 20px ${glow}`,
+          borderColor: nodeColor,
+          boxShadow: `0 0 20px ${nodeGlow}, inset 0 0 20px ${nodeGlow}`,
         }
       }
       initial={{ scale: 0.9, opacity: 0 }}
@@ -186,12 +190,12 @@ function AgentNode({ data }: { data: ExecutionNode["data"] }) {
       {isActive && (
         <span
           className="absolute -inset-[2px] rounded-[14px] opacity-50 animate-pulse"
-          style={{ border: `1px solid ${color}`, boxShadow: `0 0 30px ${color}` }}
+          style={{ border: `1px solid ${nodeColor}`, boxShadow: `0 0 30px ${nodeColor}` }}
         />
       )}
 
-      <Handle type="target" position={Position.Left} style={{ background: color, width: 8, height: 8 }} />
-      <Handle type="source" position={Position.Right} style={{ background: color, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Left} style={{ background: nodeColor, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Right} style={{ background: nodeColor, width: 8, height: 8 }} />
 
       <div className="flex items-center gap-3">
         {/* Status dot with pulse */}
@@ -199,12 +203,12 @@ function AgentNode({ data }: { data: ExecutionNode["data"] }) {
           {isActive && (
             <span
               className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping"
-              style={{ backgroundColor: color }}
+              style={{ backgroundColor: nodeColor }}
             />
           )}
           <span
             className="relative inline-flex h-3 w-3 rounded-full"
-            style={{ backgroundColor: color }}
+            style={{ backgroundColor: nodeColor }}
           />
         </span>
 
@@ -214,12 +218,12 @@ function AgentNode({ data }: { data: ExecutionNode["data"] }) {
             <span className="text-sm font-semibold truncate">{data.label}</span>
             <span
               className="rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider"
-              style={{ backgroundColor: `${color}22`, color }}
+              style={{ backgroundColor: `${nodeColor}22`, color: nodeColor }}
             >
               {data.status}
             </span>
           </div>
-          {data.tags?.map((tag) => (
+          {data.tags?.map((tag: string) => (
             <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
               {tag}
             </div>
@@ -241,19 +245,21 @@ function AgentNode({ data }: { data: ExecutionNode["data"] }) {
 }
 
 function SystemNode({ data }: { data: ExecutionNode["data"] }) {
-  const color = {
+  const color: Record<string, string> = {
     running: "#06b6d4",
     completed: "#10b981",
     failed: "#ef4444",
     idle: "#64748b",
-  }[data.status];
+  };
+  const nodeColor = color[data.status as string] || "#64748b";
 
-  const glow = {
+  const glow: Record<string, string> = {
     running: "rgba(6,182,212,0.2)",
     completed: "rgba(16,185,129,0.2)",
     failed: "rgba(239,68,68,0.2)",
     idle: "rgba(100,116,139,0.15)",
-  }[data.status];
+  };
+  const nodeGlow = glow[data.status as string] || "rgba(100,116,139,0.15)";
 
   const isActive = data.status === "running";
 
@@ -263,8 +269,8 @@ function SystemNode({ data }: { data: ExecutionNode["data"] }) {
       style={
         {
           background: "rgba(12,14,22,0.92)",
-          borderColor: color,
-          boxShadow: `0 0 20px ${glow}, inset 0 0 20px ${glow}`,
+          borderColor: nodeColor,
+          boxShadow: `0 0 20px ${nodeGlow}, inset 0 0 20px ${nodeGlow}`,
         }
       }
       initial={{ scale: 0.9, opacity: 0 }}
@@ -275,12 +281,12 @@ function SystemNode({ data }: { data: ExecutionNode["data"] }) {
       {isActive && (
         <span
           className="absolute -inset-[2px] rounded-[14px] opacity-50 animate-pulse"
-          style={{ border: `1px solid ${color}`, boxShadow: `0 0 30px ${color}` }}
+          style={{ border: `1px solid ${nodeColor}`, boxShadow: `0 0 30px ${nodeColor}` }}
         />
       )}
 
-      <Handle type="target" position={Position.Left} style={{ background: color, width: 8, height: 8 }} />
-      <Handle type="source" position={Position.Right} style={{ background: color, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Left} style={{ background: nodeColor, width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Right} style={{ background: nodeColor, width: 8, height: 8 }} />
 
       <div className="flex items-center gap-3">
         {/* Status dot with pulse */}
@@ -288,12 +294,12 @@ function SystemNode({ data }: { data: ExecutionNode["data"] }) {
           {isActive && (
             <span
               className="absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping"
-              style={{ backgroundColor: color }}
+              style={{ backgroundColor: nodeColor }}
             />
           )}
           <span
             className="relative inline-flex h-3 w-3 rounded-full"
-            style={{ backgroundColor: color }}
+            style={{ backgroundColor: nodeColor }}
           />
         </span>
 
@@ -303,12 +309,12 @@ function SystemNode({ data }: { data: ExecutionNode["data"] }) {
             <span className="text-sm font-semibold truncate">{data.label}</span>
             <span
               className="rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider"
-              style={{ backgroundColor: `${color}22`, color }}
+              style={{ backgroundColor: `${nodeColor}22`, color: nodeColor }}
             >
               {data.status}
             </span>
           </div>
-          {data.tags?.map((tag) => (
+          {data.tags?.map((tag: string) => (
             <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
               {tag}
             </div>
@@ -445,7 +451,7 @@ export function ExecutionGraph() {
       const typeMatch = filters.type.includes(node.data.type);
       const searchMatch = filters.search
         ? node.data.label.toLowerCase().includes(filters.search.toLowerCase()) ||
-          node.data.tags?.some((t) => t.toLowerCase().includes(filters.search.toLowerCase()))
+          node.data.tags?.some((t: string) => t.toLowerCase().includes(filters.search.toLowerCase()))
         : true;
       return statusMatch && typeMatch && searchMatch;
     });
@@ -639,9 +645,9 @@ export function ExecutionGraph() {
                 <MiniMap
                   maskColor="rgba(8,10,16,0.7)"
                   style={{ background: "#0b0e16", border: "1px solid rgba(255,255,255,0.08)" }}
-                  nodeColor={(n) => {
+                  nodeColor={(n: { data?: { status?: string } }) => {
                     const status = n.data?.status;
-                    return {
+                    const colorMap: Record<string, string> = {
                       running: "#10b981",
                       completed: "#3b82f6",
                       failed: "#ef4444",
@@ -651,7 +657,8 @@ export function ExecutionGraph() {
                       planned: "#64748b",
                       dispatched: "#64748b",
                       assigned: "#64748b",
-                    }[status] || "#64748b";
+                    };
+                    return colorMap[status || ""] || "#64748b";
                   }}
                 />
               </ReactFlow>
@@ -711,7 +718,7 @@ function NodeDetails({ node }: { node?: ExecutionNode }) {
         <div>
           <div className="font-medium">Tags</div>
           <div className="mt-1 flex flex-wrap gap-1">
-            {node.data.tags.map((tag) => (
+            {node.data.tags.map((tag: string) => (
               <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint">
                 {tag}
               </div>

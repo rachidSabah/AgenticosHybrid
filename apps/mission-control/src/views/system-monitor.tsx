@@ -5,8 +5,8 @@ import { Panel, Stat, StatusDot, Empty } from "@/components/ui/primitives";
 import { useStore, selectMetrics } from "@/lib/store";
 import { api } from "@/lib/api";
 import { useMemo, useEffect, useCallback, useState, useRef } from "react";
-import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
-import AutoSizer from "react-virtualized-auto-sizer";
+import { List, type RowComponentProps } from "react-window";
+import { AutoSizer } from "react-virtualized-auto-sizer";
 import type { DesktopPerformanceMetrics } from "@/lib/desktop-types";
 
 // ── Polling hook for live resource metrics ──
@@ -85,12 +85,8 @@ function Gauge({
 
 // ── Virtualized Event Row ──
 
-interface EventRowData {
-  events: Array<{ id: string; topic: string; source: string; timestamp: string }>;
-}
-
-function EventRow({ index, style, data }: ListChildComponentProps<EventRowData>) {
-  const e = data.events[index];
+function EventRow({ index, style, events }: { index: number; style: React.CSSProperties; events: Array<{ id: string; topic: string; source: string; timestamp: string }> }) {
+  const e = events[index];
   return (
     <div style={style} className="flex items-center gap-3 px-4 py-1.5">
       <StatusDot
@@ -315,21 +311,19 @@ export function SystemMonitor() {
           </div>
         ) : (
           <div className="h-full w-full">
-            <AutoSizer>
-              {({ height, width }) => (
-                <List<EventRowData>
-                  height={height}
-                  width={width}
-                  itemCount={events.length}
-                  itemSize={36}
-                  itemData={{ events }}
+            <AutoSizer
+              renderProp={({ height, width }) => (
+                <List<{ events: Array<{ id: string; topic: string; source: string; timestamp: string }> }>
+                  style={{ height: height ?? 0, width: width ?? 0 }}
+                  rowCount={events.length}
+                  rowHeight={36}
+                  rowProps={{ events }}
+                  rowComponent={EventRow}
                   className="divide-y divide-border/40 font-mono text-xs"
                   overscanCount={20}
-                >
-                  {EventRow}
-                </List>
+                />
               )}
-            </AutoSizer>
+            />
           </div>
         )}
       </Panel>

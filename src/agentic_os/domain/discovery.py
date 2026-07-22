@@ -8,6 +8,7 @@ results, and telemetry of runtime discovery operations.
 Builds on top of the M1 execution engine domain models in ``domain/execution.py``.
 Frozen dataclasses follow the same patterns as the M1 models.
 """
+
 from __future__ import annotations
 
 

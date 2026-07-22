@@ -111,6 +111,7 @@ class MissionTask:
     assigned_provider: str = ""
     dependencies: list[str] = field(default_factory=list)
     estimated_minutes: int = 0
+    required_capability: str = "chat"
     output: str = ""
     error: str = ""
     started_at: datetime | None = None

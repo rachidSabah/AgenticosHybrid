@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -10,11 +10,13 @@ import ReactFlow, {
   useReactFlow,
   Handle,
   Position,
+  getSmoothStepPath,
   type NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { motion } from "framer-motion";
-import { Panel, StatusDot, Empty } from "@/components/ui/primitives";
+import { Search } from "lucide-react";
+import { Panel, Stat, StatusDot, Empty, LoadingScreen } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -123,11 +125,95 @@ function AgentNode({ data }: NodeProps) {
   );
 }
 
-const nodeTypes = { agent: AgentNode };
+function TaskNode({ data }: NodeProps) {
+  return (
+    <motion.div
+      className="relative rounded-xl border px-3 py-2 min-w-[140px] backdrop-blur-sm"
+      style={{
+        background: "rgba(12,14,22,0.92)",
+        borderColor: STATUS_COLOR[data.status] ?? "#64748b",
+      }}
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+    >
+      <Handle type="target" position={Position.Left} style={{ width: 6, height: 6 }} />
+      <Handle type="source" position={Position.Right} style={{ width: 6, height: 6 }} />
+      <div className="flex items-center gap-2">
+        <span
+          className="h-2 w-2 rounded-full shrink-0"
+          style={{ backgroundColor: STATUS_COLOR[data.status] ?? "#64748b" }}
+        />
+        <span className="text-xs font-medium truncate">{data.label || data.id || "task"}</span>
+      </div>
+      {data.description && (
+        <div className="mt-1 text-[10px] text-faint/70 truncate">{data.description}</div>
+      )}
+    </motion.div>
+  );
+}
+
+const nodeTypes = { agent: AgentNode, task: TaskNode };
+
+function AnimatedEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+}: {
+  id: string;
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  sourcePosition: Position;
+  targetPosition: Position;
+}) {
+  const [edgePath] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  return (
+    <path
+      id={id}
+      className="react-flow__edge-path animate-dash"
+      d={edgePath}
+      stroke="#6366f1"
+      strokeWidth={2}
+      fill="none"
+      strokeDasharray="5 5"
+    />
+  );
+}
 
 import { ThreeDGraph } from "@/components/graphs/three-d-graph";
 
 // ── Main Component ──
+function AgentDetails({ agent }: { agent: Record<string, unknown> }) {
+  if (!agent) return null;
+  return (
+    <div className="space-y-2 text-xs">
+      {Object.entries(agent)
+        .filter(([k]) => !["id", "edges", "children"].includes(k))
+        .slice(0, 8)
+        .map(([key, val]) => (
+          <div key={key} className="flex justify-between gap-2">
+            <span className="text-faint capitalize">{key.replace(/_/g, " ")}</span>
+            <span className="font-medium truncate max-w-[140px]">
+              {typeof val === "object" ? JSON.stringify(val).slice(0, 40) : String(val)}
+            </span>
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export function AgentConstellation() {
   const agents = useStore((s) => s.agents);
   const tasks = useStore((s) => s.tasks);
@@ -183,7 +269,7 @@ export function AgentConstellation() {
       return [];
     });
 
-    return { nodes: allNodes, edges: allEdges };
+    return { nodes: allNodes as import("reactflow").Node[], edges: allEdges };
   }, [filteredAgents, tasks]);
 
   const nodeTypes = useMemo(() => ({
@@ -293,7 +379,7 @@ export function AgentConstellation() {
         </Panel>
         {selected && (
           <Panel title="Details" className="flex-shrink-0">
-            <AgentDetails agent={agents[selected] || tasks[selected]} />
+            <AgentDetails agent={((agents as Record<string, unknown>)[selected!] ?? (tasks as Record<string, unknown>)[selected!]) as unknown as Record<string, unknown>} />
           </Panel>
         )}
       </div>

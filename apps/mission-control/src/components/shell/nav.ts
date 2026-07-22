@@ -22,6 +22,7 @@ import {
   Shield,
   Terminal,
   MessageSquarePlus,
+  Zap,
 } from "lucide-react";
 
 export interface NavItem {
@@ -58,6 +59,7 @@ export const NAV: NavItem[] = [
   { id: "desktop-diagnostics", label: "Desktop Diagnostics", hint: "4", icon: Shield, group: "desktop" },
   { id: "desktop-offline", label: "Offline Mode", hint: "5", icon: Wifi, group: "desktop" },
   { id: "desktop-settings", label: "Desktop Settings", hint: "6", icon: Settings, group: "desktop" },
+  { id: "gateway", label: "API Gateway", hint: "G", icon: Zap, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

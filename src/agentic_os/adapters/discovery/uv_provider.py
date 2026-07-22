@@ -2,6 +2,7 @@
 
 Scans uv-managed Python environments for AI coding assistants.
 """
+
 import json
 import os
 import subprocess
@@ -21,14 +22,35 @@ class UvDiscovery(DiscoveryProvider):
 
     _known_tools: tuple[dict[str, Any], ...] = field(
         default_factory=lambda: (
-            {"name": "hermes", "tool": "hermes-agent", "engine": EngineType.HERMES,
-             "caps": [EngineCapability.CODING, EngineCapability.REASONING, EngineCapability.PLANNING, EngineCapability.TERMINAL]},
-            {"name": "opencode", "tool": "sentry-opencode-cli", "engine": EngineType.OPENCODE,
-             "caps": [EngineCapability.CODING, EngineCapability.REASONING]},
-            {"name": "aider", "tool": "aider-chat", "engine": EngineType.AIDER,
-             "caps": [EngineCapability.CODING, EngineCapability.PLANNING]},
-            {"name": "open-interpreter", "tool": "open-interpreter", "engine": EngineType.OPEN_INTERPRETER,
-             "caps": [EngineCapability.CODING, EngineCapability.TERMINAL]},
+            {
+                "name": "hermes",
+                "tool": "hermes-agent",
+                "engine": EngineType.HERMES,
+                "caps": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                    EngineCapability.PLANNING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "opencode",
+                "tool": "sentry-opencode-cli",
+                "engine": EngineType.OPENCODE,
+                "caps": [EngineCapability.CODING, EngineCapability.REASONING],
+            },
+            {
+                "name": "aider",
+                "tool": "aider-chat",
+                "engine": EngineType.AIDER,
+                "caps": [EngineCapability.CODING, EngineCapability.PLANNING],
+            },
+            {
+                "name": "open-interpreter",
+                "tool": "open-interpreter",
+                "engine": EngineType.OPEN_INTERPRETER,
+                "caps": [EngineCapability.CODING, EngineCapability.TERMINAL],
+            },
         )
     )
 
@@ -41,20 +63,25 @@ class UvDiscovery(DiscoveryProvider):
             text = result.stdout.decode("utf-8", errors="replace")
             for entry in self._known_tools:
                 if entry["tool"] in text:
-                    results.append(EngineRegistration(
-                        name=f"{entry['name']}-uv",
-                        engine_type=entry["engine"],
-                        endpoint=f"local:{entry['tool']}",
-                        transport="local",
-                        capabilities=entry["caps"],
-                        description=f"{entry['name'].title()} (uv tool)",
-                        version="unknown",
-                        tags=["discovered", "uv", entry["tool"]],
-                        metadata={"discovery_method": "uv", "tool": entry["tool"]},
-                    ))
+                    results.append(
+                        EngineRegistration(
+                            name=f"{entry['name']}-uv",
+                            engine_type=entry["engine"],
+                            endpoint=f"local:{entry['tool']}",
+                            transport="local",
+                            capabilities=entry["caps"],
+                            description=f"{entry['name'].title()} (uv tool)",
+                            version="unknown",
+                            tags=["discovered", "uv", entry["tool"]],
+                            metadata={"discovery_method": "uv", "tool": entry["tool"]},
+                        )
+                    )
         except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             pass
         return results
 
-    def get_provider_name(self) -> str: return "uv-discovery"
-    def get_provider_type(self) -> str: return "uv"
+    def get_provider_name(self) -> str:
+        return "uv-discovery"
+
+    def get_provider_type(self) -> str:
+        return "uv"

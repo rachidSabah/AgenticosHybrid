@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useContext, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { CommandPalette } from "./command-palette";
 import { Sidebar } from "./sidebar";
@@ -10,31 +10,23 @@ import { NAV } from "./nav";
 import { ActiveViewCtx } from "@/lib/active-view";
 import { LoadingScreen } from "@/components/ui/primitives";
 import { useSidebar } from "@/lib/use-sidebar";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Bot, Brain, Activity, Settings, Shield, Cpu, HardDrive, MemoryStick } from "lucide-react";
 
-// Connect WebSocket
-function connect() {
-  // Implementation in store
-}
-
-function disconnect() {
-  // Implementation in store
-}
+const storeConnect = () => useStore.getState().connect();
+const storeDisconnect = () => useStore.getState().disconnect();
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { isCollapsed, toggleCollapse } = useSidebar();
-  const { hydrated, hydrating } = useStore();
+  const { collapsed: isCollapsed, toggle: toggleCollapse } = useSidebar();
+  const { connected } = useStore();
   const [active, setActive] = useState("overview");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    // Hydrate store on mount
-    useStore.getState().hydrate().then(() => {});
-    // Connect WebSocket
-    connect();
-    return () => disconnect();
+    // Connect WebSocket — loads initial state on connection
+    storeConnect();
+    return () => storeDisconnect();
   }, []);
 
   // Global keyboard shortcuts
@@ -94,7 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex-1 overflow-y-auto py-2">
-            <Sidebar active={active} onSelect={open} isCollapsed={isCollapsed} />
+            <Sidebar active={active} onSelect={open} />
           </div>
 
           <div className="border-t border-border/30 p-2">
@@ -116,8 +108,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Content Area */}
           <div className="relative overflow-hidden">
-            {/* Hydration Loading Screen */}
-            {hydrating && (
+            {/* Loading overlay — visible until WebSocket connects */}
+            {!connected && mounted && (
               <motion.div
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 0 }}
@@ -127,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <div className="flex flex-col items-center gap-4">
                   <div className="h-12 w-12 rounded-full border-4 border-accent/30 border-t-accent animate-spin" />
-                  <div className="text-sm font-medium text-faint">Hydrating system state...</div>
+                  <div className="text-sm font-medium text-faint">Connecting to system...</div>
                 </div>
               </motion.div>
             )}
@@ -207,31 +199,33 @@ function Breadcrumb() {
   return (
     <div className="flex items-center gap-2 text-sm font-medium">
       <navItem.icon size={16} className="text-faint" />
-      <span>{navItem.title}</span>
+      <span>{navItem.label}</span>
     </div>
   );
 }
 
+// ── System Stats ──
+
 function SystemStats() {
-  const { telemetry } = useStore();
+  const { telemetry, performance } = useStore();
+
+  const cpu = performance?.cpu_usage_percent ?? telemetry.providers;
+  const mem = performance?.memory_used_mb ?? telemetry.tasks;
+  const disk = performance?.disk_free_gb ?? 0;
 
   return (
     <div className="flex items-center gap-3 text-[10px] text-faint">
       <div className="flex items-center gap-1">
         <Cpu size={12} />
-        <span>{telemetry.cpu}%</span>
+        <span>{typeof cpu === 'number' ? `${cpu.toFixed(1)}%` : `${cpu}`}</span>
       </div>
       <div className="flex items-center gap-1">
         <MemoryStick size={12} />
-        <span>{telemetry.memory}MB</span>
+        <span>{typeof mem === 'number' ? `${mem.toFixed(0)}MB` : `${mem}`}</span>
       </div>
       <div className="flex items-center gap-1">
         <HardDrive size={12} />
-        <span>{telemetry.disk}GB</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <Thermometer size={12} />
-        <span>{telemetry.temperature}°C</span>
+        <span>{disk}GB</span>
       </div>
     </div>
   );

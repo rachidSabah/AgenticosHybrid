@@ -19,6 +19,7 @@ const COMMAND_COLORS: Record<string, string> = {
   mock: "#94a3b8",
 };
 function cmdColor(provider: string): string {
+  if (!provider) return "#818cf8";
   const key = Object.keys(COMMAND_COLORS).find((k) => provider.toLowerCase().includes(k));
   return key ? COMMAND_COLORS[key] : "#818cf8";
 }
@@ -211,7 +212,7 @@ export function MissionOverview() {
             <span>TASKS</span>
             <span>LATENCY</span>
           </div>
-          {allProviders.map((p, i) => (
+          {allProviders.filter((p) => p?.provider).map((p, i) => (
             <AgentAircraft
               key={p.provider}
               provider={p.provider}
@@ -243,7 +244,7 @@ export function MissionOverview() {
         <div className="space-y-2">
           {EXECUTIVES.map((exec) => {
             const supervisedAgents = allProviders.filter((p) =>
-              exec.supervising.some((s) => p.provider.toLowerCase().includes(s.toLowerCase()))
+              p?.provider && exec.supervising.some((s) => p.provider.toLowerCase().includes(s.toLowerCase()))
             );
             return (
               <motion.div

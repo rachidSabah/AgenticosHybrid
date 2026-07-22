@@ -115,3 +115,14 @@ export function Empty({ title, hint }: { title: string; hint?: string }) {
     </div>
   );
 }
+
+export function LoadingScreen() {
+  return (
+    <div className="grid h-full min-h-[200px] place-items-center">
+      <div className="flex items-center gap-3 text-sm text-faint">
+        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        Loading…
+      </div>
+    </div>
+  );
+}

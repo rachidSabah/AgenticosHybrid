@@ -80,6 +80,9 @@ const DesktopOffline = lazy(() =>
 const DesktopSettings = lazy(() =>
   import("@/views/desktop-settings").then((m) => ({ default: m.default }))
 );
+const GatewayDashboard = lazy(() =>
+  import("@/views/gateway-dashboard").then((m) => ({ default: m.GatewayDashboard }))
+);
 
 const VIEWS: Record<string, () => ReactNode> = {
   overview: () => (
@@ -256,6 +259,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Desktop Settings" fallback={<ViewSkeleton title="Desktop Settings" />}>
       <Suspense fallback={<ViewSkeleton title="Desktop Settings" />}>
         <DesktopSettings />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "gateway": () => (
+    <ErrorBoundary viewName="API Gateway" fallback={<ViewSkeleton title="API Gateway" />}>
+      <Suspense fallback={<ViewSkeleton title="API Gateway" />}>
+        <GatewayDashboard />
       </Suspense>
     </ErrorBoundary>
   ),

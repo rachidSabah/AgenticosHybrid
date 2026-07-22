@@ -18,7 +18,7 @@ import {
   Send,
   Save,
   Clock,
-  Template,
+  FileCode,
   Paperclip,
   Image,
   FileText,
@@ -409,7 +409,7 @@ export function PromptCenter() {
                   showTemplates ? "bg-accent/20 text-accent" : "text-faint hover:text-text hover:bg-surface/20"
                 }`}
               >
-                <Template size={14} className="inline mr-1" />
+                <FileCode size={14} className="inline mr-1" />
                 Templates
               </button>
               <button

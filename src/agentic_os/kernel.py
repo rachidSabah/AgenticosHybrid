@@ -174,6 +174,8 @@ class Platform:
     runtime: RuntimeManager | None = None
     # Phase 4, M2: Discovery Framework
     discovery_framework: DiscoveryFramework | None = None
+    # Phase 4, M3: Installer Intelligence
+    installer_intelligence: object | None = None
     # Phase 4, M3: Orchestration Framework
     orchestration: OrchestrationFramework | None = None
     # Phase 4, M3: MCP Runtime Foundation
@@ -272,6 +274,16 @@ class Kernel:
         # Phase 4, M2: Discovery Framework — automatic runtime discovery & binding
         self.discovery_framework = self._build_discovery_framework(discovery_engine)
 
+        # Phase 4, M3: Installer Intelligence — automatic agent discovery, validation & binding
+        try:
+            from services.installer.engine import InstallerIntelligence
+
+            self.installer_intelligence = InstallerIntelligence()
+            _diag("Installer", "CONSTRUCTED")
+        except Exception as exc:
+            _diag("Installer", "SKIPPED", str(exc))
+            self.installer_intelligence = None
+
         # Phase 4, M3: Orchestration Framework — multi-agent orchestration & swarm intelligence
         self.orchestration = self._build_orchestration_framework()
 
@@ -345,6 +357,18 @@ class Kernel:
                 _diag("Discovery", "STARTED")
             except Exception as exc:
                 _diag("Discovery", "FAILED", str(exc))
+
+        # Phase 4, M3: Start installer intelligence
+        if self.installer_intelligence:
+            _diag("Installer", "STARTING")
+            try:
+                from services.installer.engine import InstallerIntelligence
+
+                engine: InstallerIntelligence = self.installer_intelligence
+                await engine.first_launch()
+                _diag("Installer", "STARTED", f"bound={len(engine.bound_providers)} providers")
+            except Exception as exc:
+                _diag("Installer", "FAILED", str(exc))
 
         # Phase 4, M3: Start orchestration framework
         if self.orchestration:
@@ -611,6 +635,7 @@ class Kernel:
             pipeline=self.pipeline,
             runtime=self.runtime,
             discovery_framework=self.discovery_framework,
+            installer_intelligence=self.installer_intelligence,
             orchestration=self.orchestration,
             mcp=self.mcp,
             mcp_ws=self.mcp_ws,

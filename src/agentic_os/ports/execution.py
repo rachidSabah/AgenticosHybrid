@@ -7,6 +7,7 @@ Domain logic depends on these interfaces, never on implementations.
 Every execution engine — MCP, Docker, WSL, Claude Code, subprocess, cloud API —
 implements :class:`ExecutionEnginePort`. The kernel only imports this port.
 """
+
 from __future__ import annotations
 
 

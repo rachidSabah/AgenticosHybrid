@@ -240,8 +240,14 @@ class SelfHealingEngine:
 
     def _classify(self, topic: str, payload: dict) -> Severity:
         """Map events to severity levels."""
-        topic_str = topic if isinstance(topic, str) else topic.value if hasattr(topic, 'value') else str(topic)
-        
+        topic_str = (
+            topic
+            if isinstance(topic, str)
+            else topic.value
+            if hasattr(topic, "value")
+            else str(topic)
+        )
+
         if topic_str in ("agent.failed", "health.critical"):
             return Severity.HIGH
         if topic_str in ("health.degraded", "connection.lost"):
@@ -251,7 +257,7 @@ class SelfHealingEngine:
         # Transient / retryable
         if topic_str in ("agent.recovered",):
             return Severity.LOW
-        
+
         # Payload-based heuristics
         if payload.get("critical", False):
             return Severity.CRITICAL
@@ -292,7 +298,7 @@ class SelfHealingEngine:
     def _best_action(self, issue: HealingIssue) -> Optional[HealingAction]:
         """Select the most appropriate healing action."""
         subsystem = issue.subsystem.lower()
-        
+
         for action in self._actions:
             if not action.auto_repair:
                 continue
@@ -339,6 +345,7 @@ class SelfHealingEngine:
         """Clear and rebuild the discovery cache."""
         try:
             from agentic_os.services.runtime_discovery import cache
+
             await cache.clear()
             await cache.rebuild()
             return True
@@ -357,6 +364,7 @@ class SelfHealingEngine:
         """Restart a failed AI provider connection."""
         try:
             from agentic_os.core.providers import vault
+
             await vault.restart_all()
             return True
         except Exception:
@@ -366,6 +374,7 @@ class SelfHealingEngine:
         """Rebind agent providers."""
         try:
             from agentic_os.adapters.providers import auto_bind
+
             await auto_bind.rebind_all()
             return True
         except Exception:
@@ -380,6 +389,7 @@ class SelfHealingEngine:
         """Rebuild memory/search indexes."""
         try:
             from agentic_os.core.memory import manager
+
             await manager.reindex()
             return True
         except Exception:
@@ -389,6 +399,7 @@ class SelfHealingEngine:
         """Resynchronize state from EventBus replay."""
         try:
             from agentic_os.domain.events import replay
+
             await replay.resync()
             return True
         except Exception:
@@ -398,6 +409,7 @@ class SelfHealingEngine:
         """Reload a failed plugin module."""
         try:
             from agentic_os.core.plugins import loader
+
             await loader.restart_failed()
             return True
         except Exception:
@@ -407,6 +419,7 @@ class SelfHealingEngine:
         """Restart the runtime discovery subsystem."""
         try:
             from agentic_os.services.runtime_discovery import manager
+
             await manager.restart()
             return True
         except Exception:
@@ -427,10 +440,7 @@ class SelfHealingEngine:
         return sorted(result, key=lambda i: i.severity, reverse=True)
 
     def get_pending_approvals(self) -> list[HealingIssue]:
-        return [
-            i for i in self._issues
-            if i.requires_approval and i.approved is None
-        ]
+        return [i for i in self._issues if i.requires_approval and i.approved is None]
 
     async def approve_action(self, issue_id: str) -> bool:
         for issue in self._issues:
@@ -470,5 +480,7 @@ class SelfHealingEngine:
             "medium": len([i for i in unresolved if i.severity == Severity.MEDIUM]),
             "low": len([i for i in unresolved if i.severity == Severity.LOW]),
             "pending_approvals": len(self.get_pending_approvals()),
-            "auto_repaired": len([i for i in self._issues if i.resolved_at and i.auto_repairable and not i.error]),
+            "auto_repaired": len(
+                [i for i in self._issues if i.resolved_at and i.auto_repairable and not i.error]
+            ),
         }

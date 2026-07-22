@@ -52,6 +52,7 @@ class EngineType(StrEnum):
     AGY_CLI = "agy_cli"
     CUSTOM = "custom"
 
+
 class EngineStatus(StrEnum):
     """Runtime lifecycle status of an execution engine."""
 

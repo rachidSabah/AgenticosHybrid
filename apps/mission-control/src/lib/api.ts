@@ -506,4 +506,28 @@ export const api = {
     get<import("./desktop-types").SearchResult[]>(
       `/api/desktop/search?q=${encodeURIComponent(query)}`,
     ),
+
+  // ── Gateway / OmniRoute ──
+
+  /** List models via the /v1 gateway */
+  gatewayModels: () => get<{ object: string; data: import("./types").OpenAIModelType[] }>("/v1/models"),
+
+  /** Get gateway health / status */
+  gatewayHealth: () => get<import("./types").GatewayHealth>("/api/v1/gateway/health"),
+
+  /** Get OmniRoute engine config */
+  getRouteConfig: () => get<import("./types").GatewayConfig>("/api/v1/routing/config"),
+
+  /** Update OmniRoute engine config */
+  updateRouteConfig: (cfg: Partial<import("./types").GatewayConfig>) =>
+    post<import("./types").GatewayConfig>("/api/v1/routing/config", cfg),
+
+  /** List registered routing agents */
+  listRouteAgents: () => get<import("./types").AgentRouteProfile[]>("/api/v1/routing/agents"),
+
+  /** Compare routing strategies for a mission plan */
+  compareStrategies: (missionId: string) =>
+    get<Record<string, import("./types").MissionRoutePlanType>>(
+      `/api/v1/routing/compare/${missionId}`,
+    ),
 };

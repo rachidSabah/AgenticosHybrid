@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Panel, StatusDot, Empty, Stat } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { type TaskNode, type AgentNode } from "@/lib/types";
-import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
-import AutoSizer from "react-virtualized-auto-sizer";
+import { List, type RowComponentProps } from "react-window";
+import { AutoSizer } from "react-virtualized-auto-sizer";
 import {
   Play,
   Pause,
@@ -90,15 +90,15 @@ function typeToIcon(type: TimelineEvent["type"]) {
 
 // ── Virtualized Row ──
 
-interface TimelineRowData {
+function TimelineRow({ index, style, filteredEvents, expanded, onToggle }: {
+  index: number;
+  style: React.CSSProperties;
   filteredEvents: TimelineEvent[];
   expanded: Record<string, boolean>;
   onToggle: (id: string) => void;
-}
-
-function TimelineRow({ index, style, data }: ListChildComponentProps<TimelineRowData>) {
-  const event = data.filteredEvents[index];
-  const isExpanded = data.expanded[event.id] ?? false;
+}) {
+  const event = filteredEvents[index];
+  const isExpanded = expanded[event.id] ?? false;
   const Icon = statusToIcon(event.status);
   const TypeIcon = typeToIcon(event.type);
   const level = statusToLevel(event.status);
@@ -165,7 +165,7 @@ function TimelineRow({ index, style, data }: ListChildComponentProps<TimelineRow
           )}
         </div>
         <button
-          onClick={() => data.onToggle(event.id)}
+          onClick={() => onToggle(event.id)}
           className="shrink-0 rounded-full p-1 hover:bg-surface/20 transition"
         >
           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -386,11 +386,7 @@ export function TaskTimeline() {
     });
   };
 
-  const listRef = useRef<List>(null);
-  const itemData: TimelineRowData = useMemo(
-    () => ({ filteredEvents, expanded, onToggle: toggleExpand }),
-    [filteredEvents, expanded, toggleExpand],
-  );
+  const listRef = useRef<any>(null);
 
   // Reset expanded when filter changes change visible items
   useEffect(() => {
@@ -520,22 +516,20 @@ export function TaskTimeline() {
             </div>
           ) : (
             <div className="h-full w-full">
-              <AutoSizer>
-                {({ height, width }) => (
-                  <List<TimelineRowData>
-                    ref={listRef}
-                    height={height}
-                    width={width}
-                    itemCount={filteredEvents.length}
-                    itemSize={72}
-                    itemData={itemData}
+              <AutoSizer
+                renderProp={({ height, width }) => (
+                  <List<{ filteredEvents: TimelineEvent[]; expanded: Record<string, boolean>; onToggle: (id: string) => void }>
+                    listRef={listRef as any}
+                    style={{ height: height ?? 0, width: width ?? 0 }}
+                    rowCount={filteredEvents.length}
+                    rowHeight={72}
+                    rowProps={{ filteredEvents, expanded, onToggle: toggleExpand }}
+                    rowComponent={TimelineRow}
                     className="divide-y divide-border/30"
                     overscanCount={20}
-                  >
-                    {TimelineRow}
-                  </List>
+                  />
                 )}
-              </AutoSizer>
+              />
             </div>
           )}
         </Panel>

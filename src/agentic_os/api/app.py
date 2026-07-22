@@ -19,17 +19,10 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
-from agentic_os.domain.agent import Role, Task
+from agentic_os.domain.agent import Agent, Role, Task
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
-from agentic_os.domain.mission import (
-    Attachment,
-    ExecutionMode,
-    Mission,
-    MissionPriority,
-    MissionStatus,
-)
 from agentic_os.domain.orchestration import (
     AgentDescriptor,
     AgentTask,
@@ -52,6 +45,13 @@ from agentic_os.domain.pipeline import (
     PipelineStatus,
 )
 from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
+from agentic_os.domain.mission import (
+    Attachment,
+    ExecutionMode,
+    Mission,
+    MissionPriority,
+    MissionStatus,
+)
 from agentic_os.domain.workflow import (
     WorkflowEdge,
     WorkflowExecutionStatus,
@@ -1187,6 +1187,85 @@ def create_app(platform: Platform) -> FastAPI:
         if discovery_framework is None:
             raise HTTPException(status_code=503, detail="Discovery framework not available")
         return discovery_framework.telemetry.get_history(limit)
+
+    # ── Installer Intelligence API (Phase 4, M3) ──
+    installer = platform.installer_intelligence
+
+    @app.get("/api/installer/report")
+    async def get_installer_report() -> dict:
+        """Return the most recent installer discovery report."""
+        if installer is None:
+            raise HTTPException(status_code=503, detail="Installer intelligence not available")
+        from services.installer.report import InstallReportGenerator
+
+        gen = InstallReportGenerator()
+        report = gen.load()
+        if report is None:
+            return {"report": None, "message": "No install report found"}
+        return {"report": report.to_dict()}
+
+    @app.post("/api/installer/scan")
+    async def run_installer_scan(background: bool = True) -> dict:
+        """Run a full installer discovery and validation scan."""
+        if installer is None:
+            raise HTTPException(status_code=503, detail="Installer intelligence not available")
+        if background:
+            import asyncio
+
+            asyncio.create_task(installer.run_full_install())
+            return {"status": "started", "mode": "background"}
+        report = await installer.run_full_install()
+        return {
+            "status": "completed",
+            "success": report.success,
+            "phases": [
+                {"phase": p.phase, "success": p.success, "duration": p.duration_seconds}
+                for p in report.phases
+            ],
+            "bound_providers": report.bound_providers,
+        }
+
+    @app.post("/api/installer/heal")
+    async def run_installer_heal() -> dict:
+        """Run self-healing on all bound providers."""
+        if installer is None:
+            raise HTTPException(status_code=503, detail="Installer intelligence not available")
+        report = await installer.heal_all()
+        return {
+            "total_issues": report.total_issues,
+            "total_repaired": report.total_repaired,
+            "total_failed": report.total_failed,
+            "actions": [
+                {
+                    "provider": a.provider_id,
+                    "issue": a.issue,
+                    "severity": a.severity,
+                    "success": a.success,
+                }
+                for a in report.actions
+            ],
+        }
+
+    @app.get("/api/installer/providers")
+    async def list_installer_providers() -> dict:
+        """List all bound providers from installer intelligence."""
+        if installer is None:
+            raise HTTPException(status_code=503, detail="Installer intelligence not available")
+        providers = installer.bound_providers
+        return {
+            "total": len(providers),
+            "providers": [
+                {
+                    "id": pid,
+                    "display_name": b.get("display_name", pid),
+                    "executable_path": b.get("executable_path"),
+                    "version": b.get("version"),
+                    "status": b.get("status", "unknown"),
+                    "capabilities": b.get("capabilities", []),
+                }
+                for pid, b in providers.items()
+            ],
+        }
 
     @app.get("/api/discovery/stats")
     async def get_discovery_stats() -> dict:
@@ -3302,6 +3381,19 @@ def create_app(platform: Platform) -> FastAPI:
         finally:
             mcp_bc.remove_client(send)
             log.info("mcp_ws.disconnected")
+
+    # ── OpenAI-compatible /v1 API Gateway ─────────────────────────────────
+    if hasattr(platform, "provider_mgr"):
+        try:
+            from agentic_os.api.gateway import create_gateway_router
+
+            gw_router = create_gateway_router(platform.provider_mgr)
+            app.include_router(gw_router)
+            log.info("gateway.mounted")
+        except ImportError as exc:
+            log.warning("gateway.not_available", error=str(exc))
+    else:
+        log.warning("gateway.skipped_no_provider_mgr")
 
     return app
 

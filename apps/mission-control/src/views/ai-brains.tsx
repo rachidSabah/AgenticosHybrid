@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Panel, Stat, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";

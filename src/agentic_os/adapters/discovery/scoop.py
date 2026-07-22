@@ -2,6 +2,7 @@
 
 Scans scoop-installed packages for AI coding assistants.
 """
+
 import os
 import subprocess
 from dataclasses import dataclass, field
@@ -20,14 +21,38 @@ class ScoopDiscovery(DiscoveryProvider):
 
     _known_apps: tuple[dict[str, Any], ...] = field(
         default_factory=lambda: (
-            {"name": "claude-code", "app": "claude-code", "engine": EngineType.CLAUDE_CODE,
-             "caps": [EngineCapability.CODING, EngineCapability.REASONING, EngineCapability.TERMINAL]},
-            {"name": "aider", "app": "aider", "engine": EngineType.AIDER,
-             "caps": [EngineCapability.CODING, EngineCapability.PLANNING]},
-            {"name": "goose", "app": "goose", "engine": EngineType.GOOSE,
-             "caps": [EngineCapability.CODING, EngineCapability.PLANNING, EngineCapability.TERMINAL]},
-            {"name": "git", "app": "git", "engine": EngineType.CUSTOM,
-             "caps": [EngineCapability.GIT]},
+            {
+                "name": "claude-code",
+                "app": "claude-code",
+                "engine": EngineType.CLAUDE_CODE,
+                "caps": [
+                    EngineCapability.CODING,
+                    EngineCapability.REASONING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "aider",
+                "app": "aider",
+                "engine": EngineType.AIDER,
+                "caps": [EngineCapability.CODING, EngineCapability.PLANNING],
+            },
+            {
+                "name": "goose",
+                "app": "goose",
+                "engine": EngineType.GOOSE,
+                "caps": [
+                    EngineCapability.CODING,
+                    EngineCapability.PLANNING,
+                    EngineCapability.TERMINAL,
+                ],
+            },
+            {
+                "name": "git",
+                "app": "git",
+                "engine": EngineType.CUSTOM,
+                "caps": [EngineCapability.GIT],
+            },
         )
     )
 
@@ -50,26 +75,36 @@ class ScoopDiscovery(DiscoveryProvider):
             if not bin_path:
                 continue
             version = await self._get_version(bin_path)
-            results.append(EngineRegistration(
-                name=f"{entry['name']}-scoop",
-                engine_type=entry["engine"],
-                endpoint=f"local:{entry['app']}",
-                transport="local",
-                capabilities=entry["caps"],
-                description=f"{entry['name'].title()} (Scoop)" + (f" v{version}" if version else ""),
-                version=version or "unknown",
-                tags=["discovered", "scoop", entry["app"]],
-                metadata={"path": bin_path, "discovery_method": "scoop", "app": entry["app"]},
-            ))
+            results.append(
+                EngineRegistration(
+                    name=f"{entry['name']}-scoop",
+                    engine_type=entry["engine"],
+                    endpoint=f"local:{entry['app']}",
+                    transport="local",
+                    capabilities=entry["caps"],
+                    description=f"{entry['name'].title()} (Scoop)"
+                    + (f" v{version}" if version else ""),
+                    version=version or "unknown",
+                    tags=["discovered", "scoop", entry["app"]],
+                    metadata={"path": bin_path, "discovery_method": "scoop", "app": entry["app"]},
+                )
+            )
         return results
 
-    def get_provider_name(self) -> str: return "scoop-discovery"
-    def get_provider_type(self) -> str: return "scoop"
+    def get_provider_name(self) -> str:
+        return "scoop-discovery"
+
+    def get_provider_type(self) -> str:
+        return "scoop"
 
     @staticmethod
     async def _get_version(path: str) -> str | None:
         try:
             result = subprocess.run([path, "--version"], capture_output=True, timeout=5.0)
-            return result.stdout.decode("utf-8", errors="replace").strip().split("\n")[0][:100] if result.returncode == 0 else None
+            return (
+                result.stdout.decode("utf-8", errors="replace").strip().split("\n")[0][:100]
+                if result.returncode == 0
+                else None
+            )
         except (subprocess.TimeoutExpired, OSError, FileNotFoundError):
             return None

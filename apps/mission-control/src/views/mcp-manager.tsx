@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
-import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
-import AutoSizer from "react-virtualized-auto-sizer";
+import { List, type RowComponentProps } from "react-window";
+import { AutoSizer } from "react-virtualized-auto-sizer";
 import { api } from "@/lib/api";
 import type {
   MCPHealthSummary,
@@ -304,12 +304,8 @@ function McpServersTab() {
 
 // ── Virtualized MCP Tool Row ──
 
-interface McpToolRowData {
-  tools: MCPTool[];
-}
-
-function McpToolRow({ index, style, data }: ListChildComponentProps<McpToolRowData>) {
-  const t = data.tools[index];
+function McpToolRow({ index, style, tools }: { index: number; style: React.CSSProperties; tools: MCPTool[] }) {
+  const t = tools[index];
   return (
     <div style={style} className="px-1 py-1">
       <div className="rounded-xl border border-border/60 px-3 py-2.5">
@@ -423,20 +419,18 @@ function McpToolsTab() {
               </div>
             ) : (
               <div className="h-full w-full">
-                <AutoSizer>
-                  {({ height, width }) => (
-                    <List<McpToolRowData>
-                      height={height}
-                      width={width}
-                      itemCount={tools.length}
-                      itemSize={80}
-                      itemData={{ tools }}
+                <AutoSizer
+                  renderProp={({ height, width }) => (
+                    <List<{ tools: MCPTool[] }>
+                      style={{ height: height ?? 0, width: width ?? 0 }}
+                      rowCount={tools.length}
+                      rowHeight={80}
+                      rowProps={{ tools }}
+                      rowComponent={McpToolRow}
                       overscanCount={10}
-                    >
-                      {McpToolRow}
-                    </List>
+                    />
                   )}
-                </AutoSizer>
+                />
               </div>
             )}
           </Panel>
