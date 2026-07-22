@@ -591,3 +591,61 @@ export interface MissionPlanType {
   tasks: MissionTaskType[];
   task_count: number;
 }
+
+// ── Runtime Discovery types (for Neural Visualization) ──
+
+export type RuntimeStatus = 
+  | 'discovered' | 'validating' | 'validated' | 'profiling' 
+  | 'binding' | 'bound' | 'active' | 'degraded' 
+  | 'unhealthy' | 'disabled' | 'unbound' | 'lost';
+
+export type RuntimeType = 
+  | 'claude_code' | 'gemini_cli' | 'codex_cli' | 'hermes' 
+  | 'openhands' | 'aider' | 'continue' | 'cline' | 'roo_code'
+  | 'ollama' | 'python' | 'nodejs' | 'docker' | 'git' 
+  | 'gh_cli' | 'mcp_server' | 'custom';
+
+export type RuntimeHealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+
+export interface RuntimeInfo {
+  runtime_id: string;
+  runtime_type: RuntimeType;
+  name: string;
+  display_name: string;
+  version: string | null;
+  binary_path: string | null;
+  status: RuntimeStatus;
+  health_status: RuntimeHealthStatus;
+  capabilities: string[];
+  supports_streaming: boolean;
+  supports_mcp: boolean;
+  supports_tools: boolean;
+  supports_vision: boolean;
+  latency_ms: number;
+  cpu_percent: number;
+  memory_percent: number;
+  gpu_percent: number;
+  tasks_completed: number;
+  tasks_failed: number;
+  tasks_running: number;
+  current_model: string | null;
+  current_activity: 'idle' | 'thinking' | 'reasoning' | 'planning' | 'coding' | 'searching' | 'busy' | 'offline' | 'disconnected';
+  discovered_at: string;
+  last_seen_at: string;
+  confidence: number;
+  tags: string[];
+  vendor: string;
+}
+
+export interface NeuralConnection {
+  id: string;
+  source_id: string;
+  target_id: string;
+  type: 'execution' | 'delegation' | 'memory' | 'mcp' | 'pipeline' | 'swarm' | 'heartbeat';
+  active: boolean;
+  message_count: number;
+  latency_ms: number;
+  bandwidth: number; // messages/sec
+  last_message_at: string | null;
+  error_count: number;
+}

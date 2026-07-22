@@ -10,7 +10,7 @@ const MissionOverview = lazy(() =>
   import("@/views/mission-overview").then((m) => ({ default: m.MissionOverview }))
 );
 const AIBrain = lazy(() =>
-  import("@/views/ai-brain").then((m) => ({ default: m.AIBrain }))
+  import("@/views/ai-brain").then((m) => ({ default: m.default }))
 );
 const AgentConstellation = lazy(() =>
   import("@/views/agent-constellation").then((m) => ({ default: m.AgentConstellation }))

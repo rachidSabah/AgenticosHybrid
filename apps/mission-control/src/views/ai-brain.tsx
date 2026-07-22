@@ -1,555 +1,845 @@
 "use client";
 
 /**
- * AI Brain 2.0 — Neural Intelligence Dashboard
- *
- * A living digital consciousness view combining:
- *   - Mini 3D neural scene showing all provider brains
- *   - Real-time telemetry panels derived from EventBus data
- *   - Provider health, event stream, and system metrics
- *
- * Architecture: React Three Fiber embedded scene + HTML overlay panels
- * Data: All from Zustand store (WebSocket-fed EventBus)
+ * AI Brain — Neural Intelligence Visualization
+ * A full-page 3D holographic brain scene with glass-morphism overlay panels
+ * References: Dark theme, central glowing brain, blue/cyan holographic aesthetic
  */
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import {
-  OrbitControls,
-  Line,
-  Html,
-  MeshDistortMaterial,
-  Text as DreiText,
-} from "@react-three/drei";
-import { EffectComposer, Bloom, ChromaticAberration } from "@react-three/postprocessing";
-import * as THREE from "three";
-import { motion, AnimatePresence } from "framer-motion";
-import { useStore, selectMetrics } from "@/lib/store";
-import type { AgentNode, EventEnvelope } from "@/lib/types";
-import { Panel } from "@/components/ui/responsive";
+import React, { useRef, useMemo, useEffect, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
+import { EffectComposer, Bloom, ChromaticAberration } from '@react-three/postprocessing';
+import { useStore } from '@/lib/store';
 
-// ─────────────────────────────────────────────
-//  DESIGN CONSTANTS
-// ─────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface TelemetryPoint { hour: string; value: number }
 
-const PALETTE = {
-  central: "#818cf8",
-  reasoning: "#a855f7",
-  busy: "#f97316",
-  healthy: "#22c55e",
-  idle: "#64748b",
-  error: "#ef4444",
-  offline: "#374151",
-  bg: "#080a10",
+// ─── Constants ────────────────────────────────────────────────────────────────
+const COLORS = {
+  primary: '#4488ff',
+  primaryDim: '#2255cc',
+  accent: '#66ccff',
+  accentGreen: '#44ffaa',
+  textPrimary: '#e0e8ff',
+  textDim: '#8899bb',
+  panelBg: 'rgba(10, 20, 40, 0.45)',
+  panelBorder: 'rgba(68, 136, 255, 0.25)',
+  glow: '#4488ff',
+  brainSurface: '#2266dd',
+  brainGlow: '#4488ff',
+  active: '#44ffaa',
+  idle: '#4488ff',
+  warning: '#ff8844',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  running: PALETTE.busy,
-  healthy: PALETTE.healthy,
-  completed: PALETTE.healthy,
-  failed: PALETTE.error,
-  recovered: PALETTE.reasoning,
-  idle: PALETTE.idle,
-  degraded: "#f59e0b",
-  down: PALETTE.offline,
-  unknown: PALETTE.idle,
-};
+// ─── 3D Brain Components ─────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────
-//  MINI BRAIN — simplified 3D brain for scene
-// ─────────────────────────────────────────────
-
-function MiniBrain({
-  position = [0, 0, 0],
-  scale = 1,
-  color = PALETTE.central,
-  activity = "idle",
-}: {
-  position?: [number, number, number];
+function HolographicBrain({ position, scale = 1, color = COLORS.brainSurface, pulseSpeed = 1, isCentral = false }: {
+  position: [number, number, number];
   scale?: number;
   color?: string;
-  activity?: string;
+  pulseSpeed?: number;
+  isCentral?: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null!);
-  const meshRef = useRef<THREE.Mesh>(null!);
-
-  const p = useMemo(() => {
-    switch (activity) {
-      case "busy":
-        return { rate: 1.4, amp: 0.9, rot: 0.12, glow: 0.6 };
-      case "reasoning":
-        return { rate: 0.8, amp: 0.7, rot: 0.08, glow: 0.45 };
-      case "offline":
-        return { rate: 0.1, amp: 0.02, rot: 0.01, glow: 0.02 };
-      default:
-        return { rate: 0.3, amp: 0.2, rot: 0.02, glow: 0.1 };
+  const glowRef = useRef<THREE.Mesh>(null!);
+  const coreRef = useRef<THREE.Mesh>(null!);
+  
+  // Brain geometry: left + right hemispheres using SphereGeometry with displacement
+  const leftHemiGeom = useMemo(() => {
+    const geo = new THREE.SphereGeometry(0.8 * scale, 48, 48);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      // Displace the left hemisphere
+      if (x < 0) {
+        const noise = Math.sin(y * 8) * 0.04 + Math.cos(z * 6 + x * 3) * 0.03 + Math.sin((x + y + z) * 5) * 0.02;
+        const len = Math.sqrt(x*x + y*y + z*z);
+        const nx = x / len, ny = y / len, nz = z / len;
+        const r = 0.8 + noise;
+        pos.setXYZ(i, nx * r * scale, ny * r * scale, nz * r * scale);
+      }
     }
-  }, [activity]);
+    geo.computeVertexNormals();
+    return geo;
+  }, [scale]);
 
+  const rightHemiGeom = useMemo(() => {
+    const geo = new THREE.SphereGeometry(0.8 * scale, 48, 48);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      if (x > 0) {
+        const noise = Math.sin(y * 8) * 0.04 + Math.cos(z * 6 - x * 3) * 0.03 + Math.sin((x + y + z) * 5) * 0.02;
+        const len = Math.sqrt(x*x + y*y + z*z);
+        const nx = x / len, ny = y / len, nz = z / len;
+        const r = 0.8 + noise;
+        pos.setXYZ(i, nx * r * scale, ny * r * scale, nz * r * scale);
+      }
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }, [scale]);
+
+  const cerebellumGeom = useMemo(() => {
+    return new THREE.SphereGeometry(0.35 * scale, 24, 24);
+  }, [scale]);
+
+  const stemGeom = useMemo(() => {
+    return new THREE.CylinderGeometry(0.12 * scale, 0.2 * scale, 0.4 * scale, 12);
+  }, [scale]);
+
+  // Pulse animation
   useFrame((state) => {
-    if (!groupRef.current) return;
-    groupRef.current.rotation.y += 0.01 * p.rot;
-    if (meshRef.current) {
-      const breathe = 1 + Math.sin(state.clock.elapsedTime * p.rate) * 0.02 * p.amp;
-      meshRef.current.scale.setScalar(breathe);
-      (meshRef.current.material as THREE.MeshPhysicalMaterial).emissiveIntensity =
-        0.1 + (Math.sin(state.clock.elapsedTime * p.rate * 1.5) * 0.5 + 0.5) * p.glow;
+    const t = state.clock.elapsedTime * pulseSpeed;
+    if (groupRef.current) {
+      groupRef.current.rotation.y = Math.sin(t * 0.15) * 0.3;
+      groupRef.current.position.y = position[1] + Math.sin(t * 0.5) * 0.05 * scale;
+    }
+    if (glowRef.current) {
+      const intensity = 0.4 + Math.sin(t * 0.8) * 0.2 * pulseSpeed;
+      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = Math.min(intensity, 0.8);
+      glowRef.current.scale.setScalar(1 + Math.sin(t * 0.6) * 0.03);
+    }
+    if (coreRef.current) {
+      (coreRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3 + Math.sin(t * 0.5) * 0.15 * pulseSpeed;
     }
   });
 
   return (
-    <group ref={groupRef} position={position} scale={[scale, scale, scale]}>
-      <mesh ref={meshRef}>
-        <icosahedronGeometry args={[0.8, 1]} />
-        <meshPhysicalMaterial
-          color="#141438"
-          emissive={color}
-          emissiveIntensity={0.2}
-          metalness={0.4}
-          roughness={0.3}
-          clearcoat={0.3}
+    <group ref={groupRef} position={position}>
+      {/* Outer glow sphere */}
+      <mesh ref={glowRef} scale={1.3}>
+        <sphereGeometry args={[scale, 32, 32]} />
+        <meshBasicMaterial
+          color={color}
           transparent
-          opacity={0.9}
+          opacity={0.08}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
       </mesh>
-      <mesh>
-        <sphereGeometry args={[0.85, 16, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={0.06} />
+
+      {/* Corpus callosum bridge */}
+      <mesh position={[0, 0.1 * scale, 0]} scale={[0.4 * scale, 0.05 * scale, 0.15 * scale]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial color={COLORS.glow} transparent opacity={0.3} blending={THREE.AdditiveBlending} />
       </mesh>
+
+      {/* Left hemisphere */}
+      <mesh geometry={leftHemiGeom} position={[-0.05 * scale, 0.05 * scale, 0]}>
+        <meshPhysicalMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.3}
+          metalness={0.1}
+          roughness={0.3}
+          transparent
+          opacity={0.75}
+          wireframe={false}
+          clearcoat={0.2}
+          clearcoatRoughness={0.4}
+        />
+      </mesh>
+      {/* Left hemisphere wireframe overlay */}
+      <mesh geometry={leftHemiGeom} position={[-0.05 * scale, 0.05 * scale, 0]}>
+        <meshBasicMaterial color={COLORS.glow} wireframe transparent opacity={0.08} />
+      </mesh>
+
+      {/* Right hemisphere */}
+      <mesh geometry={rightHemiGeom} position={[0.05 * scale, 0.05 * scale, 0]}>
+        <meshPhysicalMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.3}
+          metalness={0.1}
+          roughness={0.3}
+          transparent
+          opacity={0.75}
+          wireframe={false}
+          clearcoat={0.2}
+          clearcoatRoughness={0.4}
+        />
+      </mesh>
+      {/* Right hemisphere wireframe overlay */}
+      <mesh geometry={rightHemiGeom} position={[0.05 * scale, 0.05 * scale, 0]}>
+        <meshBasicMaterial color={COLORS.glow} wireframe transparent opacity={0.08} />
+      </mesh>
+
+      {/* Cerebellum */}
+      <mesh geometry={cerebellumGeom} position={[0, -0.55 * scale, 0.25 * scale]}>
+        <meshPhysicalMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.15}
+          metalness={0.05}
+          roughness={0.4}
+          transparent
+          opacity={0.6}
+        />
+      </mesh>
+
+      {/* Brainstem */}
+      <mesh geometry={stemGeom} position={[0, -0.9 * scale, 0.1 * scale]} rotation={[0.1, 0, 0]}>
+        <meshPhysicalMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.1}
+          metalness={0.05}
+          roughness={0.5}
+          transparent
+          opacity={0.5}
+        />
+      </mesh>
+
+      {/* Core glow */}
+      <mesh ref={coreRef}>
+        <sphereGeometry args={[0.3 * scale, 16, 16]} />
+        <meshBasicMaterial
+          color={COLORS.accent}
+          transparent
+          opacity={0.15}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+      {/* Orbital rings */}
+      <OrbitalRing radius={1.2 * scale} color={COLORS.glow} speed={0.3 * pulseSpeed} rot={[Math.PI / 2, 0, 0]} />
+      <OrbitalRing radius={1.4 * scale} color={COLORS.accent} speed={0.2 * pulseSpeed} rot={[Math.PI / 3, 0.5, 0]} />
+      {isCentral && (
+        <OrbitalRing radius={1.6 * scale} color={COLORS.accentGreen} speed={0.15 * pulseSpeed} rot={[Math.PI / 4, 1, 0]} />
+      )}
     </group>
   );
 }
 
-// ─────────────────────────────────────────────
-//  MINI NEURAL LINK
-// ─────────────────────────────────────────────
-
-function MiniLink({
-  from, to, active,
-}: {
-  from: [number, number, number];
-  to: [number, number, number];
-  active?: boolean;
-}) {
+function OrbitalRing({ radius, color, speed, rot }: { radius: number; color: string; speed: number; rot: [number, number, number] }) {
+  const ref = useRef<THREE.Line>(null!);
   const points = useMemo(() => {
-    const f = new THREE.Vector3(...from);
-    const t = new THREE.Vector3(...to);
-    const mid = f.clone().add(t).multiplyScalar(0.5);
-    mid.y += 0.3;
-    const curve = new THREE.QuadraticBezierCurve3(f, mid, t);
-    return curve.getPoints(16);
-  }, [from, to]);
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 64; i++) {
+      const theta = (i / 64) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(theta) * radius, Math.sin(theta) * radius, 0));
+    }
+    return pts;
+  }, [radius]);
 
+  const lineObj = useMemo(() => {
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.3,
+    });
+    return new THREE.Line(geometry, material);
+  }, [points, color]);
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.x = rot[0];
+      ref.current.rotation.y = rot[1] + state.clock.elapsedTime * speed;
+      ref.current.rotation.z = rot[2];
+    }
+  });
+
+  return <primitive ref={ref} object={lineObj} />;
+}
+
+// ─── Background ────────────────────────────────────────────────────────────────
+
+function Background({ stars = 800 }: { stars?: number }) {
+  const pointsObj = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(stars * 3);
+    for (let i = 0; i < stars * 3; i++) {
+      positions[i] = (Math.random() - 0.5) * 200;
+    }
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.PointsMaterial({
+      color: '#8899bb',
+      size: 0.15,
+      transparent: true,
+      opacity: 0.6,
+      sizeAttenuation: true,
+    });
+    return new THREE.Points(geometry, material);
+  }, [stars]);
+
+  return <primitive object={pointsObj} />;
+}
+
+// ─── Grid Floor ──────────────────────────────────────────────────────────────
+
+function HolographicGrid() {
+  const gridRef = useRef<THREE.GridHelper>(null!);
+  useFrame((state) => {
+    if (gridRef.current) {
+      gridRef.current.position.y = -2.5 + Math.sin(state.clock.elapsedTime * 0.1) * 0.02;
+    }
+  });
   return (
-    <Line
-      points={points}
-      color={active ? PALETTE.central : "#1f2633"}
-      lineWidth={active ? 1 : 0.3}
-      transparent
-      opacity={active ? 0.4 : 0.08}
-    />
+    <gridHelper ref={gridRef} args={[20, 40, COLORS.primaryDim, COLORS.primaryDim]} position={[0, -2.5, 0]}>
+      <primitive object={new THREE.LineBasicMaterial({ transparent: true, opacity: 0.15 })} />
+    </gridHelper>
   );
 }
 
-// ─────────────────────────────────────────────
-//  MINI SCENE
-// ─────────────────────────────────────────────
+// ─── Main 3D Scene ──────────────────────────────────────────────────────────
 
-function MiniConstellation() {
-  const agents = useStore((s) => s.agents);
-  const events = useStore((s) => s.events);
-
-  const providerList = useMemo(() => Object.values(agents), [agents]);
-  const positions = useMemo(() => {
-    const count = providerList.length;
-    if (count === 0) return [];
-    const phi = Math.PI * (3 - Math.sqrt(5));
-    return providerList.map((_, i) => {
-      const y = 1 - (i / (count - 1)) * 2;
-      const r = Math.sqrt(1 - y * y);
-      const theta = phi * i;
-      return [Math.cos(theta) * r * 2.8, y * 2.8, Math.sin(theta) * r * 2.8] as [number, number, number];
+function NeuralScene() {
+  const { agents, telemetry, tasks } = useStore();
+  
+  // Get active providers from agents
+  const providers = useMemo(() => {
+    const pMap = new Map<string, { name: string; model: string; status: string; health?: number }>();
+    const agentList = agents ? Object.values(agents) : [];
+    agentList.forEach(a => {
+      if (a.provider && !pMap.has(a.provider)) {
+        pMap.set(a.provider, {
+          name: a.provider,
+          model: a.role, // use role as model identifier
+          status: a.status || 'idle',
+          health: a.health === 'healthy' ? 95 : a.health === 'degraded' ? 60 : 30,
+        });
+      }
     });
-  }, [providerList]);
+    return Array.from(pMap.values());
+  }, [agents]);
 
-  const [pulseIntensity, setPulseIntensity] = useState(0.3);
-  useEffect(() => {
-    if (events.length > 0) {
-      setPulseIntensity(1);
-      const t = setTimeout(() => setPulseIntensity(0.3), 400);
-      return () => clearTimeout(t);
-    }
-  }, [events.length]);
+  const activeTaskCount = Object.values(tasks || {}).filter((t: any) => t.status === 'running' || t.status === 'pending').length;
 
   return (
-    <>
-      <color attach="background" args={[PALETTE.bg]} />
+    <Canvas camera={{ position: [0, 1, 6], fov: 45 }} dpr={[1, 2]}>
+      <color attach="background" args={['#050a18']} />
+      <fog attach="fog" args={['#050a18', 15, 30]} />
+
       <ambientLight intensity={0.2} />
-      <directionalLight position={[2, 3, 2]} intensity={0.3} color={PALETTE.central} />
+      <directionalLight position={[5, 10, 5]} intensity={0.3} color={COLORS.primary} />
+      <pointLight position={[0, 0, 3]} intensity={0.5} color={COLORS.accent} />
+
+      <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
+
+      <Background />
 
       {/* Central brain */}
-      <MiniBrain color={PALETTE.central} scale={0.6} activity={providerList.some(a => a.status === "running") ? "busy" : "idle"} />
+      <HolographicBrain position={[0, 0.2, 0]} scale={1} isCentral pulseSpeed={1} />
 
-      {/* Provider brains */}
-      {providerList.map((a, i) => {
-        const pos = positions[i];
-        if (!pos) return null;
-        const activity = a.status === "running" ? "busy" : a.status === "failed" ? "offline" : "idle";
+      {/* Provider brains positioned in a semi-circle */}
+      {providers.slice(0, 6).map((p, i) => {
+        const angle = (i / Math.max(providers.length - 1, 1)) * Math.PI - Math.PI / 2;
+        const radius = 3.2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
         return (
-          <group key={a.id}>
-            <MiniBrain
-              position={pos}
-              scale={0.3}
-              color={STATUS_COLORS[a.status] ?? PALETTE.idle}
-              activity={activity}
-            />
-            <MiniLink from={[0, 0, 0]} to={pos} active={a.status === "running"} />
-          </group>
+          <HolographicBrain
+            key={p.name}
+            position={[x, -0.3 + Math.sin(i * 1.5) * 0.3, z - 0.5]}
+            scale={0.45}
+            color={p.status === 'running' || p.status === 'active' ? COLORS.accentGreen : COLORS.primaryDim}
+            pulseSpeed={p.status === 'running' || p.status === 'active' ? 1.5 : 0.5}
+          />
         );
       })}
 
-      {/* Orbit controls - disabled auto-rotate in this mini view */}
-      <OrbitControls
-        enablePan={false}
-        enableZoom={false}
-        enableRotate={false}
-        autoRotate
-        autoRotateSpeed={0.2}
-      />
-    </>
+      {/* Neural links from center to providers */}
+      {providers.slice(0, 6).map((p, i) => {
+        const angle = (i / Math.max(providers.length - 1, 1)) * Math.PI - Math.PI / 2;
+        const radius = 3.2;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        return (
+          <NeuralLink
+            key={`link-${p.name}`}
+            start={[0, 0.2, 0]}
+            end={[x, -0.3 + Math.sin(i * 1.5) * 0.3, z - 0.5]}
+            color={p.status === 'running' || p.status === 'active' ? COLORS.accentGreen : COLORS.primaryDim}
+          />
+        );
+      })}
+
+      <HolographicGrid />
+
+      <EffectComposer>
+        <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} intensity={0.6} />
+        <ChromaticAberration offset={[0.002, 0.002]} />
+      </EffectComposer>
+    </Canvas>
   );
 }
 
-// ─────────────────────────────────────────────
-//  METRIC CARD
-// ─────────────────────────────────────────────
+function NeuralLink({ start, end, color }: { start: [number, number, number]; end: [number, number, number]; color: string }) {
+  const ref = useRef<THREE.Line>(null!);
+  const points = useMemo(() => {
+    const mid = new THREE.Vector3(
+      (start[0] + end[0]) / 2,
+      (start[1] + end[1]) / 2 - 0.5,
+      (start[2] + end[2]) / 2
+    );
+    const curve = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(...start),
+      mid,
+      new THREE.Vector3(...end)
+    );
+    return curve.getPoints(30);
+  }, [start, end]);
 
-function MetricCard({
-  label, value, danger, icon, trend,
-}: {
-  label: string;
-  value: string | number;
-  danger?: boolean;
-  icon?: string;
-  trend?: "up" | "down" | "stable";
+  const lineObj = useMemo(() => {
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.2,
+    });
+    return new THREE.Line(geometry, material);
+  }, [points, color]);
+
+  useFrame((state) => {
+    if (ref.current) {
+      const mat = ref.current.material as THREE.LineBasicMaterial;
+      mat.opacity = 0.15 + Math.sin(state.clock.elapsedTime * 0.5 + start[0]) * 0.1;
+    }
+  });
+
+  return <primitive ref={ref} object={lineObj} />;
+}
+
+// ─── Dashboard Overlay Components ────────────────────────────────────────────
+
+function MetricCard({ title, value, unit, icon, trend }: {
+  title: string; value: string | number; unit?: string; icon?: string; trend?: 'up' | 'down' | 'stable';
 }) {
   return (
-    <motion.div
-      className="rounded-xl border border-border/30 bg-surface/30 p-3.5 backdrop-blur-sm"
-      whileHover={{ scale: 1.02 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-    >
-      <div className="flex items-center justify-between mb-1">
-        <div className="text-[10px] uppercase tracking-wider text-faint/70">{label}</div>
-        {icon && <span className="text-[14px] opacity-50">{icon}</span>}
-      </div>
-      <div className={`text-xl font-semibold tabular-nums tracking-tight ${danger ? "text-danger" : "text-white/90"}`}>
-        {value}
-      </div>
-      {trend && (
-        <div className={`text-[9px] mt-0.5 ${trend === "up" ? "text-[#22c55e]" : trend === "down" ? "text-danger" : "text-faint"}`}>
-          {trend === "up" ? "↑" : trend === "down" ? "↓" : "→"} {trend}
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-// ─────────────────────────────────────────────
-//  EVENT STREAM
-// ─────────────────────────────────────────────
-
-function EventStream({ events }: { events: EventEnvelope[] }) {
-  const recent = events.slice(0, 12);
-  return (
-    <div className="h-48 space-y-0.5 overflow-y-auto text-[10px] font-mono">
-      {recent.length === 0 && (
-        <div className="text-faint/50 italic p-2">No events yet</div>
-      )}
-      {recent.map((e) => (
-        <div
-          key={e.id}
-          className="flex items-center gap-2 rounded px-2 py-1 hover:bg-surface/30 transition-colors"
-        >
-          <span className="h-1 w-1 shrink-0 rounded-full bg-accent/40" />
-          <span className="shrink-0 text-faint/60">
-            {new Date(e.timestamp || Date.now()).toLocaleTimeString()}
+    <div className="ai-brain-card">
+      <div className="ai-brain-card-header">
+        <span className="ai-brain-card-icon">{icon || '◈'}</span>
+        <span className="ai-brain-card-title">{title}</span>
+        {trend && (
+          <span className={`ai-brain-trend ${trend}`}>
+            {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'}
           </span>
-          <span className="shrink-0 text-accent/80">{e.topic}</span>
-          <span className="truncate text-faint/50">
-            {JSON.stringify(e.payload).slice(0, 40)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-//  PROVIDER HEALTH LIST
-// ─────────────────────────────────────────────
-
-function ProviderHealthList({ agents }: { agents: Record<string, AgentNode> }) {
-  const list = Object.values(agents);
-  return (
-    <div className="space-y-1.5">
-      {list.length === 0 && (
-        <div className="text-faint/50 italic text-[11px] p-2">No providers</div>
-      )}
-      {list.map((a) => {
-        const color = STATUS_COLORS[a.status] ?? PALETTE.idle;
-        return (
-          <div
-            key={a.id}
-            className="flex items-center justify-between rounded-lg border border-border/20 bg-surface/20 px-3 py-2 text-[11px]"
-          >
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-              <span className="font-medium text-white/80">{a.role}</span>
-              {a.provider && (
-                <span className="text-faint">@{a.provider}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              {a.current_task && (
-                <span className="max-w-[100px] truncate text-faint">{a.current_task}</span>
-              )}
-              <span className="capitalize text-faint/80">{a.status}</span>
-              {a.health && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
-                  a.health === "healthy" ? "border-[#22c55e]/30 text-[#22c55e]" :
-                  a.health === "degraded" ? "border-[#f59e0b]/30 text-[#f59e0b]" :
-                  "border-danger/30 text-danger"
-                }`}>
-                  {a.health}
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-//  ACTIVITY METER
-// ─────────────────────────────────────────────
-
-function ActivityMeter({ pulses }: { pulses: { topic: string; at: number }[] }) {
-  const now = Date.now();
-  const recent = pulses.filter((p) => now - p.at < 5000).length;
-
-  // 5 bars representing last 5 seconds
-  const bars = useMemo(() => {
-    const b = [0, 0, 0, 0, 0];
-    pulses.forEach((p) => {
-      const diff = now - p.at;
-      if (diff < 1000) b[0]++;
-      else if (diff < 2000) b[1]++;
-      else if (diff < 3000) b[2]++;
-      else if (diff < 4000) b[3]++;
-      else if (diff < 5000) b[4]++;
-    });
-    return b;
-  }, [pulses, now]);
-
-  const max = Math.max(...bars, 1);
-
-  return (
-    <div className="flex items-end gap-1.5 h-12">
-      {bars.map((v, i) => (
-        <div
-          key={i}
-          className="w-3 rounded-t-sm transition-all bg-gradient-to-t from-accent/40 to-accent/80"
-          style={{
-            height: `${(v / max) * 100}%`,
-            opacity: 0.3 + (v / Math.max(max, 1)) * 0.7,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-//  MAIN COMPONENT
-// ─────────────────────────────────────────────
-
-export function AIBrain() {
-  const agents = useStore((s) => s.agents);
-  const events = useStore((s) => s.events);
-  const telemetry = useStore((s) => s.telemetry);
-  const connected = useStore((s) => s.connected);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const agentCount = Object.keys(agents).length;
-  const eventCount = events.length;
-
-  // Recent pulses for activity meter
-  const now = Date.now();
-  const recentPulses = telemetry.pulses.filter((p) => now - p.at < 1200);
-  const isBraveActive = recentPulses.length > 0;
-  const brainIntensity = Math.min(1, recentPulses.length / 6);
-
-  return (
-    <div className="scroll-page space-y-4 p-4 no-hscroll">
-
-      {/* ── Top: 3D Neural Mini-Scene ── */}
-      <div className="relative h-[240px] w-full overflow-hidden rounded-2xl border border-border/40 bg-[#080a10]">
-        {mounted && (
-          <Canvas
-            dpr={[1, 1.5]}
-            gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
-            camera={{ position: [5, 3, 5], fov: 50, near: 0.1, far: 15 }}
-          >
-            <MiniConstellation />
-            <EffectComposer multisampling={0}>
-              <Bloom luminanceThreshold={0.15} luminanceSmoothing={0.9} intensity={0.6} mipmapBlur />
-              <ChromaticAberration offset={new THREE.Vector2(0.001, 0.001)} />
-            </EffectComposer>
-          </Canvas>
         )}
+      </div>
+      <div className="ai-brain-card-value">
+        {value}<span className="ai-brain-card-unit">{unit}</span>
+      </div>
+    </div>
+  );
+}
 
-        {/* Overlay live status badge */}
-        <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-surface/60 backdrop-blur-md px-3 py-1.5 border border-border/30">
-          <span className={`h-2 w-2 rounded-full ${connected ? "bg-[#22c55e] shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-[#ef4444]"}`} />
-          <span className="text-[11px] font-mono text-white/80">
-            {connected ? "Consciousness Online" : "Offline"}
-          </span>
+function ProviderMiniCard({ name, model, status, health }: {
+  name: string; model: string; status: string; health?: number;
+}) {
+  const statusColor = 
+    status === 'running' || status === 'active' ? COLORS.accentGreen :
+    status === 'idle' ? COLORS.primaryDim :
+    status === 'offline' ? '#555' :
+    COLORS.warning;
+
+  return (
+    <div className="ai-brain-provider-card" style={{ borderLeftColor: statusColor }}>
+      <div className="ai-brain-provider-name">{name}</div>
+      <div className="ai-brain-provider-meta">
+        <span className="ai-brain-provider-model">{model}</span>
+        <span className="ai-brain-provider-status" style={{ color: statusColor }}>● {status}</span>
+      </div>
+      {health !== undefined && (
+        <div className="ai-brain-provider-health">
+          <div className="ai-brain-health-bar" style={{ width: `${health}%`, background: health > 60 ? COLORS.accentGreen : COLORS.warning }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main View ──────────────────────────────────────────────────────────────
+
+export default function AIBrain() {
+  const { agents, tasks, events } = useStore();
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const interval = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const providers = useMemo(() => {
+    const pMap = new Map<string, { name: string; model: string; status: string; health?: number }>();
+    const agentList = agents ? Object.values(agents) : [];
+    agentList.forEach(a => {
+      if (a.provider && !pMap.has(a.provider)) {
+        pMap.set(a.provider, {
+          name: a.provider,
+          model: a.role, // use role as model identifier
+          status: a.status || 'idle',
+          health: a.health === 'healthy' ? 95 : a.health === 'degraded' ? 60 : 30,
+        });
+      }
+    });
+    return Array.from(pMap.values());
+  }, [agents]);
+
+  const activeTasks = Object.values(tasks || {}).filter((t: any) => t.status === 'running' || t.status === 'pending').length;
+  const recentEvents = (events || []).slice(-6).reverse();
+
+  return (
+    <div className="ai-brain-page">
+      {/* 3D Scene - full background */}
+      <div className="ai-brain-scene">
+        <NeuralScene />
+      </div>
+
+      {/* Overlay UI */}
+      <div className="ai-brain-overlay">
+        {/* Top bar */}
+        <div className="ai-brain-topbar">
+          <div className="ai-brain-title">
+            <span className="ai-brain-logo">🧠</span>
+            <div>
+              <h1>Neural Intelligence Core</h1>
+              <div className="ai-brain-subtitle">Mission Control • Real-time Consciousness Engine</div>
+            </div>
+          </div>
+          <div className="ai-brain-time">
+            <div className="ai-brain-clock">{time.toLocaleTimeString()}</div>
+            <div className="ai-brain-date">{time.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+          </div>
         </div>
 
-        {/* Brain intensity indicator */}
-        <div className="absolute bottom-3 right-3 flex items-center gap-2">
-          <span className="text-[9px] text-faint font-mono">Brain Activity</span>
-          <div className="flex gap-0.5">
-            {[0, 1, 2, 3].map((i) => (
-              <motion.span
-                key={i}
-                className="block h-3 w-1 rounded-sm"
-                animate={{
-                  background: i < Math.ceil(brainIntensity * 4)
-                    ? "rgba(129,140,248,0.8)"
-                    : "rgba(129,140,248,0.15)",
-                  scale: i < Math.ceil(brainIntensity * 4) ? [1, 1.2, 1] : 1,
-                }}
-                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
-              />
-            ))}
+        {/* Main content: Left = metrics, Right = providers */}
+        <div className="ai-brain-content">
+          {/* Left column - Metrics */}
+          <div className="ai-brain-metrics">
+            <MetricCard title="Active Providers" value={providers.length} icon="⊞" />
+            <MetricCard title="Running Tasks" value={activeTasks} icon="⚡" trend={activeTasks > 0 ? 'up' : 'stable'} />
+            <MetricCard title="Neural Links" value={providers.length * 2} icon="◈" />
+            <MetricCard title="System Health" value={providers.reduce((s, p) => s + (p.health || 85), 0) / Math.max(providers.length, 1)} unit="%" trend={providers.length > 0 ? 'up' : 'stable'} />
+          </div>
+
+          {/* Center - Provider Fleet */}
+          <div className="ai-brain-providers">
+            <div className="ai-brain-panel-header">
+              <h2>Provider Fleet</h2>
+              <span className="ai-brain-panel-count">{providers.length} connected</span>
+            </div>
+            <div className="ai-brain-provider-grid">
+              {providers.length === 0 && (
+                <div className="ai-brain-empty">Awaiting provider connections...</div>
+              )}
+              {providers.map(p => (
+                <ProviderMiniCard key={p.name} {...p} />
+              ))}
+            </div>
+          </div>
+
+          {/* Right column - Events */}
+          <div className="ai-brain-events">
+            <div className="ai-brain-panel-header">
+              <h2>Neural Activity</h2>
+              <span className="ai-brain-panel-count">{recentEvents.length} recent</span>
+            </div>
+            <div className="ai-brain-event-stream">
+              {recentEvents.length === 0 && (
+                <div className="ai-brain-empty">No recent events</div>
+              )}
+              {recentEvents.map((e: any, i: number) => (
+                <div key={i} className="ai-brain-event-item">
+                  <span className="ai-brain-event-icon">⟡</span>
+                  <div className="ai-brain-event-content">
+                    <div className="ai-brain-event-text">{e.message || e.type || 'Event'}</div>
+                    <div className="ai-brain-event-time">{e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : ''}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom status bar */}
+        <div className="ai-brain-bottombar">
+          <div className="ai-brain-status-item">
+            <span className="ai-brain-status-dot active" />
+            System Online
+          </div>
+          <div className="ai-brain-status-item">
+            <span className="ai-brain-status-dot" style={{ background: providers.length > 0 ? COLORS.accentGreen : '#555' }} />
+            {providers.length} Providers
+          </div>
+          <div className="ai-brain-status-item">
+            <span className="ai-brain-status-dot" style={{ background: activeTasks > 0 ? COLORS.accentGreen : '#555' }} />
+            {activeTasks} Active Tasks
+          </div>
+          <div className="ai-brain-status-item">
+            <span className="ai-brain-status-dot" style={{ background: '#4488ff' }} />
+            v1.0.0-rc1
           </div>
         </div>
       </div>
 
-      {/* ── Row 1: Key Metrics ── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MetricCard label="Providers" value={agentCount} icon="🧠" trend={agentCount > 0 ? "stable" : undefined} />
-        <MetricCard label="Active Tasks" value={telemetry.tasks} icon="⚡" trend={telemetry.tasks > 0 ? "up" : "stable"} />
-        <MetricCard label="Connected Providers" value={telemetry.providers} icon="🔗" />
-        <MetricCard label="Errors" value={telemetry.errors} icon="⚠️" danger={telemetry.errors > 0} trend={telemetry.errors > 0 ? "down" : undefined} />
-      </div>
-
-      {/* ── Row 2: Telemetry + Activity ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Brain Telemetry */}
-        <Panel
-          title="Brain Telemetry"
-          subtitle="Derived from EventBus pulses"
-          className="lg:col-span-1"
-        >
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="rounded-lg bg-surface/20 p-2.5 text-center">
-              <div className="text-[9px] uppercase tracking-wider text-faint">Pipelines</div>
-              <div className="text-lg font-semibold text-white/90">{telemetry.pipelines}</div>
-            </div>
-            <div className="rounded-lg bg-surface/20 p-2.5 text-center">
-              <div className="text-[9px] uppercase tracking-wider text-faint">Cost</div>
-              <div className="text-lg font-semibold text-white/90">${telemetry.cost.toFixed(4)}</div>
-            </div>
-            <div className="rounded-lg bg-surface/20 p-2.5 text-center">
-              <div className="text-[9px] uppercase tracking-wider text-faint">Latency</div>
-              <div className="text-lg font-semibold text-white/90">{telemetry.latency.toFixed(1)}ms</div>
-            </div>
-            <div className="rounded-lg bg-surface/20 p-2.5 text-center">
-              <div className="text-[9px] uppercase tracking-wider text-faint">Tokens</div>
-              <div className="text-lg font-semibold text-white/90">{telemetry.tokens.toLocaleString()}</div>
-            </div>
-          </div>
-
-          {/* Activity pulse meter */}
-          <div className="border-t border-border/20 pt-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase tracking-wider text-faint">Recent Activity</span>
-              <span className="text-[10px] font-mono text-accent">{recentPulses.length} pulses/sec</span>
-            </div>
-            <ActivityMeter pulses={telemetry.pulses} />
-          </div>
-        </Panel>
-
-        {/* Event Stream */}
-        <Panel
-          title="Event Stream"
-          subtitle="Live EventBus"
-          className="lg:col-span-1"
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[9px] text-faint">{events.length} total events</span>
-            {connected && <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" />}
-          </div>
-          <EventStream events={events} />
-        </Panel>
-
-        {/* Memory & Audit quick view */}
-        <Panel
-          title="System State"
-          subtitle="Runtime metrics"
-          className="lg:col-span-1"
-        >
-          <div className="space-y-2 text-[11px]">
-            <div className="flex justify-between">
-              <span className="text-faint">WebSocket</span>
-              <span className={connected ? "text-[#22c55e]" : "text-danger"}>
-                {connected ? "Connected" : "Disconnected"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-faint">Cache Size</span>
-              <span className="text-white/80">{events.length} events</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-faint">Provider Count</span>
-              <span className="text-white/80">{Object.keys(telemetry.providers).length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-faint">Memory Items</span>
-              <span className="text-white/80">{telemetry.pipelines}</span>
-            </div>
-          </div>
-
-          <div className="mt-4 border-t border-border/20 pt-3">
-            <div className="text-[10px] uppercase tracking-wider text-faint mb-2">Provider Fleet</div>
-            <ProviderHealthList agents={agents} />
-          </div>
-        </Panel>
-      </div>
-
-      {/* ── Provider Fleet (expanded) ── */}
-      <Panel
-        title="Provider Fleet"
-        subtitle="All connected runtimes"
-      >
-        <ProviderHealthList agents={agents} />
-      </Panel>
-
-      {/* Footer status */}
-      <div className="flex items-center justify-between text-[9px] text-faint/50 border-t border-border/10 pt-3">
-        <span>AgenticOS v1.0.0-rc1 · Neural Intelligence Dashboard</span>
-        <span>
-          {connected ? "Live · " : "Offline · "}
-          {eventCount > 0 ? `${eventCount} events since connect` : "awaiting events"}
-        </span>
-      </div>
+      <style jsx>{`
+        .ai-brain-page {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          background: #050a18;
+          color: ${COLORS.textPrimary};
+          font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .ai-brain-scene {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+        }
+        .ai-brain-overlay {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          pointer-events: none;
+        }
+        .ai-brain-overlay > * {
+          pointer-events: auto;
+        }
+        .ai-brain-topbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding: 16px 24px;
+          background: linear-gradient(180deg, ${COLORS.panelBg} 0%, transparent 100%);
+          border-bottom: 1px solid ${COLORS.panelBorder};
+          backdrop-filter: blur(12px);
+        }
+        .ai-brain-title {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .ai-brain-logo {
+          font-size: 32px;
+          line-height: 1;
+        }
+        .ai-brain-title h1 {
+          font-size: 18px;
+          font-weight: 600;
+          margin: 0;
+          color: ${COLORS.textPrimary};
+          letter-spacing: 0.5px;
+        }
+        .ai-brain-subtitle {
+          font-size: 11px;
+          color: ${COLORS.textDim};
+          letter-spacing: 1px;
+          text-transform: uppercase;
+        }
+        .ai-brain-time {
+          text-align: right;
+        }
+        .ai-brain-clock {
+          font-size: 24px;
+          font-weight: 300;
+          color: ${COLORS.textPrimary};
+          letter-spacing: 2px;
+        }
+        .ai-brain-date {
+          font-size: 11px;
+          color: ${COLORS.textDim};
+        }
+        .ai-brain-content {
+          flex: 1;
+          display: grid;
+          grid-template-columns: 240px 1fr 240px;
+          gap: 16px;
+          padding: 16px 24px;
+          overflow: auto;
+        }
+        .ai-brain-metrics {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .ai-brain-card {
+          background: ${COLORS.panelBg};
+          border: 1px solid ${COLORS.panelBorder};
+          border-radius: 8px;
+          padding: 12px 16px;
+          backdrop-filter: blur(8px);
+        }
+        .ai-brain-card-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 10px;
+          color: ${COLORS.textDim};
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .ai-brain-card-icon {
+          font-size: 12px;
+        }
+        .ai-brain-card-value {
+          font-size: 28px;
+          font-weight: 300;
+          color: ${COLORS.textPrimary};
+          margin-top: 4px;
+          letter-spacing: 1px;
+        }
+        .ai-brain-card-unit {
+          font-size: 12px;
+          color: ${COLORS.textDim};
+          margin-left: 4px;
+        }
+        .ai-brain-trend {
+          margin-left: auto;
+          font-size: 10px;
+        }
+        .ai-brain-trend.up { color: ${COLORS.accentGreen}; }
+        .ai-brain-trend.down { color: ${COLORS.warning}; }
+        .ai-brain-providers {
+          display: flex;
+          flex-direction: column;
+        }
+        .ai-brain-panel-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+        .ai-brain-panel-header h2 {
+          font-size: 12px;
+          font-weight: 600;
+          margin: 0;
+          color: ${COLORS.textPrimary};
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .ai-brain-panel-count {
+          font-size: 10px;
+          color: ${COLORS.textDim};
+        }
+        .ai-brain-provider-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+          gap: 8px;
+        }
+        .ai-brain-provider-card {
+          background: ${COLORS.panelBg};
+          border: 1px solid ${COLORS.panelBorder};
+          border-left: 3px solid ${COLORS.primaryDim};
+          border-radius: 6px;
+          padding: 10px 14px;
+          backdrop-filter: blur(8px);
+        }
+        .ai-brain-provider-name {
+          font-size: 13px;
+          font-weight: 600;
+          color: ${COLORS.textPrimary};
+        }
+        .ai-brain-provider-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 4px;
+          font-size: 10px;
+        }
+        .ai-brain-provider-model {
+          color: ${COLORS.textDim};
+        }
+        .ai-brain-provider-status {
+          font-size: 9px;
+        }
+        .ai-brain-provider-health {
+          margin-top: 6px;
+          height: 2px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .ai-brain-health-bar {
+          height: 100%;
+          border-radius: 2px;
+          transition: width 0.5s ease;
+        }
+        .ai-brain-events {
+          display: flex;
+          flex-direction: column;
+        }
+        .ai-brain-event-stream {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          overflow: auto;
+          flex: 1;
+        }
+        .ai-brain-event-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          background: ${COLORS.panelBg};
+          border: 1px solid ${COLORS.panelBorder};
+          border-radius: 6px;
+          padding: 8px 12px;
+          font-size: 11px;
+        }
+        .ai-brain-event-icon {
+          color: ${COLORS.accent};
+          font-size: 10px;
+          margin-top: 1px;
+        }
+        .ai-brain-event-content {
+          flex: 1;
+          min-width: 0;
+        }
+        .ai-brain-event-text {
+          color: ${COLORS.textPrimary};
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .ai-brain-event-time {
+          font-size: 9px;
+          color: ${COLORS.textDim};
+          margin-top: 2px;
+        }
+        .ai-brain-empty {
+          color: ${COLORS.textDim};
+          font-size: 11px;
+          text-align: center;
+          padding: 20px;
+        }
+        .ai-brain-bottombar {
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          padding: 8px 24px;
+          background: ${COLORS.panelBg};
+          border-top: 1px solid ${COLORS.panelBorder};
+          backdrop-filter: blur(12px);
+          font-size: 10px;
+          color: ${COLORS.textDim};
+        }
+        .ai-brain-status-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .ai-brain-status-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #555;
+        }
+        .ai-brain-status-dot.active {
+          background: ${COLORS.accentGreen};
+          box-shadow: 0 0 6px ${COLORS.accentGreen};
+        }
+      `}</style>
     </div>
   );
 }

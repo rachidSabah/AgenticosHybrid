@@ -10,7 +10,9 @@ import type {
   AuditEntry,
   EventEnvelope,
   MemoryItem,
+  NeuralConnection,
   ProviderHealthRecord,
+  RuntimeInfo,
   SystemMetrics,
   TaskNode,
 } from "./types";
@@ -48,6 +50,8 @@ interface StoreState {
   audit: AuditEntry[];
   notifications: Notification[];
   telemetry: Telemetry;
+  runtimes: Record<string, RuntimeInfo>;
+  connections: Record<string, NeuralConnection>;
 
   connect: () => void;
   disconnect: () => void;
@@ -104,6 +108,17 @@ function titleFor(topic: string, payload: Record<string, unknown>): string {
   return map[topic] ?? topic;
 }
 
+function mapRuntimeToActivity(status: string, eventTopic: string): RuntimeInfo['current_activity'] {
+  if (status === 'lost' || status === 'disabled') return 'offline';
+  if (status === 'unhealthy') return 'disconnected';
+  if (eventTopic.includes('task.started')) return 'busy';
+  if (eventTopic.includes('planning')) return 'planning';
+  if (eventTopic.includes('reasoning')) return 'reasoning';
+  if (eventTopic.includes('searching')) return 'searching';
+  if (eventTopic.includes('coding')) return 'coding';
+  return 'idle';
+}
+
 export const useStore = create<StoreState>((set, get) => ({
   connected: false,
   events: [],
@@ -113,6 +128,8 @@ export const useStore = create<StoreState>((set, get) => ({
   memory: [],
   audit: [],
   notifications: [],
+  runtimes: {},
+  connections: {},
   telemetry: {
     tasks: 0,
     agents: 0,
@@ -234,6 +251,8 @@ export const useStore = create<StoreState>((set, get) => ({
       let tasks = s.tasks;
       let providers = s.providers;
       let telemetry = s.telemetry;
+      let runtimes = s.runtimes;
+      let connections = s.connections;
 
       const p = e.payload as Record<string, any>;
       switch (e.topic) {
@@ -331,6 +350,163 @@ export const useStore = create<StoreState>((set, get) => ({
           telemetry.errors += 1;
           break;
         }
+        case "runtime.discovery.engine_found": {
+          runtimes = { ...s.runtimes };
+          const rid = p.runtime_id;
+          runtimes[rid] = {
+            ...runtimes[rid],
+            runtime_id: rid,
+            runtime_type: p.runtime_type ?? runtimes[rid]?.runtime_type ?? 'custom',
+            name: p.name ?? runtimes[rid]?.name ?? 'Unknown',
+            display_name: p.display_name ?? runtimes[rid]?.display_name ?? 'Unknown',
+            version: p.version ?? runtimes[rid]?.version ?? null,
+            binary_path: p.binary_path ?? runtimes[rid]?.binary_path ?? null,
+            status: p.status ?? runtimes[rid]?.status ?? 'discovered',
+            health_status: p.health_status ?? runtimes[rid]?.health_status ?? 'unknown',
+            capabilities: p.capabilities ?? runtimes[rid]?.capabilities ?? [],
+            supports_streaming: p.supports_streaming ?? runtimes[rid]?.supports_streaming ?? false,
+            supports_mcp: p.supports_mcp ?? runtimes[rid]?.supports_mcp ?? false,
+            supports_tools: p.supports_tools ?? runtimes[rid]?.supports_tools ?? false,
+            supports_vision: p.supports_vision ?? runtimes[rid]?.supports_vision ?? false,
+            latency_ms: p.latency_ms ?? runtimes[rid]?.latency_ms ?? 0,
+            cpu_percent: p.cpu_percent ?? runtimes[rid]?.cpu_percent ?? 0,
+            memory_percent: p.memory_percent ?? runtimes[rid]?.memory_percent ?? 0,
+            gpu_percent: p.gpu_percent ?? runtimes[rid]?.gpu_percent ?? 0,
+            tasks_completed: p.tasks_completed ?? runtimes[rid]?.tasks_completed ?? 0,
+            tasks_failed: p.tasks_failed ?? runtimes[rid]?.tasks_failed ?? 0,
+            tasks_running: p.tasks_running ?? runtimes[rid]?.tasks_running ?? 0,
+            current_model: p.current_model ?? runtimes[rid]?.current_model ?? null,
+            current_activity: mapRuntimeToActivity(p.status ?? 'discovered', e.topic),
+            discovered_at: p.discovered_at ?? runtimes[rid]?.discovered_at ?? new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            confidence: p.confidence ?? runtimes[rid]?.confidence ?? 1,
+            tags: p.tags ?? runtimes[rid]?.tags ?? [],
+            vendor: p.vendor ?? runtimes[rid]?.vendor ?? 'unknown',
+          };
+          break;
+        }
+        case "runtime.discovery.engine_lost": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], status: "lost", current_activity: "offline" };
+          }
+          break;
+        }
+        case "runtime.binding.completed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], status: "bound" };
+          }
+          break;
+        }
+        case "runtime.binding.failed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], status: "unbound", health_status: "unhealthy" };
+          }
+          break;
+        }
+        case "runtime.health.status_changed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], health_status: p.health_status };
+          }
+          break;
+        }
+        case "runtime.health.check_passed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], health_status: "healthy", latency_ms: p.latency_ms ?? runtimes[p.runtime_id].latency_ms };
+          }
+          break;
+        }
+        case "runtime.health.check_failed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], health_status: "unhealthy" };
+          }
+          break;
+        }
+        case "runtime.health.degraded": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], health_status: "degraded" };
+          }
+          break;
+        }
+        case "runtime.health.recovered": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], health_status: "healthy" };
+          }
+          break;
+        }
+        case "runtime.telemetry.recorded": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = {
+              ...runtimes[p.runtime_id],
+              cpu_percent: p.cpu_percent ?? runtimes[p.runtime_id].cpu_percent,
+              memory_percent: p.memory_percent ?? runtimes[p.runtime_id].memory_percent,
+              gpu_percent: p.gpu_percent ?? runtimes[p.runtime_id].gpu_percent,
+              tasks_running: p.tasks_running ?? runtimes[p.runtime_id].tasks_running,
+              tasks_completed: p.tasks_completed ?? runtimes[p.runtime_id].tasks_completed,
+              tasks_failed: p.tasks_failed ?? runtimes[p.runtime_id].tasks_failed,
+            };
+          }
+          break;
+        }
+        case "execution.task.dispatched": {
+          connections = { ...s.connections };
+          const connId = p.connection_id ?? `${p.source_id}-${p.target_id}`;
+          connections[connId] = {
+            id: connId,
+            source_id: p.source_id ?? 'orchestrator',
+            target_id: p.target_id ?? p.runtime_id,
+            type: p.type ?? 'execution',
+            active: true,
+            message_count: p.message_count ?? 1,
+            latency_ms: p.latency_ms ?? 0,
+            bandwidth: p.bandwidth ?? 0,
+            last_message_at: new Date().toISOString(),
+            error_count: 0
+          };
+          break;
+        }
+        case "execution.task.started": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { ...runtimes[p.runtime_id], current_activity: "busy" };
+          }
+          break;
+        }
+        case "execution.task.completed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { 
+              ...runtimes[p.runtime_id], 
+              tasks_completed: runtimes[p.runtime_id].tasks_completed + 1,
+              current_activity: "idle" 
+            };
+          }
+          break;
+        }
+        case "execution.task.failed": {
+          runtimes = { ...s.runtimes };
+          if (runtimes[p.runtime_id]) {
+            runtimes[p.runtime_id] = { 
+              ...runtimes[p.runtime_id], 
+              tasks_failed: runtimes[p.runtime_id].tasks_failed + 1,
+              current_activity: "idle" 
+            };
+          }
+          break;
+        }
+        case "runtime.discovery.scan_completed": {
+          telemetry = { ...s.telemetry };
+          telemetry.agents = Object.keys(runtimes).length;
+          break;
+        }
       }
 
       // Always clone telemetry to add the pulse
@@ -339,7 +515,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       telemetry.pulses = [{ topic: e.topic, at: Date.now() }, ...telemetry.pulses].slice(0, 80);
 
-      return { events, notifications, agents, tasks, providers, telemetry };
+      return { events, notifications, agents, tasks, providers, telemetry, runtimes, connections };
     });
   },
 
