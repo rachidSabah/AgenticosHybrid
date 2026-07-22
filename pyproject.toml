@@ -7,7 +7,7 @@ name = "agentic-os"
 version = "1.0.0-rc1"
 description = "Agentic OS — a local-first, event-bus-driven AI Agent Operating System."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Agentic OS Contributors" }]
 dependencies = [

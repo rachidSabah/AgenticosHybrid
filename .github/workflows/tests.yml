@@ -11,7 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev
       - run: uv run ruff format --check
 
   ruff-check:
@@ -19,7 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev
       - run: uv run ruff check
 
   ty:
@@ -27,7 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --extra mcp
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev --extra mcp
       - run: uv run ty check src/
 
   pytest:
@@ -35,10 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
-      - run: uv sync
+          python-version: "3.12"
+      - run: uv sync --dev
       - run: uv run pytest -v --tb=short
 
   mission-control:
