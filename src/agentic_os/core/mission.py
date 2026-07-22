@@ -15,12 +15,10 @@ from agentic_os.config import Settings
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.mission import (
     AgentRole,
-    Attachment,
     ExecutionMode,
     Mission,
     MissionPlan,
     MissionPriority,
-    MissionStatus,
     MissionTask,
     TaskStatus,
 )
@@ -201,7 +199,9 @@ class MissionPlannerImpl:
         backend_task = MissionTask(
             mission_id=mission.id,
             title="Backend implementation",
-            description="Implement backend components using the designed architecture and API contracts.",
+            description=(
+                "Implement backend components using the designed architecture and API contracts."
+            ),
             dependencies=[tasks[1].id, tasks[2].id],
             estimated_minutes=30,
             assigned_role=AgentRole.BACKEND_ENGINEER,
@@ -213,7 +213,9 @@ class MissionPlannerImpl:
             MissionTask(
                 mission_id=mission.id,
                 title="Frontend implementation",
-                description="Implement frontend components matching the designed workflow and backend APIs.",
+                description=(
+                    "Implement frontend components matching the designed workflow and backend APIs."
+                ),
                 dependencies=[tasks[2].id],
                 estimated_minutes=25,
                 assigned_role=AgentRole.FRONTEND_ENGINEER,

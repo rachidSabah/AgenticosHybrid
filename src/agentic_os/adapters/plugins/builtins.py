@@ -56,9 +56,7 @@ class ClaudeCodeProviderPlugin:
 
         api_key = settings.anthropic_api_key or ""
         has_key = bool(api_key)
-        ctx.providers.register(
-            ClaudeCodeProvider(bin_path=bin_path, api_key=api_key)
-        )
+        ctx.providers.register(ClaudeCodeProvider(bin_path=bin_path, api_key=api_key))
         if has_key:
             log.info("plugin.loaded", name=self.name, bin_path=bin_path)
         else:
@@ -81,9 +79,7 @@ class HermesProviderPlugin:
 
         api_key = settings.hermes_config or ""
         has_key = bool(api_key)
-        ctx.providers.register(
-            HermesProvider(bin_path=bin_path, api_key=api_key)
-        )
+        ctx.providers.register(HermesProvider(bin_path=bin_path, api_key=api_key))
         if has_key:
             log.info("plugin.loaded", name=self.name, bin_path=bin_path)
         else:

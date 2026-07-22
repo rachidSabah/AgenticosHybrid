@@ -19,10 +19,17 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
-from agentic_os.domain.agent import Agent, Role, Task
+from agentic_os.domain.agent import Role, Task
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
+from agentic_os.domain.mission import (
+    Attachment,
+    ExecutionMode,
+    Mission,
+    MissionPriority,
+    MissionStatus,
+)
 from agentic_os.domain.orchestration import (
     AgentDescriptor,
     AgentTask,
@@ -45,7 +52,6 @@ from agentic_os.domain.pipeline import (
     PipelineStatus,
 )
 from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
-from agentic_os.domain.mission import Attachment, ExecutionMode, Mission, MissionPriority, MissionStatus
 from agentic_os.domain.workflow import (
     WorkflowEdge,
     WorkflowExecutionStatus,
@@ -454,21 +460,26 @@ def create_app(platform: Platform) -> FastAPI:
             deadline=datetime.fromisoformat(body["deadline"]) if body.get("deadline") else None,
             tags=body.get("tags", []),
             attachments=[
-                Attachment(**a) if isinstance(a, dict) else a
-                for a in body.get("attachments", [])
+                Attachment(**a) if isinstance(a, dict) else a for a in body.get("attachments", [])
             ],
         )
         _missions[mission.id] = mission
         await orch.bus.publish(
-            EventEnvelope(type="mission.created", source="api", topic=Topic.MISSION_CREATED.value, payload=mission.to_dict())
+            EventEnvelope(
+                type="mission.created",
+                source="api",
+                topic=Topic.MISSION_CREATED.value,
+                payload=mission.to_dict(),
+            )
         )
         return mission.to_dict()
 
     @app.get("/api/missions")
     async def list_missions() -> list[dict]:
-        return [m.to_dict() for m in sorted(
-            _missions.values(), key=lambda x: x.created_at, reverse=True
-        )]
+        return [
+            m.to_dict()
+            for m in sorted(_missions.values(), key=lambda x: x.created_at, reverse=True)
+        ]
 
     @app.get("/api/missions/{mission_id}")
     async def get_mission(mission_id: str) -> dict:
@@ -482,7 +493,15 @@ def create_app(platform: Platform) -> FastAPI:
         m = _missions.get(mission_id)
         if not m:
             raise HTTPException(404, f"Mission {mission_id} not found")
-        for key in ("title", "description", "prompt", "priority", "execution_mode", "constraints", "tags"):
+        for key in (
+            "title",
+            "description",
+            "prompt",
+            "priority",
+            "execution_mode",
+            "constraints",
+            "tags",
+        ):
             if key in body:
                 setattr(m, key, body[key])
         if "objectives" in body:
@@ -492,10 +511,17 @@ def create_app(platform: Platform) -> FastAPI:
         if "deadline" in body and body["deadline"]:
             m.deadline = datetime.fromisoformat(body["deadline"])
         if "attachments" in body:
-            m.attachments = [Attachment(**a) if isinstance(a, dict) else a for a in body["attachments"]]
+            m.attachments = [
+                Attachment(**a) if isinstance(a, dict) else a for a in body["attachments"]
+            ]
         m.updated_at = datetime.now(UTC)
         await orch.bus.publish(
-            EventEnvelope(type="mission.updated", source="api", topic=Topic.MISSION_UPDATED.value, payload=m.to_dict())
+            EventEnvelope(
+                type="mission.updated",
+                source="api",
+                topic=Topic.MISSION_UPDATED.value,
+                payload=m.to_dict(),
+            )
         )
         return m.to_dict()
 
@@ -505,7 +531,12 @@ def create_app(platform: Platform) -> FastAPI:
         if not m:
             raise HTTPException(404, f"Mission {mission_id} not found")
         await orch.bus.publish(
-            EventEnvelope(type="mission.deleted", source="api", topic=Topic.MISSION_DELETED.value, payload={"id": mission_id})
+            EventEnvelope(
+                type="mission.deleted",
+                source="api",
+                topic=Topic.MISSION_DELETED.value,
+                payload={"id": mission_id},
+            )
         )
         return {"deleted": mission_id}
 
@@ -530,7 +561,12 @@ def create_app(platform: Platform) -> FastAPI:
         m.status = MissionStatus.EXECUTING
         m.updated_at = datetime.now(UTC)
         await orch.bus.publish(
-            EventEnvelope(type="mission.started", source="api", topic=Topic.MISSION_STARTED.value, payload=m.to_dict())
+            EventEnvelope(
+                type="mission.started",
+                source="api",
+                topic=Topic.MISSION_STARTED.value,
+                payload=m.to_dict(),
+            )
         )
         return m.to_dict()
 
@@ -542,7 +578,12 @@ def create_app(platform: Platform) -> FastAPI:
         m.status = MissionStatus.PAUSED
         m.updated_at = datetime.now(UTC)
         await orch.bus.publish(
-            EventEnvelope(type="mission.paused", source="api", topic=Topic.MISSION_PAUSED.value, payload=m.to_dict())
+            EventEnvelope(
+                type="mission.paused",
+                source="api",
+                topic=Topic.MISSION_PAUSED.value,
+                payload=m.to_dict(),
+            )
         )
         return m.to_dict()
 
@@ -554,7 +595,12 @@ def create_app(platform: Platform) -> FastAPI:
         m.status = MissionStatus.CANCELLED
         m.updated_at = datetime.now(UTC)
         await orch.bus.publish(
-            EventEnvelope(type="mission.cancelled", source="api", topic=Topic.MISSION_CANCELLED.value, payload=m.to_dict())
+            EventEnvelope(
+                type="mission.cancelled",
+                source="api",
+                topic=Topic.MISSION_CANCELLED.value,
+                payload=m.to_dict(),
+            )
         )
         return m.to_dict()
 
@@ -1883,7 +1929,11 @@ def create_app(platform: Platform) -> FastAPI:
         reg = getattr(swarm, "registry", None) or getattr(orch, "registry", None)
         if reg is not None:
             agents = reg.agents()
-            agents_online = sum(1 for a in agents if getattr(a, "status", "") == "idle" or getattr(a, "status", "") == "active")
+            agents_online = sum(
+                1
+                for a in agents
+                if getattr(a, "status", "") == "idle" or getattr(a, "status", "") == "active"
+            )
             tasks = reg.tasks()
             total_tasks = len(tasks)
             completed_tasks = sum(1 for t in tasks if getattr(t, "status", "") == "completed")

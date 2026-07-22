@@ -57,8 +57,6 @@ async def build_adapter(config: ProviderConfig, get_key) -> ProviderAdapter:
     # This allows flexible auto-binding of agents found on PATH.
     binary_name = kind.replace("_", "-")  # e.g. aider, codex, ollama
     if shutil.which(binary_name) or shutil.which(kind):
-        from agentic_os.adapters.providers.claude_code import ClaudeCodeProvider
-
         log.info("factory.auto_bind_cli", name=name, binary=binary_name)
         api_key = await get_key(name) or ""
         return ClaudeCodeProvider(bin_path=binary_name, api_key=api_key)

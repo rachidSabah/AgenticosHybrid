@@ -39,8 +39,7 @@ class HermesProvider:
     async def execute(self, agent: Agent, task: Task) -> str:
         if not shutil.which(self._bin):
             raise RuntimeError(
-                f"Hermes CLI not found at '{self._bin}'. "
-                f"Install with: pip install hermes-cli"
+                f"Hermes CLI not found at '{self._bin}'. Install with: pip install hermes-cli"
             )
         prompt = f"{task.title}\n\n{task.description}".strip()
         env = dict(__import__("os").environ)

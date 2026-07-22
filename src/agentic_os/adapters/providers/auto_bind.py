@@ -21,7 +21,6 @@ from pathlib import Path
 
 from agentic_os.adapters.providers.claude_code import ClaudeCodeProvider
 from agentic_os.adapters.providers.hermes import HermesProvider
-from agentic_os.adapters.providers.mock import MockProvider
 from agentic_os.core.registry import ProviderRegistry
 from agentic_os.domain.agent import ProviderInfo
 from agentic_os.infrastructure.logging import get_logger
@@ -160,7 +159,6 @@ def _common_install_dirs() -> list[Path]:
     if _platform.system() == "Windows":
         local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
         roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
-        prog_data = Path(os.environ.get("ProgramData", "C:\\ProgramData"))
         candidates = [
             local / "Programs" / "Python" / "Scripts",
             local / "npm",
@@ -171,7 +169,10 @@ def _common_install_dirs() -> list[Path]:
             roaming / "npm",
             roaming / "yarn" / "bin",
             roaming / "Local" / "bin",
-            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Common Files" / "Oracle" / "Java",
+            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"))
+            / "Common Files"
+            / "Oracle"
+            / "Java",
             Path("C:\\Program Files") / "nodejs",
             Path("C:\\Program Files") / "Git" / "bin",
             Path("C:\\Program Files") / "GitHub CLI",
@@ -232,7 +233,7 @@ def _probe_binary(bin_path: Path) -> dict | None:
         ai_keywords = ["ai", "agent", "code", "assistant", "copilot", "llm", "gpt", "claude"]
         if any(kw in output for kw in ai_keywords):
             return {"version": result.stdout.strip()[:100], "type": "unknown"}
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         pass
     return None
 
@@ -259,17 +260,66 @@ def _detect_unknown_agents(
                     continue
                 name = entry.name.lower()
                 # Skip non-executable / non-binary files
-                if name.endswith((".py", ".js", ".txt", ".md", ".json", ".yaml", ".yml", ".toml", ".cfg", ".conf")):
+                if name.endswith(
+                    (
+                        ".py",
+                        ".js",
+                        ".txt",
+                        ".md",
+                        ".json",
+                        ".yaml",
+                        ".yml",
+                        ".toml",
+                        ".cfg",
+                        ".conf",
+                    )
+                ):
                     continue
                 # Skip shell built-in names and common utilities
                 if name in (
-                    "python", "python3", "node", "npm", "npx", "java", "git",
-                    "bash", "sh", "zsh", "fish", "powershell", "cmd", "pwsh",
-                    "ls", "cat", "grep", "sed", "awk", "find", "sort",
-                    "curl", "wget", "make", "cmake", "gcc", "g++", "clang",
-                    "vim", "nvim", "emacs", "nano", "code", "code-insiders",
-                    "docker", "docker-compose", "kubectl", "helm",
-                    "rustc", "cargo", "go", "deno", "bun",
+                    "python",
+                    "python3",
+                    "node",
+                    "npm",
+                    "npx",
+                    "java",
+                    "git",
+                    "bash",
+                    "sh",
+                    "zsh",
+                    "fish",
+                    "powershell",
+                    "cmd",
+                    "pwsh",
+                    "ls",
+                    "cat",
+                    "grep",
+                    "sed",
+                    "awk",
+                    "find",
+                    "sort",
+                    "curl",
+                    "wget",
+                    "make",
+                    "cmake",
+                    "gcc",
+                    "g++",
+                    "clang",
+                    "vim",
+                    "nvim",
+                    "emacs",
+                    "nano",
+                    "code",
+                    "code-insiders",
+                    "docker",
+                    "docker-compose",
+                    "kubectl",
+                    "helm",
+                    "rustc",
+                    "cargo",
+                    "go",
+                    "deno",
+                    "bun",
                 ):
                     continue
                 # Skip .exe, .com, .bat, .cmd on Windows (check without extension)
@@ -285,14 +335,16 @@ def _detect_unknown_agents(
                 probe = _probe_binary(entry)
                 if probe:
                     scanned.add(stem)
-                    found.append({
-                        "binary": stem,
-                        "kind": "auto_detected",
-                        "display_name": stem.capitalize(),
-                        "capabilities": ["coding", "reasoning"],
-                        "description": f"Auto-detected AI agent: {stem}",
-                        "path": str(entry),
-                    })
+                    found.append(
+                        {
+                            "binary": stem,
+                            "kind": "auto_detected",
+                            "display_name": stem.capitalize(),
+                            "capabilities": ["coding", "reasoning"],
+                            "description": f"Auto-detected AI agent: {stem}",
+                            "path": str(entry),
+                        }
+                    )
                     log.info("auto_bind.unknown_detected", name=stem, path=str(entry))
         except PermissionError:
             continue
@@ -340,7 +392,7 @@ def auto_discover_and_bind(provider_registry: ProviderRegistry) -> list[Provider
                     stem = Path(name).stem if _platform.system() == "Windows" else name
                     if stem not in all_binaries:
                         all_binaries[stem] = entry
-        except (PermissionError, OSError):
+        except PermissionError, OSError:
             continue
 
     # ── Phase 2: Bind known agents ──

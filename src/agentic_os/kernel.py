@@ -55,9 +55,6 @@ from agentic_os.core.discovery.validation import (
 )
 from agentic_os.core.health import HealthMonitorImpl
 
-# Mission Orchestrator
-from agentic_os.core.mission import MissionPlannerImpl
-
 # Phase 5: Learning & Optimization Engine
 from agentic_os.core.learning import LearningManager
 
@@ -66,6 +63,9 @@ from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.core.mcp.security import MCPSecurity
 from agentic_os.core.memory.manager import MemoryManagerImpl
+
+# Mission Orchestrator
+from agentic_os.core.mission import MissionPlannerImpl
 from agentic_os.core.orchestration.config import OrchestrationConfiguration
 
 # Phase 4, M3: Orchestration Framework
@@ -95,13 +95,13 @@ from agentic_os.ports.execution import DiscoveryProvider
 
 log = get_logger("kernel")
 
+
 def _ensure_env() -> None:
     """Generate .env from .env.example if .env doesn't exist yet.
 
     This ensures first-time users get a ready-to-edit configuration without
     manual file copying. Existing .env files are never overwritten.
     """
-    import os
     from pathlib import Path
 
     env_path = Path(".env")
