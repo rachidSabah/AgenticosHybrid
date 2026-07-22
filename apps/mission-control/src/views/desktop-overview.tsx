@@ -73,7 +73,7 @@ export default function DesktopOverview() {
   const activeWorkspace = state.workspaces.find((w) => w.id === state.active_workspace_id);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4" role="region" aria-label="Desktop Overview">
+    <div className="scroll-page p-4 rgrid" role="region" aria-label="Desktop Overview">
       <div className="col-span-12 flex flex-wrap items-start gap-3">
         <Stat label="Desktop Status" value={state.status} tone={statusTone(state.status)} />
         <Stat label="Uptime" value={formatUptime(state.uptime_seconds)} />

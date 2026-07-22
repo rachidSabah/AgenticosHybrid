@@ -122,7 +122,7 @@ export function AgentConstellation() {
 
   if (nodes.length === 0) {
     return (
-      <div className="h-full p-4">
+      <div className="scroll-page p-4 no-hscroll">
         <Panel title="Agent Constellation" subtitle="Supervisor → agent topology">
           <Empty title="No agents in the constellation" hint="Compose or dispatch agents to populate the graph." />
         </Panel>
@@ -131,9 +131,9 @@ export function AgentConstellation() {
   }
 
   return (
-    <div className="h-full p-4">
-      <Panel title="Agent Constellation" subtitle="Live supervisor → agent topology" contentClassName="p-0" className="h-full">
-        <div ref={containerRef} className="h-full" role="application" aria-label="Agent constellation graph" tabIndex={0}>
+    <div className="scroll-page p-4 no-hscroll">
+      <Panel title="Agent Constellation" subtitle="Live supervisor → agent topology" contentClassName="p-0">
+        <div ref={containerRef} className="min-h-[400px]" role="application" aria-label="Agent constellation graph" tabIndex={0}>
           <ReactFlow
             nodes={nodes}
             edges={edges}

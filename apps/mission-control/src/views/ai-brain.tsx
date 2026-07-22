@@ -193,9 +193,9 @@ export function AIBrain() {
   // ── Render ──
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="scroll-page space-y-4 p-4 no-hscroll">
       {/* ── Left: Brain visualisation ── */}
-      <div className="col-span-7 relative flex items-center justify-center">
+      <div className="relative flex items-center justify-center">
         <div className="relative aspect-square w-full max-w-[520px]">
           {/* SVG layer — brain illustration + neural connection lines */}
           <svg
@@ -476,7 +476,7 @@ export function AIBrain() {
       </div>
 
       {/* ── Right: Panels ── */}
-      <div className="col-span-5 flex flex-col gap-4 overflow-y-auto">
+      <div className="flex flex-col gap-4">
         {/* ── Brain Telemetry (unchanged) ── */}
         <Panel
           title="Brain Telemetry"

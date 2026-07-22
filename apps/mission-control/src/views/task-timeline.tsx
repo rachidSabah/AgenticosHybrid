@@ -36,8 +36,8 @@ export function TaskTimeline() {
   }, []);
 
   return (
-    <div className="h-full p-4">
-      <Panel title="Task Timeline" subtitle="Lifecycle events in order" className="h-full">
+    <div className="scroll-page p-4">
+      <Panel title="Task Timeline" subtitle="Lifecycle events in order" className="flex-1 min-h-0">
         <div className="relative space-y-0">
           <div className="absolute bottom-0 left-[7px] top-0 w-px bg-border/50" />
           {items.map((e) => (

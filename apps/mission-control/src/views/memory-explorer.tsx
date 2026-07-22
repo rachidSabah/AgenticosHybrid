@@ -31,7 +31,8 @@ export function MemoryExplorer() {
   }, [refresh]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="scroll-page p-4">
+      <div className="rgrid gap-4">
       <Panel title="Memory Scopes" subtitle="Backed by the Memory System" className="col-span-3">
         <div className="space-y-2">
           {SCOPES.map((s) => (
@@ -128,6 +129,7 @@ export function MemoryExplorer() {
           {status && <div className="text-xs text-muted">{status}</div>}
         </div>
       </Panel>
+    </div>
     </div>
   );
 }

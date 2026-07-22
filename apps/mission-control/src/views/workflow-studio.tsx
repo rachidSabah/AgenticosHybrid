@@ -380,11 +380,11 @@ export function WorkflowStudio() {
   }, [nodes, selectedId, setNodesRF, getNode, setCenter, setNodes, setEdges]);
 
   return (
-    <div className="h-full p-4">
+    <div className="scroll-page p-4">
       <Panel
         title="Workflow Studio"
         subtitle="Compose an agentic pipeline"
-        className="h-full"
+        className="flex-1 min-h-0"
         contentClassName="p-0"
         actions={
           <div className="flex items-center gap-2">

@@ -58,7 +58,8 @@ export function MissionOrchestrator() {
   useEffect(() => { loadMissions(); }, [loadMissions]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="scroll-page p-4">
+      <div className="rgrid gap-4">
       {/* Left panel — mission list */}
       <div className="col-span-4 flex flex-col gap-4">
         <Panel
@@ -149,6 +150,7 @@ export function MissionOrchestrator() {
           </Panel>
         )}
       </div>
+    </div>
     </div>
   );
 }

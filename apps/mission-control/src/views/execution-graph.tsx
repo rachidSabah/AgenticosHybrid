@@ -142,7 +142,7 @@ export function ExecutionGraph() {
 
   if (nodes.length === 0) {
     return (
-      <div className="h-full p-4">
+      <div className="scroll-page p-4">
         <Panel title="Execution Graph" subtitle="Task lifecycle → dispatch">
           <Empty title="No tasks in flight" hint="Tasks appear here as they are created and dispatched." />
         </Panel>
@@ -151,9 +151,9 @@ export function ExecutionGraph() {
   }
 
   return (
-    <div className="h-full p-4">
-      <Panel title="Execution Graph" subtitle="Live task lifecycle" contentClassName="p-0" className="h-full">
-        <div ref={containerRef} className="h-full" role="application" aria-label="Execution graph: tasks and agents" tabIndex={0}>
+    <div className="scroll-page p-4">
+      <Panel title="Execution Graph" subtitle="Live task lifecycle" contentClassName="p-0" className="flex-1 min-h-0">
+        <div ref={containerRef} className="h-full min-h-[300px]" role="application" aria-label="Execution graph: tasks and agents" tabIndex={0}>
           <ReactFlow
             nodes={nodes}
             edges={edges}

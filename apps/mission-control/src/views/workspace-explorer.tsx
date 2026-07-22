@@ -24,8 +24,8 @@ export function WorkspaceExplorer() {
   }
 
   return (
-    <div className="h-full p-4">
-      <Panel title="Workspace Explorer" subtitle="Agent sandbox isolation" className="h-full">
+    <div className="scroll-page p-4">
+      <Panel title="Workspace Explorer" subtitle="Agent sandbox isolation" className="flex-1 min-h-0">
         <div className="flex max-w-md gap-2">
           <input
             className="flex-1 rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-sm outline-none focus:border-accent/60"

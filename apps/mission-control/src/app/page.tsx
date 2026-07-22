@@ -242,7 +242,7 @@ const VIEWS: Record<string, () => ReactNode> = {
 };
 
 export default function Page() {
-  const active = useContext(ActiveViewCtx) || "overview";
+  const { active } = useContext(ActiveViewCtx);
   const View = VIEWS[active] ?? VIEWS.overview;
   return <View />;
 }

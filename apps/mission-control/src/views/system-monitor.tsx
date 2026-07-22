@@ -28,7 +28,7 @@ export function SystemMonitor() {
   }, [events]);
 
   return (
-    <div className="grid h-full grid-cols-12 grid-rows-6 gap-4 p-4">
+    <div className="scroll-page p-4 rgrid">
       <div className="col-span-12 row-span-1 flex flex-wrap gap-3">
         <Stat label="Connection" value={connected ? "live" : "offline"} tone={connected ? "ok" : "danger"} />
         <Stat label="Throughput" value={`${rates.perSec.toFixed(1)}/s`} tone="accent" />

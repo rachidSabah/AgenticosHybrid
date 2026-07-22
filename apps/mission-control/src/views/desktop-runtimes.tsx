@@ -47,7 +47,7 @@ export default function DesktopRuntimes() {
   const verifiedCount = runtimes.filter((r) => r.verified).length;
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-4" role="region" aria-label="Desktop Runtimes">
+    <div className="scroll-page p-4" role="region" aria-label="Desktop Runtimes">
       <div className="flex flex-wrap items-center gap-3">
         <Stat label="Total Runtimes" value={runtimes.length} />
         <Stat label="Verified" value={verifiedCount} tone="ok" />

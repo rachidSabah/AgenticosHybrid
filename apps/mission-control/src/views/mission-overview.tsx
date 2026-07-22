@@ -30,8 +30,8 @@ export function MissionOverview() {
   const running = Object.values(agents).filter((a) => a.status === "running").length;
 
   return (
-    <div className="grid h-full grid-cols-12 grid-rows-6 gap-4 p-4">
-      <div className="col-span-12 row-span-1 flex flex-wrap gap-3">
+    <div className="scroll-page space-y-4 p-4 no-hscroll">
+      <div className="flex flex-wrap gap-3">
         <Stat label="Agents" value={m.agents} delta={`${running} running`} tone="accent" />
         <Stat label="Tasks" value={m.tasks} delta={`${Object.keys(tasks).length} tracked`} />
         <Stat label="Providers" value={m.providers} delta={`${healthy} healthy`} tone="ok" />
@@ -41,11 +41,11 @@ export function MissionOverview() {
         <Stat label="Events" value={events.length} delta="live stream" />
       </div>
 
-      <Panel title="Live Activity" subtitle="Real-time EventBus pulses" className="col-span-5 row-span-3">
+      <Panel title="Live Activity" subtitle="Real-time EventBus pulses">
         <ActivityStream />
       </Panel>
 
-      <Panel title="Provider Health" subtitle="From provider control center" className="col-span-4 row-span-3">
+      <Panel title="Provider Health" subtitle="From provider control center">
         {providersData.length === 0 && providers && Object.keys(providers).length === 0 ? (
           <Empty title="No provider telemetry yet" hint="Run a task or register a provider." />
         ) : (
@@ -70,7 +70,7 @@ export function MissionOverview() {
         )}
       </Panel>
 
-      <Panel title="Capabilities" subtitle={`${caps.length} registered`} className="col-span-3 row-span-3">
+      <Panel title="Capabilities" subtitle={`${caps.length} registered`}>
         <div className="flex flex-wrap gap-1.5">
           {caps.map((c) => (
             <Badge key={c.name} tone={c.requires_approval ? "warn" : "default"}>
@@ -81,7 +81,7 @@ export function MissionOverview() {
         </div>
       </Panel>
 
-      <Panel title="Agent Fleet" subtitle="Current live agents" className="col-span-5 row-span-2">
+      <Panel title="Agent Fleet" subtitle="Current live agents">
         <div className="flex flex-wrap gap-2">
           {Object.values(agents).map((a) => (
             <div key={a.id} className="flex items-center gap-2 rounded-xl border border-border/60 px-3 py-2">
@@ -96,7 +96,7 @@ export function MissionOverview() {
         </div>
       </Panel>
 
-      <Panel title="Audit Trail" subtitle="Security-relevant actions" className="col-span-7 row-span-2" contentClassName="p-0">
+      <Panel title="Audit Trail" subtitle="Security-relevant actions" contentClassName="p-0">
         <div className="divide-y divide-border/50">
           {audit.slice(0, 12).map((e) => (
             <div key={e.id} className="flex items-center gap-3 px-4 py-2 text-sm">

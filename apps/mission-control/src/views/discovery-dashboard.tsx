@@ -19,7 +19,7 @@ export function DiscoveryDashboard() {
   const [tab, setTab] = useState<DiscoveryTab>("dashboard");
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="scroll-page">
       <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2">
         {(["dashboard", "history", "profiles", "validation"] as const).map((t) => (
           <button
@@ -35,7 +35,7 @@ export function DiscoveryDashboard() {
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="p-4">
         {tab === "dashboard" && <DiscoveryDashboardTab />}
         {tab === "history" && <DiscoveryHistoryTab />}
         {tab === "profiles" && <DiscoveryProfilesTab />}
@@ -96,8 +96,8 @@ function DiscoveryDashboardTab() {
   const expiredCount = cache.filter((e) => e.expired).length;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex flex-wrap gap-3">
+    <div className="no-hscroll">
+      <div className="rflex gap-3">
         <Stat label="Active Providers" value={activeCount} tone="ok" />
         <Stat label="Cache Entries" value={cache.length} />
         <Stat label="Cache Hits" value={cacheHitCount} tone="accent" />
@@ -112,7 +112,7 @@ function DiscoveryDashboardTab() {
         )}
       </div>
 
-      <div className="col-span-12 flex items-center gap-3">
+      <div className="rflex items-center gap-3 mt-3">
         <button
           onClick={handleScan}
           disabled={scanning}
@@ -137,54 +137,56 @@ function DiscoveryDashboardTab() {
         )}
       </div>
 
-      <Panel title="Discovery Providers" subtitle={`${providers.length} registered`} className="col-span-6 row-span-2">
-        <div className="space-y-2">
-          {providers.map((p) => (
-            <div key={p.name} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
-              <StatusDot status={p.enabled ? "healthy" : "unknown"} pulse={p.enabled} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{p.name}</span>
-                  <Badge>{p.provider_type}</Badge>
+      <div className="rflex gap-4 mt-4">
+        <Panel title="Discovery Providers" subtitle={`${providers.length} registered`} className="flex-1">
+          <div className="space-y-2">
+            {providers.map((p) => (
+              <div key={p.name} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+                <StatusDot status={p.enabled ? "healthy" : "unknown"} pulse={p.enabled} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{p.name}</span>
+                    <Badge>{p.provider_type}</Badge>
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-faint">
+                    Interval: {p.interval_seconds}s &middot; Timeout: {p.timeout_seconds}s
+                  </div>
                 </div>
-                <div className="mt-0.5 text-[11px] text-faint">
-                  Interval: {p.interval_seconds}s &middot; Timeout: {p.timeout_seconds}s
-                </div>
+                <button
+                  onClick={() =>
+                    api.enableProvider(p.name, { enabled: !p.enabled }).then(() => load())
+                  }
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                    p.enabled
+                      ? "bg-ok/12 text-ok hover:bg-ok/20"
+                      : "bg-surface/40 text-faint hover:bg-surface/60"
+                  }`}
+                >
+                  {p.enabled ? "Enabled" : "Disabled"}
+                </button>
               </div>
-              <button
-                onClick={() =>
-                  api.enableProvider(p.name, { enabled: !p.enabled }).then(() => load())
-                }
-                className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
-                  p.enabled
-                    ? "bg-ok/12 text-ok hover:bg-ok/20"
-                    : "bg-surface/40 text-faint hover:bg-surface/60"
-                }`}
-              >
-                {p.enabled ? "Enabled" : "Disabled"}
-              </button>
-            </div>
-          ))}
-          {providers.length === 0 && <Empty title="No providers" hint="Providers register at kernel startup." />}
-        </div>
-      </Panel>
+            ))}
+            {providers.length === 0 && <Empty title="No providers" hint="Providers register at kernel startup." />}
+          </div>
+        </Panel>
 
-      <Panel title="Cache" subtitle={`${cache.filter((e) => !e.expired).length} active`} className="col-span-6 row-span-2">
-        <div className="space-y-1.5">
-          {cache.slice(0, 30).map((e) => (
-            <div key={e.key} className="flex items-center gap-2 text-xs">
-              <StatusDot status={e.expired ? "failed" : "healthy"} />
-              <span className="w-36 shrink-0 truncate font-mono text-faint">{e.provider_name}</span>
-              <span className="flex-1 truncate text-muted">{e.key}</span>
-              <span className="w-16 text-right tabular-nums text-faint">{e.hit_count}x</span>
-              <span className="w-24 text-right text-faint">
-                {e.expired ? "expired" : new Date(e.expires_at).toLocaleTimeString()}
-              </span>
-            </div>
-          ))}
-          {cache.length === 0 && <Empty title="Cache empty" hint="Run a discovery scan to populate." />}
-        </div>
-      </Panel>
+        <Panel title="Cache" subtitle={`${cache.filter((e) => !e.expired).length} active`} className="flex-1">
+          <div className="space-y-1.5">
+            {cache.slice(0, 30).map((e) => (
+              <div key={e.key} className="flex items-center gap-2 text-xs">
+                <StatusDot status={e.expired ? "failed" : "healthy"} />
+                <span className="w-36 shrink-0 truncate font-mono text-faint">{e.provider_name}</span>
+                <span className="flex-1 truncate text-muted">{e.key}</span>
+                <span className="w-16 text-right tabular-nums text-faint">{e.hit_count}x</span>
+                <span className="w-24 text-right text-faint">
+                  {e.expired ? "expired" : new Date(e.expires_at).toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+            {cache.length === 0 && <Empty title="Cache empty" hint="Run a discovery scan to populate." />}
+          </div>
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -201,14 +203,14 @@ function DiscoveryHistoryTab() {
   }, []);
 
   return (
-    <div className="p-4">
-      <Panel title="Scan History" subtitle={`${history.length} scans recorded`}>
-        {loading ? (
-          <div className="flex items-center justify-center py-12 text-xs text-faint">Loading…</div>
-        ) : history.length === 0 ? (
-          <Empty title="No scans yet" hint="Run a discovery scan to populate history." />
-        ) : (
-          <div className="divide-y divide-border/40">
+    <Panel title="Scan History" subtitle={`${history.length} scans recorded`}>
+      {loading ? (
+        <div className="flex items-center justify-center py-12 text-xs text-faint">Loading…</div>
+      ) : history.length === 0 ? (
+        <Empty title="No scans yet" hint="Run a discovery scan to populate history." />
+      ) : (
+        <div className="table-container">
+          <div className="divide-y divide-border/40 min-w-[600px]">
             <div className="flex items-center gap-3 px-2 py-2 text-[11px] font-semibold uppercase text-faint">
               <span className="w-8">#</span>
               <span className="w-32">Profile</span>
@@ -232,9 +234,9 @@ function DiscoveryHistoryTab() {
               </div>
             ))}
           </div>
-        )}
-      </Panel>
-    </div>
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -278,8 +280,8 @@ function DiscoveryProfilesTab() {
   };
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="no-hscroll">
+      <div className="rflex items-center gap-3">
         <input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
@@ -296,9 +298,9 @@ function DiscoveryProfilesTab() {
         </button>
       </div>
 
-      <div className="col-span-12 grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="card-grid mt-4">
         {profiles.map((p) => (
-          <div key={p.name} className="rounded-xl border border-border/60 bg-surface/20 p-4">
+          <div key={p.name} className="card-fluid rounded-xl border border-border/60 bg-surface/20 p-4">
             <div className="flex items-center justify-between">
               <div>
                 <span className="font-medium">{p.name}</span>
@@ -344,7 +346,7 @@ function DiscoveryProfilesTab() {
           </div>
         ))}
         {profiles.length === 0 && (
-          <div className="col-span-2">
+          <div className="col-span-full">
             <Empty title="No profiles" hint="Create a profile to configure discovery behavior." />
           </div>
         )}
@@ -381,35 +383,33 @@ function DiscoveryValidationTab() {
   }, []);
 
   return (
-    <div className="p-4">
-      <Panel title="Validation Results" subtitle={`${validations.length} engines validated`}>
-        {validations.length === 0 ? (
-          <Empty title="No validation data" hint="Run a discovery scan to trigger validation." />
-        ) : (
-          <div className="divide-y divide-border/40">
-            {validations.map((v) => (
-              <div key={v.engine_id} className="flex items-center gap-3 px-2 py-2.5">
-                <StatusDot status={v.valid ? "healthy" : "failed"} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{v.engine_name}</span>
-                    <Badge tone={v.valid ? "ok" : "danger"}>{v.valid ? "Pass" : "Fail"}</Badge>
-                  </div>
-                  {v.errors.length > 0 && (
-                    <div className="mt-0.5 text-[11px] text-danger">{v.errors.join("; ")}</div>
-                  )}
-                  {v.warnings.length > 0 && (
-                    <div className="mt-0.5 text-[11px] text-faint">{v.warnings.join("; ")}</div>
-                  )}
+    <Panel title="Validation Results" subtitle={`${validations.length} engines validated`}>
+      {validations.length === 0 ? (
+        <Empty title="No validation data" hint="Run a discovery scan to trigger validation." />
+      ) : (
+        <div className="space-y-2">
+          {validations.map((v) => (
+            <div key={v.engine_id} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+              <StatusDot status={v.valid ? "healthy" : "failed"} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{v.engine_name}</span>
+                  <Badge tone={v.valid ? "ok" : "danger"}>{v.valid ? "Pass" : "Fail"}</Badge>
                 </div>
-                <span className="text-[11px] text-faint">
-                  {new Date(v.validated_at).toLocaleTimeString()}
-                </span>
+                {v.errors.length > 0 && (
+                  <div className="mt-0.5 text-[11px] text-danger">{v.errors.join("; ")}</div>
+                )}
+                {v.warnings.length > 0 && (
+                  <div className="mt-0.5 text-[11px] text-faint">{v.warnings.join("; ")}</div>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </Panel>
-    </div>
+              <span className="text-[11px] text-faint">
+                {new Date(v.validated_at).toLocaleTimeString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   );
 }

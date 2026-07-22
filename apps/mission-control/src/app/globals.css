@@ -235,3 +235,117 @@ body {
   ring-offset: 2px;
   ring-offset-color: rgb(var(--focus-ring-offset));
 }
+
+/* ── Responsive Layout Utilities ── */
+
+/* Single-scroll page container — eliminates nested scrolling */
+.scroll-page {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* No horizontal scroll ever */
+.no-hscroll {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Responsive grid: 12-col desktop → 4-col tablet → 1-col mobile */
+.rgrid {
+  display: grid;
+  grid-template-columns: repeat(var(--mc-grid-cols, 12), minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1023px) {
+  .rgrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .rgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Auto-fill grid for cards — adapts to container width */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 639px) {
+  .card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Responsive flex that wraps */
+.rflex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.rflex > * {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+/* Fluid card: fills available space, auto-height */
+.card-fluid {
+  min-height: 0;
+  height: auto;
+  width: 100%;
+}
+
+/* Responsive table container */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-container table {
+  width: 100%;
+  min-width: 500px;
+}
+
+/* Stack panels vertically on small screens */
+@media (max-width: 1023px) {
+  .panel-stack {
+    flex-direction: column !important;
+  }
+  .panel-stack > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Hide on mobile */
+@media (max-width: 639px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Show only on mobile */
+.show-mobile {
+  display: none !important;
+}
+@media (max-width: 639px) {
+  .show-mobile {
+    display: revert !important;
+  }
+}
+
+/* Reduced motion override — CSS fluid measurements still work */
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe {
+    transition: none !important;
+    animation: none !important;
+  }
+}
