@@ -51,6 +51,8 @@ class TestRuntimeType:
             "continue",
             "cline",
             "roo_code",
+            "opencode",
+            "agy_cli",
             "ollama",
             "python",
             "nodejs",

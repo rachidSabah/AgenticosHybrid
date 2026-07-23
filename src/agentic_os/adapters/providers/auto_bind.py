@@ -225,14 +225,16 @@ def _probe_binary(bin_path: Path) -> dict | None:
         result = subprocess.run(
             [str(bin_path), "--version"],
             capture_output=True,
-            text=True,
+            text=False,
             timeout=5,
         )
-        output = (result.stdout + result.stderr).lower()
+        stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+        stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+        output = (stdout + stderr).lower()
         # Check for AI-agent-like keywords
         ai_keywords = ["ai", "agent", "code", "assistant", "copilot", "llm", "gpt", "claude"]
         if any(kw in output for kw in ai_keywords):
-            return {"version": result.stdout.strip()[:100], "type": "unknown"}
+            return {"version": stdout.strip()[:100], "type": "unknown"}
     except (subprocess.TimeoutExpired, OSError):
         pass
 
