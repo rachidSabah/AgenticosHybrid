@@ -595,4 +595,27 @@ export const api = {
     get<Record<string, import("./types").MissionRoutePlanType>>(
       `/api/v1/routing/compare/${missionId}`,
     ),
+  // ── AI Agent Binding Center API ──
+  bindingDiscover: (mode: "surface" | "deep" = "surface") =>
+    post<{ total_found: number; providers: Array<Record<string, unknown>> }>("/binding/discover", { mode }),
+  bindingDeepScan: () =>
+    post<{ total_found: number; sources_scanned: number; providers: Array<Record<string, unknown>> }>("/binding/deep-scan"),
+  bindingManual: (body: Record<string, unknown>) =>
+    post<{ id: string; provider: string; bound: boolean }>("/binding/manual", body),
+  bindingValidate: (providerId: string) =>
+    post<{ provider_id: string; healthy: boolean; details: Record<string, unknown> }>(`/binding/validate`, { provider_id: providerId }),
+  bindingRepair: (providerId: string) =>
+    post<{ provider_id: string; repaired: boolean; action_taken: string }>(`/binding/repair`, { provider_id: providerId }),
+  bindingRebind: (providerId: string, newPath: string) =>
+    post<{ provider_id: string; rebound: boolean }>(`/binding/rebind`, { provider_id: providerId, executable_path: newPath }),
+  bindingUnbind: (providerId: string) =>
+    post<{ provider_id: string; unbound: boolean }>(`/binding/unbind`, { provider_id: providerId }),
+  bindingProviders: () =>
+    get<Array<Record<string, unknown>>>("/binding/providers"),
+  bindingLogs: (limit = 100) =>
+    get<Array<{ timestamp: string; level: string; message: string }>>(`/binding/logs?limit=${limit}`),
+  bindingHistory: () =>
+    get<Array<{ id: string; event: string; timestamp: string; provider: string }>>("/binding/history"),
+  bindingStatus: () =>
+    get<{ total_bound: number; healthy_count: number; scanning: boolean }>("/binding/status"),
 };

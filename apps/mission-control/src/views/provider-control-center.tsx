@@ -36,15 +36,16 @@ export function ProviderControlCenter() {
 
   // ── Merge: WS data wins; REST fills any gaps WS hasn't seen yet ──
   const rows: ProviderHealthRecord[] = useMemo(() => {
-    const liveArr = Object.values(providersLive);
+    const liveArr = Object.values(providersLive ?? {});
+    const safeRest = Array.isArray(restHealth) ? restHealth : [];
     if (liveArr.length > 0) {
       // WS has data — merge in any REST-only providers not yet reported via EventBus
       const liveKeys = new Set(liveArr.map((p) => p.provider));
-      const restOnly = restHealth.filter((r) => !liveKeys.has(r.provider));
+      const restOnly = safeRest.filter((r) => r && r.provider && !liveKeys.has(r.provider));
       return [...liveArr, ...restOnly];
     }
     // WS empty — use REST snapshot
-    return restHealth;
+    return safeRest;
   }, [providersLive, restHealth]);
 
   return (

@@ -544,15 +544,15 @@ export interface MissionType {
   priority: string;
   execution_mode: string;
   constraints: string[];
-  deadline: string | null;
+  deadline?: string | null;
   tags: string[];
   attachments: MissionAttachment[];
   status: string;
-  plan: MissionPlanType | null;
+  plan?: MissionPlanType | null;
   created_at: string;
-  updated_at: string | null;
-  completed_at: string | null;
-  error: string;
+  updated_at?: string | null;
+  completed_at?: string | null;
+  error?: string | null;
 }
 
 export interface MissionAttachment {

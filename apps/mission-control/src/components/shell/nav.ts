@@ -34,6 +34,7 @@ export interface NavItem {
 }
 
 export const NAV: NavItem[] = [
+  { id: "binding", label: "AI Agent Binding", hint: "A", icon: Server, group: "core" },
   { id: "overview", label: "Mission Overview", hint: "O", icon: Activity, group: "core" },
   { id: "brain", label: "AI Brain", hint: "B", icon: Brain, group: "core" },
   { id: "prompt-center", label: "Prompt Center", hint: "P", icon: MessageSquarePlus, group: "core" },

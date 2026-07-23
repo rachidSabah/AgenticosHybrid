@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from agentic_os.adapters.plugins.builtins import PLUGINS
@@ -36,7 +38,12 @@ def test_builtin_plugins_register_providers():
         plugin.load(ctx)
     names = {p.name for p in providers.list_providers()}
     assert "mock" in names
-    assert "claude_code" in names
+    # claude_code and hermes are optional — only registered if the binary
+    # is on $PATH, which varies by CI environment.
+    if shutil.which("claude"):
+        assert "claude_code" in names
+    if shutil.which("hermes"):
+        assert "hermes" in names
 
 
 def test_claude_code_provider_reports_info():

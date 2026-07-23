@@ -97,7 +97,18 @@ const GatewayDashboard = lazyWithRetry(() =>
   import("@/views/gateway-dashboard").then((m) => ({ default: m.GatewayDashboard }))
 );
 
+const AgentBindingCenter = lazyWithRetry(() =>
+  import("@/views/agent-binding-center").then((m) => ({ default: m.AgentBindingCenter }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
+  binding: () => (
+    <ErrorBoundary viewName="AI Agent Binding Center" fallback={<ViewSkeleton title="AI Agent Binding Center" />}>
+      <Suspense fallback={<ViewSkeleton title="AI Agent Binding Center" />}>
+        <AgentBindingCenter />
+      </Suspense>
+    </ErrorBoundary>
+  ),
   overview: () => (
     <ErrorBoundary viewName="Mission Overview" fallback={<ViewSkeleton title="Mission Overview" />}>
       <Suspense fallback={<ViewSkeleton title="Mission Overview" />}>

@@ -58,10 +58,10 @@ function DiscoveryDashboardTab() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api.discoveryProviders().then(setProviders).catch((err) => { console.error("API error:", err); setError(String(err)); });
-    api.discoveryCache().then((res) => { const data = res as unknown as { entries: DiscoveryCacheEntry[]; total: number }; setCache(data.entries || []); }).catch((err) => { console.error("API error:", err); setError(String(err)); });
-    api.discoveryStats().then(setStats).catch((err) => { console.error("API error:", err); setError(String(err)); });
-    api.hotReloadStatus().then(setHotReload).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.discoveryProviders().then((res) => setProviders(Array.isArray(res) ? res : [])).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.discoveryCache().then((res) => { const data = res as unknown as { entries: DiscoveryCacheEntry[]; total: number }; setCache(Array.isArray(data?.entries) ? data.entries : Array.isArray(res) ? (res as any) : []); }).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.discoveryStats().then((res) => setStats(res && typeof res === "object" && !("status" in res && (res as any).status === "offline") ? res : null)).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.hotReloadStatus().then((res) => setHotReload(res && typeof res === "object" && "running" in res ? res : null)).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
   useEffect(() => { load(); }, [load]);

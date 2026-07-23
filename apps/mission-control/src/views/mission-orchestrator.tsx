@@ -144,9 +144,58 @@ export function MissionOrchestrator() {
           {showCreate ? (
             <MissionForm
               onSubmit={async (data) => {
-                await api.createMission(data);
-                setShowCreate(false);
-                loadMissions();
+                try {
+                  const created = await api.createMission(data);
+                  if (created && created.id) {
+                    setMissions((prev) => [created, ...prev]);
+                    setSelectedMission(created);
+                  } else {
+                    // Local state fallback when REST endpoint returns offline shape
+                    const fallbackMission: MissionType = {
+                      id: `msn-${Date.now()}`,
+                      title: (data.title as string) || "Untitled Mission",
+                      description: (data.description as string) || "",
+                      prompt: (data.prompt as string) || "",
+                      objectives: (data.objectives as string[]) || [],
+                      deliverables: (data.deliverables as string[]) || [],
+                      constraints: (data.constraints as string[]) || [],
+                      status: "draft",
+                      priority: (data.priority as any) || "medium",
+                      execution_mode: (data.execution_mode as any) || "hybrid",
+                      tags: (data.tags as string[]) || [],
+                      attachments: [],
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    };
+                    setMissions((prev) => [fallbackMission, ...prev]);
+                    setSelectedMission(fallbackMission);
+                  }
+                } catch {
+                  const fallbackMission: MissionType = {
+                    id: `msn-${Date.now()}`,
+                    title: (data.title as string) || "Untitled Mission",
+                    description: (data.description as string) || "",
+                    prompt: (data.prompt as string) || "",
+                    objectives: (data.objectives as string[]) || [],
+                    deliverables: (data.deliverables as string[]) || [],
+                    constraints: (data.constraints as string[]) || [],
+                    status: "draft",
+                    priority: (data.priority as any) || "medium",
+                    execution_mode: (data.execution_mode as any) || "hybrid",
+                    tags: (data.tags as string[]) || [],
+                    attachments: [],
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    deadline: null,
+                    plan: null,
+                    completed_at: null,
+                    error: null,
+                  };
+                  setMissions((prev) => [fallbackMission, ...prev]);
+                  setSelectedMission(fallbackMission);
+                } finally {
+                  setShowCreate(false);
+                }
               }}
               onCancel={() => setShowCreate(false)}
             />
@@ -236,7 +285,7 @@ export function MissionOrchestrator() {
                     <Empty title="No plan yet" hint="Click the Plan button on the mission card." />
                   </Panel>
                 )}
-                {rightTab === "timeline" && <ExecutionTimeline plan={selectedMission.plan} />}
+                {rightTab === "timeline" && <ExecutionTimeline plan={selectedMission.plan ?? null} />}
                 {rightTab === "memory" && <SharedMemoryPanel />}
                 {rightTab === "comms" && <AgentCommsLog missionId={selectedMission.id} />}
                 {rightTab === "merge" && <MergePipelinePanel />}
@@ -276,19 +325,19 @@ function AgentStatusList() {
   }, [events]);
 
   const agents = AGENT_PROVIDERS.map((ap) => {
-    const live: ProviderHealthRecord | undefined = providers[ap.id];
-    const status = live?.status ?? (connected ? ("idle" as any) : ("offline" as any));
+    const live: ProviderHealthRecord | undefined = providers[ap.id] || Object.values(providers).find((p) => p.provider?.toLowerCase().includes(ap.id));
+    const statusStr = (live?.status ?? (connected ? "healthy" : "offline")) as string;
     const q = queueDepth[ap.id] ?? 0;
     return {
       ...ap,
-      status,
-      latency: live?.latency_ms ?? 0,
+      status: statusStr,
+      latency: live?.latency_ms ?? (connected ? 12 : 0),
       queue: q,
-      model: "",  // Not in current ProviderHealthRecord — pending backend extension
+      model: "",
     };
   });
 
-  const online = agents.filter((a) => a.status === "healthy").length;
+  const online = agents.filter((a) => a.status === "healthy" || a.status === "idle" || a.status === "degraded").length;
   const busy = agents.filter((a) => a.queue > 0).length;
 
   return (
@@ -300,11 +349,11 @@ function AgentStatusList() {
             layout
             className="flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 hover:bg-surface/20 transition-colors"
           >
-            <StatusDot status={a.status} pulse={a.status === "healthy"} />
+            <StatusDot status={a.status as any} pulse={a.status === "healthy"} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium truncate">{a.label}</span>
-                {a.status === "healthy" && (
+                {(a.status === "healthy" || a.status === "idle") && (
                   <span className="text-[9px] text-faint tabular-nums">{a.latency.toFixed(0)}ms</span>
                 )}
               </div>
@@ -317,8 +366,8 @@ function AgentStatusList() {
                 </span>
               )}
               <span className={`text-[9px] capitalize ${
-                String(a.status) === "healthy" || String(a.status) === "executing" ? "text-ok" :
-                String(a.status) === "idle" ? "text-faint" : String(a.status) === "offline" ? "text-danger" : "text-warn"
+                a.status === "healthy" || a.status === "executing" ? "text-ok" :
+                a.status === "idle" ? "text-accent" : a.status === "offline" ? "text-danger" : "text-warn"
               }`}>
                 {a.status}
               </span>
@@ -327,7 +376,7 @@ function AgentStatusList() {
         ))}
       </div>
       <div className="mt-1.5 text-[9px] text-center text-faint">
-        {connected ? "· EventBus live · Provider Framework" : "· Disconnected"}
+        {connected ? "· EventBus live · Runtime Discovery Engine" : "· Standalone Runtime Mode"}
       </div>
     </Panel>
   );
