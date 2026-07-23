@@ -11,7 +11,6 @@ Frozen dataclasses follow the same patterns as the M1 models.
 
 from __future__ import annotations
 
-
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any

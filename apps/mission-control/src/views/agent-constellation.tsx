@@ -192,7 +192,7 @@ function AnimatedEdge({
   );
 }
 
-import { ThreeDGraph } from "@/components/graphs/three-d-graph";
+import { GalaxyConstellation } from "@/components/neural/galaxy-constellation";
 
 // ── Main Component ──
 function AgentDetails({ agent }: { agent: Record<string, unknown> }) {
@@ -410,9 +410,10 @@ export function AgentConstellation() {
           ) : (
             <div className="h-full w-full">
               <Suspense fallback={<LoadingScreen />}>
-                <ThreeDGraph nodes={nodes} edges={edges} onNodeClick={(id) => setSelected(id)} />
+                <GalaxyConstellation onSelectStar={(id) => setSelected(id)} />
               </Suspense>
             </div>
+
           )}
         </Panel>
       </div>

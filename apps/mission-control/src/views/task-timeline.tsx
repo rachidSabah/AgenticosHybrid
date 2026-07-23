@@ -391,7 +391,7 @@ export function TaskTimeline() {
   // Reset expanded when filter changes change visible items
   useEffect(() => {
     setExpanded({});
-    listRef.current?.scrollTo(0);
+    listRef.current?.scrollToRow({ index: 0 });
   }, [filters]);
 
   return (

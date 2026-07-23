@@ -344,7 +344,6 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
             );
             child
         }
-        }
         Err(e) => {
             log_startup_event(
                 &startup_log,

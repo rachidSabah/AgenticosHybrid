@@ -6,81 +6,94 @@ import { ActiveViewCtx } from "@/lib/active-view";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ViewSkeleton, ViewSkeletonMinimal } from "@/components/view-skeleton";
 
-const MissionOverview = lazy(() =>
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch {
+      await new Promise((r) => setTimeout(r, 400));
+      return await factory();
+    }
+  });
+}
+
+const MissionOverview = lazyWithRetry(() =>
   import("@/views/mission-overview").then((m) => ({ default: m.MissionOverview }))
 );
-const AIBrain = lazy(() =>
-  import("@/views/ai-brain").then((m) => ({ default: m.default }))
+const AIBrain = lazyWithRetry(() =>
+  import("@/views/ai-brain").then((m) => ({ default: m.AIBrain }))
 );
-const AgentConstellation = lazy(() =>
+const AgentConstellation = lazyWithRetry(() =>
   import("@/views/agent-constellation").then((m) => ({ default: m.AgentConstellation }))
 );
-const ExecutionGraph = lazy(() =>
+const ExecutionGraph = lazyWithRetry(() =>
   import("@/views/execution-graph").then((m) => ({ default: m.ExecutionGraph }))
 );
-const WorkflowStudio = lazy(() =>
+const WorkflowStudio = lazyWithRetry(() =>
   import("@/views/workflow-studio").then((m) => ({ default: m.WorkflowStudio }))
 );
-const PipelineBuilder = lazy(() =>
+const PipelineBuilder = lazyWithRetry(() =>
   import("@/views/pipeline-builder").then((m) => ({ default: m.PipelineBuilder }))
 );
-const ProviderControlCenter = lazy(() =>
+const ProviderControlCenter = lazyWithRetry(() =>
   import("@/views/provider-control-center").then((m) => ({ default: m.ProviderControlCenter }))
 );
-const MemoryExplorer = lazy(() =>
+const MemoryExplorer = lazyWithRetry(() =>
   import("@/views/memory-explorer").then((m) => ({ default: m.MemoryExplorer }))
 );
-const PluginMarketplace = lazy(() =>
+const PluginMarketplace = lazyWithRetry(() =>
   import("@/views/plugin-marketplace").then((m) => ({ default: m.PluginMarketplace }))
 );
-const McpManager = lazy(() =>
+const McpManager = lazyWithRetry(() =>
   import("@/views/mcp-manager").then((m) => ({ default: m.McpManager }))
 );
-const WorkspaceExplorer = lazy(() =>
+const WorkspaceExplorer = lazyWithRetry(() =>
   import("@/views/workspace-explorer").then((m) => ({ default: m.WorkspaceExplorer }))
 );
-const TaskTimeline = lazy(() =>
+const TaskTimeline = lazyWithRetry(() =>
   import("@/views/task-timeline").then((m) => ({ default: m.TaskTimeline }))
 );
-const SystemMonitor = lazy(() =>
+const SystemMonitor = lazyWithRetry(() =>
   import("@/views/system-monitor").then((m) => ({ default: m.SystemMonitor }))
 );
-const DiscoveryDashboard = lazy(() =>
+const DiscoveryDashboard = lazyWithRetry(() =>
   import("@/views/discovery-dashboard").then((m) => ({ default: m.DiscoveryDashboard }))
 );
-const SelfHealingPanel = lazy(() =>
+const SelfHealingPanel = lazyWithRetry(() =>
   import("@/views/self-healing").then((m) => ({ default: m.SelfHealingPanel }))
 );
-const SwarmDashboard = lazy(() =>
+const SwarmDashboard = lazyWithRetry(() =>
   import("@/views/swarm-dashboard").then((m) => ({ default: m.SwarmDashboard }))
 );
-const MissionOrchestrator = lazy(() =>
+const MissionOrchestrator = lazyWithRetry(() =>
   import("@/views/mission-orchestrator").then((m) => ({ default: m.MissionOrchestrator }))
 );
-const PromptCenter = lazy(() =>
+const PromptCenter = lazyWithRetry(() =>
   import("@/views/prompt-center").then((m) => ({ default: m.PromptCenter }))
 );
 
 // Desktop views (Phase 4, M6)
-const DesktopOverview = lazy(() =>
+const DesktopOverview = lazyWithRetry(() =>
   import("@/views/desktop-overview").then((m) => ({ default: m.default }))
 );
-const DesktopRuntimes = lazy(() =>
+const DesktopRuntimes = lazyWithRetry(() =>
   import("@/views/desktop-runtimes").then((m) => ({ default: m.default }))
 );
-const DesktopUpdates = lazy(() =>
+const DesktopUpdates = lazyWithRetry(() =>
   import("@/views/desktop-updates").then((m) => ({ default: m.default }))
 );
-const DesktopDiagnostics = lazy(() =>
+const DesktopDiagnostics = lazyWithRetry(() =>
   import("@/views/desktop-diagnostics").then((m) => ({ default: m.default }))
 );
-const DesktopOffline = lazy(() =>
+const DesktopOffline = lazyWithRetry(() =>
   import("@/views/desktop-offline").then((m) => ({ default: m.default }))
 );
-const DesktopSettings = lazy(() =>
+const DesktopSettings = lazyWithRetry(() =>
   import("@/views/desktop-settings").then((m) => ({ default: m.default }))
 );
-const GatewayDashboard = lazy(() =>
+const GatewayDashboard = lazyWithRetry(() =>
   import("@/views/gateway-dashboard").then((m) => ({ default: m.GatewayDashboard }))
 );
 

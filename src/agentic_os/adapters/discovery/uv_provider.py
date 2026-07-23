@@ -3,8 +3,6 @@
 Scans uv-managed Python environments for AI coding assistants.
 """
 
-import json
-import os
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any

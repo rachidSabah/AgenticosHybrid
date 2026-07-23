@@ -233,8 +233,9 @@ def _probe_binary(bin_path: Path) -> dict | None:
         ai_keywords = ["ai", "agent", "code", "assistant", "copilot", "llm", "gpt", "claude"]
         if any(kw in output for kw in ai_keywords):
             return {"version": result.stdout.strip()[:100], "type": "unknown"}
-    except subprocess.TimeoutExpired, OSError:
+    except (subprocess.TimeoutExpired, OSError):
         pass
+
     return None
 
 
@@ -392,7 +393,7 @@ def auto_discover_and_bind(provider_registry: ProviderRegistry) -> list[Provider
                     stem = Path(name).stem if _platform.system() == "Windows" else name
                     if stem not in all_binaries:
                         all_binaries[stem] = entry
-        except PermissionError, OSError:
+        except (PermissionError, OSError):
             continue
 
     # ── Phase 2: Bind known agents ──

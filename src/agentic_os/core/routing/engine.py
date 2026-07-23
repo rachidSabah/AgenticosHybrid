@@ -33,11 +33,9 @@ from agentic_os.core.routing import (
     TaskRouteAssignment,
 )
 from agentic_os.domain.mission import (
-    ExecutionMode,
     Mission,
     MissionPlan,
     MissionTask,
-    TaskStatus,
 )
 from agentic_os.infrastructure.logging import get_logger
 

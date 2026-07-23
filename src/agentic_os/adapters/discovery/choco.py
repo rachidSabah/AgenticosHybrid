@@ -3,10 +3,7 @@
 Scans Chocolatey-installed packages for AI coding assistants.
 """
 
-import asyncio
-import locale
 import os
-import shlex
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any

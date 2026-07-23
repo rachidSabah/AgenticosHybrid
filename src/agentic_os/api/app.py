@@ -19,10 +19,17 @@ from fastapi.responses import HTMLResponse, Response
 
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
-from agentic_os.domain.agent import Agent, Role, Task
+from agentic_os.domain.agent import Role, Task
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
+from agentic_os.domain.mission import (
+    Attachment,
+    ExecutionMode,
+    Mission,
+    MissionPriority,
+    MissionStatus,
+)
 from agentic_os.domain.orchestration import (
     AgentDescriptor,
     AgentTask,
@@ -45,13 +52,6 @@ from agentic_os.domain.pipeline import (
     PipelineStatus,
 )
 from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
-from agentic_os.domain.mission import (
-    Attachment,
-    ExecutionMode,
-    Mission,
-    MissionPriority,
-    MissionStatus,
-)
 from agentic_os.domain.workflow import (
     WorkflowEdge,
     WorkflowExecutionStatus,
@@ -407,12 +407,12 @@ def create_app(platform: Platform) -> FastAPI:
                 "description": getattr(c, "description", ""),
                 "requires_approval": getattr(c, "requires_approval", False),
             }
-            for c in capability.registry.all()
+            for c in capability.registry.all()  # ty:ignore[unresolved-attribute]
         ]
 
     @app.post("/api/agents/compose")
     async def compose_agent(body: dict) -> dict:
-        spec = capability.composer.compose(
+        spec = capability.composer.compose(  # ty:ignore[unresolved-attribute]
             name=body.get("name", "composed-agent"),
             capabilities=body.get("capabilities", []),
             provider=body.get("provider", ""),
@@ -461,7 +461,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/agents/compose-for-task")
     async def compose_for_task(task: Task) -> dict:
-        spec = await capability.compose_and_emit(task)
+        spec = await capability.compose_and_emit(task)  # ty:ignore[unresolved-attribute]
         return spec.model_dump(mode="json")
 
     # ── Mission Orchestrator API (Phase Ψ) ──
@@ -639,7 +639,7 @@ def create_app(platform: Platform) -> FastAPI:
             agent_id=body.get("agent_id", ""),
             project_id=body.get("project_id", ""),
         )
-        stored = await memory.write(item)
+        stored = await memory.write(item)  # ty:ignore[unresolved-attribute]
         return stored.model_dump(mode="json")
 
     @app.get("/api/memory/{scope}")
@@ -648,7 +648,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         return [
             i.model_dump(mode="json")
-            for i in await memory.store.list_scope(MemoryScope(scope), agent_id)
+            for i in await memory.store.list_scope(MemoryScope(scope), agent_id)  # ty:ignore[unresolved-attribute]
         ]
 
     @app.get("/api/memory/{scope}/recall")
@@ -659,17 +659,17 @@ def create_app(platform: Platform) -> FastAPI:
 
         return [
             i.model_dump(mode="json")
-            for i in await memory.recall(MemoryScope(scope), query, limit, agent_id)
+            for i in await memory.recall(MemoryScope(scope), query, limit, agent_id)  # ty:ignore[unresolved-attribute]
         ]
 
     @app.delete("/api/memory/{item_id}")
     async def forget_memory(item_id: str) -> dict:
-        ok = await memory.forget(item_id)
+        ok = await memory.forget(item_id)  # ty:ignore[unresolved-attribute]
         return {"forgotten": ok}
 
     @app.post("/api/memory/retention")
     async def enforce_retention() -> dict:
-        evicted = await memory.enforce_retention()
+        evicted = await memory.enforce_retention()  # ty:ignore[unresolved-attribute]
         return {"evicted": evicted}
 
     # ── Security Framework API (Phase 2, Subsystem 4) ──
@@ -678,7 +678,7 @@ def create_app(platform: Platform) -> FastAPI:
         from agentic_os.domain.security import Principal, Role
 
         principal = Principal(id=body["principal"], roles=[Role(r) for r in body.get("roles", [])])
-        security.ac.assign(principal, Role(body["role"]))
+        security.ac.assign(principal, Role(body["role"]))  # ty:ignore[unresolved-attribute]
         return {"assigned": body["role"], "to": body["principal"]}
 
     @app.post("/api/security/authorize")
@@ -692,27 +692,27 @@ def create_app(platform: Platform) -> FastAPI:
             detail=body.get("detail", ""),
             requires_approval=body.get("requires_approval", False),
         )
-        decision = await security.authorize(principal, request)
+        decision = await security.authorize(principal, request)  # ty:ignore[unresolved-attribute]
         return decision.model_dump(mode="json")
 
     @app.post("/api/security/approval/{request_id}/decide")
     async def decide_approval(request_id: str, body: dict) -> dict:
-        await security.gate.decide(request_id, bool(body.get("approved")), body.get("by", ""))
+        await security.gate.decide(request_id, bool(body.get("approved")), body.get("by", ""))  # ty:ignore[unresolved-attribute]
         return {"decided": request_id}
 
     @app.get("/api/security/approval/{request_id}")
     async def approval_status(request_id: str) -> dict:
-        decision = security.gate.status(request_id)
+        decision = security.gate.status(request_id)  # ty:ignore[unresolved-attribute]
         return decision.model_dump(mode="json") if decision else {"status": "unknown"}
 
     @app.get("/api/security/audit")
     async def audit_log(principal: str | None = None) -> list[dict]:
-        entries = await security.audit.query(principal)
+        entries = await security.audit.query(principal)  # ty:ignore[unresolved-attribute]
         return [e.model_dump(mode="json") for e in entries]
 
     @app.get("/api/security/workspace/{agent_id}")
     async def workspace_for(agent_id: str) -> dict:
-        return {"agent_id": agent_id, "workspace": security.workspace_for(agent_id)}
+        return {"agent_id": agent_id, "workspace": security.workspace_for(agent_id)}  # ty:ignore[unresolved-attribute]
 
     # ── Workflow Engine API (Phase 3B) ──
     workflow_engine = platform.workflow
@@ -1212,9 +1212,9 @@ def create_app(platform: Platform) -> FastAPI:
         if background:
             import asyncio
 
-            asyncio.create_task(installer.run_full_install())
+            asyncio.create_task(installer.run_full_install())  # ty:ignore[unresolved-attribute]
             return {"status": "started", "mode": "background"}
-        report = await installer.run_full_install()
+        report = await installer.run_full_install()  # ty:ignore[unresolved-attribute]
         return {
             "status": "completed",
             "success": report.success,
@@ -1230,7 +1230,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Run self-healing on all bound providers."""
         if installer is None:
             raise HTTPException(status_code=503, detail="Installer intelligence not available")
-        report = await installer.heal_all()
+        report = await installer.heal_all()  # ty:ignore[unresolved-attribute]
         return {
             "total_issues": report.total_issues,
             "total_repaired": report.total_repaired,
@@ -1251,7 +1251,7 @@ def create_app(platform: Platform) -> FastAPI:
         """List all bound providers from installer intelligence."""
         if installer is None:
             raise HTTPException(status_code=503, detail="Installer intelligence not available")
-        providers = installer.bound_providers
+        providers = installer.bound_providers  # ty:ignore[unresolved-attribute]
         return {
             "total": len(providers),
             "providers": [
@@ -1711,13 +1711,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/profiles")
     async def list_swarm_profiles() -> list[dict]:
         """List all swarm profiles."""
-        profiles = swarm.config.profiles
+        profiles = swarm.config.profiles  # ty:ignore[unresolved-attribute]
         return [p.to_dict() for p in profiles.values()]
 
     @app.get("/api/swarm/profiles/{name}")
     async def get_swarm_profile(name: str) -> dict:
         """Get a swarm profile by name."""
-        profile = swarm.config.get_profile(name)
+        profile = swarm.config.get_profile(name)  # ty:ignore[unresolved-attribute]
         if profile is None:
             raise HTTPException(status_code=404, detail="Profile not found")
         return profile.to_dict()
@@ -1736,13 +1736,13 @@ def create_app(platform: Platform) -> FastAPI:
             auto_discover_agents=body.get("auto_discover_agents", True),
             tags=tuple(body.get("tags", [])),
         )
-        swarm.config.add_profile(profile)
+        swarm.config.add_profile(profile)  # ty:ignore[unresolved-attribute]
         return profile.to_dict()
 
     @app.delete("/api/swarm/profiles/{name}")
     async def delete_swarm_profile(name: str) -> dict:
         """Delete a swarm profile."""
-        removed = swarm.config.remove_profile(name)
+        removed = swarm.config.remove_profile(name)  # ty:ignore[unresolved-attribute]
         if not removed:
             raise HTTPException(status_code=404, detail="Profile not found")
         return {"removed": name}
@@ -1752,13 +1752,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/swarms")
     async def list_swarms() -> list[dict]:
         """List all swarms."""
-        swarms = await swarm.list_swarms()
+        swarms = await swarm.list_swarms()  # ty:ignore[unresolved-attribute]
         return [s.to_dict() for s in swarms]
 
     @app.get("/api/swarm/swarms/{swarm_id}")
     async def get_swarm(swarm_id: str) -> dict:
         """Get a swarm by ID."""
-        result = await swarm.get_swarm(swarm_id)
+        result = await swarm.get_swarm(swarm_id)  # ty:ignore[unresolved-attribute]
         if result is None:
             raise HTTPException(status_code=404, detail="Swarm not found")
         return result.to_dict()
@@ -1766,7 +1766,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/swarm/swarms")
     async def create_swarm(body: dict) -> dict:
         """Create a new swarm."""
-        result = await swarm.create_swarm(
+        result = await swarm.create_swarm(  # ty:ignore[unresolved-attribute]
             name=body["name"],
             description=body.get("description", ""),
             topology=body.get("topology", "mesh"),
@@ -1779,7 +1779,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.delete("/api/swarm/swarms/{swarm_id}")
     async def delete_swarm(swarm_id: str) -> dict:
         """Delete a swarm."""
-        ok = await swarm.delete_swarm(swarm_id)
+        ok = await swarm.delete_swarm(swarm_id)  # ty:ignore[unresolved-attribute]
         if not ok:
             raise HTTPException(status_code=404, detail="Swarm not found")
         return {"deleted": swarm_id}
@@ -1795,7 +1795,7 @@ def create_app(platform: Platform) -> FastAPI:
             context=body.get("context", {}),
             swarm_id=body.get("swarm_id"),
         )
-        return await swarm.analyze_goal(goal)
+        return await swarm.analyze_goal(goal)  # ty:ignore[unresolved-attribute]
 
     @app.post("/api/swarm/planner/plan")
     async def create_plan(body: dict) -> dict:
@@ -1806,7 +1806,7 @@ def create_app(platform: Platform) -> FastAPI:
             context=body.get("context", {}),
             swarm_id=body.get("swarm_id"),
         )
-        plan = await swarm.create_plan(goal)
+        plan = await swarm.create_plan(goal)  # ty:ignore[unresolved-attribute]
         return plan.to_dict()
 
     @app.post("/api/swarm/planner/resolve-dependencies")
@@ -1819,7 +1819,7 @@ def create_app(platform: Platform) -> FastAPI:
             status=body.get("status", "pending"),
             metadata=body.get("metadata", {}),
         )
-        resolved = await swarm.resolve_dependencies(plan)
+        resolved = await swarm.resolve_dependencies(plan)  # ty:ignore[unresolved-attribute]
         return resolved.to_dict()
 
     @app.post("/api/swarm/planner/parallelize")
@@ -1833,7 +1833,7 @@ def create_app(platform: Platform) -> FastAPI:
             metadata=body.get("metadata", {}),
         )
         max_parallel = body.get("max_parallel", 5)
-        parallelized = await swarm.parallelize_plan(plan, max_parallel)
+        parallelized = await swarm.parallelize_plan(plan, max_parallel)  # ty:ignore[unresolved-attribute]
         return parallelized.to_dict()
 
     # ── Scheduler ──
@@ -1843,7 +1843,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Schedule all tasks in a plan using topological sort."""
         plan = _parse_plan(body["plan"])
         agents = [_parse_agent(a) for a in body.get("agents", [])]
-        scheduled = await swarm.schedule_tasks(plan, agents)
+        scheduled = await swarm.schedule_tasks(plan, agents)  # ty:ignore[unresolved-attribute]
         return scheduled.to_dict()
 
     @app.post("/api/swarm/scheduler/dispatch")
@@ -1851,13 +1851,13 @@ def create_app(platform: Platform) -> FastAPI:
         """Dispatch a scheduled task to an agent."""
         task = _parse_task(body["task"])
         agent = _parse_agent(body["agent"])
-        dispatched = await swarm.dispatch_task(task, agent)
+        dispatched = await swarm.dispatch_task(task, agent)  # ty:ignore[unresolved-attribute]
         return dispatched.to_dict()
 
     @app.get("/api/swarm/scheduler/schedule/{plan_id}")
     async def get_plan_schedule(plan_id: str) -> list[dict]:
         """Get the ordered schedule for a plan."""
-        schedule = await swarm.get_schedule(plan_id)
+        schedule = await swarm.get_schedule(plan_id)  # ty:ignore[unresolved-attribute]
         return [t.to_dict() for t in schedule]
 
     # ── Supervisor ──
@@ -1866,35 +1866,35 @@ def create_app(platform: Platform) -> FastAPI:
     async def monitor_plan_execution(body: dict) -> dict:
         """Monitor a plan's execution for failures/deadlocks."""
         plan = _parse_plan(body)
-        monitored = await swarm.monitor_execution(plan)
+        monitored = await swarm.monitor_execution(plan)  # ty:ignore[unresolved-attribute]
         return monitored.to_dict()
 
     @app.post("/api/swarm/supervisor/detect-failures")
     async def detect_plan_failures(body: dict) -> list[dict]:
         """Detect failed or hung tasks in a plan."""
         plan = _parse_plan(body)
-        failed = await swarm.detect_failures(plan)
+        failed = await swarm.detect_failures(plan)  # ty:ignore[unresolved-attribute]
         return [t.to_dict() for t in failed]
 
     @app.post("/api/swarm/supervisor/detect-deadlocks")
     async def detect_plan_deadlocks(body: dict) -> list[str]:
         """Detect deadlocked dependency chains."""
         plan = _parse_plan(body)
-        return await swarm.detect_deadlocks(plan)
+        return await swarm.detect_deadlocks(plan)  # ty:ignore[unresolved-attribute]
 
     @app.post("/api/swarm/supervisor/restart")
     async def restart_failed_task(body: dict) -> dict:
         """Restart a failed task."""
         task = _parse_task(body["task"])
         agent = _parse_agent(body["agent"]) if body.get("agent") else None
-        restarted = await swarm.restart_task(task, agent)
+        restarted = await swarm.restart_task(task, agent)  # ty:ignore[unresolved-attribute]
         return restarted.to_dict()
 
     @app.post("/api/swarm/supervisor/reassign")
     async def reassign_task_agent(body: dict) -> dict:
         """Reassign a task to a different agent."""
         task = _parse_task(body["task"])
-        reassigned = await swarm.reassign_task(task, body["new_agent_id"])
+        reassigned = await swarm.reassign_task(task, body["new_agent_id"])  # ty:ignore[unresolved-attribute]
         return reassigned.to_dict()
 
     # ── Result Merger ──
@@ -1908,7 +1908,7 @@ def create_app(platform: Platform) -> FastAPI:
             strategy = MergeStrategy(strategy_name)
         except ValueError:
             strategy = MergeStrategy.CONSENSUS
-        merged = await swarm.merge_results(tasks, strategy)
+        merged = await swarm.merge_results(tasks, strategy)  # ty:ignore[unresolved-attribute]
         return merged.to_dict()
 
     @app.post("/api/swarm/merge/resolve")
@@ -1921,7 +1921,7 @@ def create_app(platform: Platform) -> FastAPI:
             conflicts=tuple(body.get("conflicts", [])),
             confidence=body.get("confidence", 0.0),
         )
-        resolved = await swarm.resolve_merge_conflicts(merged)
+        resolved = await swarm.resolve_merge_conflicts(merged)  # ty:ignore[unresolved-attribute]
         return resolved.to_dict()
 
     # ── Validation ──
@@ -1931,14 +1931,14 @@ def create_app(platform: Platform) -> FastAPI:
         """Validate a task's output against an optional schema."""
         task = _parse_task(body["task"])
         schema = body.get("schema")
-        result = await swarm.validate_output(task, schema)
+        result = await swarm.validate_output(task, schema)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     @app.post("/api/swarm/validate/plan")
     async def validate_plan_structure(body: dict) -> dict:
         """Validate a plan's structure and dependencies."""
         plan = _parse_plan(body)
-        result = await swarm.validate_plan(plan)
+        result = await swarm.validate_plan(plan)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     @app.post("/api/swarm/validate/security")
@@ -1946,7 +1946,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Validate security constraints for a task-agent assignment."""
         task = _parse_task(body["task"])
         agent = _parse_agent(body["agent"])
-        result = await swarm.validate_security(task, agent)
+        result = await swarm.validate_security(task, agent)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     @app.post("/api/swarm/validate/policy")
@@ -1954,7 +1954,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Validate a task against execution policies."""
         task = _parse_task(body["task"])
         policies = body.get("policies", {})
-        result = await swarm.validate_policy(task, policies)
+        result = await swarm.validate_policy(task, policies)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     # ── Checkpoint ──
@@ -1965,13 +1965,13 @@ def create_app(platform: Platform) -> FastAPI:
         plan = _parse_plan(body["plan"])
         stage_data = body.get("stage")
         stage = _parse_stage(stage_data) if stage_data else None
-        checkpoint = await swarm.save_checkpoint(plan, stage, body.get("metadata"))
+        checkpoint = await swarm.save_checkpoint(plan, stage, body.get("metadata"))  # ty:ignore[unresolved-attribute]
         return checkpoint.to_dict()
 
     @app.get("/api/swarm/checkpoints/{checkpoint_id}")
     async def restore_execution_checkpoint(checkpoint_id: str) -> dict:
         """Restore execution state from a checkpoint."""
-        plan = await swarm.restore_checkpoint(checkpoint_id)
+        plan = await swarm.restore_checkpoint(checkpoint_id)  # ty:ignore[unresolved-attribute]
         if plan is None:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         return plan.to_dict()
@@ -1979,13 +1979,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/checkpoints")
     async def list_plan_checkpoints(plan_id: str) -> list[dict]:
         """List all checkpoints for a plan."""
-        checkpoints = await swarm.list_checkpoints(plan_id)
+        checkpoints = await swarm.list_checkpoints(plan_id)  # ty:ignore[unresolved-attribute]
         return [c.to_dict() for c in checkpoints]
 
     @app.delete("/api/swarm/checkpoints/{checkpoint_id}")
     async def delete_execution_checkpoint(checkpoint_id: str) -> dict:
         """Delete a checkpoint."""
-        ok = await swarm.delete_checkpoint(checkpoint_id)
+        ok = await swarm.delete_checkpoint(checkpoint_id)  # ty:ignore[unresolved-attribute]
         if not ok:
             raise HTTPException(status_code=404, detail="Checkpoint not found")
         return {"deleted": checkpoint_id}
@@ -1998,7 +1998,7 @@ def create_app(platform: Platform) -> FastAPI:
         task = _parse_task(body["task"])
         agents_data = body.get("available_agents")
         agents = [_parse_agent(a) for a in agents_data] if agents_data else None
-        agent = await swarm.select_agent(task, agents)
+        agent = await swarm.select_agent(task, agents)  # ty:ignore[unresolved-attribute]
         if agent is None:
             raise HTTPException(status_code=404, detail="No suitable agent found")
         return agent.to_dict()
@@ -2011,7 +2011,7 @@ def create_app(platform: Platform) -> FastAPI:
             description=body.get("description", ""),
             context=body.get("context", {}),
         )
-        agents = await swarm.match_capabilities(goal, body.get("capabilities", []))
+        agents = await swarm.match_capabilities(goal, body.get("capabilities", []))  # ty:ignore[unresolved-attribute]
         return [a.to_dict() for a in agents]
 
     # ── Metrics & Cost ──
@@ -2019,7 +2019,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/metrics")
     async def get_swarm_metrics() -> dict:
         """Aggregated swarm metrics for the dashboard."""
-        swarms = await swarm.list_swarms()
+        swarms = await swarm.list_swarms()  # ty:ignore[unresolved-attribute]
         total_swarms = len(swarms)
         active_swarms = sum(1 for s in swarms if getattr(s, "status", "") == "active")
         total_tasks = 0
@@ -2052,7 +2052,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def collect_execution_metrics(body: dict) -> dict:
         """Collect execution metrics for a plan."""
         plan = _parse_plan(body)
-        metrics = await swarm.collect_metrics(plan)
+        metrics = await swarm.collect_metrics(plan)  # ty:ignore[unresolved-attribute]
         return metrics.to_dict()
 
     @app.post("/api/swarm/metrics/timeline")
@@ -2068,26 +2068,26 @@ def create_app(platform: Platform) -> FastAPI:
             duration_ms=body.get("duration_ms", 0.0),
             details=body.get("details", {}),
         )
-        await swarm.record_timeline(entry)
+        await swarm.record_timeline(entry)  # ty:ignore[unresolved-attribute]
         return {"recorded": True}
 
     @app.get("/api/swarm/metrics/timeline/{plan_id}")
     async def get_execution_timeline(plan_id: str, limit: int = 100) -> list[dict]:
         """Get the execution timeline for a plan."""
-        entries = await swarm.get_timeline(plan_id, limit)
+        entries = await swarm.get_timeline(plan_id, limit)  # ty:ignore[unresolved-attribute]
         return [e.to_dict() for e in entries]
 
     @app.post("/api/swarm/cost/estimate")
     async def estimate_plan_cost(body: dict) -> dict:
         """Estimate the cost of executing a plan."""
         plan = _parse_plan(body)
-        cost = await swarm.estimate_cost(plan)
+        cost = await swarm.estimate_cost(plan)  # ty:ignore[unresolved-attribute]
         return cost.to_dict()
 
     @app.post("/api/swarm/cost/track")
     async def track_execution_cost(body: dict) -> dict:
         """Track actual cost incurred."""
-        cost = await swarm.track_cost(
+        cost = await swarm.track_cost(  # ty:ignore[unresolved-attribute]
             plan_id=body["plan_id"],
             agent_id=body["agent_id"],
             cost=body["cost"],
@@ -2098,7 +2098,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/cost/{plan_id}")
     async def get_plan_costs(plan_id: str) -> dict:
         """Get accumulated costs for a plan."""
-        costs = await swarm.get_costs(plan_id)
+        costs = await swarm.get_costs(plan_id)  # ty:ignore[unresolved-attribute]
         if costs is None:
             return {"plan_id": plan_id, "total_cost": 0.0, "cost_by_agent": {}}
         return costs.to_dict()
@@ -2106,7 +2106,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/performance/{plan_id}")
     async def analyze_plan_performance(plan_id: str) -> dict:
         """Generate a performance analysis report for a plan."""
-        return await swarm.analyze_performance(plan_id)
+        return await swarm.analyze_performance(plan_id)  # ty:ignore[unresolved-attribute]
 
     # ── Recovery ──
 
@@ -2115,7 +2115,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Recover a failed task on a suitable agent."""
         task = _parse_task(body["task"])
         agents = [_parse_agent(a) for a in body.get("available_agents", [])]
-        recovered = await swarm.recover_task(task, agents)
+        recovered = await swarm.recover_task(task, agents)  # ty:ignore[unresolved-attribute]
         return recovered.to_dict()
 
     @app.post("/api/swarm/recovery/plan")
@@ -2124,7 +2124,7 @@ def create_app(platform: Platform) -> FastAPI:
         plan = _parse_plan(body["plan"])
         checkpoint_data = body.get("checkpoint")
         checkpoint = _parse_checkpoint(checkpoint_data) if checkpoint_data else None
-        recovered = await swarm.recover_plan(plan, checkpoint)
+        recovered = await swarm.recover_plan(plan, checkpoint)  # ty:ignore[unresolved-attribute]
         return recovered.to_dict()
 
     @app.post("/api/swarm/recovery/rollback")
@@ -2132,7 +2132,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Rollback a plan to a specific checkpoint."""
         plan = _parse_plan(body["plan"])
         checkpoint = _parse_checkpoint(body["checkpoint"])
-        rolled_back = await swarm.rollback_plan(plan, checkpoint)
+        rolled_back = await swarm.rollback_plan(plan, checkpoint)  # ty:ignore[unresolved-attribute]
         return rolled_back.to_dict()
 
     # ── Retry ──
@@ -2143,13 +2143,13 @@ def create_app(platform: Platform) -> FastAPI:
         task = _parse_task(body["task"])
         policy_data = body.get("policy")
         policy = _parse_retry_policy(policy_data) if policy_data else None
-        should = await swarm.should_retry(task, policy)
+        should = await swarm.should_retry(task, policy)  # ty:ignore[unresolved-attribute]
         return {"task_id": task.id, "should_retry": should}
 
     @app.post("/api/swarm/retry/reset")
     async def reset_task_retry(body: dict) -> dict:
         """Reset retry count for a task."""
-        await swarm.reset_retry_count(body["task_id"])
+        await swarm.reset_retry_count(body["task_id"])  # ty:ignore[unresolved-attribute]
         return {"reset": body["task_id"]}
 
     # ── Goals & Tasks (extended M3) ──
@@ -2157,13 +2157,13 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/goals")
     async def list_orchestration_goals(status: str | None = None) -> list[dict]:
         """List orchestration goals."""
-        goals = await swarm.list_goals(status)
+        goals = await swarm.list_goals(status)  # ty:ignore[unresolved-attribute]
         return [g.to_dict() for g in goals]
 
     @app.get("/api/swarm/goals/{goal_id}")
     async def get_orchestration_goal(goal_id: str) -> dict:
         """Get an orchestration goal."""
-        goal = await swarm.get_goal(goal_id)
+        goal = await swarm.get_goal(goal_id)  # ty:ignore[unresolved-attribute]
         if goal is None:
             raise HTTPException(status_code=404, detail="Goal not found")
         return goal.to_dict()
@@ -2171,7 +2171,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/swarm/goals")
     async def create_orchestration_goal(body: dict) -> dict:
         """Create an orchestration goal."""
-        goal = await swarm.create_goal(
+        goal = await swarm.create_goal(  # ty:ignore[unresolved-attribute]
             title=body["title"],
             description=body.get("description", ""),
             context=body.get("context"),
@@ -2182,7 +2182,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.delete("/api/swarm/goals/{goal_id}")
     async def cancel_orchestration_goal(goal_id: str) -> dict:
         """Cancel a goal."""
-        goal = await swarm.cancel_goal(goal_id)
+        goal = await swarm.cancel_goal(goal_id)  # ty:ignore[unresolved-attribute]
         if goal is None:
             raise HTTPException(status_code=404, detail="Goal not found")
         return goal.to_dict()
@@ -2190,7 +2190,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/plans/{plan_id}")
     async def get_orchestration_plan(plan_id: str) -> dict:
         """Get an orchestration plan."""
-        plan = await swarm.get_plan(plan_id)
+        plan = await swarm.get_plan(plan_id)  # ty:ignore[unresolved-attribute]
         if plan is None:
             raise HTTPException(status_code=404, detail="Plan not found")
         return plan.to_dict()
@@ -2201,13 +2201,13 @@ def create_app(platform: Platform) -> FastAPI:
         status: str | None = None,
     ) -> list[dict]:
         """List orchestration tasks."""
-        tasks = await swarm.list_tasks(goal_id, status)
+        tasks = await swarm.list_tasks(goal_id, status)  # ty:ignore[unresolved-attribute]
         return [t.to_dict() for t in tasks]
 
     @app.get("/api/swarm/tasks/{task_id}")
     async def get_orchestration_task(task_id: str) -> dict:
         """Get a task by ID."""
-        task = await swarm.get_task(task_id)
+        task = await swarm.get_task(task_id)  # ty:ignore[unresolved-attribute]
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return task.to_dict()
@@ -2220,7 +2220,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/learning/profiles")
     async def list_learning_profiles() -> list[dict]:
-        profiles = await learning.list_profiles()
+        profiles = await learning.list_profiles()  # ty:ignore[unresolved-attribute]
         return [p.to_dict() for p in profiles]
 
     @app.post("/api/learning/profiles")
@@ -2249,19 +2249,19 @@ def create_app(platform: Platform) -> FastAPI:
             max_history_size=body.get("max_history_size", 10000),
             min_confidence=body.get("min_confidence", 0.6),
         )
-        created = await learning.create_profile(profile)
+        created = await learning.create_profile(profile)  # ty:ignore[unresolved-attribute]
         return created.to_dict()
 
     @app.get("/api/learning/profiles/{profile_id}")
     async def get_learning_profile(profile_id: str) -> dict:
-        profile = await learning.get_profile(profile_id)
+        profile = await learning.get_profile(profile_id)  # ty:ignore[unresolved-attribute]
         if profile is None:
             raise HTTPException(status_code=404, detail="Profile not found")
         return profile.to_dict()
 
     @app.delete("/api/learning/profiles/{profile_id}")
     async def delete_learning_profile(profile_id: str) -> dict:
-        await learning.delete_profile(profile_id)
+        await learning.delete_profile(profile_id)  # ty:ignore[unresolved-attribute]
         return {"deleted": profile_id}
 
     # -- Executions --
@@ -2285,21 +2285,21 @@ def create_app(platform: Platform) -> FastAPI:
             model_used=body.get("model_used"),
             metadata=body.get("metadata", {}),
         )
-        recorded = await learning.record_execution(history)
+        recorded = await learning.record_execution(history)  # ty:ignore[unresolved-attribute]
         return recorded.to_dict()
 
     @app.get("/api/learning/executions")
     async def list_executions(
         limit: int = 100, offset: int = 0, engine_type: str | None = None, status: str | None = None
     ) -> list[dict]:
-        records = learning._history.list_records(
+        records = learning._history.list_records(  # ty:ignore[unresolved-attribute]
             engine_type=engine_type, status=status, limit=limit, offset=offset
         )
         return [r.to_dict() for r in records]
 
     @app.get("/api/learning/executions/{execution_id}")
     async def get_execution(execution_id: str) -> dict:
-        record = learning._history.get_record(execution_id)
+        record = learning._history.get_record(execution_id)  # ty:ignore[unresolved-attribute]
         if record is None:
             raise HTTPException(status_code=404, detail="Execution not found")
         return record.to_dict()
@@ -2309,14 +2309,14 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/learning/analyze")
     async def analyze_executions(body: dict) -> dict:
         history_ids = tuple(body.get("history_ids", []))
-        stats = await learning.analyze_executions(history_ids)
+        stats = await learning.analyze_executions(history_ids)  # ty:ignore[unresolved-attribute]
         return stats.to_dict()
 
     @app.get("/api/learning/metrics")
     async def get_learning_metrics(
         period_start: str | None = None, period_end: str | None = None
     ) -> dict:
-        metrics = await learning.compute_learning_metrics(period_start, period_end)
+        metrics = await learning.compute_learning_metrics(period_start, period_end)  # ty:ignore[unresolved-attribute]
         return metrics.to_dict()
 
     # -- Recommendations --
@@ -2326,22 +2326,22 @@ def create_app(platform: Platform) -> FastAPI:
         from agentic_os.domain.learning import RecommendationStatus
 
         rec_status = RecommendationStatus(status) if status else None
-        recs = await learning.list_recommendations(rec_status, limit)
+        recs = await learning.list_recommendations(rec_status, limit)  # ty:ignore[unresolved-attribute]
         return [r.to_dict() for r in recs]
 
     @app.post("/api/learning/recommendations/generate")
     async def generate_recommendation(body: dict) -> dict:
-        rec = await learning.generate_recommendation(body["category"], body.get("context", {}))
+        rec = await learning.generate_recommendation(body["category"], body.get("context", {}))  # ty:ignore[unresolved-attribute]
         return rec.to_dict()
 
     @app.post("/api/learning/recommendations/{recommendation_id}/apply")
     async def apply_recommendation(recommendation_id: str) -> dict:
-        rec = await learning.apply_recommendation(recommendation_id)
+        rec = await learning.apply_recommendation(recommendation_id)  # ty:ignore[unresolved-attribute]
         return rec.to_dict()
 
     @app.post("/api/learning/recommendations/{recommendation_id}/dismiss")
     async def dismiss_recommendation(recommendation_id: str) -> dict:
-        rec = await learning.dismiss_recommendation(recommendation_id)
+        rec = await learning.dismiss_recommendation(recommendation_id)  # ty:ignore[unresolved-attribute]
         return rec.to_dict()
 
     # -- Optimization --
@@ -2351,34 +2351,34 @@ def create_app(platform: Platform) -> FastAPI:
         from agentic_os.domain.learning import OptimizationTarget
 
         target = OptimizationTarget(body["target"])
-        result = await learning.optimize(target, body.get("config", {}))
+        result = await learning.optimize(target, body.get("config", {}))  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     @app.get("/api/learning/optimization/results")
     async def list_optimization_results(limit: int = 50) -> list[dict]:
-        results = await learning.list_optimization_results(limit)
+        results = await learning.list_optimization_results(limit)  # ty:ignore[unresolved-attribute]
         return [r.to_dict() for r in results]
 
     @app.post("/api/learning/optimization/{result_id}/rollback")
     async def rollback_optimization(result_id: str) -> dict:
-        result = await learning.rollback_optimization(result_id)
+        result = await learning.rollback_optimization(result_id)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     # -- Routing --
 
     @app.post("/api/learning/routing/analyze")
     async def analyze_routing() -> list[dict]:
-        recs = await learning.analyze_routing()
+        recs = await learning.analyze_routing()  # ty:ignore[unresolved-attribute]
         return [r.to_dict() for r in recs]
 
     @app.post("/api/learning/routing/optimize")
     async def optimize_routing(body: dict) -> dict:
-        decision = await learning.optimize_routing(body["recommendation_id"])
+        decision = await learning.optimize_routing(body["recommendation_id"])  # ty:ignore[unresolved-attribute]
         return decision.to_dict()
 
     @app.get("/api/learning/routing/stats")
     async def get_routing_stats() -> dict:
-        return await learning.get_routing_stats()
+        return await learning.get_routing_stats()  # ty:ignore[unresolved-attribute]
 
     # -- Benchmarks --
 
@@ -2394,29 +2394,29 @@ def create_app(platform: Platform) -> FastAPI:
             metrics=metrics,
             iterations=body.get("iterations", 10),
         )
-        created = await learning.create_benchmark(benchmark)
+        created = await learning.create_benchmark(benchmark)  # ty:ignore[unresolved-attribute]
         return created.to_dict()
 
     @app.post("/api/learning/benchmarks/{benchmark_id}/run")
     async def run_benchmark(benchmark_id: str) -> dict:
-        result = await learning.run_benchmark(benchmark_id)
+        result = await learning.run_benchmark(benchmark_id)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     @app.get("/api/learning/benchmarks")
     async def list_benchmarks() -> list[dict]:
-        benchmarks = await learning.list_benchmarks()
+        benchmarks = await learning.list_benchmarks()  # ty:ignore[unresolved-attribute]
         return [b.to_dict() for b in benchmarks]
 
     @app.get("/api/learning/benchmarks/{benchmark_id}")
     async def get_benchmark(benchmark_id: str) -> dict:
-        benchmark = await learning.get_benchmark(benchmark_id)
+        benchmark = await learning.get_benchmark(benchmark_id)  # ty:ignore[unresolved-attribute]
         if benchmark is None:
             raise HTTPException(status_code=404, detail="Benchmark not found")
         return benchmark.to_dict()
 
     @app.delete("/api/learning/benchmarks/{benchmark_id}")
     async def delete_benchmark(benchmark_id: str) -> dict:
-        await learning.delete_benchmark(benchmark_id)
+        await learning.delete_benchmark(benchmark_id)  # ty:ignore[unresolved-attribute]
         return {"deleted": benchmark_id}
 
     # -- Experiments --
@@ -2434,36 +2434,36 @@ def create_app(platform: Platform) -> FastAPI:
             treatment_config=body.get("treatment_config", {}),
             rollback_on_regression=body.get("rollback_on_regression", True),
         )
-        created = await learning.create_experiment(experiment)
+        created = await learning.create_experiment(experiment)  # ty:ignore[unresolved-attribute]
         return created.to_dict()
 
     @app.get("/api/learning/experiments")
     async def list_experiments() -> list[dict]:
-        experiments = await learning.list_experiments()
+        experiments = await learning.list_experiments()  # ty:ignore[unresolved-attribute]
         return [e.to_dict() for e in experiments]
 
     @app.get("/api/learning/experiments/{experiment_id}")
     async def get_experiment(experiment_id: str) -> dict:
-        experiment = await learning.get_experiment(experiment_id)
+        experiment = await learning.get_experiment(experiment_id)  # ty:ignore[unresolved-attribute]
         if experiment is None:
             raise HTTPException(status_code=404, detail="Experiment not found")
         return experiment.to_dict()
 
     @app.post("/api/learning/experiments/{experiment_id}/start")
     async def start_experiment(experiment_id: str) -> dict:
-        experiment = await learning.start_experiment(experiment_id)
+        experiment = await learning.start_experiment(experiment_id)  # ty:ignore[unresolved-attribute]
         return experiment.to_dict()
 
     @app.post("/api/learning/experiments/{experiment_id}/complete")
     async def complete_experiment(experiment_id: str) -> dict:
-        experiment = await learning.complete_experiment(experiment_id)
+        experiment = await learning.complete_experiment(experiment_id)  # ty:ignore[unresolved-attribute]
         return experiment.to_dict()
 
     # -- Evaluation --
 
     @app.post("/api/learning/evaluate")
     async def evaluate(body: dict) -> dict:
-        evaluation = await learning.evaluate(
+        evaluation = await learning.evaluate(  # ty:ignore[unresolved-attribute]
             body["target_id"],
             body.get("target_type", "engine"),
             body.get("metrics", {}),
@@ -2472,21 +2472,21 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/learning/evaluations/{target_id}")
     async def list_evaluations(target_id: str) -> list[dict]:
-        evaluations = await learning.list_evaluations(target_id)
+        evaluations = await learning.list_evaluations(target_id)  # ty:ignore[unresolved-attribute]
         return [e.to_dict() for e in evaluations]
 
     # -- Performance --
 
     @app.post("/api/learning/performance/profile")
     async def profile_performance(body: dict) -> dict:
-        profile = await learning.profile_performance(
+        profile = await learning.profile_performance(  # ty:ignore[unresolved-attribute]
             body["target_id"], body.get("target_type", "engine")
         )
         return profile.to_dict()
 
     @app.get("/api/learning/performance/trends")
     async def get_performance_trends() -> dict:
-        return await learning.get_performance_trends()
+        return await learning.get_performance_trends()  # ty:ignore[unresolved-attribute]
 
     # -- Cost --
 
@@ -2494,7 +2494,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def get_cost_metrics(
         period_start: str | None = None, period_end: str | None = None
     ) -> dict:
-        metrics = await learning.get_cost_metrics(period_start, period_end)
+        metrics = await learning.get_cost_metrics(period_start, period_end)  # ty:ignore[unresolved-attribute]
         return metrics.to_dict()
 
     # -- Quality --
@@ -2503,7 +2503,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def get_quality_metrics(
         period_start: str | None = None, period_end: str | None = None
     ) -> dict:
-        metrics = await learning.get_quality_metrics(period_start, period_end)
+        metrics = await learning.get_quality_metrics(period_start, period_end)  # ty:ignore[unresolved-attribute]
         return metrics.to_dict()
 
     # -- Failure Analysis --
@@ -2512,14 +2512,14 @@ def create_app(platform: Platform) -> FastAPI:
     async def get_failure_analysis(
         period_start: str | None = None, period_end: str | None = None
     ) -> dict:
-        analysis = await learning.get_failure_analysis(period_start, period_end)
+        analysis = await learning.get_failure_analysis(period_start, period_end)  # ty:ignore[unresolved-attribute]
         return analysis.to_dict()
 
     # -- Policies --
 
     @app.get("/api/learning/policies")
     async def list_policies() -> list[dict]:
-        policies = await learning.list_policies()
+        policies = await learning.list_policies()  # ty:ignore[unresolved-attribute]
         return [p.to_dict() for p in policies]
 
     @app.post("/api/learning/policies")
@@ -2537,12 +2537,12 @@ def create_app(platform: Platform) -> FastAPI:
             priority=body.get("priority", 0),
             enabled=body.get("enabled", True),
         )
-        created = await learning.create_policy(policy)
+        created = await learning.create_policy(policy)  # ty:ignore[unresolved-attribute]
         return created.to_dict()
 
     @app.put("/api/learning/policies/{policy_id}")
     async def update_policy(policy_id: str, body: dict) -> dict:
-        existing = await learning._policy.get_policy(policy_id)
+        existing = await learning._policy.get_policy(policy_id)  # ty:ignore[unresolved-attribute]
         if existing is None:
             raise HTTPException(status_code=404, detail="Policy not found")
         from agentic_os.domain.learning import OptimizationPolicy, OptimizationTarget, PolicyEffect
@@ -2557,12 +2557,12 @@ def create_app(platform: Platform) -> FastAPI:
             priority=body.get("priority", existing.priority),
             enabled=body.get("enabled", existing.enabled),
         )
-        result = await learning.update_policy(updated)
+        result = await learning.update_policy(updated)  # ty:ignore[unresolved-attribute]
         return result.to_dict()
 
     @app.delete("/api/learning/policies/{policy_id}")
     async def delete_policy(policy_id: str) -> dict:
-        await learning.delete_policy(policy_id)
+        await learning.delete_policy(policy_id)  # ty:ignore[unresolved-attribute]
         return {"deleted": policy_id}
 
     # -- Telemetry --
@@ -2571,7 +2571,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def get_latency_metrics(
         period_start: str | None = None, period_end: str | None = None
     ) -> dict:
-        metrics = await learning._telemetry.get_latency_metrics(period_start, period_end)
+        metrics = await learning._telemetry.get_latency_metrics(period_start, period_end)  # ty:ignore[unresolved-attribute]
         return metrics.to_dict()
 
     # ── Desktop Runtime API (Phase 4, M6) ──

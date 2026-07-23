@@ -45,7 +45,6 @@ async def async_main(args: argparse.Namespace):
     _ensure_paths()
 
     from services.installer.engine import InstallerIntelligence
-    from services.installer.report import InstallReportGenerator
 
     engine = InstallerIntelligence()
 
@@ -188,7 +187,7 @@ def _print_installer_result(result, elapsed: float):
         print(f"    ✓ {pid}")
 
     if result.binding_errors:
-        print(f"  Binding Errors:")
+        print("  Binding Errors:")
         for err in result.binding_errors:
             print(f"    ✗ {err}")
 

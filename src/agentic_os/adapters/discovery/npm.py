@@ -4,7 +4,6 @@ Scans globally installed NPM packages for AI coding assistants.
 """
 
 import json
-import os
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any

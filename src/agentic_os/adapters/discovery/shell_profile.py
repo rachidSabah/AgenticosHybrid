@@ -93,7 +93,7 @@ class ShellProfileDiscovery(DiscoveryProvider):
             path = os.path.join(home, rc)
             if os.path.isfile(path):
                 try:
-                    with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    with open(path, encoding="utf-8", errors="replace") as f:
                         content_map[rc] = f.read()
                 except (OSError, PermissionError):
                     pass
@@ -116,7 +116,9 @@ class ShellProfileDiscovery(DiscoveryProvider):
                         endpoint=f"local:{entry['name']}",
                         transport="local",
                         capabilities=entry["caps"],
-                        description=f"{entry['name'].title()} (referenced in shell profile: {files_found})",
+                        description=(
+                            f"{entry['name'].title()} (referenced in profile: {files_found})"
+                        ),
                         version="unknown",
                         tags=["discovered", "shell", entry["name"]] + found_in,
                         metadata={

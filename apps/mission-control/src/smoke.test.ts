@@ -3,11 +3,6 @@ import { describe, it, expect } from "vitest";
 /**
  * E2E smoke test — verifies that the core Mission Control modules
  * import and their public interfaces are type-correct.
- *
- * These tests run in a jsdom environment and validate that:
- *   - All views export components
- *   - All store slices are accessible
- *   - API client methods exist
  */
 
 describe("Mission Control — E2E Smoke", () => {
@@ -31,7 +26,6 @@ describe("Mission Control — E2E Smoke", () => {
 
   it("core types exist", async () => {
     const t = await import("@/lib/types");
-    // Check the module exports key types
     expect(t).toBeDefined();
   });
 
@@ -50,7 +44,8 @@ describe("Mission Control — E2E Smoke", () => {
 
     for (const { path, name } of viewModules) {
       const mod = await import(path);
-      expect(mod[name]).toBeDefined();
+      const component = mod[name] || mod.default;
+      expect(component, `Failed to load component ${name} from ${path}`).toBeDefined();
     }
   });
 });

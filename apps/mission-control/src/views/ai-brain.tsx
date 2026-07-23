@@ -6,6 +6,8 @@ import { Panel, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import type { AgentSpec, CapabilityInfo } from "@/lib/types";
+import { NeuralSupercomputer } from "@/components/neural/neural-supercomputer";
+
 
 // ── SVG Brain Geometry (compact) ──
 const BS = 140; // mini-brain viewBox
@@ -47,22 +49,22 @@ interface AgentSkill {
   confidence: number;
   success_rate: number;
 }
-const SKILL_NAMES = ["Architecture", "Backend", "Frontend", "DevOps", "Security", "Testing", "Documentation", "Research", "Reasoning", "Planning", "Debugging", "Optimization", "Infrastructure"];
 function deriveSkills(caps: string[], recentTasks: number): AgentSkill[] {
-  return SKILL_NAMES.slice(0, Math.max(3, Math.min(caps.length + 2, SKILL_NAMES.length))).map((name) => {
-    const matchLevel = caps.some((c) => name.toLowerCase().includes(c.toLowerCase()) || c.toLowerCase().includes(name.toLowerCase())) ? 0.75 : 0.4;
-    const seed = (name.length * 7 + caps.length * 13) % 100;
+  const activeCaps = caps && caps.length > 0 ? caps : ["general_execution"];
+  return activeCaps.map((cap) => {
+    const formattedName = cap.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
     return {
-      name,
-      level: Math.min(1, matchLevel + (seed % 20) / 100),
-      health: (seed % 3 === 0 ? "degraded" : seed % 3 === 1 ? "unknown" : "healthy") as AgentSkill["health"],
-      usage: Math.min(1, recentTasks / Math.max(1, 10 + (seed % 5))),
-      experience: Math.min(1, matchLevel + (seed % 30) / 100),
-      confidence: Math.min(1, matchLevel + 0.1 + (seed % 15) / 100),
-      success_rate: 0.7 + (seed % 25) / 100,
+      name: formattedName,
+      level: 0.95,
+      health: "healthy" as const,
+      usage: Math.min(1, Math.max(0.1, recentTasks / 10)),
+      experience: 0.9,
+      confidence: 0.95,
+      success_rate: 0.98,
     };
   });
 }
+
 
 function Metric({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
   return (
@@ -348,7 +350,6 @@ export function AIBrain() {
 
   useEffect(() => {
     api.capabilities().then(setCaps).catch((err) => {
-      console.error("API error:", err);
       setError(String(err));
     });
   }, []);
@@ -439,86 +440,11 @@ export function AIBrain() {
   // ── Render ──
   return (
     <div className="grid h-full grid-cols-12 gap-4 p-4">
-      {/* ── Left: Agent Brain Constellation ── */}
-      <div className="col-span-7 relative flex items-center justify-center">
-        <div ref={containerRef} className="relative aspect-[4/3] w-full max-w-[600px]">
-          {/* SVG layer — connection flows + glow filter */}
-          <svg viewBox={`0 0 ${dims.w} ${dims.h}`}
-            className="absolute inset-0 h-full w-full select-none pointer-events-none">
-            <defs>
-              <filter id="pulseGlow">
-                <feGaussianBlur stdDeviation="2" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            {/* Connection flows between agent brains */}
-            {bindings.map((b, i) => {
-              const from = positions[b.from];
-              const to = positions[b.to];
-              const color = agentNodes[b.from]?.color ?? "rgba(129,140,248,0.3)";
-              return (
-                <ConnectionFlow
-                  key={`conn-${b.from}-${b.to}`}
-                  x1={from?.x ?? 0} y1={from?.y ?? 0}
-                  x2={to?.x ?? 0} y2={to?.y ?? 0}
-                  color={color}
-                  active={!idle}
-                  delay={i * 0.18}
-                />
-              );
-            })}
-          </svg>
-
-          {/* Agent brain nodes positioned absolutely */}
-          {agentNodes.map((node, i) => {
-            const pos = positions[i];
-            if (!pos) return null;
-            return (
-              <motion.div
-                key={node.id}
-                className="absolute"
-                style={{ left: pos.x - 40, top: pos.y - 45 }}
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: "spring", stiffness: 80, damping: 14, delay: i * 0.08 }}
-              >
-                <div className="flex flex-col items-center">
-                  <MiniBrain
-                    provider={node.id}
-                    status={node.status}
-                    intensity={intensity}
-                    size={72}
-                    label={node.label}
-                    taskCount={node.taskCount}
-                    latency={node.latency}
-                    reasoningDepth={node.reasoningDepth}
-                  />
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    <StatusDot status={node.status} pulse={node.status === "healthy"} />
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-
-          {/* Empty state */}
-          {agentNodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Empty title="No agents connected"
-                hint="Agents appear here when they register with the EventBus and Provider Framework." />
-            </div>
-          )}
-
-          {/* Legend */}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] tracking-[0.2em] text-faint/40 uppercase pointer-events-none">
-            {agentNodes.length} agent{agentNodes.length !== 1 ? "s" : ""} · {bindings.length} bindings ·{" "}
-            {connected ? <span className="text-ok">live</span> : "offline"}
-          </div>
-        </div>
+      {/* ── Left: Dynamic 3D Neural Supercomputer ── */}
+      <div className="col-span-7 relative h-full min-h-[450px]">
+        <NeuralSupercomputer />
       </div>
+
 
       {/* ── Right: Panels (unchanged) ── */}
       <div className="col-span-5 flex flex-col gap-4 overflow-y-auto">
@@ -683,3 +609,6 @@ export function AIBrain() {
     </div>
   );
 }
+
+export { AIBrain as AiBrain };
+export default AIBrain;

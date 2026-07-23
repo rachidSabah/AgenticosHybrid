@@ -72,6 +72,10 @@ ci-log.txt
 apps/mission-control/src-tauri/resources/
 docs/build-report.md
 
+# ── Playwright ──
+playwright-report/
+test-results/
+
 # ── Temporary / OS files ──
 .DS_Store
 Thumbs.db

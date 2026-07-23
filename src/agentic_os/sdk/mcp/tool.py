@@ -1,4 +1,4 @@
-"""MCP Tool SDK - tool builder, discovery, and invocation."""
+from __future__ import annotations
 
 from typing import Any
 

@@ -24,22 +24,6 @@ function cmdColor(provider: string): string {
   return key ? COMMAND_COLORS[key] : "#818cf8";
 }
 
-// ── C-Level Executive Definitions ──
-interface Executive {
-  title: string;
-  role: string;
-  supervising: string[];
-  color: string;
-  icon: string;
-}
-const EXECUTIVES: Executive[] = [
-  { title: "Chief Architect", role: "System Design & Architecture", supervising: ["Architecture", "Planning"], color: "#d980ff", icon: "⌗" },
-  { title: "Chief Planning Officer", role: "Mission Planning & Scheduling", supervising: ["Planning", "Analysis"], color: "#6366f1", icon: "⚑" },
-  { title: "Chief Engineering Officer", role: "Implementation & Coding", supervising: ["Coding", "Backend", "Frontend"], color: "#22c55e", icon: "⚙" },
-  { title: "Chief QA Officer", role: "Testing & Validation", supervising: ["Testing", "QA", "Validation"], color: "#fbbf24", icon: "✓" },
-  { title: "Chief Security Officer", role: "Security & Compliance", supervising: ["Security", "Audit"], color: "#ef4444", icon: "⚔" },
-  { title: "Chief DevOps Officer", role: "CI/CD & Infrastructure", supervising: ["DevOps", "Infrastructure"], color: "#38bdf8", icon: "⟳" },
-];
 
 // ── Agent Aircraft Card ──
 function AgentAircraft({
@@ -148,9 +132,9 @@ export function MissionOverview() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.providerHealth().then(setProvidersData).catch((err) => { console.error("API error:", err); setError(String(err)); });
-    api.capabilities().then(setCaps).catch((err) => { console.error("API error:", err); setError(String(err)); });
-    api.audit().then(setAudit).catch((err) => { console.error("API error:", err); setError(String(err)); });
+    api.providerHealth().then(setProvidersData).catch((err) => { setError(String(err)); });
+    api.capabilities().then(setCaps).catch((err) => { setError(String(err)); });
+    api.audit().then(setAudit).catch((err) => { setError(String(err)); });
   }, []);
 
   const healthy = Object.values(providers).filter((p) => p.status === "healthy").length;
@@ -239,37 +223,32 @@ export function MissionOverview() {
       {/* ── RIGHT TOP: System Control ── */}
       <SystemControl className="col-span-3 row-span-2" />
 
-      {/* ── RIGHT MIDDLE: C-Level Executives ── */}
+      {/* ── RIGHT MIDDLE: Executive Command ── */}
       <Panel title="Executive Command" subtitle="AI leadership hierarchy" className="col-span-3 row-span-1">
         <div className="space-y-2">
-          {EXECUTIVES.map((exec) => {
-            const supervisedAgents = allProviders.filter((p) =>
-              p?.provider && exec.supervising.some((s) => p.provider.toLowerCase().includes(s.toLowerCase()))
-            );
-            return (
+          {allProviders.length === 0 ? (
+            <Empty title="No active executives" hint="Discovered providers populate executive command" />
+          ) : (
+            allProviders.map((p, idx) => (
               <motion.div
-                key={exec.title}
-                className="flex items-center gap-2 rounded-lg border border-border/40 px-2.5 py-1.5"
-                style={{ borderLeftColor: exec.color, borderLeftWidth: 2 }}
+                key={p.provider}
+                className="flex items-center gap-2 rounded-lg border border-border/40 px-2.5 py-1.5 border-l-2"
+                style={{ borderLeftColor: cmdColor(p.provider) }}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.05 }}
               >
-                <span className="text-base shrink-0" style={{ color: exec.color }}>{exec.icon}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-medium leading-tight">{exec.title}</div>
-                  <div className="text-[9px] text-faint/60 truncate">{exec.role}</div>
+                  <div className="text-[11px] font-medium leading-tight uppercase tracking-wider">{p.provider}</div>
+                  <div className="text-[9px] text-faint/60 truncate">Command Node · {p.latency_ms.toFixed(0)}ms</div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {supervisedAgents.length > 0 && (
-                    <span className="text-[9px] text-faint/50 tabular-nums">{supervisedAgents.length}</span>
-                  )}
-                  <StatusDot status={supervisedAgents.length > 0 ? "healthy" : "unknown"} />
-                </div>
+                <StatusDot status={p.status} pulse={p.status === "healthy"} />
               </motion.div>
-            );
-          })}
+            ))
+          )}
         </div>
       </Panel>
+
 
       {/* ── BOTTOM LEFT: Capabilities ── */}
       <Panel title="Available Capabilities" subtitle={`${caps.length} registered`} className="col-span-3 row-span-1">

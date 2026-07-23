@@ -8,13 +8,14 @@ import { api } from "@/lib/api";
 import type {
   MissionType, MissionPlanType, MissionTaskType, EventEnvelope,
   MemoryItem, ProviderHealthRecord, MissionAttachment,
+  GatewayStrategy, MissionRoutePlanType, TaskRouteAssignmentType,
 } from "@/lib/types";
 import {
   Plus, X, Check, Play, Pause, Trash2, FileText, Target, ListTodo, Tag, Clock,
   ChevronDown, ChevronUp, RefreshCw, RotateCcw, UserPlus, AlertCircle,
   Upload, Paperclip, Download, GripVertical, BrainCircuit, MessageCircle,
   GitMerge, Kanban, CheckCircle2, XCircle, Loader2, Layers, Workflow,
-  Activity, Server,
+  Activity, Server, Route,
 } from "lucide-react";
 
 const PRIORITIES = ["low", "medium", "high", "critical"];
@@ -60,6 +61,17 @@ const MERGE_STAGES = [
   { id: "regression", label: "Regression", icon: RotateCcw },
   { id: "documentation", label: "Documentation", icon: FileText },
 ] as const;
+
+// ── OmniRoute strategy labels ──
+const ROUTING_STRATEGIES: { id: GatewayStrategy; label: string; desc: string; icon: string }[] = [
+  { id: "balanced", label: "Balanced", desc: "Equal weight across all dimensions", icon: "⚖️" },
+  { id: "fastest", label: "Fastest", desc: "Minimize response latency", icon: "⚡" },
+  { id: "cheapest", label: "Cheapest", desc: "Minimize cost per token", icon: "💰" },
+  { id: "best_capability", label: "Best Capability", desc: "Maximize model capability score", icon: "🧠" },
+  { id: "reliability_first", label: "Reliability First", desc: "Least error-prone providers", icon: "🛡️" },
+  { id: "latency_first", label: "Latency First", desc: "Lowest latency providers", icon: "🏎️" },
+  { id: "custom", label: "Custom", desc: "Manual assignment", icon: "🎛️" },
+];
 
 // ── Main Component ──
 export function MissionOrchestrator() {
@@ -1127,6 +1139,127 @@ function FinalValidationPanel({ mission }: { mission: MissionType }) {
           </div>
         ))}
       </div>
+    </Panel>
+  );
+}
+
+// ── OmniRoute Planner ──
+function RoutingPlanner({ mission }: { mission: MissionType }) {
+  const [selectedStrategy, setSelectedStrategy] = useState<GatewayStrategy>("balanced");
+  const [routePlan, setRoutePlan] = useState<MissionRoutePlanType | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const compareRoute = useCallback(async () => {
+    setLoading(true);
+    try {
+      const results = await api.compareStrategies(mission.id);
+      const plan = results[selectedStrategy];
+      if (plan) setRoutePlan(plan);
+    } catch {
+      setRoutePlan(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [mission.id, selectedStrategy]);
+
+  const currentStrategy = ROUTING_STRATEGIES.find((s) => s.id === selectedStrategy);
+  const stratSummary = routePlan
+    ? `$${routePlan.total_estimated_cost.toFixed(2)} · ${routePlan.average_composite_score.toFixed(2)} score · ${routePlan.assignments.length} tasks`
+    : null;
+
+  return (
+    <Panel
+      title={`Routing — ${currentStrategy?.label ?? selectedStrategy}`}
+      subtitle={stratSummary ?? "Select a strategy and compare"}
+      actions={
+        <button
+          className={`pill ${loading ? "opacity-50 pointer-events-none" : "bg-accent/15 text-accent hover:bg-accent/25"}`}
+          onClick={compareRoute}
+          disabled={loading}
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          {loading ? " Comparing…" : " Compare"}
+        </button>
+      }
+      className="h-full"
+    >
+      {/* Strategy selector grid */}
+      <div className="mb-4 grid grid-cols-3 gap-1.5">
+        {ROUTING_STRATEGIES.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => { setSelectedStrategy(s.id); setRoutePlan(null); }}
+            className={`rounded-xl p-2.5 text-left transition-all ${
+              selectedStrategy === s.id
+                ? "bg-accent/15 ring-1 ring-accent/40"
+                : "bg-surface/30 hover:bg-surface/50"
+            }`}
+          >
+            <div className="text-sm">{s.icon} {s.label}</div>
+            <div className="text-[10px] text-faint mt-0.5">{s.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {/* Route plan display */}
+      {routePlan ? (
+        <div className="space-y-3">
+          {/* Summary stats */}
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: "Est. Cost", value: `$${routePlan.total_estimated_cost.toFixed(2)}` },
+              { label: "Duration", value: `${(routePlan.total_estimated_duration_ms / 1000).toFixed(1)}s` },
+              { label: "Avg Score", value: routePlan.average_composite_score.toFixed(3) },
+              { label: "Providers", value: Object.keys(routePlan.provider_usage).length.toString() },
+            ].map((s) => (
+              <div key={s.label} className="glass rounded-xl px-2.5 py-2 text-center">
+                <div className="text-[9px] uppercase tracking-wider text-faint">{s.label}</div>
+                <div className="mt-0.5 text-sm font-medium tabular-nums">{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Provider usage breakdown */}
+          {Object.keys(routePlan.provider_usage).length > 0 && (
+            <div>
+              <div className="text-[11px] font-medium text-faint mb-1.5">Provider Usage</div>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(routePlan.provider_usage).map(([provider, count]) => (
+                  <Badge key={provider}>
+                    {provider} ×{count}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Task assignments */}
+          <div>
+            <div className="text-[11px] font-medium text-faint mb-1.5">Task Assignments ({routePlan.assignments.length})</div>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {routePlan.assignments.map((a) => (
+                <div key={a.task_id}
+                  className="flex items-center gap-2 rounded-lg bg-surface/20 px-2.5 py-1.5 text-xs"
+                >
+                  <StatusDot status={a.status as any} />
+                  <span className="flex-1 truncate">{a.task_title}</span>
+                  <span className="text-faint text-[10px] tabular-nums">
+                    {a.assigned_agent_name}
+                  </span>
+                  <span className="text-faint text-[10px] tabular-nums">
+                    ${a.estimated_cost.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Empty
+          title="No route plan"
+          hint="Select a strategy above and click Compare to generate a route plan."
+        />
+      )}
     </Panel>
   );
 }

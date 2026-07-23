@@ -28,7 +28,6 @@ The Gateway is an APIRouter that mounts on the FastAPI app. It:
 
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -37,7 +36,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from agentic_os.core.providers.manager import ProviderManagerImpl
 from agentic_os.domain.agent import Agent, Task
@@ -205,7 +204,7 @@ async def _proxy_chat_completion(
                 yield b'data: {"error": "stream failed"}\n\n'
                 yield b"data: [DONE]\n"
 
-        return _stream()
+        return _stream()  # ty:ignore[invalid-return-type]
 
 
 async def _adapter_chat_completion(
@@ -349,7 +348,7 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
             if body.stream:
                 # StreamingResponse with the proxy's byte stream
                 return StreamingResponse(
-                    result,  # type: ignore[arg-type]
+                    result,  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
                     media_type="text/event-stream",
                     headers={
                         "Cache-Control": "no-cache",
@@ -360,12 +359,12 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
             # Non-streaming: wrap the proxy response in OpenAI format
             data = result  # type: ignore[assignment]
             # Ensure the id/model fields are populated
-            if "id" not in data:
-                data["id"] = f"chatcmpl-{uuid.uuid4().hex}"
-            if "model" not in data or not data["model"]:
-                data["model"] = resolved_model
-            if "object" not in data:
-                data["object"] = "chat.completion"
+            if "id" not in data:  # ty:ignore[unsupported-operator]
+                data["id"] = f"chatcmpl-{uuid.uuid4().hex}"  # ty:ignore[invalid-assignment]
+            if "model" not in data or not data["model"]:  # ty:ignore[not-subscriptable, unsupported-operator]
+                data["model"] = resolved_model  # ty:ignore[invalid-assignment]
+            if "object" not in data:  # ty:ignore[unsupported-operator]
+                data["object"] = "chat.completion"  # ty:ignore[invalid-assignment]
             return JSONResponse(content=data)
 
         # For non-OpenAI-compatible providers → adapt through execute()
@@ -400,13 +399,13 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
             result = await _proxy_chat_completion(adapter, resolved_model, chat_body)
             if body.stream:
                 return StreamingResponse(
-                    result,  # type: ignore[arg-type]
+                    result,  # type: ignore[arg-type]  # ty:ignore[invalid-argument-type]
                     media_type="text/event-stream",
                 )
             data = result  # type: ignore[assignment]
             # Transform chat response to completion format
             text = ""
-            for choice in data.get("choices", []):
+            for choice in data.get("choices", []):  # ty:ignore[unresolved-attribute]
                 msg = choice.get("message", {})
                 text += msg.get("content", "")
             resp = {
@@ -415,7 +414,7 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
                 "created": int(time.time()),
                 "model": resolved_model,
                 "choices": [{"text": text, "index": 0, "finish_reason": "stop"}],
-                "usage": data.get(
+                "usage": data.get(  # ty:ignore[unresolved-attribute]
                     "usage", {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
                 ),
             }
@@ -476,7 +475,8 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
             status_code=501,
             detail={
                 "error": {
-                    "message": "Embeddings not available — no embedding-capable provider registered",
+                    "message": "Embeddings not available — "
+                    "no embedding-capable provider registered",
                     "type": "not_implemented",
                     "code": "not_implemented",
                 }

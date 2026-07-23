@@ -10,24 +10,24 @@ API layer receives.
 from dataclasses import dataclass
 
 from agentic_os.adapters.bus.factory import build_bus
+from agentic_os.adapters.discovery.cargo import CargoDiscovery
+from agentic_os.adapters.discovery.choco import ChocolateyDiscovery
 from agentic_os.adapters.discovery.config_file import ConfigFileDiscovery
 from agentic_os.adapters.discovery.docker_provider import DockerDiscovery
 from agentic_os.adapters.discovery.env_var import EnvVarDiscovery
 from agentic_os.adapters.discovery.filesystem import FilesystemDiscovery
 from agentic_os.adapters.discovery.jetbrains import JetBrainsDiscovery
 from agentic_os.adapters.discovery.known_install_dirs import KnownInstallDirDiscovery
-from agentic_os.adapters.discovery.path import PathDiscovery
-from agentic_os.adapters.discovery.choco import ChocolateyDiscovery
 from agentic_os.adapters.discovery.npm import NpmDiscovery
-from agentic_os.adapters.discovery.cargo import CargoDiscovery
-from agentic_os.adapters.discovery.uv_provider import UvDiscovery
-from agentic_os.adapters.discovery.shell_profile import ShellProfileDiscovery
-from agentic_os.adapters.discovery.winget import WingetDiscovery
-from agentic_os.adapters.discovery.scoop import ScoopDiscovery
+from agentic_os.adapters.discovery.path import PathDiscovery
 
 # Discovery providers (M2)
 from agentic_os.adapters.discovery.registry_provider import WindowsRegistryDiscovery
+from agentic_os.adapters.discovery.scoop import ScoopDiscovery
+from agentic_os.adapters.discovery.shell_profile import ShellProfileDiscovery
+from agentic_os.adapters.discovery.uv_provider import UvDiscovery
 from agentic_os.adapters.discovery.vscode import VSCodeDiscovery
+from agentic_os.adapters.discovery.winget import WingetDiscovery
 from agentic_os.adapters.discovery.wsl_provider import WslDiscovery
 
 # Engine adapters

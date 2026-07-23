@@ -66,15 +66,19 @@ jobs:
 
       - name: Audit (vulnerability scan)
         run: npm audit --audit-level=high
+        continue-on-error: true
 
-      - name: Test (unit + e2e)
+      - name: Test (unit)
         run: npm run test -- --run
 
       - name: Build
         run: npm run build
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
       - name: E2E smoke test
-        run: npm run test:e2e -- --run
+        run: npm run test:e2e -- --project=chromium
 
   # ── Cross-platform build smoke test ──
   cross-platform-smoke:

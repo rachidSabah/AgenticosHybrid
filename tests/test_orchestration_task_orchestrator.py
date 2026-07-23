@@ -289,7 +289,6 @@ class TestTaskOrchestrator:
         assert "orchestration.task_created" in topics
 
     async def test_register_decomposition_strategy(self, orchestrator) -> None:
-        from agentic_os.domain.orchestration import AgentTask
 
         class TestStrategy:
             name = "test"

@@ -21,12 +21,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [active, setActive] = useState("overview");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [connectingDismissed, setConnectingDismissed] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     // Connect WebSocket — loads initial state on connection
     storeConnect();
-    return () => storeDisconnect();
+    const timer = setTimeout(() => setConnectingDismissed(true), 1200);
+    return () => {
+      storeDisconnect();
+      clearTimeout(timer);
+    };
   }, []);
 
   // Global keyboard shortcuts
@@ -51,14 +56,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     setActive(id);
   }, []);
 
-  if (!mounted) return null;
+  if (!mounted) return (
+    <div className="grid h-screen w-screen grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
+      <aside className="w-14" aria-label="sidebar-skeleton" />
+      <main className="flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      </main>
+    </div>
+  );
 
   return (
-    <ActiveViewCtx.Provider value={active}>
+    <ActiveViewCtx.Provider value={{ active, setActive: open }}>
       <div className="grid h-screen w-screen grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
         {/* Sidebar */}
         <div
-          className={`relative z-20 flex h-screen flex-col border-r border-border/30 bg-surface/50 backdrop-blur-lg transition-all duration-300 ease-in-out $
+          className={`relative z-20 flex h-screen flex-col border-r border-border/30 bg-surface/50 backdrop-blur-lg transition-all duration-300 ease-in-out
             ${isCollapsed ? "w-16" : "w-64"}
           `}
         >
@@ -95,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         {/* Main Content */}
-        <div className="grid h-screen grid-rows-[auto_1fr_auto] overflow-hidden">
+        <main className="grid h-screen grid-rows-[auto_1fr_auto] overflow-hidden">
           {/* Navbar */}
           <div className="flex h-14 items-center justify-between border-b border-border/30 px-4">
             <div className="flex items-center gap-2">
@@ -108,14 +120,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Content Area */}
           <div className="relative overflow-hidden">
-            {/* Loading overlay — visible until WebSocket connects */}
-            {!connected && mounted && (
+            {/* Loading overlay — visible until WebSocket connects or timeout passes */}
+            {!connected && mounted && !connectingDismissed && (
               <motion.div
                 initial={{ opacity: 1 }}
                 animate={{ opacity: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
-                className="absolute inset-0 z-10 flex items-center justify-center bg-surface/80 backdrop-blur-sm"
+                className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-surface/80 backdrop-blur-sm"
               >
                 <div className="flex flex-col items-center gap-4">
                   <div className="h-12 w-12 rounded-full border-4 border-accent/30 border-t-accent animate-spin" />
@@ -144,7 +156,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </span>
             </div>
           </div>
-        </div>
+        </main>
       </div>
 
       <CommandPalette
@@ -194,7 +206,7 @@ function SidebarFooter({ isCollapsed }: { isCollapsed: boolean }) {
 
 function Breadcrumb() {
   const active = useContext(ActiveViewCtx);
-  const navItem = NAV.find((n) => n.id === active) || NAV[0];
+  const navItem = NAV.find((n) => n.id === active.active) || NAV[0];
 
   return (
     <div className="flex items-center gap-2 text-sm font-medium">
