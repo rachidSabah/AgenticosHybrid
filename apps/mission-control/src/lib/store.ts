@@ -71,8 +71,8 @@ const MAX_EVENTS = 400;
 const MAX_NOTIFS = 60;
 
 // WebSocket reconnection config
-const WS_RECONNECT_BASE_DELAY = 1000; // 1s
-const WS_RECONNECT_MAX_DELAY = 15000; // 15s (was 30s)
+const WS_RECONNECT_BASE_DELAY = 3000; // 3s
+const WS_RECONNECT_MAX_DELAY = 30000; // 30s
 const WS_MAX_RETRIES = 999; // effectively unlimited for desktop runtime
 
 

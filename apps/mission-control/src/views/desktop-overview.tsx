@@ -70,15 +70,17 @@ export default function DesktopOverview() {
   if (error) return <div role="alert" className="flex items-center justify-center h-full text-xs text-danger">{error}</div>;
   if (!state) return <div role="status" className="flex items-center justify-center h-full text-xs text-faint">No data</div>;
 
-  const activeWorkspace = state.workspaces.find((w) => w.id === state.active_workspace_id);
+  const activeWorkspace = Array.isArray(state.workspaces) ? state.workspaces.find((w) => w.id === state.active_workspace_id) : undefined;
+  const windowsLength = Array.isArray(state.windows) ? state.windows.length : 0;
+  const workspacesLength = Array.isArray(state.workspaces) ? state.workspaces.length : 0;
 
   return (
     <div className="scroll-page p-4 rgrid" role="region" aria-label="Desktop Overview">
       <div className="col-span-12 flex flex-wrap items-start gap-3">
         <Stat label="Desktop Status" value={state.status} tone={statusTone(state.status)} />
         <Stat label="Uptime" value={formatUptime(state.uptime_seconds)} />
-        <Stat label="Windows" value={state.windows.length} />
-        <Stat label="Workspaces" value={state.workspaces.length} />
+        <Stat label="Windows" value={windowsLength} />
+        <Stat label="Workspaces" value={workspacesLength} />
         {state.diagnostics && (
           <Stat label="Version" value={state.diagnostics.app_version} />
         )}
@@ -113,12 +115,12 @@ export default function DesktopOverview() {
         )}
       </Panel>
 
-      <Panel title="Windows" subtitle={`${state.windows.length} open`} className="col-span-6 row-span-2">
+      <Panel title="Windows" subtitle={`${windowsLength} open`} className="col-span-6 row-span-2">
         <div className="space-y-1.5">
-          {state.windows.length === 0 ? (
+          {windowsLength === 0 ? (
             <Empty title="No windows" hint="Open a window to see it here." />
           ) : (
-            state.windows.slice(0, 20).map((w) => (
+            (state.windows ?? []).slice(0, 20).map((w) => (
               <div key={w.id} className="flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2">
                 <span className={`h-2 w-2 rounded-full ${w.focused ? "bg-accent" : "bg-surface/60"}`} />
                 <span className="flex-1 truncate text-sm">{w.label}</span>
@@ -129,9 +131,9 @@ export default function DesktopOverview() {
         </div>
       </Panel>
 
-      <Panel title="Workspaces" subtitle={`${state.workspaces.length} total`} className="col-span-12 row-span-1">
+      <Panel title="Workspaces" subtitle={`${workspacesLength} total`} className="col-span-12 row-span-1">
         <div className="flex flex-wrap gap-2">
-          {state.workspaces.map((ws) => (
+          {(state.workspaces ?? []).map((ws) => (
             <div
               key={ws.id}
               tabIndex={0}

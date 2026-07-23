@@ -94,6 +94,7 @@ class TestStressRuntimeDiscovery:
     async def test_concurrent_discovery(self) -> None:
         mgr = RuntimeDiscoveryManager()
         from asyncio import wait_for
+
         results = await wait_for(
             asyncio.gather(*[mgr.discover_runtimes() for _ in range(20)]),
             timeout=15,
