@@ -616,6 +616,16 @@ export const api = {
     get<Array<{ timestamp: string; level: string; message: string }>>(`/binding/logs?limit=${limit}`),
   bindingHistory: () =>
     get<Array<{ id: string; event: string; timestamp: string; provider: string }>>("/binding/history"),
-  bindingStatus: () =>
-    get<{ total_bound: number; healthy_count: number; scanning: boolean }>("/binding/status"),
+  // ── OmniRoute AI Networking Engine API ──
+  omnirouteStatus: () => get<{ status: string; version: string; uptime_seconds: number; requests_processed: number }>("/omniroute/status"),
+  omnirouteRoutes: () => get<Array<Record<string, unknown>>>("/omniroute/routes"),
+  omnirouteProviders: () => get<Array<Record<string, unknown>>>("/omniroute/providers"),
+  omniroutePolicies: () => get<Array<Record<string, unknown>>>("/omniroute/policies"),
+  omnirouteBudget: () => get<{ today_cost: number; monthly_cost: number; saved_cost: number; local_ratio: number }>("/omniroute/budget"),
+  omnirouteCompression: () => get<{ original_tokens: number; compressed_tokens: number; savings_pct: number }>("/omniroute/compression"),
+  omnirouteFailover: () => get<Array<{ timestamp: string; from_provider: string; to_provider: string; reason: string }>>("/omniroute/failover"),
+  omnirouteTelemetry: () => get<Record<string, number>>("/omniroute/telemetry"),
+  omnirouteReload: () => post<{ reloaded: boolean }>("/omniroute/reload"),
+  omnirouteRoute: (prompt: string, policy?: string) => post<{ target_provider: string; model: string; latency_ms: number }>("/omniroute/route", { prompt, policy }),
+  omnirouteCompress: (text: string) => post<{ original_tokens: number; compressed_tokens: number; compressed_text: string }>("/omniroute/compress", { text }),
 };

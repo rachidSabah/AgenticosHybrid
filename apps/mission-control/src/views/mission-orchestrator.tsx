@@ -87,15 +87,42 @@ export function MissionOrchestrator() {
   const missionStore = useStore((s) => s.missions);
   const missionUpdates = useStore((s) => s.missionUpdates);
 
+  const STORAGE_KEY = "mc.orchestrator.missions";
+
+  const saveMissionsLocal = (list: MissionType[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  };
+
   const loadMissions = useCallback(async () => {
     try {
       setLoading(true);
       const data = await api.missions();
-      setMissions(data);
-      useStore.getState().setMissions(data);
+      const validData = Array.isArray(data) && data.length > 0 ? data : [];
+      if (validData.length > 0) {
+        setMissions(validData);
+        saveMissionsLocal(validData);
+        useStore.getState().setMissions(validData);
+      } else {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as MissionType[];
+          setMissions(parsed);
+          useStore.getState().setMissions(parsed);
+        }
+      }
       setError(null);
     } catch (e) {
-      setError(String(e));
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as MissionType[];
+          setMissions(parsed);
+          useStore.getState().setMissions(parsed);
+        } catch {}
+      }
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -147,10 +174,14 @@ export function MissionOrchestrator() {
                 try {
                   const created = await api.createMission(data);
                   if (created && created.id) {
-                    setMissions((prev) => [created, ...prev]);
+                    setMissions((prev) => {
+                      const next = [created, ...prev];
+                      saveMissionsLocal(next);
+                      useStore.getState().setMissions(next);
+                      return next;
+                    });
                     setSelectedMission(created);
                   } else {
-                    // Local state fallback when REST endpoint returns offline shape
                     const fallbackMission: MissionType = {
                       id: `msn-${Date.now()}`,
                       title: (data.title as string) || "Untitled Mission",
@@ -159,7 +190,7 @@ export function MissionOrchestrator() {
                       objectives: (data.objectives as string[]) || [],
                       deliverables: (data.deliverables as string[]) || [],
                       constraints: (data.constraints as string[]) || [],
-                      status: "draft",
+                      status: "planned",
                       priority: (data.priority as any) || "medium",
                       execution_mode: (data.execution_mode as any) || "hybrid",
                       tags: (data.tags as string[]) || [],
@@ -167,7 +198,12 @@ export function MissionOrchestrator() {
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
                     };
-                    setMissions((prev) => [fallbackMission, ...prev]);
+                    setMissions((prev) => {
+                      const next = [fallbackMission, ...prev];
+                      saveMissionsLocal(next);
+                      useStore.getState().setMissions(next);
+                      return next;
+                    });
                     setSelectedMission(fallbackMission);
                   }
                 } catch {
@@ -179,19 +215,20 @@ export function MissionOrchestrator() {
                     objectives: (data.objectives as string[]) || [],
                     deliverables: (data.deliverables as string[]) || [],
                     constraints: (data.constraints as string[]) || [],
-                    status: "draft",
+                    status: "planned",
                     priority: (data.priority as any) || "medium",
                     execution_mode: (data.execution_mode as any) || "hybrid",
                     tags: (data.tags as string[]) || [],
                     attachments: [],
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
-                    deadline: null,
-                    plan: null,
-                    completed_at: null,
-                    error: null,
                   };
-                  setMissions((prev) => [fallbackMission, ...prev]);
+                  setMissions((prev) => {
+                    const next = [fallbackMission, ...prev];
+                    saveMissionsLocal(next);
+                    useStore.getState().setMissions(next);
+                    return next;
+                  });
                   setSelectedMission(fallbackMission);
                 } finally {
                   setShowCreate(false);

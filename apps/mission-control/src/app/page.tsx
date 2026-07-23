@@ -97,11 +97,63 @@ const GatewayDashboard = lazyWithRetry(() =>
   import("@/views/gateway-dashboard").then((m) => ({ default: m.GatewayDashboard }))
 );
 
+const OmniRouteDashboard = lazyWithRetry(() =>
+  import("@/views/omniroute-dashboard").then((m) => ({ default: m.OmniRouteDashboard }))
+);
+
 const AgentBindingCenter = lazyWithRetry(() =>
   import("@/views/agent-binding-center").then((m) => ({ default: m.AgentBindingCenter }))
 );
 
+const GovernanceCenter = lazyWithRetry(() =>
+  import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
+);
+const AgentMemoryManager = lazyWithRetry(() =>
+  import("@/views/agent-memory-manager").then((m) => ({ default: m.AgentMemoryManager }))
+);
+const LiveCollaboration = lazyWithRetry(() =>
+  import("@/views/live-collaboration").then((m) => ({ default: m.LiveCollaboration }))
+);
+const DisasterRecovery = lazyWithRetry(() =>
+  import("@/views/disaster-recovery").then((m) => ({ default: m.DisasterRecovery }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
+  governance: () => (
+    <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
+      <Suspense fallback={<ViewSkeleton title="AI Governance Center" />}>
+        <GovernanceCenter />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "agent-memory": () => (
+    <ErrorBoundary viewName="Agent Memory Manager" fallback={<ViewSkeleton title="Agent Memory Manager" />}>
+      <Suspense fallback={<ViewSkeleton title="Agent Memory Manager" />}>
+        <AgentMemoryManager />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  collaboration: () => (
+    <ErrorBoundary viewName="Live Collaboration" fallback={<ViewSkeleton title="Live Collaboration" />}>
+      <Suspense fallback={<ViewSkeleton title="Live Collaboration" />}>
+        <LiveCollaboration />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "disaster-recovery": () => (
+    <ErrorBoundary viewName="Backup & Recovery" fallback={<ViewSkeleton title="Backup & Recovery" />}>
+      <Suspense fallback={<ViewSkeleton title="Backup & Recovery" />}>
+        <DisasterRecovery />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  omniroute: () => (
+    <ErrorBoundary viewName="OmniRoute AI Subsystem" fallback={<ViewSkeleton title="OmniRoute AI Subsystem" />}>
+      <Suspense fallback={<ViewSkeleton title="OmniRoute AI Subsystem" />}>
+        <OmniRouteDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
   binding: () => (
     <ErrorBoundary viewName="AI Agent Binding Center" fallback={<ViewSkeleton title="AI Agent Binding Center" />}>
       <Suspense fallback={<ViewSkeleton title="AI Agent Binding Center" />}>

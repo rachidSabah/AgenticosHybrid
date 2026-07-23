@@ -228,19 +228,14 @@ export function PipelineBuilder() {
     api.providers().then(setProviders).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes(providers));
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(PIPELINE_TEMPLATES[0].nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(PIPELINE_TEMPLATES[0].edges);
   const [stage, setStage] = useState<Stage>("route");
   const [showCode, setShowCode] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showValidation, setShowValidation] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { setNodes: setNodesRF, getNode, setCenter } = useReactFlow();
-
-  useEffect(() => {
-    setNodes(initialNodes(providers));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers]);
 
   const validationIssues = useMemo(() => validatePipeline(nodes, edges, providers), [nodes, edges, providers]);
   const hasErrors = validationIssues.some((i) => i.type === "error");

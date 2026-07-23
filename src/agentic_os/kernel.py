@@ -298,12 +298,35 @@ class Kernel:
 
         _diag("Kernel", "INITIALIZED", "all subsystems constructed")
 
-    async def start(self) -> None:
+    async def _start_critical(self) -> None:
+        """Start the minimum critical path needed for API to function.
+
+        Starts the EventBus synchronously (required by every endpoint), then
+        schedules ALL remaining subsystem init as background tasks so uvicorn
+        starts listening in <3 seconds instead of 30+.
+        """
         _ensure_env()
+        import asyncio
+
         _diag("EventBus", "STARTING")
         await self.bus.start()
         _diag("EventBus", "STARTED")
 
+        # ── Background: plugins, core subsystems, all frameworks ──
+        async def _bg_start() -> None:
+            try:
+                await self._start_subsystems()
+            except Exception as exc:
+                _diag("BackgroundInit", "FATAL", str(exc))
+
+        asyncio.create_task(_bg_start())
+        _diag("Kernel", "CRITICAL_READY", "API server will start immediately")
+
+    async def _start_subsystems(self) -> None:
+        """Start all non-critical subsystems in the background."""
+        import asyncio
+
+        # ── Plugins ──
         _diag("Plugins", "LOADING")
         try:
             self._plugins = load_plugins(self.registry, self.providers)
@@ -311,12 +334,12 @@ class Kernel:
         except Exception as exc:
             _diag("Plugins", "FAILED", str(exc))
             self._plugins = []
-        # Seed provider manager from the Phase-1 plugin-loaded providers.
         for adapter in self.providers._providers.values():
             self.provider_mgr.register(adapter)
         self._seed_default_models()
         _diag("Providers", "SEEDED")
 
+        # ── Orchestrator (core but non-blocking) ──
         _diag("Orchestrator", "STARTING")
         await self.orchestrator.start()
         _diag("Orchestrator", "STARTED")
@@ -335,7 +358,7 @@ class Kernel:
         await self.mcp_ws.start()
         _diag("MCP-WS", "STARTED")
 
-        # Phase 4: Initialize runtime and register generic engine
+        # ── Runtime ──
         if self.runtime:
             _diag("Runtime", "INITIALIZING")
             try:
@@ -347,7 +370,7 @@ class Kernel:
             except Exception as exc:
                 _diag("Runtime", "FAILED", str(exc))
 
-        # Phase 4, M2: Start discovery framework
+        # ── Discovery framework ──
         if self.discovery_framework:
             _diag("Discovery", "STARTING")
             try:
@@ -358,19 +381,27 @@ class Kernel:
             except Exception as exc:
                 _diag("Discovery", "FAILED", str(exc))
 
-        # Phase 4, M3: Start installer intelligence
+        # ── Installer intelligence (was already background) ──
         if self.installer_intelligence:
-            _diag("Installer", "STARTING")
+            _diag("Installer", "SCHEDULING_BACKGROUND")
             try:
                 from services.installer.engine import InstallerIntelligence
 
                 engine: InstallerIntelligence = self.installer_intelligence
-                await engine.first_launch()
-                _diag("Installer", "STARTED", f"bound={len(engine.bound_providers)} providers")
-            except Exception as exc:
-                _diag("Installer", "FAILED", str(exc))
 
-        # Phase 4, M3: Start orchestration framework
+                async def _installer_bg() -> None:
+                    try:
+                        await engine.first_launch()
+                        _diag("Installer", "STARTED", f"bound={len(engine.bound_providers)} providers")
+                    except Exception as exc:
+                        _diag("Installer", "FAILED", str(exc))
+
+                asyncio.create_task(_installer_bg())
+                _diag("Installer", "BACKGROUND_TASK_SCHEDULED")
+            except Exception as exc:
+                _diag("Installer", "SCHEDULE_FAILED", str(exc))
+
+        # ── Orchestration framework ──
         if self.orchestration:
             _diag("Orchestration", "STARTING")
             try:
@@ -379,7 +410,7 @@ class Kernel:
             except Exception as exc:
                 _diag("Orchestration", "FAILED", str(exc))
 
-        # Phase 4, M3: Start MCP runtime
+        # ── MCP runtime ──
         if self.mcp:
             _diag("MCP", "STARTING")
             try:
@@ -388,7 +419,7 @@ class Kernel:
             except Exception as exc:
                 _diag("MCP", "FAILED", str(exc))
 
-        # Phase 5: Start Learning & Optimization Engine
+        # ── Learning engine ──
         if self.learning:
             _diag("Learning", "STARTING")
             try:
@@ -397,7 +428,7 @@ class Kernel:
             except Exception as exc:
                 _diag("Learning", "FAILED", str(exc))
 
-        # Phase 4, M6: Start Desktop Runtime
+        # ── Desktop runtime ──
         if self.desktop and settings.desktop_enabled:
             _diag("DesktopRuntime", "STARTING")
             try:
@@ -664,15 +695,6 @@ async def run_serve(host: str | None = None, port: int | None = None) -> None:
         return
 
     try:
-        await kernel.start()
-    except Exception as exc:
-        import traceback as _tb
-
-        _diag("Kernel", "START_FAILED", f"{type(exc).__name__}: {exc}")
-        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
-        return
-
-    try:
         app = _build_app(kernel)
         _diag("API", "BUILT")
     except Exception as exc:
@@ -681,6 +703,10 @@ async def run_serve(host: str | None = None, port: int | None = None) -> None:
         _diag("API", "BUILD_FAILED", f"{type(exc).__name__}: {exc}")
         print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
         return
+
+    # Start critical subsystems synchronously, then launch the API server
+    # while the remaining subsystems initialize in the background.
+    await kernel._start_critical()
 
     _diag("REST-API", "STARTING", f"http://{h}:{p}")
     import uvicorn

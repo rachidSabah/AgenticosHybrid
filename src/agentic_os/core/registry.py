@@ -66,6 +66,10 @@ class ProviderRegistry:
     def register(self, adapter: ProviderAdapter) -> None:
         self._providers[adapter.info.name] = adapter
 
+    def unregister(self, name: str) -> bool:
+        """Remove a provider by name. Returns True if it existed."""
+        return self._providers.pop(name, None) is not None
+
     def get(self, name: str) -> ProviderAdapter | None:
         return self._providers.get(name)
 

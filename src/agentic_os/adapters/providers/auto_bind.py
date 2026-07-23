@@ -357,11 +357,38 @@ def _detect_unknown_agents(
     return found
 
 
-def auto_discover_and_bind(provider_registry: ProviderRegistry) -> list[ProviderInfo]:
+def _check_dir_for_binary(directory: Path, binary: str) -> str | None:
+    """Check if *binary* exists in *directory* (fast — no directory iteration).
+
+    Only checks the specific binary name rather than listing the entire directory.
+    On Windows tries common extensions.
+    """
+    if not directory.is_dir():
+        return None
+    if _platform.system() == "Windows":
+        for ext in ("", ".exe", ".cmd", ".bat", ".ps1"):
+            p = directory / f"{binary}{ext}"
+            if p.is_file():
+                return str(p)
+    else:
+        candidate = directory / binary
+        if candidate.is_file() or candidate.is_symlink():
+            return str(candidate)
+    return None
+
+
+def auto_discover_and_bind(
+    provider_registry: ProviderRegistry,
+    probe_unknown: bool = False,
+) -> list[ProviderInfo]:
     """Scan PATH and common install directories for known and unknown agents.
 
     Returns the list of newly bound provider infos (empty if none found).
     Safe to call repeatedly — skips already-registered providers.
+
+    When *probe_unknown* is False (default startup mode) the expensive unknown-agent
+    probing phase (subprocess --version on every unknown binary) is skipped.
+    Set *probe_unknown* to True for explicit on-demand scans or background tasks.
     """
     bound: list[ProviderInfo] = []
     existing_names: set[str] = set()
@@ -374,31 +401,22 @@ def auto_discover_and_bind(provider_registry: ProviderRegistry) -> list[Provider
             if p.kind == entry["kind"] or p.name == entry["binary"]:
                 existing_names.add(entry["binary"])
 
-    # ── Phase 1: Scan PATH + common install dirs ──
+    # ── Phase 1: Resolve install directories (no bulk file scan) ──
     install_dirs = _common_install_dirs()
-    resolved_dirs: set[Path] = set()
+    resolved_dirs: list[Path] = []
+    seen: set[Path] = set()
     for d in install_dirs:
         try:
-            resolved_dirs.add(d.resolve())
+            resolved = d.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                resolved_dirs.append(resolved)
         except OSError:
-            resolved_dirs.add(d)
+            if d not in seen:
+                seen.add(d)
+                resolved_dirs.append(d)
 
-    # Build a set of all binaries found across all directories
-    all_binaries: dict[str, Path] = {}
-    for d in resolved_dirs:
-        if not d.is_dir():
-            continue
-        try:
-            for entry in d.iterdir():
-                if entry.is_file() or entry.is_symlink():
-                    name = entry.name
-                    stem = Path(name).stem if _platform.system() == "Windows" else name
-                    if stem not in all_binaries:
-                        all_binaries[stem] = entry
-        except (PermissionError, OSError):
-            continue
-
-    # ── Phase 2: Bind known agents ──
+    # ── Phase 2: Bind known agents (targeted lookups, no directory iteration) ──
     for entry in KNOWN_AGENTS:
         binary = entry["binary"]
         kind = entry["kind"]
@@ -407,10 +425,16 @@ def auto_discover_and_bind(provider_registry: ProviderRegistry) -> list[Provider
             log.debug("auto_bind.skipping", binary=binary, reason="already registered")
             continue
 
-        # Check PATH first, then fall back to scanned directories
+        # Check PATH first (fast — shutil.which only checks PATH dirs)
         bin_path = shutil.which(binary)
-        if bin_path is None and binary in all_binaries:
-            bin_path = str(all_binaries[binary])
+
+        # Fallback: check extra install directories for the specific binary
+        if bin_path is None:
+            for d in resolved_dirs:
+                result = _check_dir_for_binary(d, binary)
+                if result:
+                    bin_path = result
+                    break
 
         if bin_path is None:
             log.debug("auto_bind.skipping", binary=binary, reason="not found on PATH or disk")
@@ -448,7 +472,10 @@ def auto_discover_and_bind(provider_registry: ProviderRegistry) -> list[Provider
             log.error("auto_bind.failed", name=binary, kind=kind, error=str(exc))
 
     # ── Phase 3: Probe for unknown / unlisted agents ──
-    unknown = _detect_unknown_agents(install_dirs, existing_names)
+    # Skipped during synchronous startup — runs on-demand or via background task.
+    unknown: list[dict] = []
+    if probe_unknown:
+        unknown = _detect_unknown_agents(install_dirs, existing_names)
     for agent in unknown:
         binary = agent["binary"]
         bin_path = agent.get("path", binary)

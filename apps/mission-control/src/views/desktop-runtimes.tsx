@@ -101,7 +101,7 @@ export default function DesktopRuntimes() {
         <Stat label="Verified" value={verifiedCount} tone="ok" />
         <Stat label="Unverified" value={runtimes.length - verifiedCount} tone={runtimes.length - verifiedCount > 0 ? "warn" : "ok"} />
         {discoveryResult && (
-          <Stat label="Last Discovery" value={`${discoveryResult.duration_seconds.toFixed(1)}s`} />
+          <Stat label="Last Discovery" value={`${(discoveryResult.duration_seconds ?? 0).toFixed(1)}s`} />
         )}
         <button
           onClick={handleDiscover}

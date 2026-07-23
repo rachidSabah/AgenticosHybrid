@@ -74,6 +74,7 @@ const MAX_NOTIFS = 60;
 const WS_RECONNECT_BASE_DELAY = 3000; // 3s
 const WS_RECONNECT_MAX_DELAY = 30000; // 30s
 const WS_MAX_RETRIES = 999; // effectively unlimited for desktop runtime
+const WS_HEARTBEAT_TIMEOUT = 90000; // 90s without heartbeat → reconnect
 
 
 function pushUnique<T extends { id: string }>(map: Record<string, T>, items: T[]): Record<string, T> {
@@ -152,6 +153,8 @@ export const useStore = create<StoreState>((set, get) => ({
     let retryCount = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let isIntentionalDisconnect = false;
+    let lastHeartbeat = Date.now();
+    let hbWatchdogTimer: ReturnType<typeof setInterval> | null = null;
 
     const connectImpl = () => {
       if (isIntentionalDisconnect) return;
@@ -199,11 +202,29 @@ export const useStore = create<StoreState>((set, get) => ({
       ws.onmessage = (ev) => {
         try {
           const data = JSON.parse(ev.data) as EventEnvelope;
+          // Track heartbeat timestamps for stale-connection detection.
+          if (data.topic === "heartbeat") {
+            lastHeartbeat = Date.now();
+          }
           get().ingest(data);
         } catch {
           /* ignore malformed frames */
         }
       };
+
+      // Start heartbeat watchdog — if no heartbeat within 90s, reconnect.
+      const startWatchdog = () => {
+        if (hbWatchdogTimer) clearInterval(hbWatchdogTimer);
+        hbWatchdogTimer = setInterval(() => {
+          if (Date.now() - lastHeartbeat > WS_HEARTBEAT_TIMEOUT) {
+            console.warn("[WebSocket] No heartbeat for 90s — reconnecting");
+            ws?.close();
+            if (hbWatchdogTimer) clearInterval(hbWatchdogTimer);
+            hbWatchdogTimer = null;
+          }
+        }, 30000);
+      };
+      startWatchdog();
 
       (get() as unknown as { _ws?: WebSocket; _reconnectTimer?: ReturnType<typeof setTimeout>; _isIntentionalDisconnect?: boolean })._ws = ws;
     };
@@ -235,6 +256,7 @@ export const useStore = create<StoreState>((set, get) => ({
     (get() as unknown as { _cleanup?: () => void })._cleanup = () => {
       isIntentionalDisconnect = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (hbWatchdogTimer) clearInterval(hbWatchdogTimer);
       ws?.close();
     };
   },
@@ -248,6 +270,16 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   ingest: (e) => {
+    // Skip heartbeat messages — they are connection keep-alive only.
+    if (e.topic === "heartbeat") {
+      set((s) => {
+        const telemetry = { ...s.telemetry };
+        telemetry.pulses = [{ topic: e.topic, at: Date.now() }, ...telemetry.pulses].slice(0, 80);
+        return { telemetry };
+      });
+      return;
+    }
+
     set((s) => {
       const events = [e, ...s.events].slice(0, MAX_EVENTS);
       const notifications: Notification[] = [

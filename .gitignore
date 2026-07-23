@@ -55,6 +55,7 @@ secrets/
 
 # ── Logs / cache / tmp ──
 logs/
+.cache/
 *.log
 cache/
 tmp/

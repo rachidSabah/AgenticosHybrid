@@ -60,7 +60,12 @@ export const NAV: NavItem[] = [
   { id: "desktop-diagnostics", label: "Desktop Diagnostics", hint: "4", icon: Shield, group: "desktop" },
   { id: "desktop-offline", label: "Offline Mode", hint: "5", icon: Wifi, group: "desktop" },
   { id: "desktop-settings", label: "Desktop Settings", hint: "6", icon: Settings, group: "desktop" },
+  { id: "omniroute", label: "OmniRoute", hint: "R", icon: Network, group: "core" },
   { id: "gateway", label: "API Gateway", hint: "G", icon: Zap, group: "core" },
+  { id: "governance", label: "AI Governance", hint: "V", icon: Shield, group: "observe" },
+  { id: "agent-memory", label: "Agent Memory Manager", hint: "Y", icon: Database, group: "observe" },
+  { id: "collaboration", label: "Live Collaboration", hint: "L", icon: Orbit, group: "build" },
+  { id: "disaster-recovery", label: "Backup & Recovery", hint: "K", icon: RefreshCw, group: "desktop" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

@@ -247,8 +247,8 @@ function validateWorkflow(nodes: Node[], edges: Edge[]): ValidationIssue[] {
 // backend workflow engine. Graph state is kept locally for 3A; the "Export"
 // action produces the canonical JSON the engine will consume.
 export function WorkflowStudio() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(load());
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(WORKFLOW_TEMPLATES[0].nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(WORKFLOW_TEMPLATES[0].edges);
   const [step, setStep] = useState<Step>("agent");
   const [showCode, setShowCode] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
