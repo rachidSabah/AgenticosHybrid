@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from agentic_os.core.desktop.backup import BackupManager
 from agentic_os.core.desktop.channel import ChannelManager
@@ -39,6 +38,20 @@ from agentic_os.domain.desktop import (
     KeyboardShortcut,
 )
 from agentic_os.infrastructure.logging import get_logger
+from agentic_os.ports.desktop import (
+    DesktopConfigurationPort,
+    DesktopDatabasePort,
+    DesktopDiagnosticsPort,
+    DesktopEventPublisherPort,
+    DesktopHardeningPort,
+    DesktopLoggingPort,
+    DesktopMenuPort,
+    DesktopPerformancePort,
+    DesktopWindowPort,
+    DesktopWorkspacePort,
+)
+from agentic_os.ports.desktop_ops import RuntimeDiscoveryPort
+from agentic_os.ports.event_bus import EventBus
 
 log = get_logger("desktop.manager")
 
@@ -49,30 +62,30 @@ class DesktopRuntimeManager:
     Owns all desktop subsystems and wires them together.
     """
 
-    def __init__(self, bus: Any) -> None:
+    def __init__(self, bus: EventBus) -> None:
         self._bus = bus
         self._started_at: datetime | None = None
         self._status = DesktopRuntimeStatus.STOPPED
 
-        # Subsystems
-        self.window = NativeWindowManager()
-        self.workspace = WorkspaceManager()
+        # Subsystems (typed with port protocols for testability)
+        self.window: DesktopWindowPort = NativeWindowManager()
+        self.workspace: DesktopWorkspacePort = WorkspaceManager()
         self.notification = NativeNotificationService()
         self.file = NativeFileIntegration()
         self.clipboard = NativeClipboardService()
         self.terminal = NativeTerminalIntegration()
         self.process = NativeProcessManager()
-        self.logging = DesktopLogging()
-        self.configuration = DesktopConfigurationManager()
-        self.diagnostics = DesktopDiagnosticsManager()
-        self.performance = DesktopPerformanceMonitor()
-        self.menu = NativeMenuManager()
+        self.logging: DesktopLoggingPort = DesktopLogging()
+        self.configuration: DesktopConfigurationPort = DesktopConfigurationManager()
+        self.diagnostics: DesktopDiagnosticsPort = DesktopDiagnosticsManager()
+        self.performance: DesktopPerformancePort = DesktopPerformanceMonitor()
+        self.menu: DesktopMenuPort = NativeMenuManager()
         self.dragdrop = NativeDragDropService()
-        self.database = LocalDatabaseManager()
-        self.publisher = DesktopEventPublisher(bus)
+        self.database: DesktopDatabasePort = LocalDatabaseManager()
+        self.publisher: DesktopEventPublisherPort = DesktopEventPublisher(bus)
 
         # Phase 4 M6 Part 2 subsystems
-        self.runtime_discovery = RuntimeDiscoveryManager()
+        self.runtime_discovery: RuntimeDiscoveryPort = RuntimeDiscoveryManager()
         self.update = AutoUpdateManager()
         self.installer = DesktopInstallerManager()
         self.first_run = FirstRunWizard()
@@ -86,7 +99,7 @@ class DesktopRuntimeManager:
         self.windows_platform = WindowsPlatformIntegration()
 
         # Phase 4 M6 Part 3 — Production Hardening
-        self.hardening = DesktopHardeningManager()
+        self.hardening: DesktopHardeningPort = DesktopHardeningManager()
 
         # Keyboard shortcuts
         self._shortcuts: dict[str, KeyboardShortcut] = {}

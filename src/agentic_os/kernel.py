@@ -7,6 +7,7 @@ here behind their ports. The :class:`Platform` bundle is the single object the
 API layer receives.
 """
 
+import os
 from dataclasses import dataclass
 
 from agentic_os.adapters.bus.factory import build_bus
@@ -685,8 +686,14 @@ async def run_serve(host: str | None = None, port: int | None = None) -> None:
 
     kernel: Kernel | None = None
     try:
-        kernel = Kernel()
-        _diag("Kernel", "CONSTRUCTED")
+        if os.environ.get("AGENTIC_OS_USE_CONTAINER", "1") == "1":
+            from agentic_os.core.kernel_bootstrap import ContainerKernel
+
+            kernel = ContainerKernel()
+            _diag("Kernel", "CONTAINER_MODE", "6 core services via DI Container")
+        else:
+            kernel = Kernel()
+            _diag("Kernel", "LEGACY_MODE")
     except Exception as exc:
         import traceback as _tb
 

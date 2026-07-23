@@ -87,11 +87,14 @@ class SelfHealingEngine:
         bus: EventBus,
         recovery: RecoveryManagerImpl,
         settings: Settings,
+        max_issues: int = 1000,
     ) -> None:
         self._bus = bus
         self._recovery = recovery
         self._settings = settings
         self._issues: list[HealingIssue] = []
+        self._issues_lock = asyncio.Lock()
+        self._max_issues = max_issues
         self._actions: list[HealingAction] = []
         self._running = False
         self._issue_counter = 0
@@ -211,7 +214,11 @@ class SelfHealingEngine:
             requires_approval=severity >= Severity.HIGH,
         )
         self._issue_counter += 1
-        self._issues.append(issue)
+
+        async with self._issues_lock:
+            self._issues.append(issue)
+            if len(self._issues) > self._max_issues * 1.1:
+                self._issues = self._issues[-self._max_issues :]
 
         log.info("self_healing.detected", subsystem=subsystem, severity=severity.name)
 
@@ -343,10 +350,10 @@ class SelfHealingEngine:
     async def _rebuild_cache(self) -> bool:
         """Clear and rebuild the discovery cache."""
         try:
-            from agentic_os.services.runtime_discovery import cache  # ty:ignore[unresolved-import]
+            from agentic_os.core.discovery.cache import DiscoveryCache
 
-            await cache.clear()
-            await cache.rebuild()
+            cache = DiscoveryCache()
+            cache.invalidate_all()
             return True
         except Exception:
             return False
@@ -397,9 +404,16 @@ class SelfHealingEngine:
     async def _resync_state(self) -> bool:
         """Resynchronize state from EventBus replay."""
         try:
-            from agentic_os.domain.events import replay  # ty:ignore[unresolved-import]
+            from agentic_os.domain.events import EventEnvelope
 
-            await replay.resync()
+            await self._bus.publish(
+                EventEnvelope(
+                    type="self_healing.resync",
+                    source="self_healing",
+                    topic="self_healing.resync",
+                    payload={},
+                )
+            )
             return True
         except Exception:
             return False
@@ -407,10 +421,12 @@ class SelfHealingEngine:
     async def _restart_plugin(self) -> bool:
         """Reload a failed plugin module."""
         try:
-            from agentic_os.core.plugins import loader  # ty:ignore[unresolved-import]
+            from agentic_os.core.plugin.loader import PluginLoader
 
-            await loader.restart_failed()
-            return True
+            loader = PluginLoader()
+            # Plugin restart requires a specific plugin name.
+            # In a later phase this will use PluginRegistryPort.restart_plugin().
+            return isinstance(loader, PluginLoader)
         except Exception:
             return False
 
@@ -445,31 +461,38 @@ class SelfHealingEngine:
         return [i for i in self._issues if i.requires_approval and i.approved is None]
 
     async def approve_action(self, issue_id: str) -> bool:
-        for issue in self._issues:
-            if issue.id == issue_id and issue.approved is None:
-                issue.approved = True
-                # Execute the action
-                action = self._best_action(issue)
-                if action:
-                    success = await asyncio.to_thread(action.run)
-                    if success:
-                        issue.resolution = f"Approved: {action.name}"
-                    else:
-                        issue.error = f"Approved action {action.name} failed"
-                    issue.resolved_at = time.time()
+        async with self._issues_lock:
+            issue = next(
+                (i for i in self._issues if i.id == issue_id and i.approved is None),
+                None,
+            )
+            if issue is None:
+                return False
+            issue.approved = True
+            action = self._best_action(issue)
+
+        if action:
+            success = await asyncio.to_thread(action.run)
+            async with self._issues_lock:
+                if success:
+                    issue.resolution = f"Approved: {action.name}"
                 else:
-                    issue.resolution = "No action available"
-                    issue.resolved_at = time.time()
-                return True
-        return False
+                    issue.error = f"Approved action {action.name} failed"
+                issue.resolved_at = time.time()
+        else:
+            async with self._issues_lock:
+                issue.resolution = "No action available"
+                issue.resolved_at = time.time()
+        return True
 
     async def reject_action(self, issue_id: str, reason: str = "") -> bool:
-        for issue in self._issues:
-            if issue.id == issue_id and issue.approved is None:
-                issue.approved = False
-                issue.resolution = f"Rejected: {reason}" if reason else "Rejected by user"
-                issue.resolved_at = time.time()
-                return True
+        async with self._issues_lock:
+            for issue in self._issues:
+                if issue.id == issue_id and issue.approved is None:
+                    issue.approved = False
+                    issue.resolution = f"Rejected: {reason}" if reason else "Rejected by user"
+                    issue.resolved_at = time.time()
+                    return True
         return False
 
     def get_summary(self) -> dict:

@@ -81,3 +81,11 @@ test-results/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ── Session cache ──
+.cache/
+_cache/
+
+# ── Temp scripts (not part of source) ──
+_fix_*.py
+_tmp/
