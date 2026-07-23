@@ -18,7 +18,8 @@ from agentic_os.kernel import Kernel
 @pytest.fixture
 async def client():
     kernel = Kernel()
-    await kernel.start()
+    import asyncio
+    await asyncio.wait_for(kernel.start(), timeout=15)
     app = create_app(kernel.platform())
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

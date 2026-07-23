@@ -44,7 +44,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --dev
-      - run: uv run pytest -v --tb=short
+      - run: uv run pytest -v --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py -x -q
 
   mission-control:
     runs-on: ubuntu-latest
@@ -64,9 +64,24 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --dev
+      - run: uv run pytest tests/test_phase2_integration.py tests/test_desktop_stress.py -v --tb=short -x -q
+        timeout-minutes: 8
+      - name: Cleanup on failure
+        if: ${{ failure() }}
+        run: echo "Integration tests timed out - skipping long-running kernel boot tests"
+
   ci-gate:
     name: CI
-    needs: [ruff-format, ruff-check, ty, pytest, mission-control]
+    needs: [ruff-format, ruff-check, ty, pytest, integration, mission-control]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:

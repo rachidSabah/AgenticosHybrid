@@ -93,7 +93,11 @@ class TestStressRuntimeDiscovery:
     @pytest.mark.asyncio
     async def test_concurrent_discovery(self) -> None:
         mgr = RuntimeDiscoveryManager()
-        results = await asyncio.gather(*[mgr.discover_runtimes() for _ in range(20)])
+        from asyncio import wait_for
+        results = await wait_for(
+            asyncio.gather(*[mgr.discover_runtimes() for _ in range(20)]),
+            timeout=15,
+        )
         assert len(results) == 20
 
     @pytest.mark.asyncio

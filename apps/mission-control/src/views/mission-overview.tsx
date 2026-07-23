@@ -132,16 +132,16 @@ export function MissionOverview() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.providerHealth().then(setProvidersData).catch((err) => { setError(String(err)); });
-    api.capabilities().then(setCaps).catch((err) => { setError(String(err)); });
-    api.audit().then(setAudit).catch((err) => { setError(String(err)); });
+    api.providerHealth().then((data) => setProvidersData(Array.isArray(data) ? data : [])).catch((err) => { setError(String(err)); });
+    api.capabilities().then((data) => setCaps(Array.isArray(data) ? data : [])).catch((err) => { setError(String(err)); });
+    api.audit().then((data) => setAudit(Array.isArray(data) ? data : [])).catch((err) => { setError(String(err)); });
   }, []);
 
   const healthy = Object.values(providers).filter((p) => p.status === "healthy").length;
   const running = Object.values(agents).filter((a) => a.status === "running").length;
   const recentPulses = events.filter((e) => Date.now() - new Date(e.timestamp).getTime() < 5000).length;
   const allProviders = useMemo(() => {
-    const merged = [...providersData];
+    const merged = Array.isArray(providersData) ? [...providersData] : [];
     for (const p of Object.values(providers)) {
       if (!merged.find((d) => d.provider === p.provider)) {
         merged.push(p as unknown as ProviderHealthRecord);
