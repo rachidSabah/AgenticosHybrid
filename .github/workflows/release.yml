@@ -56,10 +56,12 @@ jobs:
         with:
           workspaces: apps/mission-control/src-tauri
 
-      - name: Install Python + uv
-        uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
 
       - name: Bundle backend source
         shell: bash
@@ -134,10 +136,12 @@ jobs:
         with:
           workspaces: apps/mission-control/src-tauri
 
-      - name: Install Python + uv
-        uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
 
       - name: Bundle backend source
         shell: pwsh
@@ -250,10 +254,12 @@ jobs:
         with:
           workspaces: apps/mission-control/src-tauri
 
-      - name: Install Python + uv
-        uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
 
       - name: Bundle backend source
         shell: bash

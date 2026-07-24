@@ -13,9 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - run: uv sync --dev
       - run: uv run ruff format --check
 
@@ -23,9 +26,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - run: uv sync --dev
       - run: uv run ruff check
 
@@ -33,9 +39,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - run: uv sync --dev --extra mcp
       - run: uv run ty check src/
 
@@ -43,9 +52,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v9
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
       - run: uv sync --dev
       - run: uv run pytest -v --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py -x -q
 
