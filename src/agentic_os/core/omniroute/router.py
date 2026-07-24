@@ -535,6 +535,25 @@ class RouterEngineImpl:
             )
             return decision
 
+        # Step 4b: Circuit breaker filtering
+        if self._circuit_breaker is not None:
+            candidates = await self._filter_circuit_breaker(candidates)
+            if not candidates:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason="All candidates excluded by circuit breaker",
+                )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": "All candidates excluded by circuit breaker",
+                    },
+                )
+                return decision
+
         # Step 5: Capability filtering
         candidates = await self._filter_capabilities(candidates, request)
         if not candidates:
@@ -1134,6 +1153,30 @@ class RouterEngineImpl:
                 candidates.append(_Candidate(provider=provider, model=m))
 
         return candidates
+
+    async def _filter_circuit_breaker(
+        self,
+        candidates: list[_Candidate],
+    ) -> list[_Candidate]:
+        """Remove candidates whose provider has an OPEN circuit breaker.
+
+        Providers in CLOSED state are allowed. Providers in HALF_OPEN are
+        allowed only for probe traffic (limited by circuit breaker config).
+        Providers in OPEN state are filtered out entirely.
+        """
+        filtered: list[_Candidate] = []
+        cb = self._circuit_breaker
+        if cb is None:
+            return candidates
+        for c in candidates:
+            try:
+                allowed = await cb.allow_request(c.provider.name)
+                if allowed:
+                    filtered.append(c)
+            except Exception:
+                log.warning("Circuit breaker check failed for %s, allowing", c.provider.name)
+                filtered.append(c)
+        return filtered
 
     async def _filter_capabilities(
         self,

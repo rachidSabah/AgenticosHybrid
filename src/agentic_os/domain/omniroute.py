@@ -72,6 +72,7 @@ class RoutingPolicyType(StrEnum):
 
 
 class FailoverState(StrEnum):
+    CLOSED = "closed"
     IDLE = "idle"
     RETRYING = "retrying"
     FAILING_OVER = "failing_over"
@@ -283,16 +284,50 @@ class FailoverEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class CircuitBreakerConfig:
+    """Configurable parameters for a circuit breaker."""
+
+    failure_threshold: int = 5
+    minimum_request_count: int = 3
+    recovery_timeout_seconds: float = 30.0
+    half_open_probe_count: int = 2
+    sliding_window_size: int = 10
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCircuitMetrics:
+    """Per-provider failure tracking metrics."""
+
+    success_count: int = 0
+    failure_count: int = 0
+    consecutive_failures: int = 0
+    failure_rate: float = 0.0
+    last_failure: datetime | None = None
+    last_success: datetime | None = None
+    average_latency_ms: float = 0.0
+    timeout_count: int = 0
+    http_failures: int = 0
+    authentication_failures: int = 0
+    rate_limit_failures: int = 0
+    network_failures: int = 0
+    provider_unavailable_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class CircuitBreakerState:
-    """State of a circuit breaker for a provider."""
+    """Current state of a circuit breaker for a provider."""
 
     provider: str = ""
     state: FailoverState = FailoverState.IDLE
     failure_count: int = 0
+    success_count: int = 0
+    consecutive_failures: int = 0
     last_failure: datetime | None = None
     last_success: datetime | None = None
     circuit_open_until: datetime | None = None
     half_open_attempts: int = 0
+    half_open_probe_successes: int = 0
+    config: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
 
 
 @dataclass(frozen=True, slots=True)

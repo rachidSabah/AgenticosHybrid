@@ -59,6 +59,12 @@ class Topic(StrEnum):
     ROUTING_POLICY_ENABLED = "routing_policy.enabled"
     ROUTING_POLICY_DISABLED = "routing_policy.disabled"
     ROUTING_POLICY_SELECTED = "routing_policy.selected"
+    # Circuit Breaker (OmniRoute Phase 5.5)
+    PROVIDER_CIRCUIT_OPENED = "provider.circuit_opened"
+    PROVIDER_CIRCUIT_HALF_OPEN = "provider.circuit_half_open"
+    PROVIDER_CIRCUIT_CLOSED = "provider.circuit_closed"
+    PROVIDER_FAILURE_RECORDED = "provider.failure_recorded"
+    PROVIDER_SUCCESS_RECORDED = "provider.success_recorded"
     # Memory
     MEMORY_WRITTEN = "memory.written"
     MEMORY_EVICTED = "memory.evicted"

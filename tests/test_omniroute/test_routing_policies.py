@@ -8,7 +8,7 @@ concurrency, EventBus, DI, lifecycle, metrics, and Router integration.
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -1277,18 +1277,19 @@ class TestRouterIntegration:
         from agentic_os.core.omniroute.provider_registry import ProviderRegistryImpl
 
         pr = ProviderRegistryImpl()
+        mr = AsyncMock()
+        mr.list_enabled_models = AsyncMock(return_value=[])
+        mr.get_provider_models = AsyncMock(return_value=[])
         await pr.start()
         router._provider_registry = pr
-        router._model_registry = MagicMock()
-        router._model_registry.list_enabled_models = AsyncMock(return_value=[])
-        router._model_registry.get_provider_models = AsyncMock(return_value=[])
+        router._model_registry = mr
         await router.start()
 
         # Without policy engine, it should use built-in scoring
         req = RoutingRequest(task_type="chat")
-        with pytest.raises(Exception, match="No providers|No models|provider_registry"):
-            # Will fail because no providers/models registered, but that's OK
-            await router.route(req)
+        decision = await router.route(req)
+        assert decision.status == "failed"
+        assert "No providers" in decision.reason or "No models" in decision.reason
 
 
 # ══════════════════════════════════════════════
