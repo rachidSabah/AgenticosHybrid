@@ -337,6 +337,29 @@ class Topic(StrEnum):
     RATE_LIMIT_WARNING = "rate_limit.warning"
     RATE_LIMIT_FORECAST = "rate_limit.forecast"
 
+    # Scheduler (Phase 5.9)
+    SCHEDULER_STARTED = "scheduler.started"
+    SCHEDULER_STOPPED = "scheduler.stopped"
+    REQUEST_ENQUEUED = "scheduler.request_enqueued"
+    REQUEST_DEQUEUED = "scheduler.request_dequeued"
+    REQUEST_DISPATCHED = "scheduler.request_dispatched"
+    REQUEST_EXPIRED = "scheduler.request_expired"
+    REQUEST_CANCELLED = "scheduler.request_cancelled"
+    REQUEST_RETRIED = "scheduler.request_retried"
+    SCHEDULER_QUEUE_OVERFLOW = "scheduler.queue_overflow"
+    QUEUE_STARVATION = "scheduler.queue_starvation"
+    BACKPRESSURE_ENABLED = "scheduler.backpressure_enabled"
+    BACKPRESSURE_DISABLED = "scheduler.backpressure_disabled"
+    WORKER_ASSIGNED = "scheduler.worker_assigned"
+    WORKER_RELEASED = "scheduler.worker_released"
+    SCHEDULER_WARNING = "scheduler.warning"
+    SCHEDULER_ERROR = "scheduler.error"
+    SCHEDULER_HEALTH_CHANGED = "scheduler.health_changed"
+    QUEUE_REBALANCED = "scheduler.queue_rebalanced"
+    QUEUE_PRIORITY_CHANGED = "scheduler.queue_priority_changed"
+    QUEUE_DRAINED = "scheduler.queue_drained"
+    DEADLINE_MISSED = "scheduler.deadline_missed"
+
 
 class EventEnvelope(BaseModel):
     """Wire format for everything published to the bus."""

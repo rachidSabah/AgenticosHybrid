@@ -376,6 +376,7 @@ class RouterEngineImpl:
         circuit_breaker: Any | None = None,
         adaptive_learning_engine: Any | None = None,
         rate_limiter: Any | None = None,
+        scheduler: Any | None = None,
     ) -> None:
         from agentic_os.core.omniroute.model_registry import ModelRegistryPort
         from agentic_os.core.omniroute.provider_registry import ProviderRegistryPort
@@ -388,6 +389,7 @@ class RouterEngineImpl:
         self._circuit_breaker = circuit_breaker
         self._adaptive_learning_engine = adaptive_learning_engine
         self._rate_limiter = rate_limiter
+        self._scheduler = scheduler
 
         self._lock = asyncio.Lock()
         self._started = False
@@ -608,6 +610,47 @@ class RouterEngineImpl:
                     request_id=request.request_id,
                     status="failed",
                     reason="All candidates excluded by rate limiter",
+                )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": decision.reason,
+                    },
+                )
+                return decision
+
+        # Step 5.6: Intelligent Scheduler (after Rate Limiter, before Circuit Breaker)
+        if self._scheduler is not None:
+            for c in list(candidates):
+                priority_name = getattr(c.model, "priority", None) or "normal"
+                deadline_s = getattr(request, "deadline_s", None)
+                cost = getattr(c.model, "cost_per_req", 0.0) or 0.0
+                est_latency = getattr(c.model, "estimated_latency_ms", 0.0) or 0.0
+
+                decision = await self._scheduler.schedule(
+                    provider=c.provider.name,
+                    model=c.model.model_id,
+                    priority=priority_name,
+                    deadline_s=deadline_s,
+                    provider_cost=cost,
+                    estimated_latency_ms=est_latency,
+                    queue_affinity=c.provider.name,
+                )
+                if not decision.queued:
+                    candidates.remove(c)
+                    log.info(
+                        "Candidate %s/%s not scheduled: %s",
+                        c.provider.name,
+                        c.model.model_id,
+                        decision.reason,
+                    )
+            if not candidates:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason="All candidates excluded by scheduler",
                 )
                 await self._publish(
                     Topic.ROUTE_FAILED,

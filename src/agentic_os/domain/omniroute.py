@@ -971,6 +971,7 @@ class PriorityLevel(StrEnum):
     NORMAL = "normal"
     LOW = "low"
     BULK = "bulk"
+    BACKGROUND = "background"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1138,6 +1139,14 @@ class QueueStatistics:
     queue_depth: int = 0
     overflow_count: int = 0
     priority_distribution: dict[str, int] = field(default_factory=dict)
+    total_dispatched: int = 0
+    total_expired: int = 0
+    total_canceled: int = 0
+    total_retries: int = 0
+    dispatch_rate: float = 0.0
+    backpressure_events: int = 0
+    starvation_count: int = 0
+    worker_utilization: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -1209,3 +1218,212 @@ class RateLimitMetrics:
     workspace_utilization_pct: float = 0.0
     organization_utilization_pct: float = 0.0
     token_utilization_pct: float = 0.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# Phase 5.9 — Intelligent Request Scheduler & Queue Manager
+# ═══════════════════════════════════════════════════════════════
+
+
+class SchedulingReason(StrEnum):
+    QUEUED = "queued"
+    QUEUE_FULL = "queue_full"
+    QUEUE_PAUSED = "queue_paused"
+    SCHEDULER_NOT_RUNNING = "scheduler_not_running"
+    DEADLINE_MISSED = "deadline_missed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    RETRY = "retry"
+    BACKPRESSURE = "backpressure"
+    STARVATION = "starvation"
+    OVERFLOW = "overflow"
+    DISPATCHED = "dispatched"
+
+
+class QueueOverflowStrategy(StrEnum):
+    REJECT = "reject"
+    DROP_OLDEST = "drop_oldest"
+    DROP_NEWEST = "drop_newest"
+    DELAY = "delay"
+    SPILLOVER = "spillover"
+    PRIORITY_EVICTION = "priority_eviction"
+    ADAPTIVE_EVICTION = "adaptive_eviction"
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulingPolicy:
+    algorithm: str = "adaptive_hybrid"
+    max_queue_depth: int = 500
+    worker_pool_size: int = 32
+    enable_fairness: bool = True
+    enable_starvation_detection: bool = True
+    enable_backpressure: bool = True
+    enable_deadlines: bool = True
+    default_priority: PriorityLevel = PriorityLevel.NORMAL
+    overflow_strategy: QueueOverflowStrategy = QueueOverflowStrategy.REJECT
+    aging_threshold_ms: float = 30000.0
+    fair_share_weight: float = 1.0
+    edf_enabled: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class QueueItem:
+    id: str = ""
+    provider: str = ""
+    model: str = ""
+    priority: PriorityLevel = PriorityLevel.NORMAL
+    created_at: datetime = field(default_factory=_utcnow)
+    deadline: datetime | None = None
+    cost: float = 0.0
+    estimated_latency_ms: float = 0.0
+    queue_affinity: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DeadlinePolicy:
+    soft_deadline_s: float | None = None
+    hard_deadline_s: float | None = None
+    expire_on_soft: bool = False
+    expire_on_hard: bool = True
+    cancel_on_expire: bool = True
+    notify_on_miss: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class RetrySchedule:
+    should_retry: bool = False
+    retry_count: int = 0
+    delay_ms: float = 0.0
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class FairnessWindow:
+    window_duration_s: float = 60.0
+    max_per_window: int = 0
+    current_count: int = 0
+    window_start: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class WorkerLease:
+    worker_id: str = ""
+    item_id: str = ""
+    provider: str = ""
+    acquired_at: datetime = field(default_factory=_utcnow)
+    expires_at: datetime | None = None
+    released: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BackPressureState:
+    active: bool = False
+    high_water_mark: int = 100
+    low_water_mark: int = 30
+    current_depth: int = 0
+    triggered_at: datetime | None = None
+    events: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchReservation:
+    item_id: str = ""
+    provider: str = ""
+    model: str = ""
+    reserved_at: float = 0.0
+    expires_at: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchPlan:
+    item: QueueItem = field(default_factory=QueueItem)
+    priority: PriorityLevel = PriorityLevel.NORMAL
+    wait_time_ms: float = 0.0
+    retry: RetrySchedule = field(default_factory=RetrySchedule)
+    deadline_ms: float | None = None
+    reservation: DispatchReservation | None = None
+    algorithm: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulingDecision:
+    queued: bool = False
+    item_id: str = ""
+    position: int = 0
+    reason: SchedulingReason = SchedulingReason.QUEUED
+    retry_after_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulingEvent:
+    event_type: str = ""
+    item_id: str = ""
+    provider: str = ""
+    priority: PriorityLevel = PriorityLevel.NORMAL
+    wait_ms: float = 0.0
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class QueueState:
+    name: str = ""
+    depth: int = 0
+    priority: PriorityLevel = PriorityLevel.NORMAL
+    overflow: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class QueueSnapshot:
+    timestamp: datetime = field(default_factory=_utcnow)
+    total_queued: int = 0
+    depth_by_priority: dict[str, int] = field(default_factory=dict)
+    edf_depth: int = 0
+    fair_depth: int = 0
+    backpressure_active: bool = False
+    worker_utilization: float = 0.0
+    average_wait_ms: float = 0.0
+    max_wait_ms: float = 0.0
+    overflow_count: int = 0
+    stale_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class QueueMetrics:
+    queue_length: int = 0
+    average_wait_time: float = 0.0
+    dispatch_rate: float = 0.0
+    expired_requests: int = 0
+    retry_rate: float = 0.0
+    queue_utilization: float = 0.0
+    starvation_count: int = 0
+    deadline_misses: int = 0
+    backpressure_events: int = 0
+    worker_utilization: float = 0.0
+    dispatch_latency: float = 0.0
+    fairness_index: float = 1.0
+    scheduler_health: str = "healthy"
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulerHealth:
+    status: str = "stopped"
+    uptime_s: float = 0.0
+    total_queued: int = 0
+    total_dispatched: int = 0
+    total_expired: int = 0
+    total_canceled: int = 0
+    total_retries: int = 0
+    backpressure_active: bool = False
+    queue_full_pct: float = 0.0
+    worker_utilization: float = 0.0
+    error_count: int = 0
+    last_error: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SchedulerForecast:
+    current_depth: int = 0
+    predicted_dispatch_rate: float = 0.0
+    estimated_wait_s: float = 0.0
+    workload_prediction: str = "stable"
+    recommendation: str = ""

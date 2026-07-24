@@ -17,6 +17,7 @@ from agentic_os.core.omniroute.provider_registry import ProviderRegistryImpl
 from agentic_os.core.omniroute.rate_limiter import RateLimiterEngineImpl
 from agentic_os.core.omniroute.router import RouterEngineImpl
 from agentic_os.core.omniroute.routing_policies import RoutingPolicyEngineImpl
+from agentic_os.core.omniroute.scheduler import SchedulerEngineImpl
 from agentic_os.ports.event_bus import EventBus as EventBusPort
 
 
@@ -106,7 +107,21 @@ def create_omniroute_engine(
     )
     health_registry.track_service("omniroute.rate_limiter")
 
-    # ── Phase 5.3: Router Engine (policy + circuit breaker + budget + learning + rate limiter) ──
+    # ── Phase 5.9: Intelligent Request Scheduler & Queue Manager ──
+    scheduler = SchedulerEngineImpl(
+        event_bus=event_bus,
+    )
+    container.register_instance(
+        SchedulerEngineImpl,
+        scheduler,
+        description=(
+            "OmniRoute intelligent scheduler — priority queue, fairness, "
+            "deadline-aware dispatch, backpressure, and scheduling metrics"
+        ),
+    )
+    health_registry.track_service("omniroute.scheduler")
+
+    # ── Phase 5.3: Router Engine (policy, CB, budget, learning, rate limiter, scheduler) ──
     router_engine = RouterEngineImpl(
         provider_registry=provider_registry,
         model_registry=model_registry,
@@ -116,6 +131,7 @@ def create_omniroute_engine(
         budget_engine=budget_engine,
         adaptive_learning_engine=learning_engine,
         rate_limiter=rate_limiter,
+        scheduler=scheduler,
     )
     container.register_instance(
         RouterEngineImpl,
