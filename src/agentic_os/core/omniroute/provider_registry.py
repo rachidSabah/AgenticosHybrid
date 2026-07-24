@@ -232,7 +232,7 @@ class ProviderRegistryImpl:
                 fallback_order=provider.fallback_order,
                 rate_limit=provider.rate_limit,
                 version=provider.version,
-                healthy=False,
+                healthy=provider.healthy,
                 last_health_check=None,
                 error_message="",
                 metadata=dict(provider.metadata) if provider.metadata else {},

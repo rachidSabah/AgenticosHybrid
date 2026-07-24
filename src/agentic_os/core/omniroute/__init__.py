@@ -11,6 +11,7 @@ from agentic_os.core.health_registry import HealthRegistry
 from agentic_os.core.observability_registry import ObservabilityRegistry
 from agentic_os.core.omniroute.model_registry import ModelRegistryImpl
 from agentic_os.core.omniroute.provider_registry import ProviderRegistryImpl
+from agentic_os.core.omniroute.router import RouterEngineImpl
 from agentic_os.ports.event_bus import EventBus as EventBusPort
 
 
@@ -44,6 +45,19 @@ def create_omniroute_engine(
         description="OmniRoute model registry — CRUD + search + discovery sync",
     )
     health_registry.track_service("omniroute.model_registry")
+
+    # ── Phase 5.3: Router Engine ──
+    router_engine = RouterEngineImpl(
+        provider_registry=provider_registry,
+        model_registry=model_registry,
+        event_bus=event_bus,
+    )
+    container.register_instance(
+        RouterEngineImpl,
+        router_engine,
+        description="OmniRoute router engine — intelligent routing pipeline + scoring",
+    )
+    health_registry.track_service("omniroute.router_engine")
 
 
 __all__ = [

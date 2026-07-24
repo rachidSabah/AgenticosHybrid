@@ -45,6 +45,13 @@ class Topic(StrEnum):
     MODEL_REMOVED = "model.removed"
     MODEL_HEALTH = "model.health"
     MODEL_DEFAULT_CHANGED = "model.default_changed"
+    # Routing (OmniRoute Phase 5)
+    ROUTE_REQUESTED = "route.requested"
+    ROUTE_SELECTED = "route.selected"
+    ROUTE_FAILED = "route.failed"
+    ROUTE_FALLBACK = "route.fallback"
+    ROUTE_REJECTED = "route.rejected"
+    ROUTE_SCORING = "route.scoring"
     # Memory
     MEMORY_WRITTEN = "memory.written"
     MEMORY_EVICTED = "memory.evicted"

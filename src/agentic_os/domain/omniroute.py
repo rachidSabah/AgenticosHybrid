@@ -350,3 +350,80 @@ class RouteDecision:
     status: str = "routed"
     reasoning: str = ""
     timestamp: datetime = field(default_factory=_utcnow)
+
+
+# ── Phase 5.3: Router Engine domain models ──
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingRequest:
+    """A request to the RouterEngine for provider/model selection.
+
+    All fields have sensible defaults — only required_capabilities is
+    typically needed for a basic route() call.
+    """
+
+    task_type: str = "chat"
+    required_capabilities: tuple[str, ...] = field(default_factory=tuple)
+    preferred_provider: str = ""
+    preferred_model: str = ""
+    budget_limit: float = 0.0
+    max_latency_ms: float = 0.0
+    quality_weight: float = 1.0
+    cost_weight: float = 1.0
+    latency_weight: float = 1.0
+    streaming_required: bool = False
+    vision_required: bool = False
+    reasoning_required: bool = False
+    tools_required: bool = False
+    minimum_context: int = 0
+    workspace: str = ""
+    agent: str = ""
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    priority: int = 0
+    source: str = "unknown"
+    request_id: str = field(default_factory=_new_id)
+    user_id: str = ""
+    mission_id: str = ""
+    workflow_id: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingScore:
+    """Detailed scoring breakdown for a provider+model candidate."""
+
+    quality_score: float = 0.0
+    cost_score: float = 0.0
+    latency_score: float = 0.0
+    health_score: float = 0.0
+    reliability_score: float = 0.0
+    context_score: float = 0.0
+    preference_score: float = 0.0
+    weighted_total: float = 0.0
+    candidate_count: int = 0
+    rank: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RoutingDecision:
+    """Complete routing decision returned by the RouterEngine.
+
+    Includes the selected route, a full fallback chain, and detailed scoring.
+    """
+
+    id: str = field(default_factory=_new_id)
+    request_id: str = ""
+    provider: str = ""
+    provider_id: str = ""
+    model: str = ""
+    model_id: str = ""
+    score: RoutingScore = field(default_factory=RoutingScore)
+    reason: str = ""
+    fallback_chain: tuple[tuple[str, str, str], ...] = field(default_factory=tuple)
+    estimated_cost: float = 0.0
+    estimated_latency_ms: float = 0.0
+    confidence: float = 0.0
+    policy_used: str = "weighted"
+    status: str = "routed"
+    timestamp: datetime = field(default_factory=_utcnow)
+    alternatives_rejected: int = 0
