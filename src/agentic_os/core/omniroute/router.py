@@ -346,20 +346,22 @@ class RouterEngineImpl:
       - ProviderRegistry  (validate provider existence, health)
       - ModelRegistry      (model search, filtering)
       - EventBus           (publish lifecycle events)
-      - Future: RoutingPolicy, BudgetEngine, CircuitBreaker (via extension points)
+      - RoutingPolicy      (configurable decision strategies)
+      - CircuitBreaker     (provider resilience filtering)
+      - BudgetEngine       (financial decision layer)
 
     The 12-step routing pipeline:
       1. Validate request
       2. Query ProviderRegistry
       3. Query ModelRegistry
       4. Remove unhealthy/disabled
-      5. Capability filtering
-      6. Context window filtering
-      7. Budget filtering
-      8. Latency filtering
-      9. Quality ranking
-     10. Weighted scoring
-     11. Generate fallback chain
+      5. Budget Engine filtering
+      6. Circuit breaker filtering
+      7. Capability filtering
+      8. Context window filtering
+      9. Budget limit check (request-level)
+     10. Latency filtering
+     11. Weighted scoring / policy evaluation
      12. Return RoutingDecision
     """
 
@@ -535,7 +537,50 @@ class RouterEngineImpl:
             )
             return decision
 
-        # Step 4b: Circuit breaker filtering
+        # Step 5: Budget Engine — filter candidates by spending policies
+        if self._budget_engine is not None:
+            budget_candidates = [(c.provider, c.model) for c in candidates]
+            budget_decision = await self._budget_engine.evaluate(budget_candidates, request)
+            if not budget_decision.approved:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason=f"Budget exceeded: {budget_decision.reason}",
+                )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": decision.reason,
+                    },
+                )
+                return decision
+            # Remove candidates that were filtered out by budget
+            filtered_names = set(budget_decision.filtered_candidates)
+            if filtered_names:
+                candidates = [
+                    c
+                    for c in candidates
+                    if f"{c.provider.name}/{c.model.model_id}" not in filtered_names
+                ]
+                if not candidates:
+                    self._routing_failures += 1
+                    decision = RoutingDecision(
+                        request_id=request.request_id,
+                        status="failed",
+                        reason="All candidates excluded by budget policies",
+                    )
+                    await self._publish(
+                        Topic.ROUTE_FAILED,
+                        {
+                            "request_id": request.request_id,
+                            "reason": decision.reason,
+                        },
+                    )
+                    return decision
+
+        # Step 6: Circuit breaker filtering
         if self._circuit_breaker is not None:
             candidates = await self._filter_circuit_breaker(candidates)
             if not candidates:
@@ -554,7 +599,7 @@ class RouterEngineImpl:
                 )
                 return decision
 
-        # Step 5: Capability filtering
+        # Step 7: Capability filtering
         candidates = await self._filter_capabilities(candidates, request)
         if not candidates:
             self._routing_failures += 1
@@ -572,14 +617,14 @@ class RouterEngineImpl:
             )
             return decision
 
-        # Step 6: Context window filtering
+        # Step 8: Context window filtering
         candidates = await self._filter_context(candidates, request)
 
-        # Step 7: Budget filtering
+        # Step 9: Request budget limit check (fast path for simple limits)
         if request.budget_limit > 0:
             candidates = await self._filter_budget(candidates, request)
 
-        # Step 8: Latency filtering
+        # Step 10: Latency filtering
         if request.max_latency_ms > 0:
             candidates = await self._filter_latency(candidates, request)
 
@@ -599,7 +644,7 @@ class RouterEngineImpl:
             )
             return decision
 
-        # Step 9-10: Evaluate via RoutingPolicyEngine or fall back to weighted scoring
+        # Step 11-12: Evaluate via RoutingPolicyEngine or fall back to weighted scoring
         scoring_start = time.monotonic()
         if self._routing_policy_engine is not None:
             # Delegate to policy engine

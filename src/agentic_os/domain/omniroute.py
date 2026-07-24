@@ -444,6 +444,7 @@ class RoutingRequest:
     tools_required: bool = False
     minimum_context: int = 0
     workspace: str = ""
+    organization: str = ""
     agent: str = ""
     tags: tuple[str, ...] = field(default_factory=tuple)
     priority: int = 0
@@ -493,3 +494,196 @@ class RoutingDecision:
     status: str = "routed"
     timestamp: datetime = field(default_factory=_utcnow)
     alternatives_rejected: int = 0
+
+
+# ── Phase 5.6: Budget Engine domain models ──
+
+
+class BudgetScope(StrEnum):
+    GLOBAL = "global"
+    ORGANIZATION = "organization"
+    WORKSPACE = "workspace"
+    AGENT = "agent"
+    USER = "user"
+    SESSION = "session"
+    REQUEST = "request"
+    PROVIDER = "provider"
+    MODEL = "model"
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetPolicy:
+    """Budget policy definition for a scope."""
+
+    id: str = field(default_factory=_new_id)
+    scope: BudgetScope = BudgetScope.GLOBAL
+    scope_id: str = ""  # e.g. org-id, workspace-id, user-id, provider-name, model-id
+    enabled: bool = True
+    priority: int = 0
+
+    # Spend limits
+    max_spend_total: float = 0.0  # 0 = unlimited
+    max_spend_daily: float = 0.0
+    max_spend_monthly: float = 0.0
+    max_spend_per_request: float = 0.0
+    max_spend_burst: float = 0.0  # max burst within evaluation window
+
+    # Soft/hard limits
+    soft_limit: float = 0.0  # warning threshold (fraction of total or absolute)
+    hard_limit: float = 0.0  # hard cap (overrides all other limits)
+    warning_threshold: float = 0.8  # fraction of limit that triggers warning
+
+    currency: str = "USD"
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=_utcnow)
+    updated_at: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetReservation:
+    """An atomic budget reservation for a candidate provider+model."""
+
+    id: str = field(default_factory=_new_id)
+    policy_id: str = ""
+    scope: BudgetScope = BudgetScope.GLOBAL
+    scope_id: str = ""
+    provider: str = ""
+    model: str = ""
+    estimated_cost: float = 0.0
+    max_cost: float = 0.0
+    timestamp: datetime = field(default_factory=_utcnow)
+    expires_at: datetime | None = None
+    committed: bool = False
+    rolled_back: bool = False
+    released: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetUsage:
+    """Current usage against a budget policy."""
+
+    policy_id: str = ""
+    scope: BudgetScope = BudgetScope.GLOBAL
+    scope_id: str = ""
+    total_spent: float = 0.0
+    daily_spent: float = 0.0
+    monthly_spent: float = 0.0
+    request_count: int = 0
+    daily_request_count: int = 0
+    monthly_request_count: int = 0
+    provider_spend: dict[str, float] = field(default_factory=dict)
+    model_spend: dict[str, float] = field(default_factory=dict)
+    active_reservations: float = 0.0
+    last_updated: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetResult:
+    """Result of a budget evaluation for a candidate."""
+
+    approved: bool = False
+    rejected: bool = False
+    reason: str = ""
+    estimated_cost: float = 0.0
+    max_cost: float = 0.0
+    remaining_budget: float = 0.0
+    reservation_id: str = ""
+    effective_policy_id: str = ""
+    effective_scope: BudgetScope = BudgetScope.GLOBAL
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+    overrides_applied: tuple[str, ...] = field(default_factory=tuple)
+    evaluation_time_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetStatistics:
+    """Aggregate budget engine statistics."""
+
+    total_evaluations: int = 0
+    approvals: int = 0
+    rejections: int = 0
+    reservation_count: int = 0
+    active_reservations: int = 0
+    commits: int = 0
+    rollbacks: int = 0
+    average_evaluation_time_ms: float = 0.0
+    cost_saved: float = 0.0
+    provider_spend: dict[str, float] = field(default_factory=dict)
+    model_spend: dict[str, float] = field(default_factory=dict)
+    workspace_spend: dict[str, float] = field(default_factory=dict)
+    user_spend: dict[str, float] = field(default_factory=dict)
+    organization_spend: dict[str, float] = field(default_factory=dict)
+    limit_hits: dict[str, int] = field(default_factory=dict)  # scope -> count
+    warnings_issued: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetAuditRecord:
+    """An audit trail entry for budget operations."""
+
+    id: str = field(default_factory=_new_id)
+    action: str = ""  # approved, rejected, reserved, committed, rolled_back, released
+    policy_id: str = ""
+    scope: BudgetScope = BudgetScope.GLOBAL
+    scope_id: str = ""
+    provider: str = ""
+    model: str = ""
+    amount: float = 0.0
+    reservation_id: str = ""
+    reason: str = ""
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetOverride:
+    """A temporary override that adjusts a budget policy's limits."""
+
+    id: str = field(default_factory=_new_id)
+    policy_id: str = ""
+    reason: str = ""
+    overridden_limits: dict[str, float] = field(default_factory=dict)
+    expires_at: datetime | None = None
+    applied_by: str = ""
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetSnapshot:
+    """Point-in-time snapshot of all budget engine state."""
+
+    timestamp: datetime = field(default_factory=_utcnow)
+    policies: tuple[BudgetPolicy, ...] = field(default_factory=tuple)
+    usage: tuple[BudgetUsage, ...] = field(default_factory=tuple)
+    active_reservations: tuple[BudgetReservation, ...] = field(default_factory=tuple)
+    statistics: BudgetStatistics = field(default_factory=BudgetStatistics)
+    emergency_mode: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetForecast:
+    """Projected budget usage and remaining runway."""
+
+    projected_daily_spend: float = 0.0
+    projected_monthly_spend: float = 0.0
+    remaining_daily_budget: float = 0.0
+    remaining_monthly_budget: float = 0.0
+    estimated_days_remaining: float = 0.0
+    estimated_runway_days: float = 0.0
+    provider_forecast: dict[str, float] = field(default_factory=dict)
+    model_forecast: dict[str, float] = field(default_factory=dict)
+    at_risk: bool = False
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetDecision:
+    """Combined decision from budget engine across all candidates."""
+
+    approved: bool = False
+    rejected: bool = False
+    reason: str = ""
+    filtered_candidates: tuple[str, ...] = field(default_factory=tuple)
+    results: tuple[BudgetResult, ...] = field(default_factory=tuple)
+    reservations: tuple[str, ...] = field(default_factory=tuple)
+    evaluation_time_ms: float = 0.0
+    emergency_mode: bool = False

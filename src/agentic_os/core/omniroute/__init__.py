@@ -9,6 +9,7 @@ from __future__ import annotations
 from agentic_os.core.container import Container
 from agentic_os.core.health_registry import HealthRegistry
 from agentic_os.core.observability_registry import ObservabilityRegistry
+from agentic_os.core.omniroute.budgets import BudgetEngineImpl
 from agentic_os.core.omniroute.failover import CircuitBreakerEngineImpl
 from agentic_os.core.omniroute.model_registry import ModelRegistryImpl
 from agentic_os.core.omniroute.provider_registry import ProviderRegistryImpl
@@ -70,13 +71,25 @@ def create_omniroute_engine(
     )
     health_registry.track_service("omniroute.circuit_breaker")
 
-    # ── Phase 5.3: Router Engine (depends on policy engine + circuit breaker) ──
+    # ── Phase 5.6: Budget Engine ──
+    budget_engine = BudgetEngineImpl(
+        event_bus=event_bus,
+    )
+    container.register_instance(
+        BudgetEngineImpl,
+        budget_engine,
+        description="OmniRoute budget engine — financial decision layer + spending policies",
+    )
+    health_registry.track_service("omniroute.budget_engine")
+
+    # ── Phase 5.3: Router Engine (depends on policy engine + circuit breaker + budget engine) ──
     router_engine = RouterEngineImpl(
         provider_registry=provider_registry,
         model_registry=model_registry,
         event_bus=event_bus,
         routing_policy_engine=policy_engine,
         circuit_breaker=circuit_breaker,
+        budget_engine=budget_engine,
     )
     container.register_instance(
         RouterEngineImpl,
