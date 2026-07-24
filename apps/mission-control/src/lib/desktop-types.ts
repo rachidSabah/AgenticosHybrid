@@ -76,6 +76,10 @@ export interface DesktopPerformanceMetrics {
   process_count: number;
   window_count: number;
   uptime_seconds: number;
+  /** GPU utilisation percentage (0–100). May be omitted if not reported by the host. */
+  gpu_usage_percent?: number;
+  /** System-wide network I/O (bytes/sec). */
+  network_throughput_bytes_per_sec?: number;
 }
 
 export interface DesktopDiagnosticsInfo {

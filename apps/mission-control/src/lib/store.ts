@@ -149,6 +149,15 @@ export const useStore = create<StoreState>((set, get) => ({
   connect: () => {
     if (get().connected) return;
 
+    // Start performance polling — every view benefits from live data.
+    const pollPerf = () => {
+      api.performance()
+        .then((p) => { set({ performance: p }); })
+        .catch(() => { /* backend may be offline */ });
+    };
+    pollPerf();
+    const perfTimer = setInterval(pollPerf, 5000);
+
     let ws: WebSocket | null = null;
     let retryCount = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -257,6 +266,7 @@ export const useStore = create<StoreState>((set, get) => ({
       isIntentionalDisconnect = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (hbWatchdogTimer) clearInterval(hbWatchdogTimer);
+      clearInterval(perfTimer);
       ws?.close();
     };
   },

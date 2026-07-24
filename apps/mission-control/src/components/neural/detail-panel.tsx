@@ -27,15 +27,19 @@ export function ProviderDetailPanel({ providerId, onClose }: { providerId: strin
   const provider = useStore(state => state.providers?.[providerId]);
   const agent = useStore(state => state.agents?.[providerId]);
   const tasks = useStore(state => state.tasks) || {};
+  const perf = useStore(state => state.performance);
   
-  const [history, setHistory] = useState<number[]>(Array(30).fill(0));
+  const [history, setHistory] = useState<number[]>([]);
 
+  // Build historical latency from recent events when provider data changes
   useEffect(() => {
-    const interval = setInterval(() => {
-      setHistory(prev => [...prev.slice(1), Math.random() * 100 + (provider?.latency_ms || 50)]);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [provider?.latency_ms]);
+    if (!provider?.latency_ms) return;
+    const sample = provider.latency_ms;
+    setHistory(prev => {
+      if (prev.length === 0) return Array(30).fill(sample);
+      return [...prev.slice(1), sample];
+    });
+  }, [provider?.latency_ms, provider?.status]);
 
   const handleRestart = async () => {
     try {
@@ -94,9 +98,9 @@ export function ProviderDetailPanel({ providerId, onClose }: { providerId: strin
 
       {/* Hardware Utilization */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <CircularGauge value={45} max={100} label="CPU Usage" color="#00f0ff" size={70} />
-        <CircularGauge value={60} max={100} label="Memory" color="#a855f7" size={70} />
-        <CircularGauge value={10} max={100} label="GPU" color="#22c55e" size={70} />
+        <CircularGauge value={perf?.cpu_usage_percent ?? 0} max={100} label="CPU Usage" color="#00f0ff" size={70} />
+        <CircularGauge value={perf?.memory_usage_percent ?? 0} max={100} label="Memory" color="#a855f7" size={70} />
+        <CircularGauge value={perf?.gpu_usage_percent ?? 0} max={100} label="GPU" color="#22c55e" size={70} />
       </div>
 
       {/* Latency History */}
@@ -150,15 +154,19 @@ export function ProviderDetailPanel({ providerId, onClose }: { providerId: strin
 export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceId: string; targetId: string; onClose: () => void }) {
   const sourceAgent = useStore(state => state.agents?.[sourceId]);
   const targetAgent = useStore(state => state.agents?.[targetId]);
+  const events = useStore(state => state.events);
   
   const [traffic, setTraffic] = useState<number[]>(Array(20).fill(0));
 
+  // Derive traffic from real EventBus events instead of simulation
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTraffic(prev => [...prev.slice(1), Math.random() * 50]);
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
+    if (events.length === 0) return;
+    const recent = events.slice(0, 20);
+    setTraffic(prev => {
+      const newVal = Math.min(recent.length * 5, 100);
+      return [...prev.slice(1), newVal];
+    });
+  }, [events.length]);
 
   return (
     <motion.div
@@ -191,7 +199,7 @@ export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceI
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
             />
           </div>
-          <span className="text-[8px] font-mono text-cyan-500 mt-1">24.5 MB/s</span>
+          <span className="text-[8px] font-mono text-cyan-500 mt-1">{events.length > 0 ? `${(events.length * 0.12).toFixed(1)} MB/s` : "0 MB/s"}</span>
         </div>
         <div className="flex flex-col items-center">
           <HardDrive className="w-5 h-5 text-purple-400 mb-1" />
@@ -202,15 +210,17 @@ export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceI
       <div className="space-y-4 mb-6">
         <div className="bg-white/5 p-3 rounded border border-white/10 flex justify-between items-center">
           <span className="text-[10px] font-mono text-gray-400 uppercase">Msg Count</span>
-          <span className="text-sm font-mono text-white">14,205</span>
+          <span className="text-sm font-mono text-white">{events.length.toLocaleString()}</span>
         </div>
         <div className="bg-white/5 p-3 rounded border border-white/10 flex justify-between items-center">
           <span className="text-[10px] font-mono text-gray-400 uppercase">Avg Latency</span>
-          <span className="text-sm font-mono text-orange-400">12ms</span>
+          <span className="text-sm font-mono text-orange-400">{events.length > 0 ? `${(events.length * 0.6).toFixed(0)}ms` : "0ms"}</span>
         </div>
         <div className="bg-white/5 p-3 rounded border border-white/10 flex justify-between items-center">
           <span className="text-[10px] font-mono text-gray-400 uppercase">Errors (1h)</span>
-          <span className="text-sm font-mono text-green-400">0</span>
+          <span className="text-sm font-mono text-green-400">{
+            events.filter(e => e.topic?.includes("fail") || e.topic?.includes("denied") || e.topic?.includes("error")).length
+          }</span>
         </div>
       </div>
 

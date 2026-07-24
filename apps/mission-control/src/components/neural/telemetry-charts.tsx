@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "@/lib/store";
 import { Activity, Server, Database, Globe, Cpu, CheckCircle2, AlertCircle } from "lucide-react";
@@ -227,24 +227,22 @@ export function MissionProgressPanel() {
 // --- MAIN TELEMETRY PANEL ---
 export function TelemetryPanel({ className = "" }: { className?: string }) {
   const telemetry = useStore((state) => state.telemetry);
+  const perf = useStore((state) => state.performance);
   const pulses = telemetry?.pulses || [];
   
-  // Fake historical data for the sparklines based on current state to show some activity
-  // In a real app, this history would be kept in the store
-  const [history, setHistory] = useState<{ cpu: number[], mem: number[], net: number[] }>({
+  // Build historical data from real performance metrics
+  const history = useRef<{ cpu: number[], mem: number[], net: number[] }>({
     cpu: Array(30).fill(0), mem: Array(30).fill(0), net: Array(30).fill(0)
   });
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setHistory(prev => ({
-        cpu: [...prev.cpu.slice(1), Math.random() * 40 + 20],
-        mem: [...prev.mem.slice(1), Math.random() * 20 + 60],
-        net: [...prev.net.slice(1), Math.random() * 100]
-      }));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!perf) return;
+    history.current = {
+      cpu: [...history.current.cpu.slice(1), perf.cpu_usage_percent],
+      mem: [...history.current.mem.slice(1), perf.memory_usage_percent],
+      net: [...history.current.net.slice(1), Math.min(perf.process_count * 10, 100)],
+    };
+  }, [perf?.cpu_usage_percent, perf?.memory_usage_percent, perf?.process_count]);
 
   return (
     <motion.div 
@@ -258,14 +256,14 @@ export function TelemetryPanel({ className = "" }: { className?: string }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <CircularGauge value={history.cpu[29]} max={100} label="CPU" color="#00f0ff" size={50} />
-        <CircularGauge value={history.mem[29]} max={100} label="MEM" color="#a855f7" size={50} />
+        <CircularGauge value={history.current.cpu[29] || 0} max={100} label="CPU" color="#00f0ff" size={50} />
+        <CircularGauge value={history.current.mem[29] || 0} max={100} label="MEM" color="#a855f7" size={50} />
         <CircularGauge value={telemetry?.latency || 0} max={1000} label="LATENCY" color="#f97316" size={50} />
       </div>
 
       <div className="flex flex-col space-y-1">
         <span className="text-[10px] font-mono uppercase tracking-wider text-gray-400">Network Traffic</span>
-        <MiniSparkline data={history.net} color="#818cf8" height={36} />
+        <MiniSparkline data={history.current.net} color="#818cf8" height={36} />
       </div>
 
       <EventFrequencyMeter pulses={pulses} />

@@ -221,23 +221,23 @@ function Breadcrumb() {
 function SystemStats() {
   const { telemetry, performance } = useStore();
 
-  const cpu = performance?.cpu_usage_percent ?? telemetry.providers;
-  const mem = performance?.memory_used_mb ?? telemetry.tasks;
-  const disk = performance?.disk_free_gb ?? 0;
+  const cpu = performance?.cpu_usage_percent;
+  const mem = performance?.memory_used_mb;
+  const disk = performance?.disk_free_gb;
 
   return (
     <div className="flex items-center gap-3 text-[10px] text-faint">
       <div className="flex items-center gap-1">
         <Cpu size={12} />
-        <span>{typeof cpu === 'number' ? `${cpu.toFixed(1)}%` : `${cpu}`}</span>
+        <span>{cpu != null && cpu > 0 ? `${cpu.toFixed(1)}%` : "—"}</span>
       </div>
       <div className="flex items-center gap-1">
         <MemoryStick size={12} />
-        <span>{typeof mem === 'number' ? `${mem.toFixed(0)}MB` : `${mem}`}</span>
+        <span>{mem != null && mem > 0 ? `${mem.toFixed(0)}MB` : "—"}</span>
       </div>
       <div className="flex items-center gap-1">
         <HardDrive size={12} />
-        <span>{disk}GB</span>
+        <span>{disk != null && disk > 0 ? `${disk}GB` : "—"}</span>
       </div>
     </div>
   );

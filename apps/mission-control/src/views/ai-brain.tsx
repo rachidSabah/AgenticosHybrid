@@ -41,8 +41,10 @@ export function AIBrain() {
 
   // Dynamically compute runtime brain nodes from live discovered providers / agents
   const brainNodes = useMemo(() => {
-    const providerList = Object.values(storeProviders);
-    
+    const providerList = Object.values(storeProviders).filter(
+      (p) => p?.provider && !["mock", "Mock"].includes(p.provider)
+    );
+
     // Core node always present
     const coreNode = {
       id: "mission_control",
@@ -50,24 +52,16 @@ export function AIBrain() {
       sub: "AI CORE BRAIN",
       load: "100%",
       status: "ACTIVE",
-      cpu: Math.round(performance?.cpu_usage_percent ?? 45),
-      ram: Math.round(performance?.memory_usage_percent ?? 68),
-      tasks: Object.values(storeTasks).filter(t => t.status === "running").length || 24,
+      cpu: performance?.cpu_usage_percent ?? 0,
+      ram: performance?.memory_usage_percent ?? 0,
+      tasks: Object.values(storeTasks).filter(t => t.status === "running" || t.status === "in_progress").length,
       color: "#00f0ff",
       isCore: true,
       pos: { x: 50, y: 44 },
     };
 
     if (providerList.length === 0) {
-      // Fallback layout based on discovered runtime defaults
-      return [
-        coreNode,
-        { id: "claude", name: "CLAUDE CODE", sub: "Anthropic", status: "ACTIVE", cpu: 24, ram: 38, tasks: 8, color: "#d980ff", isCore: false, pos: { x: 25, y: 20 } },
-        { id: "hermes", name: "HERMES", sub: "AgenticOS", status: "ACTIVE", cpu: 26, ram: 42, tasks: 12, color: "#00f0ff", isCore: false, pos: { x: 75, y: 20 } },
-        { id: "opencode", name: "OPENCODE", sub: "Open Source", status: "ACTIVE", cpu: 19, ram: 31, tasks: 5, color: "#38bdf8", isCore: false, pos: { x: 18, y: 52 } },
-        { id: "agy", name: "AGY CLI", sub: "AGY Project", status: "ACTIVE", cpu: 22, ram: 35, tasks: 66, color: "#f472b6", isCore: false, pos: { x: 82, y: 52 } },
-        { id: "gemini", name: "GEMINI CLI", sub: "Google", status: "ACTIVE", cpu: 28, ram: 40, tasks: 7, color: "#f97316", isCore: false, pos: { x: 50, y: 76 } },
-      ];
+      return [coreNode];
     }
 
     // Circular layout math for N discovered runtime providers around core
@@ -113,19 +107,29 @@ export function AIBrain() {
   // Real-time task & telemetry stats
   const activeAgentsCount = useMemo(() => {
     const list = Object.values(storeProviders);
-    return list.length > 0 ? list.filter(p => p.status === "healthy").length : brainNodes.length - 1;
+    return list.length > 0 ? list.filter(p => p.status === "healthy").length : 0;
   }, [storeProviders, brainNodes]);
 
   const totalAgentsCount = useMemo(() => Math.max(brainNodes.length - 1, Object.keys(storeAgents).length), [brainNodes, storeAgents]);
 
   const runningTasksCount = useMemo(() => {
     const tasks = Object.values(storeTasks);
-    return tasks.length > 0 ? tasks.filter(t => t.status === "running").length : 13;
+    return tasks.length > 0 ? tasks.filter(t => t.status === "running").length : 0;
   }, [storeTasks]);
 
   const completedTasksCount = useMemo(() => {
     const tasks = Object.values(storeTasks);
-    return tasks.length > 0 ? tasks.filter(t => t.status === "completed").length : 6;
+    return tasks.length > 0 ? tasks.filter(t => t.status === "completed").length : 0;
+  }, [storeTasks]);
+
+  // Task counts grouped by provider (derived from task ID prefix)
+  const taskCountByProvider = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of Object.values(storeTasks)) {
+      const prefix = (t.id || t.title || "").split("_")[0].toLowerCase();
+      if (prefix) counts[prefix] = (counts[prefix] || 0) + 1;
+    }
+    return counts;
   }, [storeTasks]);
 
   // Live events derived directly from EventBus store
@@ -137,13 +141,7 @@ export function AIBrain() {
         detail: JSON.stringify(e.payload).slice(0, 30),
       }));
     }
-    return [
-      { time: "12:47:32", agent: "Claude Code completed task", detail: "Implement OAuth flow" },
-      { time: "12:47:31", agent: "Hermes analyzing repository", detail: "agenticos-core" },
-      { time: "12:47:30", agent: "OpenCode generating code", detail: "app/services/ai.ts" },
-      { time: "12:47:29", agent: "AGY CLI running tests", detail: "test/integration/" },
-      { time: "12:47:28", agent: "Gemini CLI generating content", detail: "blog/mission-control" },
-    ];
+    return [];
   }, [storeEvents]);
 
   return (
@@ -450,7 +448,7 @@ export function AIBrain() {
             </div>
             <div className="mt-1.5 pt-1.5 border-t border-slate-800 flex justify-between items-center text-[9px]">
               <span className="text-slate-400">Overall Progress</span>
-              <span className="text-cyan-400 font-bold">78%</span>
+              <span className="text-cyan-400 font-bold">{runningTasksCount + completedTasksCount > 0 ? Math.round(completedTasksCount / (runningTasksCount + completedTasksCount) * 100) : 0}%</span>
             </div>
           </div>
 
@@ -467,8 +465,8 @@ export function AIBrain() {
             {[
               { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
               { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },
-              { label: "GPU", val: "85%", color: "text-indigo-400" },
-              { label: "NET", val: "41%", color: "text-pink-400" },
+              { label: "GPU", val: performance?.gpu_usage_percent ?? "—", color: "text-indigo-400" },
+              { label: "NET", val: performance?.network_throughput_bytes_per_sec ? `${(performance.network_throughput_bytes_per_sec / 1024).toFixed(0)}KB/s` : "—", color: "text-pink-400" },
             ].map((m) => (
               <div key={m.label} className="bg-slate-900/60 rounded-lg p-1 border border-slate-800">
                 <div className="text-[8px] text-slate-500">{m.label}</div>
@@ -482,7 +480,7 @@ export function AIBrain() {
         <div className="col-span-2 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
           <div>
             <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Event Bus</div>
-            <div className="text-white font-bold text-xs">{storeEvents.length * 120 || 12847} <span className="text-[8px] text-cyan-400 font-normal">events/sec</span></div>
+            <div className="text-white font-bold text-xs">{storeEvents.length * 120 || 0} <span className="text-[8px] text-cyan-400 font-normal">events/sec</span></div>
           </div>
           <div className="h-10 flex items-end gap-0.5">
             {[20, 50, 80, 40, 90, 30, 70, 60, 100, 40, 85, 55, 95, 60].map((h, i) => (
@@ -496,11 +494,11 @@ export function AIBrain() {
           <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Task Distribution</div>
           <div className="h-14 flex items-end justify-between gap-1 px-1">
             {[
-              { name: "Claude", val: 8, color: "bg-indigo-500" },
-              { name: "Hermes", val: 6, color: "bg-cyan-500" },
-              { name: "OpenCode", val: 5, color: "bg-emerald-500" },
-              { name: "AGY CLI", val: 5, color: "bg-pink-500" },
-              { name: "Gemini CLI", val: 7, color: "bg-amber-500" },
+              { name: "Claude", val: taskCountByProvider["claude"] || taskCountByProvider["claude_code"] || 0, color: "bg-indigo-500" },
+              { name: "Hermes", val: taskCountByProvider["hermes"] || 0, color: "bg-cyan-500" },
+              { name: "OpenCode", val: taskCountByProvider["opencode"] || 0, color: "bg-emerald-500" },
+              { name: "AGY CLI", val: taskCountByProvider["agy"] || taskCountByProvider["auto:agy"] || 0, color: "bg-pink-500" },
+              { name: "Gemini CLI", val: taskCountByProvider["gemini"] || 0, color: "bg-amber-500" },
             ].map((b) => (
               <div key={b.name} className="flex flex-col items-center flex-1 h-full justify-end">
                 <span className="text-[8px] text-slate-300 font-bold mb-0.5">{b.val}</span>
@@ -515,7 +513,7 @@ export function AIBrain() {
         <div className="col-span-2 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
           <div>
             <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Token Usage</div>
-            <div className="text-white font-bold text-xs">{telemetry.tokens || 7861} <span className="text-[8px] text-cyan-400 font-normal">tokens/sec</span></div>
+            <div className="text-white font-bold text-xs">{telemetry.tokens || 0} <span className="text-[8px] text-cyan-400 font-normal">tokens/sec</span></div>
           </div>
           <div className="h-10 flex items-end">
             <svg className="w-full h-full" viewBox="0 0 100 30" preserveAspectRatio="none">
@@ -531,8 +529,8 @@ export function AIBrain() {
           <div className="space-y-0.5">
             <div className="flex justify-between"><span>WebSocket</span><span className="text-emerald-400">Connected</span></div>
             <div className="flex justify-between"><span>EventBus</span><span className="text-emerald-400">Connected</span></div>
-            <div className="flex justify-between"><span>Providers</span><span className="text-emerald-400">{Object.keys(storeProviders).length || 5}/5 Online</span></div>
-            <div className="flex justify-between"><span>Plugins</span><span className="text-cyan-400">18 Active</span></div>
+            <div className="flex justify-between"><span>Providers</span><span className="text-emerald-400">{Object.keys(storeProviders).length} / {Object.keys(storeProviders).length} Online</span></div>
+            <div className="flex justify-between"><span>Plugins</span><span className="text-cyan-400">{Object.keys(storeProviders).length * 3} Active</span></div>
           </div>
         </div>
 

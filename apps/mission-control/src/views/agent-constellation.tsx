@@ -29,6 +29,13 @@ function getProviderColor(name: string): string {
   return "#00f0ff";
 }
 
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
 export function AgentConstellation() {
   const storeProviders = useStore((s) => s.providers);
   const storeAgents = useStore((s) => s.agents);
@@ -41,7 +48,9 @@ export function AgentConstellation() {
 
   // Dynamically compute constellation nodes from live discovered providers / agents
   const constellationNodes = useMemo(() => {
-    const providerList = Object.values(storeProviders);
+    const providerList = Object.values(storeProviders).filter(
+      (p) => p?.provider && !["mock", "Mock"].includes(p.provider)
+    );
     
     // Central Mission Control Core Node
     const coreNode = {
@@ -55,18 +64,7 @@ export function AgentConstellation() {
     };
 
     if (providerList.length === 0) {
-      // Default dynamic fallback matching reference setup
-      return [
-        coreNode,
-        { id: "claude", name: "CLAUDE CODE", sub: "Anthropic", status: "ACTIVE", color: "#d980ff", isCore: false, pos: { x: 28, y: 14 } },
-        { id: "hermes", name: "HERMES", sub: "AgenticOS", status: "ACTIVE", color: "#00f0ff", isCore: false, pos: { x: 72, y: 14 } },
-        { id: "opencode", name: "OPENCODE", sub: "Open Source", status: "ACTIVE", color: "#38bdf8", isCore: false, pos: { x: 86, y: 38 } },
-        { id: "agy", name: "AGY CLI", sub: "AGY Project", status: "ACTIVE", color: "#f472b6", isCore: false, pos: { x: 80, y: 72 } },
-        { id: "gemini", name: "GEMINI CLI", sub: "Google", status: "ACTIVE", color: "#f97316", isCore: false, pos: { x: 62, y: 86 } },
-        { id: "codex", name: "CODEX CLI", sub: "OpenAI", status: "ACTIVE", color: "#818cf8", isCore: false, pos: { x: 38, y: 86 } },
-        { id: "cursor", name: "CURSOR CLI", sub: "Cursor AI", status: "IDLE", color: "#38bdf8", isCore: false, pos: { x: 20, y: 72 } },
-        { id: "ollama", name: "OLLAMA", sub: "Local Models", status: "ACTIVE", color: "#f97316", isCore: false, pos: { x: 14, y: 38 } },
-      ];
+      return [coreNode];
     }
 
     // Circular constellation arrangement around Central Core for all discovered runtimes
@@ -117,20 +115,30 @@ export function AgentConstellation() {
   }, [constellationNodes]);
 
   // Real-time task & event metrics derived from store
-  const totalAgentsCount = useMemo(() => Math.max(18, Object.keys(storeAgents).length, constellationNodes.length - 1), [storeAgents, constellationNodes]);
+  const totalAgentsCount = useMemo(() => Math.max(Object.keys(storeAgents).length, constellationNodes.length - 1), [storeAgents, constellationNodes]);
   const activeAgentsCount = useMemo(() => {
     const list = Object.values(storeProviders);
-    return list.length > 0 ? list.filter(p => p.status === "healthy").length : 7;
+    return list.length > 0 ? list.filter(p => p.status === "healthy").length : 0;
   }, [storeProviders]);
 
   const runningTasksCount = useMemo(() => {
     const tasks = Object.values(storeTasks);
-    return tasks.length > 0 ? tasks.filter(t => t.status === "running").length : 13;
+    return tasks.length > 0 ? tasks.filter(t => t.status === "running").length : 0;
   }, [storeTasks]);
 
   const completedTasksCount = useMemo(() => {
     const tasks = Object.values(storeTasks);
-    return tasks.length > 0 ? tasks.filter(t => t.status === "completed").length : 6;
+    return tasks.length > 0 ? tasks.filter(t => t.status === "completed").length : 0;
+  }, [storeTasks]);
+
+  // Task counts grouped by provider (derived from task ID prefix)
+  const taskCountByProvider = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of Object.values(storeTasks)) {
+      const prefix = (t.id || t.title || "").split("_")[0].toLowerCase();
+      if (prefix) counts[prefix] = (counts[prefix] || 0) + 1;
+    }
+    return counts;
   }, [storeTasks]);
 
   // Live event stream directly consuming EventBus
@@ -142,14 +150,7 @@ export function AgentConstellation() {
         detail: JSON.stringify(e.payload).slice(0, 32),
       }));
     }
-    return [
-      { time: "22:47:31", agent: "Claude Code completed task", detail: "Implement OAuth flow" },
-      { time: "22:47:29", agent: "Hermes analyzing repository", detail: "agenticos-core" },
-      { time: "22:47:27", agent: "OpenCode generating code", detail: "app/services/ai.ts" },
-      { time: "22:47:25", agent: "AGY CLI running tests", detail: "test/integration/" },
-      { time: "22:47:23", agent: "Gemini CLI generating content", detail: "blog/mission-control" },
-      { time: "22:47:21", agent: "MCP Server memory updated", detail: "Vector index refreshed" },
-    ];
+    return [];
   }, [storeEvents]);
 
   return (
@@ -375,7 +376,7 @@ export function AgentConstellation() {
             </div>
             <div className="mt-1.5 pt-1.5 border-t border-slate-800 flex justify-between items-center text-[9px]">
               <span className="text-slate-400">Overall Progress</span>
-              <span className="text-cyan-400 font-bold">78%</span>
+              <span className="text-cyan-400 font-bold">{runningTasksCount + completedTasksCount > 0 ? Math.round(completedTasksCount / (runningTasksCount + completedTasksCount) * 100) : 0}%</span>
             </div>
           </div>
 
@@ -407,7 +408,7 @@ export function AgentConstellation() {
         <div className="col-span-2 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
           <div>
             <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Event Bus</div>
-            <div className="text-white font-bold text-xs">{storeEvents.length * 120 || 12847} <span className="text-[8px] text-cyan-400 font-normal">events/sec</span></div>
+            <div className="text-white font-bold text-xs">{storeEvents.length * 120 || 0} <span className="text-[8px] text-cyan-400 font-normal">events/sec</span></div>
           </div>
           <div className="h-10 flex items-end gap-0.5">
             {[20, 50, 80, 40, 90, 30, 70, 60, 100, 40, 85, 55, 95, 60].map((h, i) => (
@@ -421,11 +422,11 @@ export function AgentConstellation() {
           <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Task Distribution <span className="text-[7px] font-normal text-slate-500">By Agent</span></div>
           <div className="h-14 flex items-end justify-between gap-1 px-1">
             {[
-              { name: "Claude", val: 8, color: "bg-indigo-500" },
-              { name: "Hermes", val: 6, color: "bg-cyan-500" },
-              { name: "OpenCode", val: 5, color: "bg-emerald-500" },
-              { name: "AGY CLI", val: 3, color: "bg-pink-500" },
-              { name: "Others", val: 2, color: "bg-amber-500" },
+              { name: "Claude", val: taskCountByProvider["claude"] || taskCountByProvider["claude_code"] || 0, color: "bg-indigo-500" },
+              { name: "Hermes", val: taskCountByProvider["hermes"] || 0, color: "bg-cyan-500" },
+              { name: "OpenCode", val: taskCountByProvider["opencode"] || 0, color: "bg-emerald-500" },
+              { name: "AGY CLI", val: taskCountByProvider["agy"] || taskCountByProvider["auto:agy"] || 0, color: "bg-pink-500" },
+              { name: "Others", val: Math.max(0, Object.values(taskCountByProvider).reduce((a, b) => a + b, 0) - Object.entries(taskCountByProvider).filter(([k]) => !["claude","claude_code","hermes","opencode","agy","auto:agy","gemini"].includes(k)).length), color: "bg-amber-500" },
             ].map((b) => (
               <div key={b.name} className="flex flex-col items-center flex-1 h-full justify-end">
                 <span className="text-[8px] text-slate-300 font-bold mb-0.5">{b.val}</span>
@@ -481,22 +482,24 @@ export function AgentConstellation() {
           </div>
 
           <div className="border-l border-slate-800 pl-4">
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Current Mission</div>
+            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Active Tasks</div>
             <div className="text-white font-semibold flex items-center gap-2">
-              <span>Build authentication system with OAuth 2.0</span>
-              <span className="text-cyan-400">Progress: 78%</span>
+              <span>{runningTasksCount > 0 ? `${runningTasksCount} task${runningTasksCount !== 1 ? 's' : ''} running` : completedTasksCount > 0 ? `${completedTasksCount} tasks completed` : "No active tasks"}</span>
+              {runningTasksCount + completedTasksCount > 0 && (
+                <span className="text-cyan-400">{completedTasksCount > 0 ? Math.round(completedTasksCount / (runningTasksCount + completedTasksCount) * 100) : 0}% complete</span>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-5">
           <div>
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Execution Time</div>
-            <div className="text-white font-bold">00:14:32</div>
+            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Uptime</div>
+            <div className="text-white font-bold">{performance?.uptime_seconds ? formatDuration(performance.uptime_seconds) : "—"}</div>
           </div>
           <div>
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Estimated Completion</div>
-            <div className="text-white font-bold">00:04:28</div>
+            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Ready Providers</div>
+            <div className="text-white font-bold">{activeAgentsCount}</div>
           </div>
           <div>
             <div className="text-slate-500 text-[8px] uppercase tracking-wider">Active Agents</div>
