@@ -77,6 +77,12 @@ class RepositoryConfig:
         ).rstrip("/")
     )
 
+    def __post_init__(self) -> None:
+        if "/" in self.repository_name:
+            owner, repo = self.repository_name.split("/", 1)
+            self.repository_owner = owner
+            self.repository_name = repo
+
     @property
     def full_name(self) -> str:
         return f"{self.repository_owner}/{self.repository_name}"
