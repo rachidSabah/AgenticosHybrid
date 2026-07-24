@@ -1028,7 +1028,7 @@ class ExecutionEngineImpl:
 
         try:
             chunk_count = 0
-            async for chunk in (await adapter.invoke_stream(request)):
+            async for chunk in await adapter.invoke_stream(request):
                 if token.is_set():
                     break
                 chunk_count += 1
