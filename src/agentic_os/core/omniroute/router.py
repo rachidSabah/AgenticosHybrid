@@ -350,19 +350,20 @@ class RouterEngineImpl:
       - CircuitBreaker     (provider resilience filtering)
       - BudgetEngine       (financial decision layer)
 
-    The 12-step routing pipeline:
+    The 13-step routing pipeline:
       1. Validate request
       2. Query ProviderRegistry
       3. Query ModelRegistry
       4. Remove unhealthy/disabled
       5. Budget Engine filtering
       6. Circuit breaker filtering
-      7. Capability filtering
-      8. Context window filtering
-      9. Budget limit check (request-level)
-     10. Latency filtering
-     11. Weighted scoring / policy evaluation
-     12. Return RoutingDecision
+      7. Adaptive Learning enrichment
+      8. Capability filtering
+      9. Context window filtering
+     10. Budget limit check (request-level)
+     11. Latency filtering
+     12. Weighted scoring / policy evaluation
+     13. Return RoutingDecision
     """
 
     def __init__(
@@ -373,6 +374,7 @@ class RouterEngineImpl:
         routing_policy_engine: Any | None = None,
         budget_engine: Any | None = None,
         circuit_breaker: Any | None = None,
+        adaptive_learning_engine: Any | None = None,
     ) -> None:
         from agentic_os.core.omniroute.model_registry import ModelRegistryPort
         from agentic_os.core.omniroute.provider_registry import ProviderRegistryPort
@@ -383,6 +385,7 @@ class RouterEngineImpl:
         self._routing_policy_engine = routing_policy_engine
         self._budget_engine = budget_engine
         self._circuit_breaker = circuit_breaker
+        self._adaptive_learning_engine = adaptive_learning_engine
 
         self._lock = asyncio.Lock()
         self._started = False
@@ -599,7 +602,11 @@ class RouterEngineImpl:
                 )
                 return decision
 
-        # Step 7: Capability filtering
+        # Step 7: Adaptive Learning enrichment (before capability filtering)
+        if self._adaptive_learning_engine is not None:
+            await self._adaptive_learning_engine.enrich(candidates, request)
+
+        # Step 8: Capability filtering
         candidates = await self._filter_capabilities(candidates, request)
         if not candidates:
             self._routing_failures += 1

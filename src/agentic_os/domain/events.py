@@ -305,6 +305,17 @@ class Topic(StrEnum):
     LEARN_ANOMALY_DETECTED = "learning.anomaly_detected"
     LEARN_TREND_CHANGED = "learning.trend_changed"
     LEARN_EXPERIENCE_RECORDED = "learning.experience_recorded"
+    # Adaptive Learning Engine (Phase 5.7)
+    LEARNING_UPDATED = "learning.updated"
+    PROVIDER_SCORE_UPDATED = "learning.provider_score_updated"
+    MODEL_SCORE_UPDATED = "learning.model_score_updated"
+    REPUTATION_CHANGED = "learning.reputation_changed"
+    CONFIDENCE_CHANGED = "learning.confidence_changed"
+    MODEL_DEGRADED = "learning.model_degraded"
+    MODEL_RECOVERED = "learning.model_recovered"
+    ANOMALY_DETECTED = "learning.anomaly_detected"
+    FORECAST_UPDATED = "learning.forecast_updated"
+    TREND_CHANGED = "learning.trend_changed"
 
 
 class EventEnvelope(BaseModel):

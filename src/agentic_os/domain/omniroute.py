@@ -687,3 +687,266 @@ class BudgetDecision:
     reservations: tuple[str, ...] = field(default_factory=tuple)
     evaluation_time_ms: float = 0.0
     emergency_mode: bool = False
+
+
+# ── Phase 5.7: Adaptive Learning Engine domain models ──
+
+
+class TrendDirection(StrEnum):
+    IMPROVING = "improving"
+    STABLE = "stable"
+    DEGRADING = "degrading"
+    RAPID_DEGRADATION = "rapid_degradation"
+    RECOVERY = "recovery"
+    OSCILLATION = "oscillation"
+    UNKNOWN = "unknown"
+
+
+class LearningInputSource(StrEnum):
+    ROUTING = "routing"
+    BUDGET = "budget"
+    CIRCUIT_BREAKER = "circuit_breaker"
+    FEEDBACK = "feedback"
+    MANUAL = "manual"
+
+
+@dataclass(frozen=True, slots=True)
+class AdaptiveWeights:
+    quality: float = 0.25
+    latency: float = 0.20
+    cost: float = 0.20
+    reliability: float = 0.15
+    availability: float = 0.10
+    recovery: float = 0.05
+    budget_efficiency: float = 0.05
+
+
+@dataclass(frozen=True, slots=True)
+class LatencyTrend:
+    current: float = 0.0
+    ewma: float = 0.0
+    min: float = 0.0
+    max: float = 0.0
+    variance: float = 0.0
+    sample_count: int = 0
+    direction: TrendDirection = TrendDirection.UNKNOWN
+    last_update: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class CostTrend:
+    current: float = 0.0
+    ewma: float = 0.0
+    min: float = 0.0
+    max: float = 0.0
+    variance: float = 0.0
+    sample_count: int = 0
+    direction: TrendDirection = TrendDirection.UNKNOWN
+    last_update: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class SuccessTrend:
+    current: float = 0.0
+    ewma: float = 0.0
+    direction: TrendDirection = TrendDirection.UNKNOWN
+    last_update: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class FailureTrend:
+    current: float = 0.0
+    ewma: float = 0.0
+    direction: TrendDirection = TrendDirection.UNKNOWN
+    last_update: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderTrend:
+    latency: LatencyTrend = field(default_factory=LatencyTrend)
+    cost: CostTrend = field(default_factory=CostTrend)
+    success: SuccessTrend = field(default_factory=SuccessTrend)
+    failure: FailureTrend = field(default_factory=FailureTrend)
+    overall: TrendDirection = TrendDirection.UNKNOWN
+
+
+@dataclass(frozen=True, slots=True)
+class ConfidenceScore:
+    score: float = 0.0
+    sample_count: int = 0
+    variance: float = 0.0
+    prediction_error: float = 0.0
+    calibration: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class PredictionResult:
+    expected_latency_ms: float = 0.0
+    expected_cost: float = 0.0
+    expected_success_probability: float = 0.0
+    expected_failure_probability: float = 0.0
+    expected_retry_probability: float = 0.0
+    expected_availability: float = 0.0
+    confidence: ConfidenceScore = field(default_factory=ConfidenceScore)
+    prediction_horizon: str = "short_term"
+
+
+@dataclass(frozen=True, slots=True)
+class AdaptiveScore:
+    raw_score: float = 0.0
+    normalized_score: float = 0.0
+    quality_component: float = 0.0
+    latency_component: float = 0.0
+    cost_component: float = 0.0
+    reliability_component: float = 0.0
+    availability_component: float = 0.0
+    recovery_component: float = 0.0
+    budget_efficiency: float = 0.0
+    confidence: ConfidenceScore = field(default_factory=ConfidenceScore)
+    trend: TrendDirection = TrendDirection.UNKNOWN
+    updated_at: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class ReputationScore:
+    success_count: int = 0
+    failure_count: int = 0
+    total_attempts: int = 0
+    success_rate: float = 0.0
+    failure_rate: float = 0.0
+    latency_score: float = 0.0
+    cost_score: float = 0.0
+    availability: float = 0.0
+    stability: float = 0.0
+    confidence: float = 0.0
+    quality: float = 0.0
+    trend: TrendDirection = TrendDirection.UNKNOWN
+    sample_size: int = 0
+    last_updated: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderReputation:
+    provider: str = ""
+    reputation: ReputationScore = field(default_factory=ReputationScore)
+    adaptive_score: AdaptiveScore = field(default_factory=AdaptiveScore)
+    trend: ProviderTrend = field(default_factory=ProviderTrend)
+    predictions: PredictionResult = field(default_factory=PredictionResult)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelReputation:
+    provider: str = ""
+    model: str = ""
+    reputation: ReputationScore = field(default_factory=ReputationScore)
+    adaptive_score: AdaptiveScore = field(default_factory=AdaptiveScore)
+    trend: ProviderTrend = field(default_factory=ProviderTrend)
+    predictions: PredictionResult = field(default_factory=PredictionResult)
+
+
+@dataclass(frozen=True, slots=True)
+class LearningRecord:
+    id: str = field(default_factory=_new_id)
+    provider: str = ""
+    model: str = ""
+    source: LearningInputSource = LearningInputSource.ROUTING
+    success: bool = False
+    failure: bool = False
+    retry: bool = False
+    fallback: bool = False
+    latency_ms: float = 0.0
+    cost: float = 0.0
+    estimated_cost: float = 0.0
+    tokens_used: int = 0
+    duration_ms: float = 0.0
+    reason: str = ""
+    task_type: str = ""
+    workspace: str = ""
+    user_id: str = ""
+    agent: str = ""
+    policy_used: str = ""
+    circuit_state: str = ""
+    budget_approved: bool = True
+    budget_rejected: bool = False
+    timeout: bool = False
+    vision_used: bool = False
+    tools_used: bool = False
+    streaming: bool = False
+    cache_hit: bool = False
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class LearningSnapshot:
+    timestamp: datetime = field(default_factory=_utcnow)
+    provider_reputations: tuple[ProviderReputation, ...] = field(default_factory=tuple)
+    model_reputations: tuple[ModelReputation, ...] = field(default_factory=tuple)
+    statistics: "LearningStatistics" = field(default_factory=lambda: LearningStatistics())
+    recent_records: tuple[LearningRecord, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class LearningStatistics:
+    total_observations: int = 0
+    total_successes: int = 0
+    total_failures: int = 0
+    total_retries: int = 0
+    total_fallbacks: int = 0
+    provider_count: int = 0
+    model_count: int = 0
+    average_latency_ms: float = 0.0
+    average_cost: float = 0.0
+    average_confidence: float = 0.0
+    prediction_accuracy: float = 0.0
+    alerts_triggered: int = 0
+    anomalies_detected: int = 0
+    last_observation: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class LearningForecast:
+    provider_forecast: dict[str, PredictionResult] = field(default_factory=dict)
+    model_forecast: dict[str, PredictionResult] = field(default_factory=dict)
+    global_latency_trend: LatencyTrend = field(default_factory=LatencyTrend)
+    global_cost_trend: CostTrend = field(default_factory=CostTrend)
+    global_success_rate: float = 0.0
+    confidence: ConfidenceScore = field(default_factory=ConfidenceScore)
+    at_risk_providers: tuple[str, ...] = field(default_factory=tuple)
+    at_risk_models: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class LearningWindow:
+    window_duration: str = ""
+    sample_count: int = 0
+    success_rate: float = 0.0
+    failure_rate: float = 0.0
+    average_latency_ms: float = 0.0
+    average_cost: float = 0.0
+    p50_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    min_latency_ms: float = 0.0
+    max_latency_ms: float = 0.0
+    direction: TrendDirection = TrendDirection.UNKNOWN
+
+
+@dataclass(frozen=True, slots=True)
+class LearningEvent:
+    id: str = field(default_factory=_new_id)
+    topic: str = ""
+    provider: str = ""
+    model: str = ""
+    score_before: float = 0.0
+    score_after: float = 0.0
+    confidence: float = 0.0
+    reason: str = ""
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class LearningDecision:
+    enriched_candidates: tuple[tuple[str, str, AdaptiveScore], ...] = field(default_factory=tuple)
+    predictions: dict[str, PredictionResult] = field(default_factory=dict)
+    evaluation_time_ms: float = 0.0
+    observations_count: int = 0
