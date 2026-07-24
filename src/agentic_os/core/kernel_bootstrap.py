@@ -791,3 +791,52 @@ class ContainerKernel:
         await self._old_kernel.stop()
         await run_container_shutdown(self._lifecycle, self._health_registry)
         _diag("Kernel", "STOPPED")
+
+
+async def run_container_serve(host: str | None = None, port: int | None = None) -> None:
+    """Container-backed kernel serve.
+
+    Creates a ContainerKernel (wrapping legacy Kernel with DI Container),
+    runs phased startup, builds the FastAPI app, and starts uvicorn.
+
+    This is the v2 entry point called by CLI instead of kernel.py:run_serve.
+    """
+    h = host or _settings_singleton.http_host
+    p = port or _settings_singleton.http_port
+    _settings_singleton.http_host = h
+    _settings_singleton.http_port = p
+    _diag("Backend", "INITIALIZING", f"host={h} port={p}")
+
+    kernel: ContainerKernel | None = None
+    try:
+        kernel = ContainerKernel()
+        _diag("Kernel", "CONTAINER_CONSTRUCTED")
+    except Exception as exc:
+        import traceback as _tb
+
+        _diag("Kernel", "CONSTRUCTION_FAILED", f"{type(exc).__name__}: {exc}")
+        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        return
+
+    try:
+        from agentic_os.api.app import create_app
+
+        app = create_app(kernel.platform())
+        _diag("API", "BUILT")
+    except Exception as exc:
+        import traceback as _tb
+
+        _diag("API", "BUILD_FAILED", f"{type(exc).__name__}: {exc}")
+        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        return
+
+    # Container-backed phased startup (Critical + Infrastructure, then background subsystems)
+    await kernel._start_critical()
+
+    _diag("REST-API", "STARTING", f"http://{h}:{p}")
+    import uvicorn
+
+    config = uvicorn.Config(app, host=h, port=p, log_level="warning")
+    server = uvicorn.Server(config)
+    _diag("REST-API", "LISTENING", f"http://{h}:{p}")
+    await server.serve()

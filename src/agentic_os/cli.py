@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from agentic_os.kernel import run_serve
+from agentic_os.core.kernel_bootstrap import run_container_serve
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "serve":
         import anyio
 
-        anyio.run(run_serve, args.host, args.port)
+        anyio.run(run_container_serve, args.host, args.port)
     return 0
 
 

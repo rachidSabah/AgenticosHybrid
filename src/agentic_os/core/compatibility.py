@@ -99,11 +99,17 @@ class CompatibilityKernelProxy:
         raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
 
     def generate_platform(self, **overrides: Any) -> Any:
-        """Auto-generate a Platform-compatible object from Container registrations."""
+        """Auto-generate a Platform-compatible object from Container registrations.
+
+        Populates fields from the Container where bridges are registered, then
+        copies all remaining fields from the old kernel's Platform (if available)
+        so that every legacy attribute remains accessible.
+        """
         if not self._use_container or not self._container:
             return self._old_kernel.platform() if self._old_kernel else _PlatformStub()
 
         data: dict[str, Any] = {}
+        # 1. Resolve Container-managed services
         for field_name, interface in PLATFORM_FIELD_MAP.items():
             try:
                 data[field_name] = self._container.resolve(interface)
@@ -112,6 +118,17 @@ class CompatibilityKernelProxy:
                     val = getattr(self._old_kernel, field_name, None)
                     if val is not None:
                         data[field_name] = val
+
+        # 2. Copy all remaining fields from old kernel's Platform
+        if self._old_kernel:
+            try:
+                old_platform = self._old_kernel.platform()
+                for attr_name in vars(old_platform):
+                    if attr_name not in data:
+                        data[attr_name] = getattr(old_platform, attr_name, None)
+            except Exception:
+                pass
+
         data.update(overrides)
 
         try:
