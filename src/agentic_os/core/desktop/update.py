@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 
 from agentic_os.domain.desktop import (
     ReleaseInfo,
@@ -63,9 +64,7 @@ class RepositoryConfig:
     repository_name: str = field(
         default_factory=lambda: os.getenv("GITHUB_REPOSITORY", DEFAULT_REPO_NAME)
     )
-    default_branch: str = field(
-        default_factory=lambda: os.getenv("GITHUB_BRANCH", DEFAULT_BRANCH)
-    )
+    default_branch: str = field(default_factory=lambda: os.getenv("GITHUB_BRANCH", DEFAULT_BRANCH))
     api_base_url: str = field(
         default_factory=lambda: os.getenv("GITHUB_API", "https://api.github.com").rstrip("/")
     )
@@ -73,7 +72,9 @@ class RepositoryConfig:
         default_factory=lambda: os.getenv("GITHUB_URL", "https://github.com").rstrip("/")
     )
     raw_base_url: str = field(
-        default_factory=lambda: os.getenv("GITHUB_RAW_URL", "https://raw.githubusercontent.com").rstrip("/")
+        default_factory=lambda: os.getenv(
+            "GITHUB_RAW_URL", "https://raw.githubusercontent.com"
+        ).rstrip("/")
     )
 
     @property
@@ -461,9 +462,7 @@ class AutoUpdateManager:
         self._status = UpdateStatus.IDLE
         return releases
 
-    async def get_latest_update(
-        self, channel: UpdateChannel | None = None
-    ) -> ReleaseInfo | None:
+    async def get_latest_update(self, channel: UpdateChannel | None = None) -> ReleaseInfo | None:
         releases = await self.check_for_updates(channel)
         curr_ver = Version(self._current_version)
 
@@ -661,7 +660,7 @@ class AutoUpdateManager:
                                     pass
 
             return True
-        except urllib.error.HTTPError as err:
+        except HTTPError as err:
             if err.code == 416 and dest.exists() and dest.stat().st_size > 0:
                 return True
             raise
@@ -781,11 +780,15 @@ class AutoUpdateManager:
                 try:
                     with urllib.request.urlopen(repo_req, timeout=5) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
-                        return True, True, {
-                            "repo_id": data.get("id"),
-                            "stargazers": data.get("stargazers_count"),
-                        }
-                except urllib.error.HTTPError as err:
+                        return (
+                            True,
+                            True,
+                            {
+                                "repo_id": data.get("id"),
+                                "stargazers": data.get("stargazers_count"),
+                            },
+                        )
+                except HTTPError as err:
                     if err.code == 404:
                         return True, False, {"error": "Repository 404 not found"}
                     return False, False, {"error": f"HTTP {err.code}"}
@@ -815,8 +818,8 @@ class AutoUpdateManager:
                 },
             ]
             win_asset = self.select_best_asset(sample_assets, target_os="win32")
-            diag["asset_selection_valid"] = (
-                win_asset is not None and win_asset["name"].endswith(".exe")
+            diag["asset_selection_valid"] = win_asset is not None and win_asset["name"].endswith(
+                ".exe"
             )
 
         except Exception as e:
