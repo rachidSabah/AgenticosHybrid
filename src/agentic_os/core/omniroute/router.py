@@ -580,92 +580,201 @@ class RouterEngineImpl:
             )
             return decision
 
-        # Step 9: Quality ranking
-        candidates.sort(key=lambda c: c.model.quality_score, reverse=True)
-
-        # Step 10: Weighted scoring
+        # Step 9-10: Evaluate via RoutingPolicyEngine or fall back to weighted scoring
         scoring_start = time.monotonic()
-        scorer = _ScoringEngine(request)
-        scored: list[_Candidate] = []
-        for c in candidates:
-            score = scorer.score(c.provider, c.model)
-            scored.append(
-                _Candidate(
-                    provider=c.provider,
-                    model=c.model,
-                    score=score,
-                    weighted_total=score.weighted_total,
+        if self._routing_policy_engine is not None:
+            # Delegate to policy engine
+            raw_candidates = [(c.provider, c.model) for c in candidates]
+            policy_result = await self._routing_policy_engine.evaluate(raw_candidates, request)
+            scoring_duration = time.monotonic() - scoring_start
+            self._total_scoring_time += scoring_duration
+
+            if not policy_result.selected_model_id:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason=policy_result.reason or "Policy engine returned no selection",
                 )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": decision.reason,
+                    },
+                )
+                return decision
+
+            # Build scored list from policy result
+            scored: list[_Candidate] = []
+            for pname, mid, _reason, score_val in policy_result.scored_candidates:
+                for c in candidates:
+                    if c.provider.name == pname and c.model.model_id == mid:
+                        routing_score = RoutingScore(
+                            quality_score=score_val,
+                            cost_score=score_val,
+                            latency_score=score_val,
+                            health_score=score_val,
+                            reliability_score=score_val,
+                            context_score=score_val,
+                            preference_score=score_val,
+                            weighted_total=score_val,
+                            candidate_count=len(policy_result.scored_candidates),
+                            rank=0,
+                        )
+                        scored.append(
+                            _Candidate(
+                                provider=c.provider,
+                                model=c.model,
+                                score=routing_score,
+                                weighted_total=score_val,
+                            )
+                        )
+                        break
+
+            if not scored:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason="Policy engine scored zero candidates",
+                )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": decision.reason,
+                    },
+                )
+                return decision
+
+            scored.sort(key=lambda c: c.weighted_total, reverse=True)
+            for i, c in enumerate(scored):
+                c.rank = i + 1
+                c.score = RoutingScore(
+                    quality_score=c.score.quality_score,
+                    cost_score=c.score.cost_score,
+                    latency_score=c.score.latency_score,
+                    health_score=c.score.health_score,
+                    reliability_score=c.score.reliability_score,
+                    context_score=c.score.context_score,
+                    preference_score=c.score.preference_score,
+                    weighted_total=c.score.weighted_total,
+                    candidate_count=len(scored),
+                    rank=i + 1,
+                )
+
+            async with self._lock:
+                self._total_candidates += len(scored)
+
+            best = scored[0]
+            fallback_chain = _FallbackEngine.generate(scored, chain_length=5)
+            estimated_cost = policy_result.selected_cost or (
+                best.model.input_cost_per_1k + best.model.output_cost_per_1k
             )
-        scoring_duration = time.monotonic() - scoring_start
-        self._total_scoring_time += scoring_duration
-
-        # Sort by weighted total descending
-        scored.sort(key=lambda c: c.weighted_total, reverse=True)
-
-        # Assign ranks
-        for i, c in enumerate(scored):
-            c.rank = i + 1
-            c.score = RoutingScore(
-                quality_score=c.score.quality_score,
-                cost_score=c.score.cost_score,
-                latency_score=c.score.latency_score,
-                health_score=c.score.health_score,
-                reliability_score=c.score.reliability_score,
-                context_score=c.score.context_score,
-                preference_score=c.score.preference_score,
-                weighted_total=c.score.weighted_total,
-                candidate_count=len(scored),
-                rank=i + 1,
+            estimated_latency = policy_result.selected_latency_ms or max(
+                best.provider.latency_ms, best.model.latency_ms
             )
+            confidence = best.score.weighted_total
 
-        # Track selections
-        async with self._lock:
-            self._total_candidates += len(scored)
-
-        if not scored:
-            self._routing_failures += 1
             decision = RoutingDecision(
                 request_id=request.request_id,
-                status="failed",
-                reason="All candidates scored zero",
+                provider=best.provider.name,
+                provider_id=best.provider.id,
+                model=best.model.display_name or best.model.model_id,
+                model_id=best.model.model_id,
+                score=best.score,
+                reason=(
+                    policy_result.reason
+                    or (
+                        f"Selected {best.provider.name}/{best.model.model_id}"
+                        f" via {policy_result.strategy}"
+                    )
+                ),
+                fallback_chain=fallback_chain,
+                estimated_cost=round(estimated_cost, 6),
+                estimated_latency_ms=round(estimated_latency, 2),
+                confidence=round(confidence, 4),
+                policy_used=policy_result.strategy or "policy_engine",
+                status="routed",
+                alternatives_rejected=len(scored) - 1,
             )
-            await self._publish(
-                Topic.ROUTE_FAILED,
-                {
-                    "request_id": request.request_id,
-                    "reason": "All candidates scored zero",
-                },
+        else:
+            # Fallback: hardcoded weighted scoring (legacy)
+            candidates.sort(key=lambda c: c.model.quality_score, reverse=True)
+            scorer = _ScoringEngine(request)
+            scored = []
+            for c in candidates:
+                score = scorer.score(c.provider, c.model)
+                scored.append(
+                    _Candidate(
+                        provider=c.provider,
+                        model=c.model,
+                        score=score,
+                        weighted_total=score.weighted_total,
+                    )
+                )
+            scoring_duration = time.monotonic() - scoring_start
+            self._total_scoring_time += scoring_duration
+
+            scored.sort(key=lambda c: c.weighted_total, reverse=True)
+            for i, c in enumerate(scored):
+                c.rank = i + 1
+                c.score = RoutingScore(
+                    quality_score=c.score.quality_score,
+                    cost_score=c.score.cost_score,
+                    latency_score=c.score.latency_score,
+                    health_score=c.score.health_score,
+                    reliability_score=c.score.reliability_score,
+                    context_score=c.score.context_score,
+                    preference_score=c.score.preference_score,
+                    weighted_total=c.score.weighted_total,
+                    candidate_count=len(scored),
+                    rank=i + 1,
+                )
+
+            async with self._lock:
+                self._total_candidates += len(scored)
+
+            if not scored:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason="All candidates scored zero",
+                )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": decision.reason,
+                    },
+                )
+                return decision
+
+            best = scored[0]
+            fallback_chain = _FallbackEngine.generate(scored, chain_length=5)
+            estimated_cost = best.model.input_cost_per_1k + best.model.output_cost_per_1k
+            estimated_latency = max(best.provider.latency_ms, best.model.latency_ms)
+            confidence = best.score.weighted_total
+
+            decision = RoutingDecision(
+                request_id=request.request_id,
+                provider=best.provider.name,
+                provider_id=best.provider.id,
+                model=best.model.display_name or best.model.model_id,
+                model_id=best.model.model_id,
+                score=best.score,
+                reason=f"Selected {best.provider.name}/{best.model.model_id} "
+                f"(score={best.score.weighted_total:.3f})",
+                fallback_chain=fallback_chain,
+                estimated_cost=round(estimated_cost, 6),
+                estimated_latency_ms=round(estimated_latency, 2),
+                confidence=round(confidence, 4),
+                policy_used="weighted",
+                status="routed",
+                alternatives_rejected=len(scored) - 1,
             )
-            return decision
-
-        best = scored[0]
-
-        # Step 11: Fallback chain
-        fallback_chain = _FallbackEngine.generate(scored, chain_length=5)
-
-        # Step 12: Build decision
-        estimated_cost = best.model.input_cost_per_1k + best.model.output_cost_per_1k
-        estimated_latency = max(best.provider.latency_ms, best.model.latency_ms)
-        confidence = best.score.weighted_total  # weight acts as confidence proxy
-
-        decision = RoutingDecision(
-            request_id=request.request_id,
-            provider=best.provider.name,
-            provider_id=best.provider.id,
-            model=best.model.display_name or best.model.model_id,
-            model_id=best.model.model_id,
-            score=best.score,
-            reason=f"Selected {best.provider.name}/{best.model.model_id} "
-            f"(score={best.score.weighted_total:.3f})",
-            fallback_chain=fallback_chain,
-            estimated_cost=round(estimated_cost, 6),
-            estimated_latency_ms=round(estimated_latency, 2),
-            confidence=round(confidence, 4),
-            policy_used="weighted",
-            status="routed",
-            alternatives_rejected=len(scored) - 1,
-        )
 
         # Track provider/model selection
         async with self._lock:

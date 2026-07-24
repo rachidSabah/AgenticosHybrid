@@ -153,26 +153,57 @@ class OmniRouteModel:
 
 @dataclass(frozen=True, slots=True)
 class RoutingPolicy:
-    """A configurable routing policy."""
+    """A configurable routing policy that controls RouterEngine behavior.
+
+    Scoped to workspace, agent, or user for fine-grained control.
+    weight_overrides and filter settings override defaults when non-empty.
+    """
 
     id: str = field(default_factory=_new_id)
     name: str = ""
-    policy_type: RoutingPolicyType = RoutingPolicyType.BALANCED
     description: str = ""
-    target_provider: str = ""
-    target_model: str = ""
-    fallback_provider: str = ""
-    fallback_model: str = ""
     enabled: bool = True
     priority: int = 0
-    cost_weight: float = 0.25
-    speed_weight: float = 0.25
-    capability_weight: float = 0.30
-    reliability_weight: float = 0.20
-    budget_limit: float = 0.0
-    max_latency_ms: float = 0.0
+    strategy: str = "balanced"
+    # Provider / model / capability filters
+    provider_filter: tuple[str, ...] = field(default_factory=tuple)
+    model_filter: tuple[str, ...] = field(default_factory=tuple)
+    capability_filter: tuple[str, ...] = field(default_factory=tuple)
+    # Weight overrides (used by custom-weighted and balanced strategies)
+    weight_overrides: dict[str, float] = field(default_factory=dict)
+    # Threshold overrides
+    budget_override: float = 0.0
+    latency_override_ms: float = 0.0
+    context_override: int = 0
+    # Scope — empty means global
+    workspace_scope: str = ""
+    agent_scope: str = ""
+    user_scope: str = ""
+    # Metadata
+    metadata: dict[str, Any] = field(default_factory=dict)
+    version: str = "1.0.0"
     created_at: datetime = field(default_factory=_utcnow)
     updated_at: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyResult:
+    """Result of evaluating one or more policies against candidates."""
+
+    policy_name: str = ""
+    policy_id: str = ""
+    strategy: str = "balanced"
+    selected_provider: str = ""
+    selected_provider_id: str = ""
+    selected_model: str = ""
+    selected_model_id: str = ""
+    selected_cost: float = 0.0
+    selected_latency_ms: float = 0.0
+    scored_candidates: tuple[tuple[str, str, str, float], ...] = field(default_factory=tuple)
+    reason: str = ""
+    evaluation_time_ms: float = 0.0
+    policy_applied: bool = False
+    overrides_used: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,6 +12,7 @@ from agentic_os.core.observability_registry import ObservabilityRegistry
 from agentic_os.core.omniroute.model_registry import ModelRegistryImpl
 from agentic_os.core.omniroute.provider_registry import ProviderRegistryImpl
 from agentic_os.core.omniroute.router import RouterEngineImpl
+from agentic_os.core.omniroute.routing_policies import RoutingPolicyEngineImpl
 from agentic_os.ports.event_bus import EventBus as EventBusPort
 
 
@@ -46,11 +47,21 @@ def create_omniroute_engine(
     )
     health_registry.track_service("omniroute.model_registry")
 
-    # ── Phase 5.3: Router Engine ──
+    # ── Phase 5.4 (wired before 5.3): Routing Policy Engine ──
+    policy_engine = RoutingPolicyEngineImpl(event_bus=event_bus)
+    container.register_instance(
+        RoutingPolicyEngineImpl,
+        policy_engine,
+        description="OmniRoute routing policy engine — configurable decision layer",
+    )
+    health_registry.track_service("omniroute.routing_policy_engine")
+
+    # ── Phase 5.3: Router Engine (depends on policy engine) ──
     router_engine = RouterEngineImpl(
         provider_registry=provider_registry,
         model_registry=model_registry,
         event_bus=event_bus,
+        routing_policy_engine=policy_engine,
     )
     container.register_instance(
         RouterEngineImpl,

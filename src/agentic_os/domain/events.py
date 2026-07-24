@@ -52,6 +52,13 @@ class Topic(StrEnum):
     ROUTE_FALLBACK = "route.fallback"
     ROUTE_REJECTED = "route.rejected"
     ROUTE_SCORING = "route.scoring"
+    # Routing Policy (OmniRoute Phase 5.4)
+    ROUTING_POLICY_CREATED = "routing_policy.created"
+    ROUTING_POLICY_UPDATED = "routing_policy.updated"
+    ROUTING_POLICY_DELETED = "routing_policy.deleted"
+    ROUTING_POLICY_ENABLED = "routing_policy.enabled"
+    ROUTING_POLICY_DISABLED = "routing_policy.disabled"
+    ROUTING_POLICY_SELECTED = "routing_policy.selected"
     # Memory
     MEMORY_WRITTEN = "memory.written"
     MEMORY_EVICTED = "memory.evicted"
