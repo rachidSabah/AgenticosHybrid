@@ -1,0 +1,95 @@
+"""Discovery WebSocket broadcaster.
+
+Subscribes to discovery lifecycle topics and fans events out to connected
+Mission Control clients that care about runtime discovery, validation,
+profiling, and engine state changes.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import anyio
+from anyio.streams.memory import MemoryObjectSendStream
+
+from agentic_os.domain.events import EventEnvelope, Topic
+from agentic_os.infrastructure.logging import get_logger
+from agentic_os.ports.event_bus import EventBus
+
+log = get_logger("api.discovery_ws")
+
+# All discovery-specific topics streamed to /ws/discovery clients.
+_DISCOVERY_TOPICS = [
+    # Discovery lifecycle
+    Topic.DISCOVERY_SCAN_STARTED,
+    Topic.DISCOVERY_SCAN_COMPLETED,
+    Topic.DISCOVERY_PROVIDER_RUNNING,
+    Topic.DISCOVERY_PROVIDER_FAILED,
+    Topic.DISCOVERY_ENGINE_FOUND,
+    Topic.DISCOVERY_ENGINE_LOST,
+    Topic.DISCOVERY_ENGINE_REJECTED,
+    Topic.DISCOVERY_CACHE_HIT,
+    Topic.DISCOVERY_CACHE_MISS,
+    Topic.DISCOVERY_PROFILE_ACTIVATED,
+    Topic.DISCOVERY_PROFILE_DEACTIVATED,
+    # Engine lifecycle
+    Topic.ENGINE_DISCOVERED,
+    Topic.ENGINE_LOST,
+    Topic.ENGINE_REGISTERED,
+    Topic.ENGINE_UNREGISTERED,
+    Topic.ENGINE_UPDATED,
+    Topic.ENGINE_ONLINE,
+    Topic.ENGINE_OFFLINE,
+    Topic.ENGINE_ERROR,
+    Topic.ENGINE_CAPABILITIES_CHANGED,
+    # Validation
+    Topic.VALIDATION_STARTED,
+    Topic.VALIDATION_PASSED,
+    Topic.VALIDATION_FAILED,
+    Topic.VALIDATION_SKIPPED,
+    # Profiling
+    Topic.PROFILING_STARTED,
+    Topic.PROFILING_COMPLETED,
+    # Plugins (discoverable artifacts)
+    Topic.PLUGIN_INSTALLED,
+    Topic.PLUGIN_UNINSTALLED,
+    Topic.PLUGIN_UPDATED,
+    Topic.PLUGIN_STARTED,
+    Topic.PLUGIN_STOPPED,
+    Topic.PLUGIN_FAILED,
+]
+
+
+class DiscoveryBroadcaster:
+    """Fans discovery lifecycle events to connected WebSocket clients."""
+
+    def __init__(self, bus: EventBus) -> None:
+        self._bus = bus
+        self._clients: set[MemoryObjectSendStream] = set()
+
+    async def start(self) -> None:
+        for topic in _DISCOVERY_TOPICS:
+            await self._bus.subscribe(topic.value, self._on_event)
+        log.info("discovery_ws.started", topics=len(_DISCOVERY_TOPICS))
+
+    async def stop(self) -> None:
+        pass
+
+    def add_client(self) -> tuple[Any, MemoryObjectSendStream]:
+        send, recv = anyio.create_memory_object_stream(max_buffer_size=256)
+        self._clients.add(send)
+        return recv, send
+
+    def remove_client(self, send: MemoryObjectSendStream) -> None:
+        self._clients.discard(send)
+
+    async def _on_event(self, event: EventEnvelope) -> None:
+        snapshot = event.model_dump(mode="json")
+        for client in list(self._clients):
+            try:
+                await client.send(snapshot)
+            except anyio.BrokenResourceError:
+                self._clients.discard(client)
+
+
+__all__ = ["DiscoveryBroadcaster"]

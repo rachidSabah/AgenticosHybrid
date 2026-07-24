@@ -15,18 +15,16 @@ import os
 import re
 import socket
 import sys
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
 
-from agentic_os.core.container import Container, CyclicDependencyError, Registration
-from agentic_os.core.lifecycle import LifecycleManager, Phase, ServiceRecord
+from agentic_os.core.container import Container, Registration
+from agentic_os.core.lifecycle import LifecycleManager
 
 logger = __import__("logging").getLogger("agentic_os.validation")
 
 
 # ── Check Results ──
+
 
 @dataclass
 class ValidationCheck:
@@ -74,6 +72,7 @@ class ValidationReport:
 
 # ── Checker Protocol ──
 
+
 class ValidationChecker:
     """Base class for a single validation check."""
 
@@ -90,6 +89,7 @@ class ValidationChecker:
 
 
 # ── Individual Checkers ──
+
 
 class CircularDependencyChecker(ValidationChecker):
     """Check #1: Detect cycles in the dependency graph."""
@@ -117,7 +117,7 @@ class CircularDependencyChecker(ValidationChecker):
                         if result:
                             return result
                     elif neighbor in path_stack:
-                        cycle = path_stack[path_stack.index(neighbor):] + [neighbor]
+                        cycle = path_stack[path_stack.index(neighbor) :] + [neighbor]
                         return " -> ".join(cycle)
                 path_stack.pop()
                 return None
@@ -131,12 +131,13 @@ class CircularDependencyChecker(ValidationChecker):
                             status="failed",
                             details=f"Cyclic dependency detected: {cycle}",
                             suggestion="Break the cycle by removing or reordering one of the "
-                                       "depends_on declarations in the chain above.",
+                            "depends_on declarations in the chain above.",
                         )
             return ValidationCheck(name=self.name, status="passed", details="No cycles detected")
         except Exception as exc:
             return ValidationCheck(
-                name=self.name, status="failed",
+                name=self.name,
+                status="failed",
                 details=f"Cycle detection error: {exc}",
             )
 
@@ -153,20 +154,27 @@ class MissingDependencyChecker(ValidationChecker):
         registrations: list[Registration] | None = None,
     ) -> ValidationCheck:
         missing: list[str] = []
-        for reg in (registrations or container.list_registrations()):
+        for reg in registrations or container.list_registrations():
             if reg.depends_on:
                 for dep_type in reg.depends_on:
                     key = dep_type.__name__
                     if not container.is_registered(dep_type):
-                        missing.append(f"'{reg.key}' depends on '{key}' but '{key}' is not registered")
+                        missing.append(
+                            f"'{reg.key}' depends on '{key}' but '{key}' is not registered"
+                        )
         if missing:
             return ValidationCheck(
                 name=self.name,
                 status="failed",
                 details="; ".join(missing),
-                suggestion="Register the missing service before starting, or remove the depends_on declaration.",
+                suggestion=(
+                    "Register the missing service before starting, "
+                    "or remove the depends_on declaration."
+                ),
             )
-        return ValidationCheck(name=self.name, status="passed", details="All dependencies satisfied")
+        return ValidationCheck(
+            name=self.name, status="passed", details="All dependencies satisfied"
+        )
 
 
 class DuplicateRegistrationChecker(ValidationChecker):
@@ -181,7 +189,7 @@ class DuplicateRegistrationChecker(ValidationChecker):
         registrations: list[Registration] | None = None,
     ) -> ValidationCheck:
         seen: dict[str, list[str]] = {}
-        for reg in (registrations or container.list_registrations()):
+        for reg in registrations or container.list_registrations():
             base = reg.interface.__name__
             if base not in seen:
                 seen[base] = []
@@ -194,7 +202,9 @@ class DuplicateRegistrationChecker(ValidationChecker):
                 status="passed",  # Named duplicates are allowed
                 details=f"Named duplicates found (ok): {msg}",
             )
-        return ValidationCheck(name=self.name, status="passed", details="No duplicate registrations")
+        return ValidationCheck(
+            name=self.name, status="passed", details="No duplicate registrations"
+        )
 
 
 class VersionValidator(ValidationChecker):
@@ -251,7 +261,8 @@ class CapabilityMismatchChecker(ValidationChecker):
                     for rt in required_types:
                         if not container.is_registered(rt):
                             warnings_list.append(
-                                f"'{sid}' declares capability requiring '{rt}' but '{rt}' is not registered"
+                                f"'{sid}' declares capability requiring '{rt}' "
+                                f"but '{rt}' is not registered"
                             )
             except Exception:
                 pass
@@ -262,7 +273,9 @@ class CapabilityMismatchChecker(ValidationChecker):
                 details="; ".join(warnings_list),
                 suggestion="Register missing capabilities or remove capability requirements.",
             )
-        return ValidationCheck(name=self.name, status="passed", details="All capabilities satisfied")
+        return ValidationCheck(
+            name=self.name, status="passed", details="All capabilities satisfied"
+        )
 
 
 class PortConflictChecker(ValidationChecker):
@@ -291,7 +304,7 @@ class PortConflictChecker(ValidationChecker):
                 status="warning",
                 details=f"Multiple services implement same interface: {msg}",
                 suggestion="Use named registrations with resolve_all() if multiple implementations "
-                           "are intentional.",
+                "are intentional.",
             )
         return ValidationCheck(name=self.name, status="passed", details="No port conflicts")
 
@@ -346,7 +359,8 @@ class ResourceConflictChecker(ValidationChecker):
                     for r in resources:
                         if r in claimed_resources:
                             warnings_list.append(
-                                f"Resource '{r}' claimed by both '{claimed_resources[r]}' and '{sid}'"
+                                f"Resource '{r}' claimed by both "
+                                f"'{claimed_resources[r]}' and '{sid}'"
                             )
                         else:
                             claimed_resources[r] = sid
@@ -507,7 +521,9 @@ class RuntimeConflictChecker(ValidationChecker):
         for rt in required_runtimes:
             if rt == "python":
                 ver = f"{sys.version_info.major}.{sys.version_info.minor}"
-                if sys.version_info.major < 3 or (sys.version_info.major == 3 and sys.version_info.minor < 10):
+                if sys.version_info.major < 3 or (
+                    sys.version_info.major == 3 and sys.version_info.minor < 10
+                ):
                     warnings_list.append(f"Python {ver} detected, 3.10+ recommended")
         if warnings_list:
             return ValidationCheck(
@@ -534,6 +550,7 @@ class ProviderConflictChecker(ValidationChecker):
 
 
 # ── ValidationPipeline ──
+
 
 class ValidationPipeline:
     """Runs all validators and produces a combined report.
@@ -623,7 +640,6 @@ class ValidationPipeline:
         if not report.success:
             fail_msgs = [f"  [{c.name}] {c.details}" for c in report.failed]
             raise RuntimeError(
-                f"Kernel validation FAILED ({len(report.failed)} checks):\n"
-                + "\n".join(fail_msgs)
+                f"Kernel validation FAILED ({len(report.failed)} checks):\n" + "\n".join(fail_msgs)
             )
         return report

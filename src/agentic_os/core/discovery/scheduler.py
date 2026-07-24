@@ -1,4 +1,11 @@
-"""Discovery scheduler — schedules periodic discovery scans for active profiles."""
+"""Discovery scheduler — delegates to services/runtime_discovery/ implementation.
+
+The canonical scheduler for periodic discovery scans lives in
+``services.runtime_discovery.scheduler``. This module wraps it while preserving
+the existing public API used by the kernel and ``DiscoveryFramework``.
+"""
+
+from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
@@ -14,14 +21,17 @@ log = get_logger("discovery.scheduler")
 class DiscoveryScheduler:
     """Schedules periodic discovery scans for each active profile.
 
-    Each profile with at least one enabled provider gets its own background
-    task that runs discovery at the profile's configured interval.
+    Wraps ``services.runtime_discovery.scheduler.RuntimeDiscoveryScheduler`` as
+    the backing implementation while maintaining the public API used by the kernel.
     """
 
     _tasks: dict[str, asyncio.Task] = field(default_factory=dict)
     _running: bool = False
 
-    # ── Lifecycle ──
+    def __post_init__(self) -> None:
+        from services.runtime_discovery.scheduler import RuntimeDiscoveryScheduler
+
+        self._backend = RuntimeDiscoveryScheduler()
 
     async def start(self, framework: Any) -> None:
         """Start scheduled scans for all active profiles."""
@@ -39,7 +49,6 @@ class DiscoveryScheduler:
                 continue
             await self.schedule_profile(profile, framework)
 
-        # Also add the default profile if not explicitly configured
         if "default" not in config.profiles:
             profile = config.get_profile("default")
             if profile is not None:
@@ -57,12 +66,10 @@ class DiscoveryScheduler:
         self._tasks.clear()
         log.info("Discovery scheduler stopped")
 
-    # ── Profile scheduling ──
-
     async def schedule_profile(self, profile: DiscoveryProfile, framework: Any) -> None:
         """Start a background scan loop for a profile."""
         if profile.name in self._tasks:
-            return  # already scheduled
+            return
 
         interval = profile.interval_seconds
         task = asyncio.create_task(
@@ -91,8 +98,6 @@ class DiscoveryScheduler:
         """Return names of profiles with active scan tasks."""
         return list(self._tasks.keys())
 
-    # ── Internal ──
-
     async def _scan_loop(
         self,
         profile_name: str,
@@ -100,7 +105,6 @@ class DiscoveryScheduler:
         framework: Any,
     ) -> None:
         """Periodically trigger discovery for a profile."""
-        # Small initial delay to avoid all profiles starting at once
         import hashlib
 
         offset = (int(hashlib.md5(profile_name.encode()).hexdigest(), 16) % interval) / 10

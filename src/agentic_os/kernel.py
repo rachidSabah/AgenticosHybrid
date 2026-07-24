@@ -36,6 +36,7 @@ from agentic_os.adapters.engines.generic import GenericExecutionEngine
 from agentic_os.adapters.plugins.loader import load_plugins
 from agentic_os.adapters.security.encrypted_store import EncryptedSecretStore
 from agentic_os.api.dashboard import DashboardBroadcaster
+from agentic_os.api.discovery_ws import DiscoveryBroadcaster
 from agentic_os.api.mcp_ws import MCPBroadcaster
 from agentic_os.config import settings
 from agentic_os.core.capability.engine import CapabilityEngine
@@ -183,6 +184,8 @@ class Platform:
     mcp: MCPManager | None = None
     # Phase 4, M3: MCP WebSocket broadcaster
     mcp_ws: MCPBroadcaster | None = None
+    # Phase 4, M3: Discovery WebSocket broadcaster
+    discovery_ws: DiscoveryBroadcaster | None = None
     # Phase 5: Learning & Optimization Engine
     learning: LearningManager | None = None
     # Phase 4, M6: Desktop Runtime Foundation
@@ -247,6 +250,7 @@ class Kernel:
         self.recovery = RecoveryManagerImpl(self.bus, self.orchestrator, settings)
         self.dashboard = DashboardBroadcaster(self.bus)
         self.mcp_ws = MCPBroadcaster(self.bus)
+        self.discovery_ws = DiscoveryBroadcaster(self.bus)
 
         self.capability = CapabilityEngine(self.bus)
         self.mission_planner = MissionPlannerImpl(self.bus, settings)
@@ -358,6 +362,8 @@ class Kernel:
         _diag("Dashboard", "STARTED")
         await self.mcp_ws.start()
         _diag("MCP-WS", "STARTED")
+        await self.discovery_ws.start()
+        _diag("Discovery-WS", "STARTED")
 
         # ── Runtime ──
         if self.runtime:
@@ -393,7 +399,9 @@ class Kernel:
                 async def _installer_bg() -> None:
                     try:
                         await engine.first_launch()
-                        _diag("Installer", "STARTED", f"bound={len(engine.bound_providers)} providers")
+                        _diag(
+                            "Installer", "STARTED", f"bound={len(engine.bound_providers)} providers"
+                        )
                     except Exception as exc:
                         _diag("Installer", "FAILED", str(exc))
 
@@ -463,6 +471,7 @@ class Kernel:
             await self.runtime.shutdown()
         await self.dashboard.stop()
         await self.mcp_ws.stop()
+        await self.discovery_ws.stop()
         await self.recovery.stop()
         await self.health.stop()
         await self.provider_health.stop()
@@ -671,6 +680,7 @@ class Kernel:
             orchestration=self.orchestration,
             mcp=self.mcp,
             mcp_ws=self.mcp_ws,
+            discovery_ws=self.discovery_ws,
             desktop=self.desktop,
             learning=self.learning,
             mission_planner=self.mission_planner,

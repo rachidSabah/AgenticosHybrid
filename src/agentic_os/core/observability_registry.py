@@ -133,9 +133,7 @@ class ObservabilityRegistry:
         timing = PhaseTiming(
             phase=result.phase,
             success=result.success,
-            services_count=(
-                len(result.started_services) + len(result.failed_services)
-            ),
+            services_count=(len(result.started_services) + len(result.failed_services)),
             services_started=len(result.started_services),
             services_failed=len(result.failed_services),
             duration_ms=result.duration_ms,
@@ -269,7 +267,8 @@ class ObservabilityRegistry:
                 "current_phase": lifecycle_health.get("current_phase"),
                 "uptime_seconds": (
                     (datetime.now(UTC) - self._started_at).total_seconds()
-                    if self._started_at else 0.0
+                    if self._started_at
+                    else 0.0
                 ),
                 "startup_duration_ms": self.total_startup_duration_ms(),
                 "errors_total": self._error_count,
@@ -311,11 +310,11 @@ class ObservabilityRegistry:
 
     def _trim_metrics(self) -> None:
         if len(self._metrics) > self._max_metric_points:
-            self._metrics = self._metrics[-self._max_metric_points:]
+            self._metrics = self._metrics[-self._max_metric_points :]
             self._metric_aggregates.clear()
             for m in self._metrics:
                 self._metric_aggregates[m.name].append(m.value)
 
     def _trim_snapshots(self) -> None:
         if len(self._snapshots) > self._max_snapshots:
-            self._snapshots = self._snapshots[-self._max_snapshots:]
+            self._snapshots = self._snapshots[-self._max_snapshots :]

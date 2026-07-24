@@ -135,9 +135,11 @@ class TestConfigFileProvider:
     async def test_provider_type(self, provider: ConfigFileProvider) -> None:
         assert provider.provider_type == DiscoveryProviderType.CONFIG_FILE
 
-    async def test_discover_none(self, provider: ConfigFileProvider) -> None:
-        results = await provider.discover()
-        assert len(results) == 0
+    async def test_discover_none(self) -> None:
+        with patch("services.runtime_discovery.providers.config_file._CONFIG_FILES", {}):
+            provider = ConfigFileProvider()
+            results = await provider.discover()
+            assert len(results) == 0
 
     async def test_get_provider_name(self, provider: ConfigFileProvider) -> None:
         assert await provider.get_provider_name() == "config_file"

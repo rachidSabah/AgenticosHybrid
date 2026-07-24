@@ -1,21 +1,30 @@
-"""
-MCP Discovery Framework
+"""MCP Discovery Framework -- delegates to services/runtime_discovery/.
 
-Automatic discovery of MCP servers with:
-- File-based discovery
-- Directory scanning
-- Version detection
-- Capability detection
-- Automatic registration
+Automatic discovery of MCP servers with file-based discovery, directory
+scanning, version detection, capability detection, and automatic registration.
+
+The actual scanning and config-file parsing logic lives in
+``services.runtime_discovery.mcp_discovery``. This module wraps it with
+EventBus integration, continuous scanning, and registration callbacks for the
+kernel-layer ``agentic_os.core`` API.
 """
+
+from __future__ import annotations
 
 import asyncio
-import json
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+# Re-export the services types so callers can still import from here.
+from services.runtime_discovery.mcp_discovery import (  # noqa: E402
+    MCPDiscovery as _MCPDiscovery,
+)
+from services.runtime_discovery.mcp_discovery import (
+    MCPTransportType,
+)
 
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.mcp import MCPTransport
@@ -86,15 +95,14 @@ class DiscoveryResult:
 
 class MCPServerDiscovery:
     """
-    MCP Server Discovery Framework.
+    MCP Server Discovery Framework -- delegates scanning to MCPDiscovery.
 
     Features:
-    - Automatic server discovery from filesystem
-    - Version detection
-    - Capability detection
+    - Automatic server discovery (delegated to services MCPDiscovery)
+    - EventBus integration for lifecycle events
     - Configuration file parsing
-    - Automatic registration
-    - Incremental updates
+    - Automatic registration callbacks
+    - Continuous discovery with configurable interval
     """
 
     def __init__(
@@ -104,6 +112,7 @@ class MCPServerDiscovery:
     ) -> None:
         self._bus = bus
         self._config = config or DiscoveryConfig()
+        self._backend = _MCPDiscovery()
 
         self._discovered_servers: dict[str, DiscoveredServer] = {}
         self._scan_tasks: dict[str, asyncio.Task] = {}
@@ -124,7 +133,7 @@ class MCPServerDiscovery:
             )
         )
 
-    # ── Configuration ──────────────────────────────────────────────────
+    # -- Configuration --
 
     def set_register_callback(self, callback: Any) -> None:
         """Set the callback for automatic server registration."""
@@ -140,39 +149,74 @@ class MCPServerDiscovery:
         if path in self._config.scan_paths:
             self._config.scan_paths.remove(path)
 
-    # ── Discovery ──────────────────────────────────────────────────────
+    # -- Discovery --
 
     async def discover_all(self) -> DiscoveryResult:
-        """Perform a full discovery scan."""
+        """Perform a full discovery scan (delegates to services MCPDiscovery)."""
         result = DiscoveryResult(
             timestamp=_utcnow(),
             servers_found=0,
             servers_registered=0,
         )
 
-        expanded_paths = [str(Path(p).expanduser().resolve()) for p in self._config.scan_paths]
+        # Delegate actual scanning to the services-layer MCPDiscovery
+        try:
+            service_servers = await self._backend.discover_all()
+        except Exception as e:
+            result.errors.append(f"MCPDiscovery error: {e}")
+            log.error("MCPDiscovery.discover_all failed: %s", e)
+            return result
 
+        # Convert DiscoveredMCPServer -> DiscoveredServer
+        for svc in service_servers:
+            server = DiscoveredServer(
+                name=svc.name,
+                path=svc.binary_path or svc.config_path or "",
+                transport=self._convert_transport(svc.transport),
+                version=svc.version,
+                capabilities=list(svc.capabilities),
+                tools=list(svc.tools),
+                description=svc.description,
+                config_file=svc.config_path,
+                metadata=dict(svc.metadata),
+            )
+            result.discoveries.append(server)
+            self._discovered_servers[server.name] = server
+
+        result.servers_found = len(result.discoveries)
+
+        # Also scan locally configured paths (original MCPServerDiscovery behavior)
+        expanded_paths = [str(Path(p).expanduser().resolve()) for p in self._config.scan_paths]
         for scan_path in expanded_paths:
             if not os.path.exists(scan_path):
-                log.debug(f"Skipping non-existent scan path: {scan_path}")
                 continue
-
             try:
-                discoveries = await self._scan_path(scan_path)
-                result.discoveries.extend(discoveries)
-                result.servers_found += len(discoveries)
+                for entry in os.listdir(scan_path):
+                    entry_path = os.path.join(scan_path, entry)
+                    if os.path.isfile(entry_path) and os.access(entry_path, os.X_OK):
+                        if self._matches_pattern(entry):
+                            name = os.path.basename(entry_path)
+                            if name not in self._discovered_servers:
+                                server = DiscoveredServer(
+                                    name=name,
+                                    path=entry_path,
+                                    transport=MCPTransport.STDIO,
+                                    metadata={"source": "config_path_scan"},
+                                )
+                                result.discoveries.append(server)
+                                self._discovered_servers[server.name] = server
+                                result.servers_found += 1
 
-                for server in discoveries:
-                    await self._discover_server_details(server)
-                    self._discovered_servers[server.name] = server
-
-                    if self._config.auto_register and self._register_callback:
-                        await self._auto_register(server)
-                        result.servers_registered += 1
-
+            except PermissionError:
+                result.errors.append(f"Permission denied: {scan_path}")
             except Exception as e:
                 result.errors.append(f"Error scanning {scan_path}: {e}")
-                log.error(f"Discovery error scanning {scan_path}: {e}")
+
+        # Auto-register if configured
+        for server in result.discoveries:
+            if self._config.auto_register and self._register_callback:
+                await self._auto_register(server)
+                result.servers_registered += 1
 
         self._last_scan = _utcnow()
 
@@ -187,276 +231,56 @@ class MCPServerDiscovery:
         return result
 
     async def discover_server(self, path: str) -> DiscoveredServer | None:
-        """Discover a single server at the given path."""
+        """Discover a single server at the given path (delegates to MCPDiscovery)."""
         if not os.path.exists(path):
-            log.warning(f"Server path does not exist: {path}")
+            log.warning("Server path does not exist: %s", path)
             return None
 
+        # Use MCPDiscovery to discover by name if it's a known server
+        name = os.path.basename(path)
+        svc = await self._backend.discover_by_name(name)
+        if svc:
+            server = DiscoveredServer(
+                name=svc.name,
+                path=svc.binary_path or path,
+                transport=self._convert_transport(svc.transport),
+                version=svc.version,
+                config_file=svc.config_path,
+                description=svc.description,
+                capabilities=list(svc.capabilities),
+                tools=list(svc.tools),
+                metadata=dict(svc.metadata),
+            )
+            self._discovered_servers[server.name] = server
+            return server
+
+        # Fall back to local file/dir scan
         if os.path.isfile(path):
-            return await self._discover_from_executable(path)
+            server = DiscoveredServer(
+                name=name,
+                path=path,
+                transport=MCPTransport.STDIO,
+                metadata={"source": "direct_path"},
+            )
         elif os.path.isdir(path):
-            return await self._discover_from_directory(path)
+            server = DiscoveredServer(
+                name=name,
+                path=path,
+                transport=MCPTransport.STDIO,
+                metadata={"source": "direct_path"},
+            )
+        else:
+            return None
 
-        return None
-
-    async def _scan_path(self, path: str) -> list[DiscoveredServer]:
-        """Scan a directory for MCP servers."""
-        discoveries: list[DiscoveredServer] = []
-
-        try:
-            entries = os.listdir(path)
-        except PermissionError:
-            log.warning(f"Permission denied accessing: {path}")
-            return discoveries
-
-        for entry in entries:
-            entry_path = os.path.join(path, entry)
-
-            # Check if it's an executable file
-            if os.path.isfile(entry_path) and os.access(entry_path, os.X_OK):
-                if self._matches_pattern(entry):
-                    server = await self._discover_from_executable(entry_path)
-                    if server:
-                        discoveries.append(server)
-
-            # Check if it's a directory with a config file
-            elif os.path.isdir(entry_path):
-                for config_pattern in self._config.config_patterns:
-                    config_path = os.path.join(entry_path, config_pattern)
-                    if os.path.exists(config_path):
-                        server = await self._discover_from_directory(entry_path)
-                        if server:
-                            discoveries.append(server)
-                        break
-
-        return discoveries
-
-    async def _discover_from_executable(self, path: str) -> DiscoveredServer | None:
-        """Discover server from an executable file."""
-        name = os.path.basename(path)
-
-        # Try to get version
-        version = await self._detect_version(path)
-
-        # Detect transport type
-        transport = await self._detect_transport(path)
-
-        # Try to parse config if present
-        config = await self._find_config_for_executable(path)
-
-        server = DiscoveredServer(
-            name=name,
-            path=path,
-            transport=transport,
-            version=version,
-            config_file=config,
-            last_modified=datetime.fromtimestamp(os.path.getmtime(path), tz=UTC)
-            if os.path.exists(path)
-            else None,
-        )
-
-        if config:
-            await self._parse_config(config, server)
-
+        self._discovered_servers[server.name] = server
         return server
 
-    async def _discover_from_directory(self, path: str) -> DiscoveredServer | None:
-        """Discover server from a directory."""
-        name = os.path.basename(path)
-
-        # Look for config file
-        config = await self._find_config_for_directory(path)
-
-        # Look for executable
-        executable = await self._find_executable_in_directory(path)
-
-        if not executable and not config:
-            return None
-
-        transport = MCPTransport.STDIO
-        version = None
-
-        if executable:
-            version = await self._detect_version(executable)
-            transport = await self._detect_transport(executable)
-
-        server = DiscoveredServer(
-            name=name,
-            path=executable or path,
-            transport=transport,
-            version=version,
-            config_file=config,
-            last_modified=datetime.fromtimestamp(os.path.getmtime(path), tz=UTC),
-        )
-
-        if config:
-            await self._parse_config(config, server)
-
-        return server
-
-    async def _detect_version(self, path: str) -> str | None:
-        """Detect server version by running with --version."""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                path,
-                "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-
-            output = stdout.decode() or stderr.decode()
-            # Try to extract version
-            for line in output.split("\n"):
-                if "version" in line.lower():
-                    parts = line.split()
-                    for part in parts:
-                        if part[0].isdigit() or part.startswith("v"):
-                            return part.strip("v")
-            return None
-
-        except Exception:
-            return None
-
-    async def _detect_transport(self, path: str) -> MCPTransport:
-        """Detect transport type for a server."""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                path,
-                "--help",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-
-            output = (stdout.decode() + stderr.decode()).lower()
-
-            if "stdio" in output:
-                return MCPTransport.STDIO
-            elif "http" in output or "sse" in output:
-                return MCPTransport.SSE
-            elif "streamable" in output:
-                return MCPTransport.STREAMABLE_HTTP
-
-        except Exception:
-            pass
-
-        return MCPTransport.STDIO  # Default to stdio
-
-    async def _find_config_for_executable(self, path: str) -> str | None:
-        """Find config file for an executable."""
-        dir_path = os.path.dirname(path)
-        name = os.path.basename(path)
-
-        for pattern in self._config.config_patterns:
-            config_path = os.path.join(dir_path, pattern)
-            if os.path.exists(config_path):
-                return config_path
-
-        # Also check ~/.config/{name}/
-        home_config = Path("~/.config").expanduser() / name
-        if home_config.exists():
-            for pattern in self._config.config_patterns:
-                config_path = str(home_config / pattern)
-                if os.path.exists(config_path):
-                    return config_path
-
-        return None
-
-    async def _find_config_for_directory(self, path: str) -> str | None:
-        """Find config file in a server directory."""
-        for pattern in self._config.config_patterns:
-            config_path = os.path.join(path, pattern)
-            if os.path.exists(config_path):
-                return config_path
-        return None
-
-    async def _find_executable_in_directory(self, path: str) -> str | None:
-        """Find executable in a server directory."""
-        is_win = os.name == "nt"
-        extensions = (
-            [".exe", ".bat", ".cmd", ".ps1", ".js", ".py"] if is_win else ["", ".sh", ".js", ".py"]
-        )
-        for name in ["server", "run", "start", "main"]:
-            for ext in extensions:
-                executable = os.path.join(path, f"{name}{ext}")
-                if os.path.exists(executable):
-                    if is_win:
-                        if ext in (".exe", ".bat", ".cmd", ".ps1") or os.access(
-                            executable, os.X_OK
-                        ):
-                            return executable
-                    elif os.access(executable, os.X_OK):
-                        return executable
-        return None
-
-    async def _parse_config(self, config_path: str, server: DiscoveredServer) -> None:
-        """Parse a config file and update server info."""
-        try:
-            with open(config_path) as f:
-                content = f.read()
-
-            # Try JSON format
-            if config_path.endswith(".json"):
-                try:
-                    config = json.loads(content)
-                    server.name = config.get("name", server.name)
-                    server.description = config.get("description", "")
-                    server.author = config.get("author", "")
-                    server.homepage = config.get("homepage")
-                    server.capabilities = config.get("capabilities", [])
-                    server.metadata = config.get("metadata", {})
-                    return
-                except json.JSONDecodeError:
-                    pass
-
-            # Try simple key=value format
-            for line in content.split("\n"):
-                if "=" in line and not line.startswith("#"):
-                    key, _, value = line.partition("=")
-                    key = key.strip()
-                    value = value.strip().strip('"').strip("'")
-
-                    if key == "name":
-                        server.name = value
-                    elif key == "description":
-                        server.description = value
-                    elif key == "author":
-                        server.author = value
-
-        except Exception as e:
-            log.warning(f"Error parsing config {config_path}: {e}")
-
-    async def _discover_server_details(self, server: DiscoveredServer) -> None:
-        """Discover detailed capabilities for a server."""
-        if not self._config.detect_capabilities or not os.path.exists(server.path):
-            return
-
-        try:
-            # Try to get capabilities via MCP protocol
-            proc = await asyncio.create_subprocess_exec(
-                server.path,
-                "--capabilities",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-
-            try:
-                caps = json.loads(stdout.decode())
-                server.capabilities = caps.get("capabilities", [])
-                server.tools = caps.get("tools", [])
-            except json.JSONDecodeError:
-                pass
-
-        except Exception:
-            pass
+    # -- Helpers --
 
     async def _auto_register(self, server: DiscoveredServer) -> None:
         """Automatically register a discovered server."""
         if not self._register_callback:
             return
-
         try:
             await self._register_callback(server)
             await self._emit(
@@ -468,12 +292,29 @@ class MCPServerDiscovery:
                     "source": "discovery",
                 },
             )
-            log.info(f"Auto-registered discovered server: {server.name}")
-
+            log.info("Auto-registered discovered server: %s", server.name)
         except Exception as e:
-            log.error(f"Failed to auto-register {server.name}: {e}")
+            log.error("Failed to auto-register %s: %s", server.name, e)
 
-    # ── State Access ────────────────────────────────────────────────────
+    @staticmethod
+    def _matches_pattern(name: str) -> bool:
+        """Check if a name matches any discovery pattern."""
+        import fnmatch
+
+        patterns = ["mcp-*", "mcp_*", "*mcp*", "server-*.sh"]
+        return any(fnmatch.fnmatch(name, p) for p in patterns)
+
+    @staticmethod
+    def _convert_transport(t: MCPTransportType) -> MCPTransport:
+        """Convert MCPTransportType to MCPTransport enum."""
+        mapping = {
+            MCPTransportType.STDIO: MCPTransport.STDIO,
+            MCPTransportType.SSE: MCPTransport.SSE,
+            MCPTransportType.STREAMABLE_HTTP: MCPTransport.STREAMABLE_HTTP,
+        }
+        return mapping.get(t, MCPTransport.STDIO)
+
+    # -- State Access --
 
     def get_discovered_servers(self) -> dict[str, DiscoveredServer]:
         """Get all discovered servers."""
@@ -491,22 +332,12 @@ class MCPServerDiscovery:
         """Get the timestamp of the last scan."""
         return self._last_scan
 
-    def _matches_pattern(self, name: str) -> bool:
-        """Check if a name matches any discovery pattern."""
-        import fnmatch
-
-        for pattern in self._config.file_patterns:
-            if fnmatch.fnmatch(name, pattern):
-                return True
-        return False
-
-    # ── Continuous Discovery ────────────────────────────────────────────
+    # -- Continuous Discovery --
 
     async def start_continuous_discovery(self) -> None:
         """Start continuous discovery at configured intervals."""
         if self._running:
             return
-
         self._running = True
         log.info("Starting continuous MCP discovery")
 
@@ -515,13 +346,11 @@ class MCPServerDiscovery:
                 await asyncio.sleep(self._config.scan_interval_seconds)
                 if not self._running:
                     break
-
                 await self.discover_all()
-
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                log.error(f"Continuous discovery error: {e}")
+                log.error("Continuous discovery error: %s", e)
 
     async def stop_continuous_discovery(self) -> None:
         """Stop continuous discovery."""

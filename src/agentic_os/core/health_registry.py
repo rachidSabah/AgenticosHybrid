@@ -16,16 +16,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from agentic_os.core.lifecycle import (
     LifecycleManager,
     Phase,
-    PhaseResult,
-    ServiceProtocol,
-    ServiceRecord,
     ServiceState,
 )
 
@@ -336,14 +333,8 @@ class HealthRegistry:
 
     def summary(self) -> str:
         """Human-readable health summary."""
-        healthy = sum(
-            1 for s in self._snapshots.values() if s.status == HealthStatus.HEALTHY
-        )
-        degraded = sum(
-            1 for s in self._snapshots.values() if s.status == HealthStatus.DEGRADED
-        )
-        failed = sum(
-            1 for s in self._snapshots.values() if s.status == HealthStatus.FAILED
-        )
+        healthy = sum(1 for s in self._snapshots.values() if s.status == HealthStatus.HEALTHY)
+        degraded = sum(1 for s in self._snapshots.values() if s.status == HealthStatus.DEGRADED)
+        failed = sum(1 for s in self._snapshots.values() if s.status == HealthStatus.FAILED)
         total = len(self._snapshots)
         return f"Health: {healthy}/{total} healthy, {degraded} degraded, {failed} failed"

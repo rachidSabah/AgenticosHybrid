@@ -49,6 +49,7 @@ def _diag(stage: str, status: str, detail: str = "") -> None:
 # Service Wrappers  (all 6 implement ServiceProtocol)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class LoggingService(ServiceProtocol):
     """Wraps configure_logging and get_logger as a Kernel service."""
 
@@ -307,8 +308,7 @@ class EventBusService(ServiceProtocol):
 
     async def metrics(self) -> dict[str, Any]:
         return {
-            "bus_type": self._settings.bus_type
-            if self._settings else "unknown",
+            "bus_type": self._settings.bus_type if self._settings else "unknown",
             "started": self._started,
         }
 
@@ -371,6 +371,7 @@ class SchedulerService(BackgroundService):
 # Container Bootstrap
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def build_container_kernel(
     old_kernel: Any = None,
 ) -> tuple[
@@ -404,20 +405,27 @@ def build_container_kernel(
     settings_service = SettingsService(_settings_singleton)
     container.register_instance(Settings, _settings_singleton, name="settings_default")
     container.register_instance(
-        Settings, _settings_singleton,
+        Settings,
+        _settings_singleton,
         description="Default unnamed settings resolve",
     )
     container.register_instance(
-        SettingsService, settings_service,
+        SettingsService,
+        settings_service,
         description="12-factor application settings",
     )
     lifecycle.register_service(
-        "settings", SettingsService, settings_service,
-        phase=Phase.CRITICAL, container_key="SettingsService",
+        "settings",
+        SettingsService,
+        settings_service,
+        phase=Phase.CRITICAL,
+        container_key="SettingsService",
     )
     service_registry.register(
-        "settings", settings_service,
-        interface=SettingsService, version="1.0.0",
+        "settings",
+        settings_service,
+        interface=SettingsService,
+        version="1.0.0",
         description="Settings Manager — pydantic-settings 12-factor config",
         phase="critical",
     )
@@ -429,9 +437,11 @@ def build_container_kernel(
     container.register_instance(LoggingService, logging_service)
     lifecycle.register_service("logging", LoggingService, logging_service, phase=Phase.CRITICAL)
     service_registry.register(
-        "logging", logging_service,
+        "logging",
+        logging_service,
         description="Structured logging via structlog",
-        phase="critical", dependencies=["settings"],
+        phase="critical",
+        dependencies=["settings"],
     )
     health_registry.track_service("logging")
     compatibility.register_legacy_bridge("logger", LoggingService, "logging")
@@ -440,13 +450,17 @@ def build_container_kernel(
     config_service = ConfigurationService(_settings_singleton)
     container.register_instance(ConfigurationService, config_service)
     lifecycle.register_service(
-        "configuration", ConfigurationService, config_service,
+        "configuration",
+        ConfigurationService,
+        config_service,
         phase=Phase.CRITICAL,
     )
     service_registry.register(
-        "configuration", config_service,
+        "configuration",
+        config_service,
         description="Hot-reloadable configuration manager",
-        phase="critical", dependencies=["settings"],
+        phase="critical",
+        dependencies=["settings"],
     )
     health_registry.track_service("configuration")
     compatibility.register_legacy_bridge("configuration", ConfigurationService, "configuration")
@@ -454,8 +468,11 @@ def build_container_kernel(
     # ── Determine whether we have a pre-built old Kernel to share ─────
     if old_kernel is not None:
         # Use old Kernel's existing instances to avoid split-brain
-        _diag("Container", "SHARING_OLD_KERNEL_INSTANCES",
-              "bus, scheduler, secret_store will be shared")
+        _diag(
+            "Container",
+            "SHARING_OLD_KERNEL_INSTANCES",
+            "bus, scheduler, secret_store will be shared",
+        )
         existing_bus = getattr(old_kernel, "bus", None)
         existing_scheduler = getattr(old_kernel, "scheduler", None)
         existing_secret_store = getattr(old_kernel, "secret_store", None)
@@ -469,12 +486,14 @@ def build_container_kernel(
     container.register_instance(SecretsService, secrets_service)
     if existing_secret_store is not None:
         container.register_instance(
-                EncryptedSecretStore, existing_secret_store,
-                description="Legacy secret store (shared)",
-            )
+            EncryptedSecretStore,
+            existing_secret_store,
+            description="Legacy secret store (shared)",
+        )
     lifecycle.register_service("secrets", SecretsService, secrets_service, phase=Phase.CRITICAL)
     service_registry.register(
-        "secrets", secrets_service,
+        "secrets",
+        secrets_service,
         description="Fernet-encrypted at-rest secret store",
         phase="critical",
     )
@@ -486,23 +505,29 @@ def build_container_kernel(
     if existing_bus is not None:
         # Register the shared bus instance so everyone resolves the same object
         container.register_instance(
-                EventBus, existing_bus,
-                description="EventBus protocol instance (shared with legacy)",
-            )
+            EventBus,
+            existing_bus,
+            description="EventBus protocol instance (shared with legacy)",
+        )
     else:
         container.register_instance(
-                EventBus, eventbus_service.bus,  # type: ignore[type-abstract]
-                description="EventBus protocol instance",
-            )
+            EventBus,
+            eventbus_service.bus,  # type: ignore[type-abstract]
+            description="EventBus protocol instance",
+        )
     lifecycle.register_service(
-        "event_bus", EventBusService, eventbus_service,
+        "event_bus",
+        EventBusService,
+        eventbus_service,
         phase=Phase.INFRASTRUCTURE,
     )
     service_registry.register(
-        "event_bus", eventbus_service,
+        "event_bus",
+        eventbus_service,
         interface=EventBus,
         description="Inter-service communication via pub/sub EventBus",
-        phase="infrastructure", dependencies=["settings"],
+        phase="infrastructure",
+        dependencies=["settings"],
     )
     health_registry.track_service("event_bus")
     compatibility.register_legacy_bridge("bus", EventBus, "event_bus")
@@ -510,15 +535,19 @@ def build_container_kernel(
     # ── Register Scheduler (no deps, Phase 1 ── INFRASTRUCTURE) ───────
     scheduler_service = SchedulerService(existing_scheduler=existing_scheduler)
     container.register_instance(
-        _Scheduler, scheduler_service.scheduler,
+        _Scheduler,
+        scheduler_service.scheduler,
         description="Scheduler singleton",
     )
     lifecycle.register_service(
-        "scheduler", SchedulerService, scheduler_service,
+        "scheduler",
+        SchedulerService,
+        scheduler_service,
         phase=Phase.INFRASTRUCTURE,
     )
     service_registry.register(
-        "scheduler", scheduler_service,
+        "scheduler",
+        scheduler_service,
         interface=_Scheduler,
         description="Periodic task scheduler",
         phase="infrastructure",
@@ -587,7 +616,8 @@ async def run_container_startup(
         return False
 
     phase1_healthy = await health_registry.wait_for_phase_healthy(
-        Phase.INFRASTRUCTURE, timeout=10.0,
+        Phase.INFRASTRUCTURE,
+        timeout=10.0,
     )
     if not phase1_healthy:
         log.error("Phase 1 services did not become healthy")
@@ -605,12 +635,15 @@ async def run_container_startup(
             async def _publish(topic: str, payload: dict[str, Any]) -> None:
                 try:
                     from agentic_os.domain.events import EventEnvelope
-                    await bus.publish(EventEnvelope(
-                        type=topic,
-                        source="lifecycle",
-                        topic=topic,
-                        payload=payload,
-                    ))
+
+                    await bus.publish(
+                        EventEnvelope(
+                            type=topic,
+                            source="lifecycle",
+                            topic=topic,
+                            payload=payload,
+                        )
+                    )
                 except Exception:
                     pass  # nosec
 
@@ -648,6 +681,7 @@ async def run_container_shutdown(
 # ContainerKernel — wraps legacy Kernel with Container-backed 6 services
 # ═══════════════════════════════════════════════════════════════════════
 
+
 class ContainerKernel:
     """Container-backed Kernel v2.
 
@@ -674,12 +708,14 @@ class ContainerKernel:
         _diag("LegacyKernel", "CONSTRUCTED")
 
         # ── Build Container with shared instances ──
-        (self._container,
-         self._lifecycle,
-         self._compatibility,
-         self._health_registry,
-         self._observability,
-         self._service_registry) = build_container_kernel(old_kernel=self._old_kernel)
+        (
+            self._container,
+            self._lifecycle,
+            self._compatibility,
+            self._health_registry,
+            self._observability,
+            self._service_registry,
+        ) = build_container_kernel(old_kernel=self._old_kernel)
 
         # ── Expose 6 migrated services at top level for direct access ──
         self.bus: Any = self._container.resolve(EventBus)  # type: ignore[type-abstract]
@@ -689,8 +725,7 @@ class ContainerKernel:
             else self._old_kernel.scheduler
         )
         self.secret_store: Any = getattr(
-            self._container.resolve(SecretsService),
-            "store", self._old_kernel.secret_store
+            self._container.resolve(SecretsService), "store", self._old_kernel.secret_store
         )
         self.settings = _settings_singleton
         self.configuration: Any = self._container.resolve(ConfigurationService)
@@ -718,6 +753,7 @@ class ContainerKernel:
         Then background-init the legacy subsystems.
         """
         from agentic_os.kernel import _ensure_env  # noqa: PLC0415
+
         _ensure_env()
 
         # Run Container startup (validates deps, starts Phase 0+1)

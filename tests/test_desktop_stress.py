@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -91,7 +92,10 @@ class TestStressHardening:
 
 class TestStressRuntimeDiscovery:
     @pytest.mark.asyncio
-    async def test_concurrent_discovery(self) -> None:
+    @patch("agentic_os.core.desktop.runtime_discovery.CoreDiscoveryManager")
+    async def test_concurrent_discovery(self, mock_core: MagicMock) -> None:
+        instance = mock_core.return_value
+        instance.discover_all = AsyncMock(return_value=[])  # type: ignore[method-assign]
         mgr = RuntimeDiscoveryManager()
         from asyncio import wait_for
 

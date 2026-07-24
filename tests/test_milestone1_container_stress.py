@@ -9,12 +9,10 @@ Validates the 6 migrated subsystems under load:
 - Thread safety under concurrent resolution
 """
 
-import sys
-import os
-import time
-import threading
 import gc
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+import sys
+import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 os.environ["AGENTIC_OS_USE_CONTAINER"] = "1"
@@ -23,7 +21,7 @@ os.environ["AGENTIC_OS_BUS_TYPE"] = "local"
 
 def test_1000_registrations():
     """Register 1000 services and verify they all resolve."""
-    from agentic_os.core.container import Container, DuplicateRegistrationError
+    from agentic_os.core.container import Container
 
     c = Container()
     created: list[str] = []
@@ -41,7 +39,7 @@ def test_1000_registrations():
         resolved = c.resolve(iface)
         assert resolved is not None, f"Interface_{i} failed to resolve"
 
-    print(f"OK 1000 registrations, 1000 resolutions")
+    print("OK 1000 registrations, 1000 resolutions")
 
 
 def test_1000_registrations_and_singletons():
@@ -63,7 +61,7 @@ def test_1000_registrations_and_singletons():
         r2 = c.resolve(iface)
         assert r1 is r2, f"Interface_{i} singleton broken"
 
-    print(f"OK 1000 singleton verifications")
+    print("OK 1000 singleton verifications")
 
 
 def test_lifecycle_1000_services():
@@ -86,7 +84,7 @@ def test_lifecycle_1000_services():
     assert len(lm._records) == 1000
     assert lm.service_count_by_phase()["infrastructure"] == 1000
 
-    print(f"OK 1000 lifecycle registrations")
+    print("OK 1000 lifecycle registrations")
 
 
 def test_concurrent_resolution():
@@ -124,7 +122,7 @@ def test_concurrent_resolution():
         t.join(timeout=10)
 
     assert len(errors) == 0, f"Concurrent resolution failures: {errors}"
-    print(f"OK 20 concurrent threads, 100 services each, no errors")
+    print("OK 20 concurrent threads, 100 services each, no errors")
 
 
 def test_cycle_detection():
@@ -134,21 +132,25 @@ def test_cycle_detection():
     c = Container()
 
     # A -> B -> C -> A  (cycle!)
-    class A: pass
-    class B: pass
-    class C: pass
+    class A:
+        pass
+
+    class B:
+        pass
+
+    class C:
+        pass
 
     c.register(A, lambda: A(), depends_on=[B])
     c.register(B, lambda: B(), depends_on=[C])
     c.register(C, lambda: C(), depends_on=[A])
 
-    try:
-        c.resolve(A)
-        assert False, "Should have raised CyclicDependencyError"
-    except CyclicDependencyError:
-        pass
+    import pytest
 
-    print(f"OK Cycle detection caught A->B->C->A")
+    with pytest.raises(CyclicDependencyError):
+        c.resolve(A)
+
+    print("OK Cycle detection caught A->B->C->A")
 
 
 def test_memory_leak_detection():
@@ -174,7 +176,7 @@ def test_memory_leak_detection():
     gc.collect()
     assert len(lm._records) == 0
 
-    print(f"OK Memory leak check passed (100 services cleaned)")
+    print("OK Memory leak check passed (100 services cleaned)")
 
 
 def test_singleton_identity():
@@ -183,13 +185,15 @@ def test_singleton_identity():
 
     container, lifecycle, compat, health_reg, obs, svc_reg = build_container_kernel()
 
-    from agentic_os.ports.event_bus import EventBus
-    from agentic_os.core.scheduler import Scheduler
     from agentic_os.config import Settings
     from agentic_os.core.kernel_bootstrap import (
-        SettingsService, LoggingService, ConfigurationService,
+        ConfigurationService,
+        LoggingService,
         SecretsService,
+        SettingsService,
     )
+    from agentic_os.core.scheduler import Scheduler
+    from agentic_os.ports.event_bus import EventBus
 
     assert container.resolve(EventBus) is container.resolve(EventBus)
     assert container.resolve(Scheduler) is container.resolve(Scheduler)
@@ -199,20 +203,26 @@ def test_singleton_identity():
     assert container.resolve(ConfigurationService) is container.resolve(ConfigurationService)
     assert container.resolve(SecretsService) is container.resolve(SecretsService)
 
-    print(f"OK All 6 services are true singletons")
+    print("OK All 6 services are true singletons")
 
 
 def test_cycle_detection_lifecycle():
     """Verify that the DI validator's cycle checker works."""
+    import asyncio
+
     from agentic_os.core.container import Container
     from agentic_os.core.di_validator import CircularDependencyChecker
-    import asyncio
 
     c = Container()
 
-    class A: pass
-    class B: pass
-    class C: pass
+    class A:
+        pass
+
+    class B:
+        pass
+
+    class C:
+        pass
 
     c.register(A, lambda: A(), depends_on=[B])
     c.register(B, lambda: B(), depends_on=[C])
@@ -223,7 +233,7 @@ def test_cycle_detection_lifecycle():
     assert result.status == "failed", f"Expected failed, got {result.status}"
     assert "cyclic" in result.details.lower()
 
-    print(f"OK Cycle detection checker caught cycle")
+    print("OK Cycle detection checker caught cycle")
 
 
 def test_thread_safety():
@@ -255,7 +265,7 @@ def test_thread_safety():
         t.join(timeout=15)
 
     assert len(errors) == 0, f"Thread safety errors: {errors}"
-    print(f"OK 10 concurrent threads with concurrent register+resolve")
+    print("OK 10 concurrent threads with concurrent register+resolve")
 
 
 if __name__ == "__main__":
@@ -280,6 +290,7 @@ if __name__ == "__main__":
             passed += 1
         except Exception as e:
             import traceback
+
             print(f"FAIL {name}: {e}")
             traceback.print_exc()
             failed += 1

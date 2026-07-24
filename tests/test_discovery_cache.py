@@ -4,9 +4,10 @@ import json
 from datetime import timedelta
 
 import pytest
+from services.runtime_discovery.models import RuntimeCacheEntry, RuntimeType
 
 from agentic_os.core.discovery.cache import DiscoveryCache
-from agentic_os.domain.discovery import DiscoveryCacheEntry, _utcnow
+from agentic_os.domain.discovery import _utcnow
 
 
 class TestDiscoveryCache:
@@ -122,17 +123,20 @@ class TestDiscoveryCache:
         reg = {"name": "engine1", "endpoint": "http://localhost:8080"}
         entry = cache.create_entry("p1", "engine1", "http://localhost:8080", reg, 0.9)
 
-        # Manually expire the entry
-
-        expired = DiscoveryCacheEntry(
+        # Manually expire the entry via the backend
+        rce = RuntimeCacheEntry(
             key=entry.key,
-            registration_json=entry.registration_json,
-            confidence=entry.confidence,
-            provider_name=entry.provider_name,
-            discovered_at=entry.discovered_at,
+            runtime_type=RuntimeType.CUSTOM,
+            name=entry.provider_name,
+            data={
+                "registration_json": entry.registration_json,
+                "confidence": entry.confidence,
+                "provider_name": entry.provider_name,
+            },
+            created_at=entry.discovered_at,
             expires_at=_utcnow() - timedelta(seconds=1),
         )
-        cache._entries[entry.key] = expired
+        cache._backend._entries[entry.key] = rce
         assert cache.get(entry.key) is None
 
     def test_get_bumps_hit_count(self, cache: DiscoveryCache) -> None:
@@ -150,16 +154,19 @@ class TestDiscoveryCache:
         reg = {"name": "e1", "endpoint": "ep1"}
         entry = cache.create_entry("p1", "e1", "ep1", reg, 0.9)
 
-        # Add expired entry manually
-        expired = DiscoveryCacheEntry(
+        # Add expired entry via the backend
+        expired = RuntimeCacheEntry(
             key="expired_key",
-            registration_json='{"name": "expired"}',
-            confidence=0.5,
-            provider_name="p2",
-            discovered_at=_utcnow(),
+            runtime_type=RuntimeType.CUSTOM,
+            name="p2",
+            data={
+                "registration_json": '{"name": "expired"}',
+                "confidence": 0.5,
+                "provider_name": "p2",
+            },
             expires_at=_utcnow() - timedelta(seconds=1),
         )
-        cache._entries["expired_key"] = expired
+        cache._backend._entries["expired_key"] = expired
 
         removed = cache.clean_expired()
         # expired_key should be cleaned; the valid entry stays
@@ -186,16 +193,20 @@ class TestDiscoveryCache:
         reg = {"name": "e1", "endpoint": "ep1"}
         entry = cache.create_entry("p1", "e1", "ep1", reg, 0.9)
 
-        # Manually expire it
-        expired = DiscoveryCacheEntry(
+        # Manually expire it via the backend
+        rce = RuntimeCacheEntry(
             key=entry.key,
-            registration_json=entry.registration_json,
-            confidence=entry.confidence,
-            provider_name=entry.provider_name,
-            discovered_at=entry.discovered_at,
+            runtime_type=RuntimeType.CUSTOM,
+            name=entry.provider_name,
+            data={
+                "registration_json": entry.registration_json,
+                "confidence": entry.confidence,
+                "provider_name": entry.provider_name,
+            },
+            created_at=entry.discovered_at,
             expires_at=_utcnow() - timedelta(seconds=1),
         )
-        cache._entries[entry.key] = expired
+        cache._backend._entries[entry.key] = rce
 
         # This should evict the expired entry (via clean_expired) rather than raising
         cache.create_entry("p1", "e2", "ep2", {"name": "e2"}, 0.9)

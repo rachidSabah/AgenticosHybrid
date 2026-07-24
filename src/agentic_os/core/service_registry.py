@@ -31,6 +31,7 @@ log = logging.getLogger("agentic_os.service_registry")
 
 # ── Service Metadata ──
 
+
 @dataclass
 class ServiceMetadata:
     """Complete metadata for a registered Kernel service."""
@@ -71,6 +72,7 @@ class ServiceMetadata:
 
 
 # ── BackgroundService Base Class ──
+
 
 class BackgroundService(ServiceProtocol):
     """Base class for periodic-task services.
@@ -152,6 +154,7 @@ class BackgroundService(ServiceProtocol):
 
 # ── ServiceRegistry ──
 
+
 class ServiceRegistry:
     """Central registry for all Kernel services."""
 
@@ -222,7 +225,8 @@ class ServiceRegistry:
 
     def find_by_capability(self, capability: str) -> list[ServiceMetadata]:
         return [
-            r for r in self._metadatas.values()
+            r
+            for r in self._metadatas.values()
             if any(
                 cap.get("name") == capability or capability in cap.get("capabilities", [])
                 for cap in r.capabilities
@@ -230,10 +234,7 @@ class ServiceRegistry:
         ]
 
     def find_by_interface(self, interface: type) -> list[ServiceMetadata]:
-        return [
-            r for r in self._metadatas.values()
-            if r.interface is interface
-        ]
+        return [r for r in self._metadatas.values() if r.interface is interface]
 
     def get_background_service(self, service_id: str) -> BackgroundService | None:
         return self._background_services.get(service_id)

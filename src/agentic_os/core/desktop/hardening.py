@@ -152,7 +152,13 @@ class DesktopHardeningManager:
             if spec is not None:
                 checks.append({"name": "desktop_runtime_manager", "status": "ok"})
             else:
-                checks.append({"name": "desktop_runtime_manager", "status": "fail", "error": "Module not found"})
+                checks.append(
+                    {
+                        "name": "desktop_runtime_manager",
+                        "status": "fail",
+                        "error": "Module not found",
+                    }
+                )
                 errors.append("DesktopRuntimeManager module not found")
         except Exception as e:
             checks.append({"name": "desktop_runtime_manager", "status": "fail", "error": str(e)})

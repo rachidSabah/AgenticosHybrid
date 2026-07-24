@@ -27,6 +27,7 @@ class _PlatformStub:
     """Minimal Platform-compatible data class for Container mode.
     Replaced by the real Platform import once services are migrated.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -95,9 +96,7 @@ class CompatibilityKernelProxy:
             if val is not None:
                 return val
 
-        raise AttributeError(
-            f"'{self.__class__.__name__}' has no attribute '{name}'"
-        )
+        raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
 
     def generate_platform(self, **overrides: Any) -> Any:
         """Auto-generate a Platform-compatible object from Container registrations."""

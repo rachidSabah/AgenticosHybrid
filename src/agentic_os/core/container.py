@@ -140,7 +140,10 @@ class Container:
             resolved_factory: Callable[..., T] | type[T] = factory  # type: ignore[assignment]
         else:
             # An instance was passed directly — store as singleton factory
-            resolved_factory = lambda: factory  # type: ignore[assignment]
+            def _instance_factory() -> T:  # type: ignore[type-arg]
+                return factory  # type: ignore[return-value]
+
+            resolved_factory = _instance_factory
             resolved_lifetime = Lifetime.SINGLETON
 
         reg: Registration[Any] = Registration(
@@ -291,12 +294,12 @@ class Container:
         # ── Cycle Detection ──
         if key in visited:
             cycle_path = " -> ".join(list(visited) + [key])
-            raise CyclicDependencyError(
-                f"Cyclic dependency detected: {cycle_path}"
-            )
+            raise CyclicDependencyError(f"Cyclic dependency detected: {cycle_path}")
 
         if resolve_id in reg.resolving_in:
-            cycle_parts = [k for k, ids in self._registrations.items() if resolve_id in ids.resolving_in]
+            cycle_parts = [
+                k for k, ids in self._registrations.items() if resolve_id in ids.resolving_in
+            ]
             raise CyclicDependencyError(
                 f"Cyclic dependency detected resolving '{key}' "
                 f"(resolve chain {resolve_id}): {' -> '.join(cycle_parts + [key])}"
@@ -332,9 +335,7 @@ class Container:
 
                 for dep_type in deps:
                     dep_key = dep_type.__name__
-                    resolved_deps[dep_key] = self._resolve(
-                        dep_key, resolve_id, visited
-                    )
+                    resolved_deps[dep_key] = self._resolve(dep_key, resolve_id, visited)
 
             # ── Construct ──
             instance: Any
@@ -357,9 +358,7 @@ class Container:
                             hint_type = hints[p_name]
                             hint_key = hint_type.__name__
                             try:
-                                params[p_name] = self._resolve(
-                                    hint_key, resolve_id, visited
-                                )
+                                params[p_name] = self._resolve(hint_key, resolve_id, visited)
                             except MissingDependencyError:
                                 if p_param.default is not inspect.Parameter.empty:
                                     params[p_name] = p_param.default
@@ -377,9 +376,7 @@ class Container:
                         hint_type = hints[p_name]
                         hint_key = hint_type.__name__
                         try:
-                            params[p_name] = self._resolve(
-                                hint_key, resolve_id, visited
-                            )
+                            params[p_name] = self._resolve(hint_key, resolve_id, visited)
                         except MissingDependencyError:
                             if p_param.default is not inspect.Parameter.empty:
                                 params[p_name] = p_param.default
@@ -389,9 +386,7 @@ class Container:
             raise
         except Exception as exc:
             reg.status = RegistrationStatus.FAILED
-            raise ResolutionError(
-                f"Failed to resolve '{key}': {exc}"
-            ) from exc
+            raise ResolutionError(f"Failed to resolve '{key}': {exc}") from exc
         finally:
             reg.resolving_in.discard(resolve_id)
             visited.discard(key)

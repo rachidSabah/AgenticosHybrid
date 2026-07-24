@@ -6,6 +6,8 @@ import shutil
 from collections.abc import Sequence
 from typing import Any
 
+from services.runtime_discovery.manager import RuntimeDiscoveryManager as CoreDiscoveryManager
+
 from agentic_os.domain.desktop import (
     RuntimeDiscoveryResult,
     RuntimeInfo,
@@ -15,29 +17,12 @@ from agentic_os.infrastructure.logging import get_logger
 
 log = get_logger("desktop.runtime_discovery")
 
-_DISCOVERY_PROVIDERS: list[dict[str, Any]] = [
-    {"type": RuntimeType.PYTHON, "names": ["python", "python3", "py"], "version_flag": "--version"},
-    {"type": RuntimeType.GIT, "names": ["git"], "version_flag": "--version"},
-    {"type": RuntimeType.DOCKER, "names": ["docker"], "version_flag": "--version"},
-    {"type": RuntimeType.NODE, "names": ["node", "nodejs"], "version_flag": "--version"},
-    {
-        "type": RuntimeType.CLAUDE_CODE,
-        "names": ["claude", "claude-code"],
-        "version_flag": "--version",
-    },
-    {"type": RuntimeType.OPENCODE, "names": ["opencode"], "version_flag": "--version"},
-    {"type": RuntimeType.GEMINI_CLI, "names": ["gemini"], "version_flag": "--version"},
-    {"type": RuntimeType.CODEX_CLI, "names": ["codex"], "version_flag": "--version"},
-    {"type": RuntimeType.OLLAMA, "names": ["ollama"], "version_flag": "--version"},
-    {"type": RuntimeType.LM_STUDIO, "names": ["lm-studio"], "version_flag": "--version"},
-    {"type": RuntimeType.SQLITE, "names": ["sqlite3", "sqlite"], "version_flag": "--version"},
-]
-
 
 class RuntimeDiscoveryManager:
-    """Auto-detects installed runtimes and their capabilities."""
+    """Auto-detects installed runtimes using the authoritative unified Runtime Discovery Engine."""
 
     def __init__(self) -> None:
+        self._core_manager = CoreDiscoveryManager()
         self._runtimes: dict[RuntimeType, RuntimeInfo] = {}
 
     async def discover_runtimes(self) -> RuntimeDiscoveryResult:
@@ -46,17 +31,33 @@ class RuntimeDiscoveryManager:
         start = time.monotonic()
         errors: list[str] = []
 
-        for provider in _DISCOVERY_PROVIDERS:
-            try:
-                info = self._detect_one(provider)
-                if info is not None:
-                    self._runtimes[info.runtime_type] = info
-            except Exception as exc:
-                errors.append(f"{provider['type'].value}: {exc}")
+        try:
+            discovered = await self._core_manager.discover_all()
+            for item in discovered:
+                # Map Core RuntimeType to desktop RuntimeType
+                try:
+                    desktop_type = RuntimeType(item.runtime_type.value)
+                except ValueError:
+                    desktop_type = RuntimeType.CUSTOM
+
+                info = RuntimeInfo(
+                    runtime_type=desktop_type,
+                    name=item.name,
+                    version=item.version or "unknown",
+                    path=item.binary_path or "",
+                    executable=item.executable or item.name,
+                    capabilities=[
+                        c.value if hasattr(c, "value") else str(c) for c in item.capabilities
+                    ],
+                    verified=item.found,
+                )
+                self._runtimes[desktop_type] = info
+        except Exception as exc:
+            errors.append(f"Unified Discovery error: {exc}")
 
         duration = time.monotonic() - start
         log.info(
-            "Runtime discovery complete",
+            "Runtime discovery complete via unified engine",
             count=len(self._runtimes),
             duration_seconds=round(duration, 2),
         )
@@ -122,13 +123,29 @@ class RuntimeDiscoveryManager:
         return shutil.which(info.executable) is not None
 
     async def refresh_runtime(self, runtime_type: RuntimeType) -> RuntimeInfo | None:
-        for provider in _DISCOVERY_PROVIDERS:
-            if provider["type"] == runtime_type:
-                info = self._detect_one(provider)
-                if info is not None:
-                    self._runtimes[info.runtime_type] = info
-                    return info
-                return None
+        # Delegate to the unified core discovery engine
+        try:
+            discovered = await self._core_manager.discover_all()
+            for item in discovered:
+                try:
+                    if RuntimeType(item.runtime_type.value) == runtime_type:
+                        info = RuntimeInfo(
+                            runtime_type=runtime_type,
+                            name=item.name,
+                            version=item.version or "unknown",
+                            path=item.binary_path or "",
+                            executable=item.executable or item.name,
+                            capabilities=[],
+                            verified=item.found,
+                        )
+                        self._runtimes[runtime_type] = info
+                        return info
+                except ValueError:
+                    continue
+            # Runtime not found — ensure it's removed from cache
+            self._runtimes.pop(runtime_type, None)
+        except Exception:
+            self._runtimes.pop(runtime_type, None)
         return None
 
     async def get_discovery_count(self) -> int:

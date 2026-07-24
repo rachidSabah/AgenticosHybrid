@@ -192,6 +192,7 @@ class _UnavailableSentinel:
                 status_code=503,
                 detail=f"Subsystem not available: {name}",
             )
+
         return _unavailable
 
 
@@ -3382,9 +3383,7 @@ def create_app(platform: Platform) -> FastAPI:
             while not hb_stop.is_set():
                 try:
                     await asyncio.sleep(30)
-                    await websocket.send_json(
-                        {"topic": "heartbeat", "ts": time.time()}
-                    )
+                    await websocket.send_json({"topic": "heartbeat", "ts": time.time()})
                 except Exception:
                     break
 
@@ -3422,9 +3421,7 @@ def create_app(platform: Platform) -> FastAPI:
             while not hb_stop.is_set():
                 try:
                     await asyncio.sleep(30)
-                    await websocket.send_json(
-                        {"topic": "heartbeat", "ts": time.time()}
-                    )
+                    await websocket.send_json({"topic": "heartbeat", "ts": time.time()})
                 except Exception:
                     break
 
@@ -3440,6 +3437,44 @@ def create_app(platform: Platform) -> FastAPI:
             hb_task.cancel()
             mcp_bc.remove_client(send)
             log.info("mcp_ws.disconnected")
+
+    @app.websocket("/ws/discovery")
+    async def discovery_ws(websocket: WebSocket) -> None:
+        from agentic_os.api.discovery_ws import DiscoveryBroadcaster
+
+        discovery_bc: DiscoveryBroadcaster | None = platform.discovery_ws
+        if discovery_bc is None:
+            await websocket.accept()
+            await websocket.close(code=1011, reason="Discovery WebSocket not available")
+            return
+        await websocket.accept()
+        recv, send = discovery_bc.add_client()
+        log.info("discovery_ws.connected")
+
+        import asyncio
+
+        hb_stop = asyncio.Event()
+
+        async def _heartbeat() -> None:
+            while not hb_stop.is_set():
+                try:
+                    await asyncio.sleep(30)
+                    await websocket.send_json({"topic": "heartbeat", "ts": time.time()})
+                except Exception:
+                    break
+
+        hb_task = asyncio.create_task(_heartbeat())
+        try:
+            async with recv:
+                async for snapshot in recv:
+                    await websocket.send_json(snapshot)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            hb_stop.set()
+            hb_task.cancel()
+            discovery_bc.remove_client(send)
+            log.info("discovery_ws.disconnected")
 
     # ── System overview ───────────────────────────────────────────────────
     @app.get("/api/system")
@@ -3542,7 +3577,6 @@ def create_app(platform: Platform) -> FastAPI:
         mode = (body or {}).get("mode", "surface")
         try:
             from agentic_os.adapters.providers.auto_bind import (
-                KNOWN_AGENTS,
                 auto_discover_and_bind,
             )
 
@@ -3568,9 +3602,7 @@ def create_app(platform: Platform) -> FastAPI:
             )
             return {
                 "total_found": len(bound) + pre_count,
-                "providers": [
-                    {"name": p.name, "kind": p.kind} for p in bound
-                ],
+                "providers": [{"name": p.name, "kind": p.kind} for p in bound],
             }
         except Exception as exc:
             _binding_log.append(
@@ -3605,9 +3637,7 @@ def create_app(platform: Platform) -> FastAPI:
             return {
                 "total_found": len(bound) + pre_count,
                 "sources_scanned": max(sources_scanned, 5),
-                "providers": [
-                    {"name": p.name, "kind": p.kind} for p in bound
-                ],
+                "providers": [{"name": p.name, "kind": p.kind} for p in bound],
             }
         except Exception as exc:
             return {
@@ -3663,7 +3693,11 @@ def create_app(platform: Platform) -> FastAPI:
             pre = len(platform.providers.list_providers())
             auto_discover_and_bind(platform.providers, probe_unknown=False)
             post = len(platform.providers.list_providers())
-            return {"provider_id": provider_id, "repaired": post > pre, "action_taken": "re-discovered"}
+            return {
+                "provider_id": provider_id,
+                "repaired": post > pre,
+                "action_taken": "re-discovered",
+            }
         except Exception as exc:
             return {"provider_id": provider_id, "repaired": False, "action_taken": str(exc)}
 
@@ -3738,35 +3772,121 @@ def create_app(platform: Platform) -> FastAPI:
         providers = platform.providers.list_providers()
         res = []
         for p in providers:
-            res.append({
-                "name": p.name,
-                "kind": p.kind,
-                "installed": True,
-                "healthy": True,
-                "version": "1.0.0",
-                "capabilities": ["text", "tools", "streaming"] if p.supports_streaming else ["text"],
-                "streaming": p.supports_streaming,
-                "tools": p.supports_tools,
-            })
+            res.append(
+                {
+                    "name": p.name,
+                    "kind": p.kind,
+                    "installed": True,
+                    "healthy": True,
+                    "version": "1.0.0",
+                    "capabilities": ["text", "tools", "streaming"]
+                    if p.supports_streaming
+                    else ["text"],
+                    "streaming": p.supports_streaming,
+                    "tools": p.supports_tools,
+                }
+            )
         if not res:
             res = [
-                {"name": "Claude Code", "kind": "claude_code", "installed": True, "healthy": True, "version": "1.0.4", "capabilities": ["text", "tools", "streaming"]},
-                {"name": "Hermes", "kind": "hermes", "installed": True, "healthy": True, "version": "2.5.0", "capabilities": ["text", "reasoning"]},
-                {"name": "OpenCode", "kind": "openai_compatible", "installed": True, "healthy": True, "version": "0.9.1", "capabilities": ["text", "code"]},
-                {"name": "AGY CLI", "kind": "antigravity", "installed": True, "healthy": True, "version": "2.0.0", "capabilities": ["text", "mcp"]},
-                {"name": "Gemini CLI", "kind": "gemini", "installed": True, "healthy": True, "version": "1.2.0", "capabilities": ["text", "multimodal"]},
-                {"name": "Ollama", "kind": "ollama", "installed": True, "healthy": True, "version": "0.5.7", "capabilities": ["text", "local"]},
+                {
+                    "name": "Claude Code",
+                    "kind": "claude_code",
+                    "installed": True,
+                    "healthy": True,
+                    "version": "1.0.4",
+                    "capabilities": ["text", "tools", "streaming"],
+                },
+                {
+                    "name": "Hermes",
+                    "kind": "hermes",
+                    "installed": True,
+                    "healthy": True,
+                    "version": "2.5.0",
+                    "capabilities": ["text", "reasoning"],
+                },
+                {
+                    "name": "OpenCode",
+                    "kind": "openai_compatible",
+                    "installed": True,
+                    "healthy": True,
+                    "version": "0.9.1",
+                    "capabilities": ["text", "code"],
+                },
+                {
+                    "name": "AGY CLI",
+                    "kind": "antigravity",
+                    "installed": True,
+                    "healthy": True,
+                    "version": "2.0.0",
+                    "capabilities": ["text", "mcp"],
+                },
+                {
+                    "name": "Gemini CLI",
+                    "kind": "gemini",
+                    "installed": True,
+                    "healthy": True,
+                    "version": "1.2.0",
+                    "capabilities": ["text", "multimodal"],
+                },
+                {
+                    "name": "Ollama",
+                    "kind": "ollama",
+                    "installed": True,
+                    "healthy": True,
+                    "version": "0.5.7",
+                    "capabilities": ["text", "local"],
+                },
             ]
         return res
 
     @app.get("/omniroute/policies")
     async def omniroute_policies() -> list[dict]:
         return [
-            {"id": "p1", "name": "Coding & Architecture", "category": "coding", "targetProvider": "Claude Code", "targetModel": "claude-3-7-sonnet", "fallbackProvider": "OpenCode", "enabled": True},
-            {"id": "p2", "name": "Deep Reasoning & Security", "category": "reasoning", "targetProvider": "Hermes", "targetModel": "hermes-3-405b", "fallbackProvider": "AGY CLI", "enabled": True},
-            {"id": "p3", "name": "Multimodal & Large Context", "category": "large-context", "targetProvider": "Gemini CLI", "targetModel": "gemini-2.5-pro", "fallbackProvider": "Claude Code", "enabled": True},
-            {"id": "p4", "name": "Fast & Autonomous Implementation", "category": "fast", "targetProvider": "OpenCode", "targetModel": "gpt-4o", "fallbackProvider": "Claude Code", "enabled": True},
-            {"id": "p5", "name": "Local Offline Execution", "category": "local", "targetProvider": "Ollama", "targetModel": "llama3.3:70b", "fallbackProvider": "Hermes", "enabled": True},
+            {
+                "id": "p1",
+                "name": "Coding & Architecture",
+                "category": "coding",
+                "targetProvider": "Claude Code",
+                "targetModel": "claude-3-7-sonnet",
+                "fallbackProvider": "OpenCode",
+                "enabled": True,
+            },
+            {
+                "id": "p2",
+                "name": "Deep Reasoning & Security",
+                "category": "reasoning",
+                "targetProvider": "Hermes",
+                "targetModel": "hermes-3-405b",
+                "fallbackProvider": "AGY CLI",
+                "enabled": True,
+            },
+            {
+                "id": "p3",
+                "name": "Multimodal & Large Context",
+                "category": "large-context",
+                "targetProvider": "Gemini CLI",
+                "targetModel": "gemini-2.5-pro",
+                "fallbackProvider": "Claude Code",
+                "enabled": True,
+            },
+            {
+                "id": "p4",
+                "name": "Fast & Autonomous Implementation",
+                "category": "fast",
+                "targetProvider": "OpenCode",
+                "targetModel": "gpt-4o",
+                "fallbackProvider": "Claude Code",
+                "enabled": True,
+            },
+            {
+                "id": "p5",
+                "name": "Local Offline Execution",
+                "category": "local",
+                "targetProvider": "Ollama",
+                "targetModel": "llama3.3:70b",
+                "fallbackProvider": "Hermes",
+                "enabled": True,
+            },
         ]
 
     @app.get("/omniroute/budget")
@@ -3789,9 +3909,30 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/omniroute/failover")
     async def omniroute_failover() -> list[dict]:
         return [
-            {"id": "f1", "timestamp": "14:23:10", "from_provider": "Claude Code", "to_provider": "OpenCode", "reason": "API Timeout (>45s)", "status": "success"},
-            {"id": "f2", "timestamp": "14:15:02", "from_provider": "Hermes", "to_provider": "AGY CLI", "reason": "Local VRAM Spike", "status": "success"},
-            {"id": "f3", "timestamp": "14:02:44", "from_provider": "Ollama", "to_provider": "Hermes", "reason": "GGUF Context Overflow", "status": "success"},
+            {
+                "id": "f1",
+                "timestamp": "14:23:10",
+                "from_provider": "Claude Code",
+                "to_provider": "OpenCode",
+                "reason": "API Timeout (>45s)",
+                "status": "success",
+            },
+            {
+                "id": "f2",
+                "timestamp": "14:15:02",
+                "from_provider": "Hermes",
+                "to_provider": "AGY CLI",
+                "reason": "Local VRAM Spike",
+                "status": "success",
+            },
+            {
+                "id": "f3",
+                "timestamp": "14:02:44",
+                "from_provider": "Ollama",
+                "to_provider": "Hermes",
+                "reason": "GGUF Context Overflow",
+                "status": "success",
+            },
         ]
 
     @app.get("/omniroute/telemetry")
@@ -3830,12 +3971,14 @@ def create_app(platform: Platform) -> FastAPI:
             model = "claude-3-7-sonnet"
 
         # Record route log event
-        _omniroute_log.append({
-            "timestamp": datetime.now(UTC).isoformat(),
-            "prompt_sample": prompt[:40],
-            "target": target,
-            "model": model,
-        })
+        _omniroute_log.append(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "prompt_sample": prompt[:40],
+                "target": target,
+                "model": model,
+            }
+        )
 
         # Publish telemetry to EventBus
         await platform.bus.publish(

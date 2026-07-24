@@ -15,16 +15,17 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum, auto
-from typing import Any, Generic, TypeVar
+from enum import StrEnum
+from typing import Any, TypeVar
 
-from agentic_os.core.container import Container, Registration
+from agentic_os.core.container import Container
 
 T = TypeVar("T")
 log = logging.getLogger("agentic_os.lifecycle")
 
 
 # ── Lifecycle Phases ──
+
 
 class Phase(StrEnum):
     """Ordered startup phases. Each phase must complete before the next begins."""
@@ -51,6 +52,7 @@ PHASE_REVERSE = list(reversed(PHASE_ORDER))
 
 # ── Lifecycle States ──
 
+
 class ServiceState(StrEnum):
     """The full state machine for every Kernel service."""
 
@@ -69,6 +71,7 @@ class ServiceState(StrEnum):
 
 # ── Lifecycle Hooks ──
 
+
 @dataclass
 class LifecycleHooks:
     """Hooks called at various lifecycle points for a service."""
@@ -81,6 +84,7 @@ class LifecycleHooks:
 
 
 # ── Service Protocol (minimal) ──
+
 
 class ServiceProtocol:
     """The mandatory interface every Kernel service must implement.
@@ -179,6 +183,7 @@ class ServiceProtocol:
 
 # ── ServiceRecord ──
 
+
 @dataclass
 class ServiceRecord:
     """Tracks a service through its lifecycle within the Kernel."""
@@ -199,6 +204,7 @@ class ServiceRecord:
 
 
 # ── LifecycleManager ──
+
 
 @dataclass
 class PhaseResult:
@@ -381,6 +387,7 @@ class LifecycleManager:
 
                 # 3. Health check
                 try:
+
                     async def _health_check(svc: ServiceProtocol) -> dict[str, Any]:
                         return await svc.health()
 
@@ -401,9 +408,10 @@ class LifecycleManager:
                 started.append(service_id)
                 log.info("Service %s started (state=%s)", service_id, record.state.value)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await self._transition(
-                    service_id, ServiceState.FAILED,
+                    service_id,
+                    ServiceState.FAILED,
                     error="startup timed out",
                 )
                 failed.append(service_id)
@@ -413,7 +421,8 @@ class LifecycleManager:
 
             except Exception as exc:
                 await self._transition(
-                    service_id, ServiceState.FAILED,
+                    service_id,
+                    ServiceState.FAILED,
                     error=str(exc),
                 )
                 failed.append(service_id)
@@ -439,7 +448,9 @@ class LifecycleManager:
             self.current_state = ServiceState.DEGRADED
             log.warning(
                 "Phase %s completed with %d failures: %s",
-                phase.value, len(failed), errors,
+                phase.value,
+                len(failed),
+                errors,
             )
 
         return result
@@ -527,9 +538,10 @@ class LifecycleManager:
 
                 stopped.append(service_id)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await self._transition(
-                    service_id, ServiceState.STOPPED,
+                    service_id,
+                    ServiceState.STOPPED,
                     error="stop timed out, force-disposed",
                 )
                 await self._transition(service_id, ServiceState.DISPOSED)
@@ -538,7 +550,8 @@ class LifecycleManager:
 
             except Exception as exc:
                 await self._transition(
-                    service_id, ServiceState.FAILED,
+                    service_id,
+                    ServiceState.FAILED,
                     error=str(exc),
                 )
                 failed.append(service_id)

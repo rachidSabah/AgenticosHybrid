@@ -1,47 +1,63 @@
-"""Discovery cache — TTL-based caching of provider results."""
+"""Discovery cache -- delegates to services/runtime_discovery/ implementation.
+
+The canonical TTL-based discovery cache lives in
+services.runtime_discovery.cache. This module wraps
+services.runtime_discovery.cache.RuntimeCache as the backing store while
+preserving the DiscoveryCache public API used by the kernel and
+:class:.
+"""
+
+from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
+
+from services.runtime_discovery.cache import RuntimeCache
+from services.runtime_discovery.models import RuntimeCacheEntry, RuntimeType
 
 from agentic_os.domain.discovery import DiscoveryCacheEntry, _utcnow
 
 
 @dataclass
 class DiscoveryCache:
-    """TTL-based cache for discovery results to avoid redundant scanning.
+    """TTL-based cache for discovery results -- delegates to RuntimeCache.
 
     Entries are keyed by a deterministic hash of (provider, engine_name, endpoint).
     Expired entries are skipped on get() and can be bulk-cleaned.
+
+    When cache_dir is provided, entries are persisted to disk and survive
+    process restarts (see services.runtime_discovery.cache.RuntimeCache).
     """
 
-    _entries: dict[str, DiscoveryCacheEntry] = field(default_factory=dict)
     ttl_seconds: float = 300.0
     max_entries: int = 1000
+    cache_dir: str | None = None
 
-    # ── Core operations ──
+    def __post_init__(self) -> None:
+        self._backend = RuntimeCache(
+            ttl_seconds=int(self.ttl_seconds),
+            max_entries=self.max_entries,
+            cache_dir=self.cache_dir,
+        )
+
+    # -- Core operations --
 
     def get(self, key: str) -> DiscoveryCacheEntry | None:
         """Get a non-expired entry by key. Returns None if missing or expired."""
-        entry = self._entries.get(key)
+        entry = self._backend.get(key)
         if entry is None:
             return None
-        if entry.is_expired():
-            del self._entries[key]
-            return None
-        # Bump hit count
-        bumped = entry.with_hit()
-        self._entries[key] = bumped
-        return bumped
+        return self._to_discovery_entry(entry)
 
     def set(self, entry: DiscoveryCacheEntry) -> None:
         """Store a cache entry, evicting if over capacity."""
-        if len(self._entries) >= self.max_entries and entry.key not in self._entries:
-            self._evict_one()
-        self._entries[entry.key] = entry
+        # Sync max_entries if set after init
+        self._sync_config()
+        self._backend.set(self._to_runtime_entry(entry))
 
-    # ── Key management ──
+    # -- Key management --
 
     @staticmethod
     def make_key(provider: str, engine_name: str, endpoint: str) -> str:
@@ -49,7 +65,7 @@ class DiscoveryCache:
         raw = f"{provider}::{engine_name}::{endpoint or ''}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
-    # ── Entry creation ──
+    # -- Entry creation --
 
     def create_entry(
         self,
@@ -73,68 +89,97 @@ class DiscoveryCache:
         self.set(entry)
         return entry
 
-    # ── Invalidation ──
+    # -- Invalidation --
 
     def invalidate(self, key: str) -> None:
         """Remove a single cache entry by key."""
-        self._entries.pop(key, None)
+        self._backend.invalidate(key)
 
     def invalidate_by_provider(self, provider_name: str) -> int:
         """Remove all entries for a given provider. Returns count removed."""
-        before = len(self._entries)
-        self._entries = {k: v for k, v in self._entries.items() if v.provider_name != provider_name}
-        return before - len(self._entries)
+        self._backend.clean_expired()
+        to_remove = [
+            k
+            for k, v in self._backend._entries.items()
+            if v.data.get("provider_name") == provider_name
+        ]
+        for k in to_remove:
+            self._backend._entries.pop(k, None)
+        return len(to_remove)
 
     def invalidate_by_engine(self, engine_name: str) -> int:
         """Remove all entries for a given engine name. Returns count removed."""
-        before = len(self._entries)
-        self._entries = {k: v for k, v in self._entries.items() if v.provider_name != engine_name}
-        return before - len(self._entries)
+        self._backend.clean_expired()
+        to_remove = [
+            k for k, v in self._backend._entries.items() if v.data.get("engine_name") == engine_name
+        ]
+        for k in to_remove:
+            self._backend._entries.pop(k, None)
+        return len(to_remove)
 
     def invalidate_all(self) -> int:
         """Remove all entries. Returns count removed."""
-        count = len(self._entries)
-        self._entries.clear()
-        return count
+        before = self._backend.count()
+        self._backend.invalidate_all()
+        return before
 
     def clean_expired(self) -> int:
         """Remove all expired entries. Returns count removed."""
-        before = len(self._entries)
-        self._entries = {k: v for k, v in self._entries.items() if not v.is_expired()}
-        return before - len(self._entries)
+        return self._backend.clean_expired()
 
-    # ── Query ──
+    # -- Query --
 
     def list_entries(self) -> list[DiscoveryCacheEntry]:
         """Return all non-expired entries."""
-        now = _utcnow()
-        return [e for e in self._entries.values() if e.expires_at > now]
+        return [self._to_discovery_entry(e) for e in self._backend.list_entries()]
 
     def count(self) -> int:
-        """Return the number of entries (including expired, cleaned lazily)."""
-        return len(self._entries)
+        """Return the number of active (non-expired) entries."""
+        return self._backend.count()
 
     def get_stats(self) -> dict:
         """Return cache statistics."""
-        entries = self.list_entries()
-        total_hits = sum(e.hit_count for e in entries)
-        return {
-            "total_entries": len(self._entries),
-            "active_entries": len(entries),
-            "total_hits": total_hits,
-            "max_entries": self.max_entries,
-            "ttl_seconds": self.ttl_seconds,
-        }
+        stats = self._backend.get_stats()
+        entries = self._backend.list_entries()
+        stats["active_entries"] = len(entries)
+        return stats
 
-    # ── Internal ──
+    # -- Internal --
 
-    def _evict_one(self) -> None:
-        """Evict the oldest (or expired) entry when over capacity."""
-        # Prefer evicting expired first
-        if self.clean_expired() > 0:
-            return
-        # Otherwise evict the entry with the lowest hit count (LRU-like)
-        if not self._entries:
-            return
-        oldest_key = min(self._entries, key=lambda k: self._entries[k].hit_count)
-        del self._entries[oldest_key]
+    def _sync_config(self) -> None:
+        """Sync max_entries to backend if changed after init."""
+        if self._backend._max_entries != self.max_entries:
+            self._backend._max_entries = self.max_entries
+        if self._backend._ttl_seconds != int(self.ttl_seconds):
+            self._backend._ttl_seconds = int(self.ttl_seconds)
+
+    @staticmethod
+    def _to_discovery_entry(entry: RuntimeCacheEntry) -> DiscoveryCacheEntry:
+        """Convert a RuntimeCacheEntry to a DiscoveryCacheEntry."""
+        return DiscoveryCacheEntry(
+            key=entry.key,
+            registration_json=entry.data.get("registration_json", "{}"),
+            confidence=entry.data.get("confidence", 0.0),
+            provider_name=entry.data.get("provider_name", entry.name),
+            discovered_at=entry.created_at,
+            expires_at=entry.expires_at,
+            hit_count=entry.hit_count,
+        )
+
+    @staticmethod
+    def _to_runtime_entry(entry: DiscoveryCacheEntry) -> RuntimeCacheEntry:
+        """Convert a DiscoveryCacheEntry to a RuntimeCacheEntry."""
+        return RuntimeCacheEntry(
+            key=entry.key,
+            runtime_type=RuntimeType.CUSTOM,
+            name=entry.provider_name,
+            data={
+                "registration_json": entry.registration_json,
+                "confidence": entry.confidence,
+                "provider_name": entry.provider_name,
+                "engine_name": entry.provider_name,
+            },
+            created_at=entry.discovered_at,
+            expires_at=entry.expires_at,
+            hit_count=entry.hit_count,
+        )
