@@ -47,7 +47,8 @@ class RuntimeDiscoveryManager:
                     path=item.binary_path or "",
                     executable=item.executable or item.name,
                     capabilities=[
-                        c.value if hasattr(c, "value") else str(c) for c in item.capabilities  # ty:ignore[unresolved-attribute]
+                        c.value if hasattr(c, "value") else str(c)
+                        for c in item.capabilities  # ty:ignore[unresolved-attribute]
                     ],
                     verified=item.found,
                 )
