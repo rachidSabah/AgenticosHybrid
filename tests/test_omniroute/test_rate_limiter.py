@@ -1455,9 +1455,7 @@ class TestPermitAudit:
         from agentic_os.core.omniroute.rate_limiter import _PermitManager
 
         pm = _PermitManager()
-        pm.reserve(
-            "policy_1", QuotaScope.GLOBAL, "", "provider_a", "model_x", ttl_seconds=0.001
-        )
+        pm.reserve("policy_1", QuotaScope.GLOBAL, "", "provider_a", "model_x", ttl_seconds=0.001)
         await asyncio.sleep(0.005)
         expired = pm.expire_stale()
         assert expired >= 1
