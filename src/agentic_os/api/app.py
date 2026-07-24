@@ -1235,9 +1235,9 @@ def create_app(platform: Platform) -> FastAPI:
         if background:
             import asyncio
 
-            asyncio.create_task(installer.run_full_install())
+            asyncio.create_task(installer.run_full_install())  # ty:ignore[unresolved-attribute]
             return {"status": "started", "mode": "background"}
-        report = await installer.run_full_install()
+        report = await installer.run_full_install()  # ty:ignore[unresolved-attribute]
         return {
             "status": "completed",
             "success": report.success,
@@ -1253,7 +1253,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Run self-healing on all bound providers."""
         if installer is None:
             raise HTTPException(status_code=503, detail="Installer intelligence not available")
-        report = await installer.heal_all()
+        report = await installer.heal_all()  # ty:ignore[unresolved-attribute]
         return {
             "total_issues": report.total_issues,
             "total_repaired": report.total_repaired,
@@ -1274,7 +1274,7 @@ def create_app(platform: Platform) -> FastAPI:
         """List all bound providers from installer intelligence."""
         if installer is None:
             raise HTTPException(status_code=503, detail="Installer intelligence not available")
-        providers = installer.bound_providers
+        providers = installer.bound_providers  # ty:ignore[unresolved-attribute]
         return {
             "total": len(providers),
             "providers": [

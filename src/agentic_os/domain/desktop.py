@@ -234,6 +234,7 @@ class RuntimeType(StrEnum):
     POSTGRESQL = "postgresql"
     REDIS = "redis"
     UNKNOWN = "unknown"
+    CUSTOM = "custom"
 
 
 class OfflineState(StrEnum):
@@ -716,6 +717,7 @@ class RuntimeDiscoveryResult:
     runtimes: list[RuntimeInfo] = field(default_factory=list)
     duration_seconds: float = 0.0
     errors: list[str] = field(default_factory=list)
+    capabilities: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -724,6 +726,7 @@ class RuntimeDiscoveryResult:
             "runtimes": [r.to_dict() for r in self.runtimes],
             "duration_seconds": self.duration_seconds,
             "errors": self.errors,
+            "capabilities": self.capabilities,
             "metadata": self.metadata,
         }
 

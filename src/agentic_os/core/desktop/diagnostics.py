@@ -3,11 +3,13 @@
 import platform as _platform
 import sys
 from datetime import UTC, datetime
+from typing import Any
 
-from agentic_os.domain.desktop import DesktopDiagnosticsInfo
+from agentic_os.domain.desktop import DesktopDiagnosticsInfo, DesktopPerformanceMetrics
+from agentic_os.ports.desktop import DesktopDiagnosticsPort
 
 
-class DesktopDiagnosticsManager:
+class DesktopDiagnosticsManager(DesktopDiagnosticsPort):
     """Collects and reports desktop runtime diagnostics and health."""
 
     async def get_diagnostics(self) -> DesktopDiagnosticsInfo:
@@ -23,7 +25,21 @@ class DesktopDiagnosticsManager:
             sampled_at=datetime.now(UTC),
         )
 
-    async def check_health(self) -> dict[str, str | bool]:
+    async def get_performance(self) -> DesktopPerformanceMetrics:
+        """Return current performance metrics."""
+        return DesktopPerformanceMetrics()
+
+    async def run_diagnostics(self) -> dict[str, Any]:
+        """Run full diagnostics and return combined results."""
+        diag = await self.get_diagnostics()
+        perf = await self.get_performance()
+        return {
+            "diagnostics": diag.to_dict(),
+            "performance": perf.to_dict(),
+            "status": "healthy",
+        }
+
+    async def check_health(self) -> dict[str, Any]:
         """Quick health check for the desktop runtime."""
         return {
             "status": "healthy",

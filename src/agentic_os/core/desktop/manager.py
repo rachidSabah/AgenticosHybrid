@@ -165,7 +165,7 @@ class DesktopRuntimeManager:
         self._started_at = datetime.now(UTC)
 
         # Run startup validation
-        if self.hardening._config.validate_on_startup:
+        if (await self.hardening.get_config()).validate_on_startup:
             validation = await self.hardening.validate_startup()
             if not validation.success:
                 log.warning(
@@ -231,10 +231,11 @@ class DesktopRuntimeManager:
         except Exception:
             pass
 
+        active_ws = await self.workspace.get_active_workspace()
         return DesktopRuntimeState(
             status=self._status,
             windows=list(await self.window.list_windows()),
-            active_workspace_id=self.workspace._active_workspace_id,
+            active_workspace_id=active_ws.id if active_ws else "",
             workspaces=list(await self.workspace.list_workspaces()),
             performance=await self.performance.get_metrics(),
             diagnostics=await self.diagnostics.get_diagnostics(),

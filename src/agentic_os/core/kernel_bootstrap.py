@@ -628,7 +628,7 @@ async def run_container_startup(
     # are broadcast to all EventBus subscribers.
     eventbus_record = lifecycle.get_service("event_bus")
     if eventbus_record and eventbus_record.instance:
-        eventbus_svc: EventBusService = eventbus_record.instance  # type: ignore[assignment]
+        eventbus_svc: EventBusService = eventbus_record.instance  # type: ignore  # ty:ignore[assignment]
         bus = eventbus_svc.bus if hasattr(eventbus_svc, "bus") else None
         if bus is not None and hasattr(bus, "publish"):
 
