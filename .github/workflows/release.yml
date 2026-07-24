@@ -24,7 +24,7 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -41,7 +41,7 @@ jobs:
             rpm
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -56,7 +56,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Install Python + uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v9
         with:
           python-version: "3.12"
 
@@ -101,7 +101,7 @@ jobs:
           ls -la dist/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-artifacts
           path: apps/mission-control/dist/artifacts/*
@@ -116,10 +116,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -134,7 +134,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Install Python + uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v9
         with:
           python-version: "3.12"
 
@@ -217,7 +217,7 @@ jobs:
           Get-ChildItem $ArtifactsDir
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-artifacts
           path: apps/mission-control/dist/artifacts/*
@@ -232,10 +232,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -250,7 +250,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Install Python + uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v9
         with:
           python-version: "3.12"
 
@@ -291,7 +291,7 @@ jobs:
           ls -la dist/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-artifacts
           path: apps/mission-control/dist/artifacts/*
@@ -307,10 +307,10 @@ jobs:
       actions: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
 
