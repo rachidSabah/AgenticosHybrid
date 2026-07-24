@@ -1,46 +1,33 @@
-"""Desktop Diagnostics Manager — system diagnostics and health checks."""
+"""Desktop diagnostics — OS health, system info, desktop runtime state."""
 
-from __future__ import annotations
+import platform as _platform
+import sys
+from datetime import UTC, datetime
 
-from typing import Any
-
-from agentic_os.domain.desktop import DesktopDiagnosticsInfo, DesktopPerformanceMetrics
-from agentic_os.infrastructure.logging import get_logger
-
-log = get_logger("desktop.diagnostics")
+from agentic_os.domain.desktop import DesktopDiagnosticsInfo
 
 
 class DesktopDiagnosticsManager:
-    """In-memory diagnostics. Reports system information when Tauri is available."""
-
-    def __init__(self) -> None:
-        self._diagnostics = DesktopDiagnosticsInfo(
-            os_name="unknown",
-            os_version="0.0.0",
-            os_arch="x86_64",
-            backend_version="0.9.2",
-        )
-        self._performance = DesktopPerformanceMetrics()
+    """Collects and reports desktop runtime diagnostics and health."""
 
     async def get_diagnostics(self) -> DesktopDiagnosticsInfo:
-        return self._diagnostics
+        """Collect current system and runtime diagnostics."""
+        return DesktopDiagnosticsInfo(
+            os_name=_platform.system(),
+            os_version=_platform.version(),
+            os_arch=_platform.machine(),
+            hostname=_platform.node(),
+            python_version=sys.version.split()[0],
+            app_version="1.0.0",
+            backend_version="0.9.2",
+            sampled_at=datetime.now(UTC),
+        )
 
-    async def get_performance(self) -> DesktopPerformanceMetrics:
-        return self._performance
-
-    async def update_performance(self, metrics: DesktopPerformanceMetrics) -> None:
-        self._performance = metrics
-
-    async def run_diagnostics(self) -> dict[str, Any]:
-        return {
-            "diagnostics": self._diagnostics.to_dict(),
-            "performance": self._performance.to_dict(),
-            "status": "healthy",
-        }
-
-    async def check_health(self) -> dict[str, Any]:
+    async def check_health(self) -> dict[str, str | bool]:
+        """Quick health check for the desktop runtime."""
         return {
             "status": "healthy",
-            "desktop_runtime": "running",
-            "diagnostics": self._diagnostics.to_dict(),
+            "os": _platform.system(),
+            "python": sys.version.split()[0],
+            "timestamp": datetime.now(UTC).isoformat(),
         }

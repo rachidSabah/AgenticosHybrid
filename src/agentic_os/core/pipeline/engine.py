@@ -769,7 +769,6 @@ class PipelineEngineImpl(PipelineEnginePort):
             type="event",
             source=key,
             topic=topic.value,
-            timestamp=_utcnow().isoformat(),
             payload=payload,
         )
         await self._event_bus.publish(event)

@@ -700,7 +700,6 @@ class WorkflowEngineImpl(WorkflowEnginePort):
             type="event",
             source=key,
             topic=topic.value,
-            timestamp=datetime.now(UTC).isoformat(),
             payload=payload,
         )
         await self._event_bus.publish(event)

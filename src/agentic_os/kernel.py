@@ -7,7 +7,6 @@ here behind their ports. The :class:`Platform` bundle is the single object the
 API layer receives.
 """
 
-import os
 from dataclasses import dataclass
 
 from agentic_os.adapters.bus.factory import build_bus
@@ -36,7 +35,6 @@ from agentic_os.adapters.engines.generic import GenericExecutionEngine
 from agentic_os.adapters.plugins.loader import load_plugins
 from agentic_os.adapters.security.encrypted_store import EncryptedSecretStore
 from agentic_os.api.dashboard import DashboardBroadcaster
-from agentic_os.api.discovery_ws import DiscoveryBroadcaster
 from agentic_os.api.mcp_ws import MCPBroadcaster
 from agentic_os.config import settings
 from agentic_os.core.capability.engine import CapabilityEngine
@@ -100,6 +98,7 @@ from agentic_os.core.workflow.engine import WorkflowEngineImpl
 from agentic_os.domain.discovery import DiscoveryProfile, DiscoveryProviderConfig
 from agentic_os.domain.execution import EngineType
 from agentic_os.infrastructure.logging import configure_logging, get_logger
+from agentic_os.ports.event_bus import EventBus
 from agentic_os.ports.execution import DiscoveryProvider
 
 log = get_logger("kernel")
@@ -149,7 +148,7 @@ def _diag(stage: str, status: str, detail: str = "") -> None:
 class Platform:
     """Bundle of every subsystem, handed to the API layer."""
 
-    bus: object
+    bus: EventBus
     registry: AgentRegistry
     providers: ProviderRegistry
     orchestrator: Orchestrator
@@ -184,8 +183,6 @@ class Platform:
     mcp: MCPManager | None = None
     # Phase 4, M3: MCP WebSocket broadcaster
     mcp_ws: MCPBroadcaster | None = None
-    # Phase 4, M3: Discovery WebSocket broadcaster
-    discovery_ws: DiscoveryBroadcaster | None = None
     # Phase 5: Learning & Optimization Engine
     learning: LearningManager | None = None
     # Phase 4, M6: Desktop Runtime Foundation
@@ -250,7 +247,6 @@ class Kernel:
         self.recovery = RecoveryManagerImpl(self.bus, self.orchestrator, settings)
         self.dashboard = DashboardBroadcaster(self.bus)
         self.mcp_ws = MCPBroadcaster(self.bus)
-        self.discovery_ws = DiscoveryBroadcaster(self.bus)
 
         self.capability = CapabilityEngine(self.bus)
         self.mission_planner = MissionPlannerImpl(self.bus, settings)
@@ -362,8 +358,6 @@ class Kernel:
         _diag("Dashboard", "STARTED")
         await self.mcp_ws.start()
         _diag("MCP-WS", "STARTED")
-        await self.discovery_ws.start()
-        _diag("Discovery-WS", "STARTED")
 
         # ── Runtime ──
         if self.runtime:
@@ -400,7 +394,9 @@ class Kernel:
                     try:
                         await engine.first_launch()
                         _diag(
-                            "Installer", "STARTED", f"bound={len(engine.bound_providers)} providers"
+                            "Installer",
+                            "STARTED",
+                            f"bound={len(engine.bound_providers)} providers",
                         )
                     except Exception as exc:
                         _diag("Installer", "FAILED", str(exc))
@@ -471,7 +467,6 @@ class Kernel:
             await self.runtime.shutdown()
         await self.dashboard.stop()
         await self.mcp_ws.stop()
-        await self.discovery_ws.stop()
         await self.recovery.stop()
         await self.health.stop()
         await self.provider_health.stop()
@@ -680,7 +675,6 @@ class Kernel:
             orchestration=self.orchestration,
             mcp=self.mcp,
             mcp_ws=self.mcp_ws,
-            discovery_ws=self.discovery_ws,
             desktop=self.desktop,
             learning=self.learning,
             mission_planner=self.mission_planner,
@@ -696,14 +690,8 @@ async def run_serve(host: str | None = None, port: int | None = None) -> None:
 
     kernel: Kernel | None = None
     try:
-        if os.environ.get("AGENTIC_OS_USE_CONTAINER", "1") == "1":
-            from agentic_os.core.kernel_bootstrap import ContainerKernel
-
-            kernel = ContainerKernel()
-            _diag("Kernel", "CONTAINER_MODE", "6 core services via DI Container")
-        else:
-            kernel = Kernel()
-            _diag("Kernel", "LEGACY_MODE")
+        kernel = Kernel()
+        _diag("Kernel", "CONSTRUCTED")
     except Exception as exc:
         import traceback as _tb
 
