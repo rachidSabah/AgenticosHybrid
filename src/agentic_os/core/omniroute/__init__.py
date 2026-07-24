@@ -14,6 +14,7 @@ from agentic_os.core.omniroute.failover import CircuitBreakerEngineImpl
 from agentic_os.core.omniroute.learning import AdaptiveLearningEngineImpl
 from agentic_os.core.omniroute.model_registry import ModelRegistryImpl
 from agentic_os.core.omniroute.provider_registry import ProviderRegistryImpl
+from agentic_os.core.omniroute.rate_limiter import RateLimiterEngineImpl
 from agentic_os.core.omniroute.router import RouterEngineImpl
 from agentic_os.core.omniroute.routing_policies import RoutingPolicyEngineImpl
 from agentic_os.ports.event_bus import EventBus as EventBusPort
@@ -94,7 +95,18 @@ def create_omniroute_engine(
     )
     health_registry.track_service("omniroute.adaptive_learning_engine")
 
-    # ── Phase 5.3: Router Engine (depends on policy + circuit breaker + budget + learning) ──
+    # ── Phase 5.8: Intelligent Rate Limiter & Quota Engine ──
+    rate_limiter = RateLimiterEngineImpl(
+        event_bus=event_bus,
+    )
+    container.register_instance(
+        RateLimiterEngineImpl,
+        rate_limiter,
+        description="OmniRoute rate limiter — distributed-capable quota & rate limiting engine",
+    )
+    health_registry.track_service("omniroute.rate_limiter")
+
+    # ── Phase 5.3: Router Engine (policy + circuit breaker + budget + learning + rate limiter) ──
     router_engine = RouterEngineImpl(
         provider_registry=provider_registry,
         model_registry=model_registry,
@@ -103,6 +115,7 @@ def create_omniroute_engine(
         circuit_breaker=circuit_breaker,
         budget_engine=budget_engine,
         adaptive_learning_engine=learning_engine,
+        rate_limiter=rate_limiter,
     )
     container.register_instance(
         RouterEngineImpl,

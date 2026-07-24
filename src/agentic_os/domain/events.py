@@ -316,6 +316,26 @@ class Topic(StrEnum):
     ANOMALY_DETECTED = "learning.anomaly_detected"
     FORECAST_UPDATED = "learning.forecast_updated"
     TREND_CHANGED = "learning.trend_changed"
+    # Rate Limiter & Quota Engine (Phase 5.8)
+    RATE_LIMIT_POLICY_CREATED = "rate_limit.policy_created"
+    RATE_LIMIT_POLICY_UPDATED = "rate_limit.policy_updated"
+    RATE_LIMIT_POLICY_DELETED = "rate_limit.policy_deleted"
+    RATE_LIMIT_APPROVED = "rate_limit.approved"
+    RATE_LIMIT_REJECTED = "rate_limit.rejected"
+    PERMIT_RESERVED = "rate_limit.permit_reserved"
+    PERMIT_GRANTED = "rate_limit.permit_granted"
+    PERMIT_RELEASED = "rate_limit.permit_released"
+    PERMIT_ROLLED_BACK = "rate_limit.permit_rolled_back"
+    TOKEN_BUCKET_EMPTY = "rate_limit.token_bucket_empty"
+    QUOTA_EXCEEDED = "rate_limit.quota_exceeded"
+    QUEUE_OVERFLOW = "rate_limit.queue_overflow"
+    QUEUE_DELAY_UPDATED = "rate_limit.queue_delay_updated"
+    BURST_DETECTED = "rate_limit.burst_detected"
+    THROTTLING_STARTED = "rate_limit.throttling_started"
+    THROTTLING_STOPPED = "rate_limit.throttling_stopped"
+    RETRY_AFTER_UPDATED = "rate_limit.retry_after_updated"
+    RATE_LIMIT_WARNING = "rate_limit.warning"
+    RATE_LIMIT_FORECAST = "rate_limit.forecast"
 
 
 class EventEnvelope(BaseModel):

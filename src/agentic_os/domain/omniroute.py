@@ -950,3 +950,262 @@ class LearningDecision:
     predictions: dict[str, PredictionResult] = field(default_factory=dict)
     evaluation_time_ms: float = 0.0
     observations_count: int = 0
+
+
+# ── Phase 5.8: Rate Limiter & Quota Engine domain models ──
+
+
+class QuotaScope(StrEnum):
+    GLOBAL = "global"
+    PROVIDER = "provider"
+    MODEL = "model"
+    WORKSPACE = "workspace"
+    ORGANIZATION = "organization"
+    USER = "user"
+    AGENT = "agent"
+
+
+class PriorityLevel(StrEnum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    NORMAL = "normal"
+    LOW = "low"
+    BULK = "bulk"
+
+
+@dataclass(frozen=True, slots=True)
+class TokenBucket:
+    capacity: float = 100.0
+    refill_rate: float = 10.0
+    refill_interval_ms: float = 1000.0
+    burst_allowance: float = 20.0
+
+
+@dataclass(frozen=True, slots=True)
+class LeakyBucket:
+    drain_rate: float = 10.0
+    drain_interval_ms: float = 1000.0
+    max_queue_depth: int = 100
+    overflow: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SlidingWindowCounter:
+    window_duration_s: float = 60.0
+    max_requests: int = 100
+    current_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RateLimitPolicy:
+    id: str = field(default_factory=_new_id)
+    name: str = ""
+    description: str = ""
+    enabled: bool = True
+    order: int = 0
+    scope: QuotaScope = QuotaScope.GLOBAL
+    scope_id: str = ""
+    algorithm: str = "token_bucket"  # token_bucket, leaky_bucket, sliding_window, fixed_window
+    token_bucket: TokenBucket = field(default_factory=TokenBucket)
+    leaky_bucket: LeakyBucket = field(default_factory=LeakyBucket)
+    sliding_window: SlidingWindowCounter = field(default_factory=SlidingWindowCounter)
+    max_burst: int = 0
+    queue_max_size: int = 0
+    priority: PriorityLevel = PriorityLevel.NORMAL
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=_utcnow)
+    updated_at: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class QuotaUsage:
+    policy_id: str = ""
+    scope: QuotaScope = QuotaScope.GLOBAL
+    scope_id: str = ""
+    request_count: int = 0
+    approved_count: int = 0
+    rejected_count: int = 0
+    queued_count: int = 0
+    delayed_count: int = 0
+    burst_count: int = 0
+    token_balance: float = 0.0
+    queue_depth: int = 0
+    last_request: datetime | None = None
+    last_updated: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class PermitReservation:
+    id: str = field(default_factory=_new_id)
+    policy_id: str = ""
+    scope: QuotaScope = QuotaScope.GLOBAL
+    scope_id: str = ""
+    provider: str = ""
+    model: str = ""
+    count: int = 1
+    status: str = "reserved"  # reserved, granted, committed, released, rolled_back, expired
+    ttl_seconds: float = 30.0
+    created_at: datetime = field(default_factory=_utcnow)
+    expires_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    committed_at: datetime | None = None
+    released_at: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class PermitGrant:
+    id: str = field(default_factory=_new_id)
+    reservation_id: str = ""
+    policy_id: str = ""
+    scope: QuotaScope = QuotaScope.GLOBAL
+    scope_id: str = ""
+    provider: str = ""
+    model: str = ""
+    count: int = 1
+    granted: bool = False
+    delay_ms: float = 0.0
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class PermitRelease:
+    id: str = field(default_factory=_new_id)
+    reservation_id: str = ""
+    policy_id: str = ""
+    count: int = 1
+    released: bool = False
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class PermitAuditRecord:
+    id: str = field(default_factory=_new_id)
+    action: str = ""  # reserved, granted, committed, released, rolled_back, expired
+    policy_id: str = ""
+    scope: QuotaScope = QuotaScope.GLOBAL
+    scope_id: str = ""
+    provider: str = ""
+    model: str = ""
+    count: int = 0
+    reason: str = ""
+    timestamp: datetime = field(default_factory=_utcnow)
+
+
+@dataclass(frozen=True, slots=True)
+class RateLimitDecision:
+    approved: bool = False
+    rejected: bool = False
+    queued: bool = False
+    delayed: bool = False
+    reason: str = ""
+    policy_id: str = ""
+    algorithm: str = ""
+    retry_after_ms: float = 0.0
+    estimated_wait_ms: float = 0.0
+    queue_position: int = 0
+    tokens_remaining: float = 0.0
+    evaluation_time_ms: float = 0.0
+    reservation_id: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ThrottleDecision:
+    throttled: bool = False
+    reason: str = ""
+    provider: str = ""
+    model: str = ""
+    retry_after_ms: float = 0.0
+    throttle_duration_ms: float = 0.0
+    scope: QuotaScope = QuotaScope.GLOBAL
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPrediction:
+    retry_after_ms: float = 0.0
+    queue_delay_ms: float = 0.0
+    expected_permit_availability: float = 0.0
+    expected_provider_availability: float = 0.0
+    confidence: float = 0.0
+    estimated_wait_total_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class QueueStatistics:
+    total_queued: int = 0
+    active_queues: int = 0
+    average_wait_ms: float = 0.0
+    max_wait_ms: float = 0.0
+    queue_depth: int = 0
+    overflow_count: int = 0
+    priority_distribution: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class PermitSnapshot:
+    timestamp: datetime = field(default_factory=_utcnow)
+    total_reservations: int = 0
+    active_reservations: int = 0
+    granted_count: int = 0
+    released_count: int = 0
+    rolled_back_count: int = 0
+    expired_count: int = 0
+    pending_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PermitStatistics:
+    total_requests: int = 0
+    approved: int = 0
+    rejected: int = 0
+    queued: int = 0
+    delayed: int = 0
+    burst_count: int = 0
+    reservations_active: int = 0
+    reservations_granted: int = 0
+    reservations_released: int = 0
+    reservations_expired: int = 0
+    reservations_rolled_back: int = 0
+    average_evaluation_time_ms: float = 0.0
+    queue_overflow_count: int = 0
+    quota_exceeded_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class QuotaForecast:
+    policy_id: str = ""
+    projected_usage_next_hour: float = 0.0
+    projected_usage_today: float = 0.0
+    remaining_capacity_today: float = 0.0
+    estimated_exhaustion_time: datetime | None = None
+    at_risk: bool = False
+    recommendation: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RateLimitForecast:
+    provider_forecasts: dict[str, QuotaForecast] = field(default_factory=dict)
+    model_forecasts: dict[str, QuotaForecast] = field(default_factory=dict)
+    workspace_forecasts: dict[str, QuotaForecast] = field(default_factory=dict)
+    global_forecast: QuotaForecast = field(default_factory=QuotaForecast)
+    at_risk_providers: tuple[str, ...] = field(default_factory=tuple)
+    at_risk_models: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class RateLimitMetrics:
+    requests_per_second: float = 0.0
+    permits_per_second: float = 0.0
+    queue_depth: int = 0
+    average_wait_ms: float = 0.0
+    average_retry_delay_ms: float = 0.0
+    burst_count: int = 0
+    quota_utilization_pct: float = 0.0
+    reservation_count: int = 0
+    queue_latency_ms: float = 0.0
+    permit_throughput: float = 0.0
+    forecast_accuracy_pct: float = 0.0
+    adaptive_adjustments: int = 0
+    provider_utilization_pct: float = 0.0
+    workspace_utilization_pct: float = 0.0
+    organization_utilization_pct: float = 0.0
+    token_utilization_pct: float = 0.0

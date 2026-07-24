@@ -375,6 +375,7 @@ class RouterEngineImpl:
         budget_engine: Any | None = None,
         circuit_breaker: Any | None = None,
         adaptive_learning_engine: Any | None = None,
+        rate_limiter: Any | None = None,
     ) -> None:
         from agentic_os.core.omniroute.model_registry import ModelRegistryPort
         from agentic_os.core.omniroute.provider_registry import ProviderRegistryPort
@@ -386,6 +387,7 @@ class RouterEngineImpl:
         self._budget_engine = budget_engine
         self._circuit_breaker = circuit_breaker
         self._adaptive_learning_engine = adaptive_learning_engine
+        self._rate_limiter = rate_limiter
 
         self._lock = asyncio.Lock()
         self._started = False
@@ -582,6 +584,39 @@ class RouterEngineImpl:
                         },
                     )
                     return decision
+
+        # Step 5.5: Rate Limiter (after Budget, before Circuit Breaker)
+        if self._rate_limiter is not None:
+            scope_id = getattr(request, "workspace", "") or getattr(request, "user_id", "")
+            for c in list(candidates):
+                limiter_decision = await self._rate_limiter.evaluate(
+                    c.provider.name,
+                    c.model.model_id,
+                    scope_id=scope_id,
+                )
+                if not limiter_decision.approved and not limiter_decision.queued:
+                    candidates.remove(c)
+                    log.info(
+                        "Candidate %s/%s rate-limited: %s",
+                        c.provider.name,
+                        c.model.model_id,
+                        limiter_decision.reason,
+                    )
+            if not candidates:
+                self._routing_failures += 1
+                decision = RoutingDecision(
+                    request_id=request.request_id,
+                    status="failed",
+                    reason="All candidates excluded by rate limiter",
+                )
+                await self._publish(
+                    Topic.ROUTE_FAILED,
+                    {
+                        "request_id": request.request_id,
+                        "reason": decision.reason,
+                    },
+                )
+                return decision
 
         # Step 6: Circuit breaker filtering
         if self._circuit_breaker is not None:
