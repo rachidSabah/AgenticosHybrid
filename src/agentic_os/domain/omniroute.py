@@ -125,6 +125,7 @@ class OmniRouteModel:
     provider: str = ""
     provider_id: str = ""
     display_name: str = ""
+    model_family: str = ""
     context_window: int = 0
     max_output_tokens: int = 4096
     input_cost_per_1k: float = 0.0
@@ -137,6 +138,15 @@ class OmniRouteModel:
     is_default: bool = False
     latency_ms: float = 0.0
     quality_score: float = 0.5
+    throughput: float = 0.0
+    tokenizer: str = ""
+    healthy: bool = False
+    enabled: bool = True
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    version: str = ""
+    aliases: tuple[str, ...] = field(default_factory=tuple)
+    input_modalities: tuple[str, ...] = field(default_factory=tuple)
+    output_modalities: tuple[str, ...] = field(default_factory=tuple)
     discovered_at: datetime = field(default_factory=_utcnow)
     metadata: dict[str, Any] = field(default_factory=dict)
 

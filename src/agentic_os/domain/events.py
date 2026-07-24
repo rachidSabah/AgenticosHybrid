@@ -39,6 +39,12 @@ class Topic(StrEnum):
     PROVIDER_FAILED = "provider.failed"
     PROVIDER_FAILOVER = "provider.failover"
     COST_RECORDED = "cost.recorded"
+    # Model management (OmniRoute Phase 5)
+    MODEL_REGISTERED = "model.registered"
+    MODEL_UPDATED = "model.updated"
+    MODEL_REMOVED = "model.removed"
+    MODEL_HEALTH = "model.health"
+    MODEL_DEFAULT_CHANGED = "model.default_changed"
     # Memory
     MEMORY_WRITTEN = "memory.written"
     MEMORY_EVICTED = "memory.evicted"
