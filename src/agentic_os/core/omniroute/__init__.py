@@ -9,7 +9,9 @@ from __future__ import annotations
 from agentic_os.core.container import Container
 from agentic_os.core.health_registry import HealthRegistry
 from agentic_os.core.observability_registry import ObservabilityRegistry
+from agentic_os.core.omniroute.aggregation import AggregationEngineImpl
 from agentic_os.core.omniroute.budgets import BudgetEngineImpl
+from agentic_os.core.omniroute.executor import ExecutionEngineImpl
 from agentic_os.core.omniroute.failover import CircuitBreakerEngineImpl
 from agentic_os.core.omniroute.learning import AdaptiveLearningEngineImpl
 from agentic_os.core.omniroute.model_registry import ModelRegistryImpl
@@ -121,7 +123,29 @@ def create_omniroute_engine(
     )
     health_registry.track_service("omniroute.scheduler")
 
-    # ── Phase 5.3: Router Engine (policy, CB, budget, learning, rate limiter, scheduler) ──
+    # ── Phase 5.10: Execution Engine ──
+    execution_engine = ExecutionEngineImpl(
+        event_bus=event_bus,
+    )
+    container.register_instance(
+        ExecutionEngineImpl,
+        execution_engine,
+        description="OmniRoute execution engine — provider invocation, retries, streaming",
+    )
+    health_registry.track_service("omniroute.execution_engine")
+
+    # ── Phase 5.11: Aggregation Engine ──
+    aggregation_engine = AggregationEngineImpl(
+        event_bus=event_bus,
+    )
+    container.register_instance(
+        AggregationEngineImpl,
+        aggregation_engine,
+        description="OmniRoute aggregation engine — response synthesis, consensus, ranking, merge",
+    )
+    health_registry.track_service("omniroute.aggregation_engine")
+
+    # Phase 5.3: Router Engine (policy, CB, budget, learning, rate limiter, scheduler, exec, agg)
     router_engine = RouterEngineImpl(
         provider_registry=provider_registry,
         model_registry=model_registry,
@@ -132,6 +156,8 @@ def create_omniroute_engine(
         adaptive_learning_engine=learning_engine,
         rate_limiter=rate_limiter,
         scheduler=scheduler,
+        execution_engine=execution_engine,
+        aggregation_engine=aggregation_engine,
     )
     container.register_instance(
         RouterEngineImpl,

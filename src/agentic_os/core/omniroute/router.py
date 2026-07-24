@@ -377,6 +377,8 @@ class RouterEngineImpl:
         adaptive_learning_engine: Any | None = None,
         rate_limiter: Any | None = None,
         scheduler: Any | None = None,
+        execution_engine: Any | None = None,
+        aggregation_engine: Any | None = None,
     ) -> None:
         from agentic_os.core.omniroute.model_registry import ModelRegistryPort
         from agentic_os.core.omniroute.provider_registry import ProviderRegistryPort
@@ -390,6 +392,8 @@ class RouterEngineImpl:
         self._adaptive_learning_engine = adaptive_learning_engine
         self._rate_limiter = rate_limiter
         self._scheduler = scheduler
+        self._execution_engine = execution_engine
+        self._aggregation_engine = aggregation_engine
 
         self._lock = asyncio.Lock()
         self._started = False

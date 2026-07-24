@@ -1427,3 +1427,750 @@ class SchedulerForecast:
     estimated_wait_s: float = 0.0
     workload_prediction: str = "stable"
     recommendation: str = ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Execution Engine (Phase 5.10)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ExecutionStrategy(StrEnum):
+    SINGLE = "single"
+    STREAMING = "streaming"
+    PARALLEL = "parallel"
+    HEDGED = "hedged"
+    SPECULATIVE = "speculative"
+    SHADOW = "shadow"
+    CANARY = "canary"
+    MIRROR = "mirror"
+    FALLBACK = "fallback"
+    QUORUM = "quorum"
+    RACE = "race"
+    BATCH = "batch"
+    PIPELINE = "pipeline"
+
+
+class ExecutionState(StrEnum):
+    PENDING = "pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    STREAMING = "streaming"
+    RETRYING = "retrying"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    TIMED_OUT = "timed_out"
+    FAILED = "failed"
+    ABORTED = "aborted"
+    PARTIAL_SUCCESS = "partial_success"
+
+
+class AggregationStrategy(StrEnum):
+    FIRST_SUCCESS = "first_success"
+    FIRST_COMPLETED = "first_completed"
+    FASTEST = "fastest"
+    LOWEST_COST = "lowest_cost"
+    BEST_QUALITY = "best_quality"
+    BEST_CONFIDENCE = "best_confidence"
+    WEIGHTED_SCORE = "weighted_score"
+    WEIGHTED_VOTE = "weighted_vote"
+    MAJORITY_VOTE = "majority_vote"
+    SUPER_MAJORITY = "super_majority"
+    UNANIMOUS = "unanimous"
+    CONSENSUS = "consensus"
+    QUORUM = "quorum"
+    AVERAGE = "average"
+    MEDIAN = "median"
+    MERGE = "merge"
+    ENSEMBLE = "ensemble"
+    STACKING = "stacking"
+    PIPELINE = "pipeline"
+    CUSTOM = "custom"
+    AUTO = "auto"
+    # Legacy alias (Phase 5.10 executor compatibility)
+    QUALITY_WEIGHTED = "quality_weighted"
+
+
+class RetryPolicyType(StrEnum):
+    IMMEDIATE_RETRY = "immediate_retry"
+    FIXED_DELAY = "fixed_delay"
+    EXPONENTIAL_BACKOFF = "exponential_backoff"
+    LINEAR_BACKOFF = "linear_backoff"
+    JITTERED_BACKOFF = "jittered_backoff"
+    DECORRELATED_JITTER = "decorrelated_jitter"
+    NO_RETRY = "no_retry"
+    # Legacy aliases (Phase 5.10 executor compatibility)
+    IMMEDIATE = "immediate_retry"
+    LINEAR = "linear_backoff"
+    JITTER = "jittered_backoff"
+    ADAPTIVE = "adaptive"
+    BUDGET_AWARE = "budget_aware"
+    PROVIDER_AWARE = "provider_aware"
+    CIRCUIT_BREAKER_AWARE = "circuit_breaker_aware"
+    DEADLINE_AWARE = "deadline_aware"
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionRequest:
+    request_id: str = ""
+    session_id: str = ""
+    provider: str = ""
+    model: str = ""
+    messages: tuple[dict[str, str], ...] = field(default_factory=tuple)
+    max_tokens: int = 4096
+    temperature: float = 0.7
+    strategy: ExecutionStrategy = ExecutionStrategy.SINGLE
+    aggregation: AggregationStrategy = AggregationStrategy.FIRST_SUCCESS
+    retry_policy: RetryPolicyType = RetryPolicyType.EXPONENTIAL_BACKOFF
+    max_retries: int = 3
+    soft_timeout_s: float = 30.0
+    hard_timeout_s: float = 60.0
+    idle_timeout_s: float = 10.0
+    streaming_timeout_s: float = 120.0
+    parallel_providers: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionResult:
+    request_id: str = ""
+    provider: str = ""
+    model: str = ""
+    state: ExecutionState = ExecutionState.PENDING
+    output: str = ""
+    content: str = ""
+    finish_reason: str = ""
+    tokens_in: int = 0
+    tokens_out: int = 0
+    total_tokens: int = 0
+    latency_ms: float = 0.0
+    ttfb_ms: float = 0.0
+    attempts: int = 1
+    retries: int = 0
+    error: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    cost: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionAttempt:
+    attempt: int = 1
+    provider: str = ""
+    model: str = ""
+    latency_ms: float = 0.0
+    state: ExecutionState = ExecutionState.PENDING
+    error: str = ""
+    timestamp: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionHealth:
+    status: str = "healthy"
+    uptime_s: float = 0.0
+    active_executions: int = 0
+    total_executions: int = 0
+    success_rate: float = 0.0
+    failure_rate: float = 0.0
+    avg_latency_ms: float = 0.0
+    error_count: int = 0
+    last_error: str = ""
+    provider_health: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionMetrics:
+    total_executions: int = 0
+    successful_executions: int = 0
+    failed_executions: int = 0
+    cancelled_executions: int = 0
+    timed_out_executions: int = 0
+    retry_count: int = 0
+    total_latency_ms: float = 0.0
+    avg_latency_ms: float = 0.0
+    p50_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0
+    p99_latency_ms: float = 0.0
+    total_tokens: int = 0
+    total_tokens_in: int = 0
+    total_tokens_out: int = 0
+    throughput_tokens_per_s: float = 0.0
+    streaming_count: int = 0
+    parallel_count: int = 0
+    hedged_count: int = 0
+    speculative_count: int = 0
+    quorum_count: int = 0
+    fallback_count: int = 0
+    shadow_count: int = 0
+    provider_error_count: int = 0
+    timeout_count: int = 0
+    ttfb_ms: float = 0.0
+    provider_utilization: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionStatistics:
+    total_executions: int = 0
+    active_executions: int = 0
+    completed_executions: int = 0
+    failed_executions: int = 0
+    cancelled_executions: int = 0
+    timed_out_executions: int = 0
+    streaming_executions: int = 0
+    parallel_executions: int = 0
+    hedged_executions: int = 0
+    average_latency_ms: float = 0.0
+    average_ttfb_ms: float = 0.0
+    average_retries: float = 0.0
+    average_tokens_per_request: float = 0.0
+    throughput_per_minute: float = 0.0
+    error_rate: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionTrace:
+    request_id: str = ""
+    provider: str = ""
+    model: str = ""
+    started_at: float = 0.0
+    completed_at: float = 0.0
+    duration_ms: float = 0.0
+    steps: tuple[str, ...] = field(default_factory=tuple)
+    errors: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionTimeline:
+    request_id: str = ""
+    events: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    total_duration_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionReservation:
+    request_id: str = ""
+    provider: str = ""
+    reserved_at: float = 0.0
+    expires_at: float = 0.0
+    ttl_ms: float = 5000.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionStream:
+    request_id: str = ""
+    provider: str = ""
+    model: str = ""
+    chunks: tuple[str, ...] = field(default_factory=tuple)
+    total_chunks: int = 0
+    total_duration_ms: float = 0.0
+    complete: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionChunk:
+    request_id: str = ""
+    provider: str = ""
+    model: str = ""
+    index: int = 0
+    content: str = ""
+    finish_reason: str = "continue"
+    timestamp: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionRetry:
+    request_id: str = ""
+    attempt: int = 1
+    policy: RetryPolicyType = RetryPolicyType.EXPONENTIAL_BACKOFF
+    delay_ms: float = 0.0
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionFailure:
+    request_id: str = ""
+    provider: str = ""
+    error: str = ""
+    attempt: int = 1
+    is_final: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionTimeout:
+    request_id: str = ""
+    provider: str = ""
+    timeout_type: str = "hard"
+    duration_s: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionSession:
+    session_id: str = ""
+    request_ids: tuple[str, ...] = field(default_factory=tuple)
+    started_at: float = 0.0
+    completed_at: float = 0.0
+    total_cost: float = 0.0
+    total_latency_ms: float = 0.0
+    provider_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionDecision:
+    request_id: str = ""
+    provider: str = ""
+    model: str = ""
+    strategy: ExecutionStrategy = ExecutionStrategy.SINGLE
+    confidence: float = 1.0
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionSummary:
+    request_id: str = ""
+    state: ExecutionState = ExecutionState.PENDING
+    provider: str = ""
+    model: str = ""
+    strategy: str = ""
+    duration_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionSnapshot:
+    timestamp: float = 0.0
+    active_count: int = 0
+    queued_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
+    avg_latency_ms: float = 0.0
+    status: str = "healthy"
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionPolicy:
+    strategy: ExecutionStrategy = ExecutionStrategy.SINGLE
+    aggregation: AggregationStrategy = AggregationStrategy.FIRST_SUCCESS
+    retry_policy: RetryPolicyType = RetryPolicyType.EXPONENTIAL_BACKOFF
+    max_retries: int = 3
+    soft_timeout_s: float = 30.0
+    hard_timeout_s: float = 60.0
+    hedged_delay_s: float = 1.0
+    quorum_size: int = 3
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionPrediction:
+    request_id: str = ""
+    predicted_provider: str = ""
+    predicted_latency_ms: float = 0.0
+    predicted_tokens: int = 0
+    confidence: float = 0.5
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionTelemetry:
+    request_id: str = ""
+    provider: str = ""
+    model: str = ""
+    latency_ms: float = 0.0
+    ttfb_ms: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    retry_count: int = 0
+    timeout: bool = False
+    error: str = ""
+    strategy: str = ""
+    timestamp: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionProgress:
+    request_id: str = ""
+    provider: str = ""
+    progress_pct: float = 0.0
+    tokens_so_far: int = 0
+    estimated_remaining_s: float = 0.0
+    current_attempt: int = 1
+    state: ExecutionState = ExecutionState.RUNNING
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionContext:
+    request_id: str = ""
+    session_id: str = ""
+    provider: str = ""
+    model: str = ""
+    strategy: ExecutionStrategy = ExecutionStrategy.SINGLE
+    state: ExecutionState = ExecutionState.PENDING
+    attempts: tuple[ExecutionAttempt, ...] = field(default_factory=tuple)
+    created_at: float = 0.0
+    updated_at: float = 0.0
+    cancellation_token: bool = False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Aggregation Engine (Phase 5.11)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ConsensusMode(StrEnum):
+    SIMPLE_MAJORITY = "simple_majority"
+    ABSOLUTE_MAJORITY = "absolute_majority"
+    SUPER_MAJORITY = "super_majority"
+    UNANIMOUS = "unanimous"
+    WEIGHTED_VOTING = "weighted_voting"
+    CONFIDENCE_WEIGHTED = "confidence_weighted"
+    QUALITY_WEIGHTED = "quality_weighted"
+    BAYESIAN = "bayesian"
+    QUORUM = "quorum"
+    CONSENSUS_THRESHOLD = "consensus_threshold"
+
+
+class ConflictResolutionPolicy(StrEnum):
+    TRUST_HIGHEST_CONFIDENCE = "trust_highest_confidence"
+    TRUST_MAJORITY = "trust_majority"
+    TRUST_FASTEST = "trust_fastest"
+    TRUST_LOWEST_COST = "trust_lowest_cost"
+    TRUST_LATEST = "trust_latest"
+    MARK_CONFLICT = "mark_conflict"
+    REQUEST_CLARIFICATION = "request_clarification"
+
+
+class DeduplicationMethod(StrEnum):
+    EXACT_HASH = "exact_hash"
+    TOKEN_OVERLAP = "token_overlap"
+    SEMANTIC_SIMILARITY = "semantic_similarity"
+    NORMALIZED_TEXT = "normalized_text"
+
+
+@dataclass(frozen=True, slots=True)
+class WeightedVote:
+    provider: str = ""
+    value: str = ""
+    weight: float = 1.0
+    confidence: float = 0.5
+    quality: float = 0.5
+    latency_ms: float = 0.0
+    cost: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class VoteRecord:
+    provider: str = ""
+    content_hash: str = ""
+    content: str = ""
+    weight: float = 1.0
+    confidence: float = 0.5
+    quality: float = 0.5
+    timestamp: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderVote:
+    provider: str = ""
+    vote: str = ""
+    weight: float = 1.0
+    evidence: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class MajorityResult:
+    winner: str = ""
+    votes_for: int = 0
+    votes_against: int = 0
+    total_votes: int = 0
+    majority_pct: float = 0.0
+    threshold_met: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ConsensusResult:
+    reached: bool = False
+    value: str = ""
+    confidence: float = 0.0
+    mode: ConsensusMode = ConsensusMode.SIMPLE_MAJORITY
+    votes: tuple[WeightedVote, ...] = field(default_factory=tuple)
+    tie: bool = False
+    majority: MajorityResult | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AgreementMatrix:
+    providers: tuple[str, ...] = field(default_factory=tuple)
+    matrix: tuple[tuple[float, ...], ...] = field(default_factory=tuple)
+    average_agreement: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class SimilarityMatrix:
+    providers: tuple[str, ...] = field(default_factory=tuple)
+    matrix: tuple[tuple[float, ...], ...] = field(default_factory=tuple)
+    min_similarity: float = 0.0
+    max_similarity: float = 0.0
+    avg_similarity: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticCluster:
+    label: str = ""
+    members: tuple[str, ...] = field(default_factory=tuple)
+    provider_responses: tuple[str, ...] = field(default_factory=tuple)
+    average_score: float = 0.0
+    size: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderContribution:
+    provider: str = ""
+    model: str = ""
+    latency_ms: float = 0.0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost: float = 0.0
+    quality_score: float = 0.0
+    confidence: float = 0.0
+    is_selected: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedResponse:
+    provider: str = ""
+    model: str = ""
+    content: str = ""
+    citations: tuple[str, ...] = field(default_factory=tuple)
+    tokens_in: int = 0
+    tokens_out: int = 0
+    finish_reason: str = ""
+    latency_ms: float = 0.0
+    cost: float = 0.0
+    confidence: float = 0.5
+    quality: float = 0.5
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationCandidate:
+    provider: str = ""
+    content: str = ""
+    normalized_content: str = ""
+    quality_score: float = 0.5
+    confidence_score: float = 0.5
+    latency_score: float = 0.5
+    cost_score: float = 0.5
+    reliability_score: float = 0.5
+    learning_score: float = 0.5
+    final_score: float = 0.5
+    is_valid: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class MergedContent:
+    content: str = ""
+    sources: tuple[str, ...] = field(default_factory=tuple)
+    fragments: tuple[str, ...] = field(default_factory=tuple)
+    total_source_count: int = 0
+    merge_type: str = "text"
+
+
+@dataclass(frozen=True, slots=True)
+class AggregatedResponse:
+    content: str = ""
+    provider_count: int = 0
+    citations: tuple[str, ...] = field(default_factory=tuple)
+    strategy: AggregationStrategy = AggregationStrategy.AUTO
+    is_consensus: bool = False
+    selected_provider: str = ""
+    quality: float = 0.0
+    confidence: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class ConflictRecord:
+    conflict_field: str = ""
+    values: tuple[str, ...] = field(default_factory=tuple)
+    providers: tuple[str, ...] = field(default_factory=tuple)
+    confidences: tuple[float, ...] = field(default_factory=tuple)
+    resolved: bool = False
+    resolution: str = ""
+    resolution_policy: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ConflictResolution:
+    conflicts: tuple[ConflictRecord, ...] = field(default_factory=tuple)
+    total_conflicts: int = 0
+    resolved_count: int = 0
+    policy: ConflictResolutionPolicy = ConflictResolutionPolicy.TRUST_MAJORITY
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationConfidence:
+    """Aggregation-level confidence score with per-section, provider, and consensus estimates."""
+
+    overall: float = 0.5
+    per_section: dict[str, float] = field(default_factory=dict)
+    provider_confidence: dict[str, float] = field(default_factory=dict)
+    citation_confidence: float = 0.5
+    consensus_confidence: float = 0.5
+    uncertainty: float = 0.0
+    risk_score: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationRequest:
+    request_id: str = ""
+    session_id: str = ""
+    strategy: AggregationStrategy = AggregationStrategy.AUTO
+    results: tuple[ExecutionResult, ...] = field(default_factory=tuple)
+    providers: tuple[str, ...] = field(default_factory=tuple)
+    models: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationResult:
+    request_id: str = ""
+    content: str = ""
+    strategy: AggregationStrategy = AggregationStrategy.AUTO
+    confidence: AggregationConfidence = field(default_factory=AggregationConfidence)
+    consensus: ConsensusResult | None = None
+    conflicts: ConflictResolution | None = None
+    selected_provider: str = ""
+    candidates: tuple[AggregationCandidate, ...] = field(default_factory=tuple)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationDecision:
+    strategy: AggregationStrategy = AggregationStrategy.AUTO
+    reason: str = ""
+    confidence: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationRule:
+    name: str = ""
+    condition: str = ""
+    action: str = ""
+    priority: int = 0
+    enabled: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationOverride:
+    request_id: str = ""
+    strategy: AggregationStrategy | None = None
+    consensus_mode: ConsensusMode | None = None
+    threshold: float | None = None
+    reason: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationAuditRecord:
+    request_id: str = ""
+    strategy: AggregationStrategy = AggregationStrategy.AUTO
+    provider_count: int = 0
+    conflict_count: int = 0
+    selected_provider: str = ""
+    consensus_reached: bool = False
+    duration_ms: float = 0.0
+    timestamp: float = 0.0
+    error: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationExplanation:
+    request_id: str = ""
+    strategy: AggregationStrategy = AggregationStrategy.AUTO
+    reasoning: str = ""
+    provider_scores: dict[str, float] = field(default_factory=dict)
+    confidence_breakdown: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationTrace:
+    request_id: str = ""
+    steps: tuple[str, ...] = field(default_factory=tuple)
+    decisions: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    duration_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationPrediction:
+    request_id: str = ""
+    predicted_strategy: AggregationStrategy = AggregationStrategy.AUTO
+    predicted_consensus: bool = False
+    predicted_quality: float = 0.5
+    confidence: float = 0.3
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationWindow:
+    request_ids: tuple[str, ...] = field(default_factory=tuple)
+    start_time: float = 0.0
+    end_time: float = 0.0
+    aggregation_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationHistory:
+    records: tuple[AggregationAuditRecord, ...] = field(default_factory=tuple)
+    total: int = 0
+    span_duration_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationMetrics:
+    aggregation_count: int = 0
+    consensus_count: int = 0
+    merge_count: int = 0
+    average_similarity: float = 0.0
+    average_confidence: float = 0.0
+    average_quality: float = 0.0
+    majority_rate: float = 0.0
+    conflict_rate: float = 0.0
+    consensus_latency_ms: float = 0.0
+    selected_provider_distribution: dict[str, int] = field(default_factory=dict)
+    strategy_usage: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationStatistics:
+    total_aggregations: int = 0
+    avg_latency_ms: float = 0.0
+    strategy_breakdown: dict[str, int] = field(default_factory=dict)
+    consensus_count: int = 0
+    consensus_rate: float = 0.0
+    conflict_count: int = 0
+    conflict_rate: float = 0.0
+    dedup_count: int = 0
+    avg_quality: float = 0.0
+    avg_confidence: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationSnapshot:
+    status: str = "healthy"
+    total_aggregations: int = 0
+    active_count: int = 0
+    avg_latency_ms: float = 0.0
+    strategy: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationHealth:
+    status: str = "healthy"
+    uptime_s: float = 0.0
+    total_aggregations: int = 0
+    avg_latency_ms: float = 0.0
+    active_count: int = 0
+    conflict_rate: float = 0.0
+    consensus_rate: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationPolicy:
+    default_strategy: AggregationStrategy = AggregationStrategy.AUTO
+    consensus_mode: ConsensusMode = ConsensusMode.SIMPLE_MAJORITY
+    dedup_method: DeduplicationMethod = DeduplicationMethod.EXACT_HASH
+    conflict_policy: ConflictResolutionPolicy = ConflictResolutionPolicy.TRUST_MAJORITY
+    min_quality: float = 0.3
+    min_confidence: float = 0.3
