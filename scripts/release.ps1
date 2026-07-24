@@ -172,7 +172,7 @@ else {
         exit 1
     }
 
-    $repo = "rachidSabah/AgenticOS"
+    $repo = "rachidSabah/AgenticosHybrid"
     $apiUrl = "https://api.github.com/repos/$repo/releases"
 
     $body = @{
@@ -227,5 +227,5 @@ else {
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  Release $Version published!" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  https://github.com/rachidSabah/AgenticOS/releases/tag/$Version" -ForegroundColor Green
+Write-Host "  https://github.com/rachidSabah/AgenticosHybrid/releases/tag/$Version" -ForegroundColor Green
 Write-Host "`nDone." -ForegroundColor Cyan

@@ -32,7 +32,7 @@ This guide covers installing AgenticOS on Windows, Linux, and macOS. AgenticOS r
 
 ### 2.1 MSI Installer (Recommended)
 
-1. Download the MSI package from the [GitHub Releases](https://github.com/rachidSabah/AgenticOS/releases) page (look for `AgenticOS-Setup-x64.msi`).
+1. Download the MSI package from the [GitHub Releases](https://github.com/rachidSabah/AgenticosHybrid/releases) page (look for `AgenticOS-Setup-x64.msi`).
 2. Double-click the MSI file to launch the Windows Installer.
 3. Follow the setup wizard:
    - Accept the license agreement
@@ -107,7 +107,7 @@ sudo dnf install fuse-libs
 
 ```bash
 # Download the .deb package
-wget https://github.com/rachidSabah/AgenticOS/releases/download/v1.0.0-rc1/AgenticOS_1.0.0-rc1_amd64.deb
+wget https://github.com/rachidSabah/AgenticosHybrid/releases/download/v1.0.0-rc1/AgenticOS_1.0.0-rc1_amd64.deb
 
 # Install
 sudo dpkg -i AgenticOS_1.0.0-rc1_amd64.deb
@@ -121,7 +121,7 @@ agenticos
 
 ```bash
 # Download the .rpm package
-wget https://github.com/rachidSabah/AgenticOS/releases/download/v1.0.0-rc1/AgenticOS-1.0.0-rc1.x86_64.rpm
+wget https://github.com/rachidSabah/AgenticosHybrid/releases/download/v1.0.0-rc1/AgenticOS-1.0.0-rc1.x86_64.rpm
 
 # Install
 sudo rpm -i AgenticOS-1.0.0-rc1.x86_64.rpm
@@ -136,7 +136,7 @@ agenticos
 
 ```bash
 # Download and extract
-wget https://github.com/rachidSabah/AgenticOS/releases/download/v1.0.0-rc1/AgenticOS-Portable-x64.zip
+wget https://github.com/rachidSabah/AgenticosHybrid/releases/download/v1.0.0-rc1/AgenticOS-Portable-x64.zip
 unzip AgenticOS-Portable-x64.zip -d ~/AgenticOS
 
 # Run
@@ -165,7 +165,7 @@ unzip AgenticOS-Portable-x64.zip -d ~/AgenticOS
 
 ```bash
 # Download and extract
-wget https://github.com/rachidSabah/AgenticOS/releases/download/v1.0.0-rc1/AgenticOS-Portable-x64.zip
+wget https://github.com/rachidSabah/AgenticosHybrid/releases/download/v1.0.0-rc1/AgenticOS-Portable-x64.zip
 unzip AgenticOS-Portable-x64.zip -d ~/AgenticOS
 
 # Run
@@ -420,7 +420,7 @@ For development builds, see the `README.md` or the development guide:
 
 ```bash
 # Prerequisites: Python 3.14+, Node.js 18+, Rust (for Tauri)
-git clone https://github.com/rachidSabah/AgenticOS.git
+git clone https://github.com/rachidSabah/AgenticosHybrid.git
 cd AgenticOS
 
 # Backend

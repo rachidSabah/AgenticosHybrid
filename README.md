@@ -2,7 +2,7 @@
 
 A **desktop operating system for AI agents** that lets non-technical users install, run, and use local AI models, MCP tools, and plugins without ever touching a terminal.
 
-[GitHub](https://github.com/rachidSabah/AgenticOS) | [Changelog](CHANGELOG.md) | [Architecture](ARCHITECTURE.md) | [Security](SECURITY.md) | [Roadmap](ROADMAP.md)
+[GitHub](https://github.com/rachidSabah/AgenticosHybrid) | [Changelog](CHANGELOG.md) | [Architecture](ARCHITECTURE.md) | [Security](SECURITY.md) | [Roadmap](ROADMAP.md)
 
 ---
 
@@ -82,7 +82,7 @@ Every bus message is wrapped in an `EventEnvelope` (id, type, source, timestamp,
 
 The fastest way to try AgenticOS:
 
-1. **Download** the installer for your platform from the [GitHub Releases](https://github.com/rachidSabah/AgenticOS/releases) page.
+1. **Download** the installer for your platform from the [GitHub Releases](https://github.com/rachidSabah/AgenticosHybrid/releases) page.
 2. **Run** the installer and launch AgenticOS.
 3. **Use** the Mission Control dashboard at the automatically opened window.
 
@@ -99,7 +99,7 @@ That's it. No terminal, no package managers, no configuration files.
 
 ### Steps
 
-1. Download the latest `AgenticOS-Setup-x64.exe` or `AgenticOS-Setup-x64.msi` from the [Releases page](https://github.com/rachidSabah/AgenticOS/releases).
+1. Download the latest `AgenticOS-Setup-x64.exe` or `AgenticOS-Setup-x64.msi` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
 2. Double-click the installer and follow the on-screen instructions.
 3. AgenticOS launches automatically after installation.
 
@@ -394,7 +394,7 @@ curl http://localhost:8000/api/desktop/diagnostics
 
 ```bash
 # Clone the repository
-git clone https://github.com/rachidSabah/AgenticOS.git
+git clone https://github.com/rachidSabah/AgenticosHybrid.git
 cd AgenticOS
 
 # Install Python dependencies
@@ -665,9 +665,9 @@ A: No data is collected by default. Telemetry is opt-in and can be enabled in Se
 ## Support
 
 - **Documentation** — See [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md), and the `docs/` directory.
-- **GitHub Issues** — Report bugs and request features at [github.com/rachidSabah/AgenticOS/issues](https://github.com/rachidSabah/AgenticOS/issues).
+- **GitHub Issues** — Report bugs and request features at [github.com/rachidSabah/AgenticosHybrid/issues](https://github.com/rachidSabah/AgenticosHybrid/issues).
 - **Security Issues** — Report vulnerabilities privately to security@agenticos.dev (see [SECURITY.md](SECURITY.md)).
-- **Discussions** — Join the conversation on [GitHub Discussions](https://github.com/rachidSabah/AgenticOS/discussions).
+- **Discussions** — Join the conversation on [GitHub Discussions](https://github.com/rachidSabah/AgenticosHybrid/discussions).
 
 ## Contributing
 

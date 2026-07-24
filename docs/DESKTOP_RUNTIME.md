@@ -118,7 +118,7 @@ Results are cached and accessible via the REST API at `/api/desktop/runtimes`.
 The `AutoUpdateManager` (at `src/agentic_os/core/desktop/update.py`) handles checking for, downloading, verifying, and installing updates.
 
 ### 4.1 Update Checking
-Queries the GitHub Releases API (`https://api.github.com/repos/rachidSabah/AgenticOS/releases`) on the configured channel. Returns a sorted list of `ReleaseInfo` objects with version, tag, URL, release notes, and asset details.
+Queries the GitHub Releases API (`https://api.github.com/repos/rachidSabah/AgenticosHybrid/releases`) on the configured channel. Returns a sorted list of `ReleaseInfo` objects with version, tag, URL, release notes, and asset details.
 
 ### 4.2 Download & SHA256 Verification
 Downloads the update package to a temporary directory. After download, computes the SHA256 hash of the file and compares it against the expected checksum in the manifest. If they mismatch, the download is marked as failed.

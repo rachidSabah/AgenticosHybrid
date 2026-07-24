@@ -33,9 +33,16 @@ class DesktopDiagnosticsManager(DesktopDiagnosticsPort):
         """Run full diagnostics and return combined results."""
         diag = await self.get_diagnostics()
         perf = await self.get_performance()
+
+        from agentic_os.core.desktop.update import AutoUpdateManager
+
+        updater = AutoUpdateManager()
+        update_health = await updater.validate_update_infrastructure()
+
         return {
             "diagnostics": diag.to_dict(),
             "performance": perf.to_dict(),
+            "update_health": update_health,
             "status": "healthy",
         }
 

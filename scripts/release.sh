@@ -191,7 +191,7 @@ else
         exit 1
     fi
 
-    REPO="rachidSabah/AgenticOS"
+    REPO="rachidSabah/AgenticosHybrid"
     API_URL="https://api.github.com/repos/$REPO/releases"
     NOTES_CONTENT=$(cat "$NOTES_PATH")
 
@@ -243,5 +243,5 @@ fi
 echo -e "\n${CYAN}========================================${NC}"
 echo -e "${CYAN}  Release $VERSION published!${NC}"
 echo -e "${CYAN}========================================${NC}"
-echo -e "  ${GREEN}https://github.com/rachidSabah/AgenticOS/releases/tag/$VERSION${NC}"
+echo -e "  ${GREEN}https://github.com/rachidSabah/AgenticosHybrid/releases/tag/$VERSION${NC}"
 echo -e "\n${CYAN}Done.${NC}"

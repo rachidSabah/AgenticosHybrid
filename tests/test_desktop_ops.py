@@ -76,7 +76,8 @@ class TestAutoUpdateManager:
     async def test_get_current_version(self) -> None:
         mgr = AutoUpdateManager()
         version = await mgr.get_current_version()
-        assert version == "0.9.5"
+        assert bool(version)
+        assert version == "1.0.0-rc2"
 
     @pytest.mark.asyncio
     async def test_check_updates(self) -> None:
