@@ -1279,6 +1279,7 @@ class TestRouterIntegration:
         pr = ProviderRegistryImpl()
         mr = AsyncMock()
         mr.list_enabled_models = AsyncMock(return_value=[])
+        mr.list_models = AsyncMock(return_value=[])
         mr.get_provider_models = AsyncMock(return_value=[])
         await pr.start()
         router._provider_registry = pr
