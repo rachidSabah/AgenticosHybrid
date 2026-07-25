@@ -106,6 +106,7 @@ from agentic_os.core.runtime.registry import RuntimeRegistryImpl
 from agentic_os.core.scheduler import Scheduler
 from agentic_os.core.security.framework import SecurityFramework
 from agentic_os.core.workflow.engine import WorkflowEngineImpl
+from agentic_os.domain.brains import RelationshipType
 from agentic_os.domain.discovery import DiscoveryProfile, DiscoveryProviderConfig
 from agentic_os.domain.events import EventEnvelope  # EventEnvelope for event publishing
 from agentic_os.domain.execution import EngineType
@@ -519,12 +520,24 @@ class Kernel:
             try:
                 detected = await self.brain_runtime_bridge.detect_all_with_windows()
                 registered = 0
+                # Central hub ID for the constellation graph
+                _HUB_ID = "agenticos-hub"
                 for record in detected:
                     # Only register brains that are actually installed
                     if record.health < 50:
                         continue
                     await self.brain_registry.register(record)
                     registered += 1
+
+                    # Add a constellation graph edge: hub → brain
+                    if self.brain_graph is not None:
+                        await self.brain_graph.add_edge(
+                            source_id=_HUB_ID,
+                            target_id=record.id,
+                            rel_type=RelationshipType.PARENT,
+                            metadata={"label": f"{record.display_name} managed by AgenticOS"},
+                            weight=max(1.0, record.health / 100.0),
+                        )
                     # Publish events the frontend main store understands
                     if self.bus:
                         await self.bus.publish(
