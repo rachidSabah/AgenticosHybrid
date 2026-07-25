@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import inspect
 import os
 import platform as os_platform
 import subprocess
@@ -471,7 +472,7 @@ class RuntimeDiagnosticsService:
                     for method in ("list_all", "get_all", "all_capabilities", "capabilities"):
                         fn = getattr(cap, method, None)
                         if callable(fn):
-                            all_caps = await fn() if asyncio.iscoroutinefunction(fn) else fn()
+                            all_caps = await fn() if inspect.iscoroutinefunction(fn) else fn()
                             break
 
                     if all_caps and isinstance(all_caps, list):
@@ -670,7 +671,7 @@ class RuntimeDiagnosticsService:
                     for method in ("list_servers", "get_servers", "servers"):
                         fn = getattr(mcp, method, None)
                         if callable(fn):
-                            result = await fn() if asyncio.iscoroutinefunction(fn) else fn()
+                            result = await fn() if inspect.iscoroutinefunction(fn) else fn()
                             if isinstance(result, list):
                                 for s in result:
                                     d = (
@@ -911,7 +912,7 @@ class RuntimeDiagnosticsService:
             try:
                 passed = (
                     await asyncio.to_thread(check)
-                    if not asyncio.iscoroutinefunction(check)
+                    if not inspect.iscoroutinefunction(check)
                     else await check()
                 )
                 duration = round((time.perf_counter() - t0) * 1000, 2)

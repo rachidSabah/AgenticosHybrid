@@ -27,6 +27,7 @@ dependencies = [
     "opentelemetry-sdk>=1.25.0",
     "opentelemetry-exporter-otlp>=1.25.0",
     "opentelemetry-exporter-prometheus>=0.45b0",
+    "psutil>=7.2.2",
 ]
 
 [project.scripts]
