@@ -510,6 +510,9 @@ class Kernel:
                 detected = await self.brain_runtime_bridge.detect_all_with_windows()
                 registered = 0
                 for record in detected:
+                    # Only register brains that are actually installed
+                    if record.health < 50:
+                        continue
                     await self.brain_registry.register(record)
                     registered += 1
                     # Publish events the frontend main store understands

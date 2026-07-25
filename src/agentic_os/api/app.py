@@ -3837,6 +3837,9 @@ def create_app(platform: Platform) -> FastAPI:
         if platform.brain_registry is not None:
             brains = await platform.brain_registry.list_all()
             for b in brains:
+                # Only replay brains that are actually installed
+                if b.health < 50:
+                    continue
                 # Send as provider.registered
                 await websocket.send_json(
                     {

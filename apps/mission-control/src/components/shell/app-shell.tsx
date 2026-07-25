@@ -25,12 +25,19 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    // Connect WebSocket — loads initial state on connection
+    // Connect WebSocket — delivers live events.
     storeConnect();
+    // Immediately seed agents/providers/brains from REST snapshot.
+    void useStore.getState().hydrate();
+    // Re-hydrate every 30s so counts stay accurate even if WS events are missed.
+    const hydrateTimer = setInterval(() => {
+      void useStore.getState().hydrate();
+    }, 30_000);
     const timer = setTimeout(() => setConnectingDismissed(true), 1200);
     return () => {
       storeDisconnect();
       clearTimeout(timer);
+      clearInterval(hydrateTimer);
     };
   }, []);
 

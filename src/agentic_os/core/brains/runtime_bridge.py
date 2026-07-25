@@ -120,7 +120,18 @@ class _GenericCliConnector(BrainConnector):
         self._extra_capabilities = extra_capabilities
 
     async def detect(self) -> RuntimeInfo:
-        exe_path = shutil.which(self._exe_name) or ""
+        try:
+            exe_path = (
+                await asyncio.wait_for(
+                    asyncio.to_thread(shutil.which, self._exe_name),
+                    timeout=3.0,
+                )
+                or ""
+            )
+        except TimeoutError:
+            exe_path = ""
+        except Exception:
+            exe_path = ""
         installed = bool(exe_path)
         version = ""
 
@@ -398,6 +409,7 @@ class RuntimeBridge:
             A list of :class:`RuntimeInfo` objects.
         """
         results: list[RuntimeInfo] = []
+        tasks: list[asyncio.Task[RuntimeInfo]] = []
         for tool_type, connector in self._connectors.items():
             if use_cache:
                 async with self._lock:
@@ -406,22 +418,37 @@ class RuntimeBridge:
                         results.append(cached)
                         continue
 
-            try:
-                info = await connector.detect()
-                async with self._lock:
-                    self._cache[tool_type] = info
-                results.append(info)
-            except Exception as exc:
-                log.warning("Detection failed for %s: %s", tool_type, exc)
-                results.append(
-                    RuntimeInfo(
-                        tool_type=tool_type,
-                        display_name=connector.display_name,
-                        vendor=connector.vendor,
+            async def _detect_one(tt: str, conn: BrainConnector) -> RuntimeInfo:
+                try:
+                    return await asyncio.wait_for(conn.detect(), timeout=10.0)
+                except TimeoutError:
+                    log.warning("Detection timed out for %s", tt)
+                    return RuntimeInfo(
+                        tool_type=tt,
+                        display_name=conn.display_name,
+                        vendor=conn.vendor,
                         installed=False,
                         status=BrainStatus.REMOVED,
                     )
-                )
+                except Exception as exc:
+                    log.warning("Detection failed for %s: %s", tt, exc)
+                    return RuntimeInfo(
+                        tool_type=tt,
+                        display_name=conn.display_name,
+                        vendor=conn.vendor,
+                        installed=False,
+                        status=BrainStatus.REMOVED,
+                    )
+
+            tasks.append(asyncio.create_task(_detect_one(tool_type, connector)))
+
+        if tasks:
+            for task in asyncio.as_completed(tasks):
+                info = await task
+                async with self._lock:
+                    self._cache[info.tool_type] = info
+                results.append(info)
+
         return results
 
     async def detect_one(self, tool_type: str) -> RuntimeInfo | None:
@@ -574,23 +601,34 @@ class RuntimeBridge:
 
         # 2) Windows OS-level process scan
         try:
-            from agentic_os.core.brains.windows_detector import (  # type: ignore[import-untyped]
+            from agentic_os.core.brains.windows_detector import (
                 detect_local_windows,
                 detect_remote_brains,
             )
 
-            win_records = await detect_local_windows()
+            win_records = await asyncio.wait_for(
+                detect_local_windows(),
+                timeout=8.0,
+            )
             records.extend(win_records)
-            cloud_records = await detect_remote_brains()
+            cloud_records = await asyncio.wait_for(
+                detect_remote_brains(),
+                timeout=8.0,
+            )
             records.extend(cloud_records)
+        except TimeoutError:
+            log.warning("Windows process detection timed out")
         except Exception as exc:
             log.warning("Windows process detection failed: %s", exc)
 
-        # Deduplicate by id
+        # Deduplicate by id or display_name
         seen: set[str] = set()
         deduped: list[BrainRecord] = []
         for r in records:
-            if r.id not in seen:
-                seen.add(r.id)
+            key = r.id if r.id else r.display_name.lower()
+            name_key = r.display_name.lower()
+            if key not in seen and name_key not in seen:
+                seen.add(key)
+                seen.add(name_key)
                 deduped.append(r)
         return deduped

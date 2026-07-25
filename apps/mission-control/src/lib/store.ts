@@ -65,6 +65,8 @@ interface StoreState {
   setMissions: (items: MissionType[]) => void;
   updateMission: (m: MissionType) => void;
   clearNotifications: () => void;
+  /** Fetch initial snapshot from REST and seed the store (agents, providers, brains). */
+  hydrate: () => Promise<void>;
 }
 
 const MAX_EVENTS = 400;
@@ -455,37 +457,114 @@ export const useStore = create<StoreState>((set, get) => ({
   clearNotifications: () => set({ notifications: [] }),
   hydrate: async () => {
     try {
-      const [agents, tasks, providers, missions] = await Promise.all([
-        api.get<unknown[]>("/api/agents"),
-        api.get<unknown[]>("/api/tasks"),
-        api.providers(),
-        api.missions(),
+      // Fetch all snapshot sources in parallel — never block on any single failure.
+      const [rawAgents, rawProviders, rawBrains, rawLocalAgents] = await Promise.allSettled([
+        api.get<Array<Record<string, unknown>>>("/api/agents"),
+        api.providerHealth(),
+        api.get<Array<Record<string, unknown>>>("/api/brains"),
+        api.get<Array<Record<string, unknown>>>("/api/local-agents"),
       ]);
-      set({
-        agents: (agents as Array<{ id: string }>).reduce((acc, agent) => {
-          acc[agent.id] = agent as unknown as AgentNode;
-          return acc;
-        }, {} as Record<string, AgentNode>),
-        tasks: (tasks as Array<{ id: string }>).reduce((acc, task) => {
-          acc[task.id] = task as unknown as TaskNode;
-          return acc;
-        }, {} as Record<string, TaskNode>),
-        providers: (providers as Array<{ name: string; status?: string; latency?: number; lastSeen?: string }>).reduce((acc, provider) => {
-          acc[provider.name] = {
-            provider: provider.name,
-            status: (provider.status as ProviderHealthStatus) || "unknown",
-            latency_ms: provider.latency || 0,
-            last_checked: provider.lastSeen || undefined,
+
+      // ── Agents ──────────────────────────────────────────────────────────────
+      const agentsMap: Record<string, AgentNode> = {};
+      if (rawAgents.status === "fulfilled" && Array.isArray(rawAgents.value)) {
+        for (const a of rawAgents.value) {
+          const id = String(a.id ?? a.name ?? "");
+          if (!id) continue;
+          agentsMap[id] = {
+            id,
+            role: String(a.role ?? "agent"),
+            capabilities: (a.capabilities as string[]) ?? [],
+            status: (a.status as AgentNode["status"]) ?? "idle",
+            health: (a.health as AgentNode["health"]) ?? "unknown",
+            provider: a.provider as string | undefined,
           };
-          return acc;
-        }, {} as Record<string, ProviderHealthRecord>),
-        missions: (missions as Array<{ id: string }>).reduce((acc, mission) => {
-          acc[mission.id] = mission as unknown as MissionType;
-          return acc;
-        }, {} as Record<string, MissionType>),
-      });
+        }
+      }
+
+      // ── Providers (from health endpoint — has .provider field) ────────────
+      const providersMap: Record<string, ProviderHealthRecord> = {};
+      if (rawProviders.status === "fulfilled" && Array.isArray(rawProviders.value)) {
+        for (const p of rawProviders.value) {
+          const name = String(p.provider ?? "");
+          if (!name || ["mock", "Mock"].includes(name)) continue;
+          providersMap[name] = {
+            provider: name,
+            status: (p.status as ProviderHealthStatus) ?? "unknown",
+            latency_ms: Number(p.latency_ms ?? 0),
+            error: p.error as string | undefined,
+          };
+        }
+      }
+
+      // ── Brains → also surface as provider entries so AI Brain shows them ──
+      if (rawBrains.status === "fulfilled" && Array.isArray(rawBrains.value)) {
+        for (const b of rawBrains.value) {
+          const name = String(b.display_name ?? b.id ?? "");
+          if (!name) continue;
+          // Add as provider entry so AI Brain / Agent Constellation renders them
+          if (!providersMap[name]) {
+            providersMap[name] = {
+              provider: name,
+              status: b.health != null && Number(b.health) >= 80 ? "healthy"
+                : b.health != null && Number(b.health) >= 50 ? "degraded" : "unknown",
+              latency_ms: Number(b.latency ?? 0),
+            };
+          }
+          // Also add as agent entry
+          const id = String(b.id ?? b.display_name ?? "");
+          if (id && !agentsMap[id]) {
+            agentsMap[id] = {
+              id,
+              role: "assistant",
+              capabilities: (b.capabilities as string[]) ?? [],
+              status: providersMap[name].status === "healthy" ? "running" : "idle",
+              health: providersMap[name].status as AgentNode["health"] ?? "unknown",
+              provider: name,
+            };
+          }
+        }
+      }
+
+      // ── Local Agents → surface as providers + agents ──────────────────────
+      if (rawLocalAgents.status === "fulfilled" && Array.isArray(rawLocalAgents.value)) {
+        for (const a of rawLocalAgents.value) {
+          if (!a.running) continue;
+          const name = String(a.name ?? "");
+          if (!name) continue;
+          if (!providersMap[name]) {
+            providersMap[name] = {
+              provider: name,
+              status: a.health === "healthy" || a.health === "ok" ? "healthy" : "degraded",
+              latency_ms: 0,
+            };
+          }
+          const id = String(a.id ?? a.name ?? "");
+          if (id && !agentsMap[id]) {
+            agentsMap[id] = {
+              id,
+              role: String(a.engine_type ?? "agent"),
+              capabilities: (a.capabilities as string[]) ?? [],
+              status: a.running ? "running" : "idle",
+              health: a.health === "healthy" ? "healthy" : "degraded",
+              provider: name,
+            };
+          }
+        }
+      }
+
+      // ── Commit snapshot + update telemetry counters ───────────────────────
+      set((s) => ({
+        agents: { ...s.agents, ...agentsMap },
+        providers: { ...s.providers, ...providersMap },
+        telemetry: {
+          ...s.telemetry,
+          agents: Object.keys({ ...s.agents, ...agentsMap }).length,
+          providers: Object.keys({ ...s.providers, ...providersMap }).length,
+        },
+      }));
     } catch (e) {
-      console.error("Failed to hydrate store:", e);
+      console.warn("[store] hydrate failed:", e);
     }
   },
 }));
