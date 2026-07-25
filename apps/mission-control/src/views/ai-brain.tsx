@@ -37,6 +37,11 @@ export function AIBrain() {
   const telemetry = useStore((s) => s.telemetry);
   const performance = useStore((s) => s.performance);
 
+  // Ensure brains/agents are hydrated from REST when this tab is first opened.
+  useEffect(() => {
+    void useStore.getState().hydrate();
+  }, []);
+
   const [activePlayback, setActivePlayback] = useState<"1x" | "2x" | "4x">("4x");
 
   // Dynamically compute runtime brain nodes from live discovered providers / agents
