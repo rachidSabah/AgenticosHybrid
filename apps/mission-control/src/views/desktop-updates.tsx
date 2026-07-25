@@ -148,7 +148,7 @@ export default function DesktopUpdates() {
                 Size: {(pending.size_bytes / 1024 / 1024).toFixed(1)} MB &middot; Released: {pending.release_date}
                 {pending.mandatory && <span className="ml-2"><Badge tone="danger">Mandatory</Badge></span>}
               </div>
-              {pending.changelog.length > 0 && (
+              {pending.changelog?.length > 0 && (
                 <ul className="list-inside list-disc text-[11px] text-faint">
                   {pending.changelog.slice(0, 5).map((line, i) => (
                     <li key={i}>{line}</li>

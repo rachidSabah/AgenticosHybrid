@@ -1,9 +1,11 @@
 """
 Discovery Domain Models
 
-Domain layer for Phase 4 Milestone 2 — Automatic Runtime Discovery & Binding.
+Domain layer for Phase 4 Milestone 2 — Automatic Runtime Discovery & Binding,
+extended in Phase 6.1 with Local Agent Discovery & Auto-Binding.
+
 Pure Python, no external dependencies. These models describe the configuration,
-results, and telemetry of runtime discovery operations.
+results, telemetry, and local agent registration of discovery operations.
 
 Builds on top of the M1 execution engine domain models in ``domain/execution.py``.
 Frozen dataclasses follow the same patterns as the M1 models.
@@ -13,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
@@ -447,3 +450,222 @@ class ProfileResult:
             platform=platform_name or platform.system().lower(),
             capabilities=tuple(capabilities),
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 6.1 — Local Agent Discovery & Auto-Binding
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class AgentStatus(StrEnum):
+    """Operational status of a locally discovered agent."""
+
+    RUNNING = "running"
+    STOPPED = "stopped"
+    CRASHED = "crashed"
+    BUSY = "busy"
+    IDLE = "idle"
+    UPDATING = "updating"
+    RESTARTING = "restarting"
+    UNKNOWN = "unknown"
+
+
+class AgentCapability(StrEnum):
+    """Capabilities an agent can advertise."""
+
+    CODE_GENERATION = "code_generation"
+    CODE_REVIEW = "code_review"
+    TESTING = "testing"
+    DEBUGGING = "debugging"
+    CHAT = "chat"
+    SEARCH = "search"
+    FILE_OPS = "file_operations"
+    TERMINAL_OPS = "terminal_operations"
+    BROWSER_OPS = "browser_operations"
+    IMAGE_GENERATION = "image_generation"
+    EMBEDDINGS = "embeddings"
+    REASONING = "reasoning"
+    PLANNING = "planning"
+    MEMORY = "memory"
+    MCP = "mcp"
+    API_GATEWAY = "api_gateway"
+    CUSTOM = "custom"
+
+
+@dataclass(frozen=True, slots=True)
+class LocalAgent:
+    """A locally discovered AI agent registered with Mission Control.
+
+    Captures every piece of metadata about an installed AI tool on the
+    local workstation — binary path, version, capabilities, health, and
+    runtime resource consumption.
+    """
+
+    id: str
+    name: str
+    tool_type: str  # "hermes", "claude-code", "codex", "gemini-cli", "ollama", etc.
+    version: str
+    status: AgentStatus = AgentStatus.UNKNOWN
+    executable_path: str = ""
+    working_directory: str = ""
+    pid: int | None = None
+    capabilities: tuple[AgentCapability, ...] = field(default_factory=tuple)
+    supported_models: tuple[str, ...] = field(default_factory=tuple)
+    supported_providers: tuple[str, ...] = field(default_factory=tuple)
+    health_score: float = 0.0
+    last_seen: datetime = field(default_factory=_utcnow)
+    discovered_at: datetime = field(default_factory=_utcnow)
+    latency_ms: float = 0.0
+    memory_mb: float = 0.0
+    cpu_percent: float = 0.0
+    threads: int = 0
+    uptime_seconds: float = 0.0
+    restart_count: int = 0
+    configuration: dict[str, Any] = field(default_factory=dict)
+    tags: tuple[str, ...] = field(default_factory=tuple)
+    error: str = ""
+
+    def running(self) -> bool:
+        """Check if the agent is in a running-like state."""
+        return self.status in (
+            AgentStatus.RUNNING,
+            AgentStatus.IDLE,
+            AgentStatus.BUSY,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a JSON-compatible dict."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "tool_type": self.tool_type,
+            "version": self.version,
+            "status": self.status.value,
+            "executable_path": self.executable_path,
+            "working_directory": self.working_directory,
+            "pid": self.pid,
+            "capabilities": [c.value for c in self.capabilities],
+            "supported_models": list(self.supported_models),
+            "supported_providers": list(self.supported_providers),
+            "health_score": self.health_score,
+            "last_seen": self.last_seen.isoformat(),
+            "discovered_at": self.discovered_at.isoformat(),
+            "latency_ms": self.latency_ms,
+            "memory_mb": self.memory_mb,
+            "cpu_percent": self.cpu_percent,
+            "threads": self.threads,
+            "uptime_seconds": self.uptime_seconds,
+            "restart_count": self.restart_count,
+            "configuration": dict(self.configuration),
+            "tags": list(self.tags),
+            "error": self.error,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AgentHealthRecord:
+    """A single health check record for a local agent."""
+
+    agent_id: str
+    status: AgentStatus
+    health_score: float
+    latency_ms: float
+    memory_mb: float
+    cpu_percent: float
+    threads: int
+    pid: int | None
+    checked_at: datetime = field(default_factory=_utcnow)
+    error: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agent_id": self.agent_id,
+            "status": self.status.value,
+            "health_score": self.health_score,
+            "latency_ms": self.latency_ms,
+            "memory_mb": self.memory_mb,
+            "cpu_percent": self.cpu_percent,
+            "threads": self.threads,
+            "pid": self.pid,
+            "checked_at": self.checked_at.isoformat(),
+            "error": self.error,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AgentDiscoveryConfig:
+    """Configuration for local agent discovery.
+
+    Controls which tools to look for, discovery paths, and auto-binding
+    behaviour.
+    """
+
+    enabled_tools: tuple[str, ...] = field(
+        default_factory=lambda: (
+            "hermes",
+            "claude-code",
+            "codex",
+            "gemini-cli",
+            "opencode",
+            "aider",
+            "continue",
+            "openhands",
+            "ollama",
+            "lm-studio",
+            "vllm",
+            "docker",
+            "git",
+            "python",
+            "node",
+            "vscode-cli",
+        )
+    )
+    scan_path: bool = True
+    scan_registry: bool = True
+    scan_processes: bool = True
+    scan_common_dirs: bool = True
+    scan_env_vars: bool = True
+    auto_register: bool = True
+    auto_bind: bool = True
+    health_check_interval_seconds: float = 15.0
+    discovery_interval_seconds: float = 120.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled_tools": list(self.enabled_tools),
+            "scan_path": self.scan_path,
+            "scan_registry": self.scan_registry,
+            "scan_processes": self.scan_processes,
+            "scan_common_dirs": self.scan_common_dirs,
+            "scan_env_vars": self.scan_env_vars,
+            "auto_register": self.auto_register,
+            "auto_bind": self.auto_bind,
+            "health_check_interval_seconds": self.health_check_interval_seconds,
+            "discovery_interval_seconds": self.discovery_interval_seconds,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryResult:
+    """Result of a single local agent discovery scan."""
+
+    agents_found: int = 0
+    agents_new: int = 0
+    agents_updated: int = 0
+    agents_registered: int = 0
+    errors: tuple[str, ...] = field(default_factory=tuple)
+    scanned_at: datetime = field(default_factory=_utcnow)
+    duration_ms: float = 0.0
+    tools_detected: tuple[str, ...] = field(default_factory=tuple)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "agents_found": self.agents_found,
+            "agents_new": self.agents_new,
+            "agents_updated": self.agents_updated,
+            "agents_registered": self.agents_registered,
+            "errors": list(self.errors),
+            "scanned_at": self.scanned_at.isoformat(),
+            "duration_ms": self.duration_ms,
+            "tools_detected": list(self.tools_detected),
+        }

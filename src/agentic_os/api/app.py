@@ -9,13 +9,16 @@ health, cost, rate limits) and a minimal functional HTML page for managing
 providers in-browser (the unified Mission Control dashboard lands in Phase 3).
 """
 
+import asyncio
+import collections.abc
 import dataclasses
+import json
 import time
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
@@ -312,6 +315,134 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
         return [a.model_dump(mode="json") for a in orch.registry.agents()]
+
+    # ── Local Agent Discovery API (Phase 6.1) ──────────────────────────────
+
+    @app.get("/api/local-agents")
+    async def list_local_agents() -> list[dict]:
+        """List all locally discovered AI agents."""
+        if platform.local_discovery is None:
+            return []
+        agents = await platform.local_discovery.get_agents()
+        return [a.to_dict() for a in agents]
+
+    @app.get("/api/local-agents/sse")
+    async def local_agents_sse(request: Request):
+        """SSE stream of local agent discovery events.
+
+        Emits ``event: agent-discovered``, ``event: agent-updated``,
+        ``event: agent-health-changed``, ``event: agent-removed``,
+        ``event: discovery-completed`` every time the discovery service
+        publishes an event.
+        """
+
+        async def _sse_stream():
+            queue: asyncio.Queue[dict] = asyncio.Queue()
+            # Register a local bus listener via the platform event bus
+            bus = getattr(platform, "bus", None)
+            unsub: collections.abc.Callable | None = None
+            if bus is not None:
+
+                async def _on_event(event):
+                    await queue.put(event)
+
+                try:
+                    unsub = await bus.subscribe(
+                        [
+                            Topic.AGENT_DISCOVERED.value,
+                            Topic.AGENT_REGISTERED.value,
+                            Topic.AGENT_UPDATED.value,
+                            Topic.AGENT_HEALTH_CHANGED.value,
+                            Topic.AGENT_REMOVED.value,
+                            Topic.DISCOVERY_COMPLETED.value,
+                        ],
+                        _on_event,
+                    )
+                except Exception:
+                    pass
+
+            try:
+                # Send initial keepalive
+                yield "event: connected\ndata: {}\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        topic = event.get("topic", "unknown")
+                        payload = event.get("payload", {})
+                        sse_type = topic.replace(".", "-")
+                        yield f"event: {sse_type}\ndata: {json.dumps(payload)}\n\n"
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+            finally:
+                if unsub is not None:
+                    try:
+                        await unsub()
+                    except Exception:
+                        pass
+
+        return StreamingResponse(
+            _sse_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.post("/api/local-agents/rescan")
+    async def rescan_local_agents() -> dict:
+        """Trigger a full re-scan of the local machine for AI tools."""
+        if platform.local_discovery is None:
+            raise HTTPException(status_code=503, detail="Local discovery service not available")
+        result = await platform.local_discovery.run_discovery()
+        return result.to_dict()
+
+    @app.post("/api/local-agents/{agent_id}/start")
+    async def start_local_agent(agent_id: str) -> dict:
+        """Start a local agent."""
+        if platform.local_discovery is None:
+            raise HTTPException(status_code=503, detail="Local discovery service not available")
+        agent = platform.local_discovery.get_agent(agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        updated = await platform.local_discovery.update_agent(agent_id, error="")
+        return updated.to_dict() if updated else {"status": "started"}
+
+    @app.post("/api/local-agents/{agent_id}/stop")
+    async def stop_local_agent(agent_id: str) -> dict:
+        """Stop a local agent."""
+        if platform.local_discovery is None:
+            raise HTTPException(status_code=503, detail="Local discovery service not available")
+        agent = platform.local_discovery.get_agent(agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        updated = await platform.local_discovery.update_agent(agent_id, error="stopped")
+        return updated.to_dict() if updated else {"status": "stopped"}
+
+    @app.post("/api/local-agents/{agent_id}/restart")
+    async def restart_local_agent(agent_id: str) -> dict:
+        """Restart a local agent."""
+        if platform.local_discovery is None:
+            raise HTTPException(status_code=503, detail="Local discovery service not available")
+        agent = platform.local_discovery.get_agent(agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        updated = await platform.local_discovery.update_agent(agent_id, error="")
+        return updated.to_dict() if updated else {"status": "restarted"}
+
+    @app.post("/api/local-agents/{agent_id}/forget")
+    async def forget_local_agent(agent_id: str) -> dict:
+        """Forget/remove a local agent from the registry."""
+        if platform.local_discovery is None:
+            raise HTTPException(status_code=503, detail="Local discovery service not available")
+        agent = platform.local_discovery.get_agent(agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        await platform.local_discovery.remove_agent(agent_id)
+        return {"status": "removed", "agent_id": agent_id}
 
     @app.post("/api/tasks")
     async def create_task(task: Task) -> dict:

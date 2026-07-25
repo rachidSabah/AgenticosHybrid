@@ -97,6 +97,10 @@ const GatewayDashboard = lazyWithRetry(() =>
   import("@/views/gateway-dashboard").then((m) => ({ default: m.GatewayDashboard }))
 );
 
+const LocalAgents = lazyWithRetry(() =>
+  import("@/views/local-agents").then((m) => ({ default: m.LocalAgents }))
+);
+
 const OmniRouteDashboard = lazyWithRetry(() =>
   import("@/views/omniroute-dashboard").then((m) => ({ default: m.OmniRouteDashboard }))
 );
@@ -342,6 +346,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="API Gateway" fallback={<ViewSkeleton title="API Gateway" />}>
       <Suspense fallback={<ViewSkeleton title="API Gateway" />}>
         <GatewayDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "local-agents": () => (
+    <ErrorBoundary viewName="Local Agents" fallback={<ViewSkeleton title="Local Agents" />}>
+      <Suspense fallback={<ViewSkeleton title="Local Agents" />}>
+        <LocalAgents />
       </Suspense>
     </ErrorBoundary>
   ),

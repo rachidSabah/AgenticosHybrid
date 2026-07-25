@@ -412,6 +412,20 @@ class Topic(StrEnum):
     AGGREGATION_DEGRADED = "aggregation.degraded"
     AGGREGATION_RECOVERED = "aggregation.recovered"
 
+    # ── Local Agent Discovery topics (Phase 6.1) ──
+    AGENT_DISCOVERED = "agent.discovered"
+    AGENT_REGISTERED = "agent.registered"
+    AGENT_UPDATED = "agent.updated"
+    AGENT_STARTED_STATUS = "agent.started_status"
+    AGENT_STOPPED_STATUS = "agent.stopped_status"
+    AGENT_CRASHED = "agent.crashed"
+    AGENT_HEALTH_CHANGED = "agent.health_changed"
+    AGENT_VERSION_CHANGED = "agent.version_changed"
+    AGENT_REMOVED = "agent.removed"
+    DISCOVERY_STARTED = "discovery.started"
+    DISCOVERY_COMPLETED = "discovery.completed"
+    DISCOVERY_FAILED = "discovery.failed"
+
 
 class EventEnvelope(BaseModel):
     """Wire format for everything published to the bus."""

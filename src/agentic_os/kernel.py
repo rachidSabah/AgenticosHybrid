@@ -51,6 +51,7 @@ from agentic_os.core.discovery import (
     DiscoveryRegistry,
     DiscoveryScheduler,
     DiscoveryTelemetry,
+    LocalDiscoveryService,
     ProfilingEngine,
     ValidationPipeline,
 )
@@ -189,6 +190,8 @@ class Platform:
     desktop: DesktopRuntimeManager | None = None
     # Mission Orchestrator
     mission_planner: MissionPlannerImpl | None = None
+    # Phase 6.1: Local Agent Discovery & Auto-Binding
+    local_discovery: LocalDiscoveryService | None = None
 
 
 class Kernel:
