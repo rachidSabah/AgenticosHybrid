@@ -25,6 +25,9 @@ const MissionOverview = lazyWithRetry(() =>
 const AIBrain = lazyWithRetry(() =>
   import("@/views/ai-brain").then((m) => ({ default: m.AIBrain }))
 );
+const BrainsRegistry = lazyWithRetry(() =>
+  import("@/views/brains").then((m) => ({ default: m.Brains }))
+);
 const AgentConstellation = lazyWithRetry(() =>
   import("@/views/agent-constellation").then((m) => ({ default: m.AgentConstellation }))
 );
@@ -57,6 +60,9 @@ const TaskTimeline = lazyWithRetry(() =>
 );
 const SystemMonitor = lazyWithRetry(() =>
   import("@/views/system-monitor").then((m) => ({ default: m.SystemMonitor }))
+);
+const RuntimeDiagnostics = lazyWithRetry(() =>
+  import("@/views/runtime-diagnostics").then((m) => ({ default: m.RuntimeDiagnostics }))
 );
 const DiscoveryDashboard = lazyWithRetry(() =>
   import("@/views/discovery-dashboard").then((m) => ({ default: m.DiscoveryDashboard }))
@@ -179,6 +185,13 @@ const VIEWS: Record<string, () => ReactNode> = {
       </Suspense>
     </ErrorBoundary>
   ),
+  "brains": () => (
+    <ErrorBoundary viewName="Brain Registry" fallback={<ViewSkeleton title="Brain Registry" />}>
+      <Suspense fallback={<ViewSkeleton title="Brain Registry" />}>
+        <BrainsRegistry />
+      </Suspense>
+    </ErrorBoundary>
+  ),
   constellation: () => (
     <ReactFlowProvider>
       <ErrorBoundary viewName="Agent Constellation" fallback={<ViewSkeletonMinimal title="Agent Constellation" />}>
@@ -261,6 +274,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="System Monitor" fallback={<ViewSkeleton title="System Monitor" />}>
       <Suspense fallback={<ViewSkeleton title="System Monitor" />}>
         <SystemMonitor />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "runtime-diagnostics": () => (
+    <ErrorBoundary viewName="Runtime Diagnostics" fallback={<ViewSkeleton title="Runtime Diagnostics" />}>
+      <Suspense fallback={<ViewSkeleton title="Runtime Diagnostics" />}>
+        <RuntimeDiagnostics />
       </Suspense>
     </ErrorBoundary>
   ),

@@ -426,6 +426,22 @@ class Topic(StrEnum):
     DISCOVERY_COMPLETED = "discovery.completed"
     DISCOVERY_FAILED = "discovery.failed"
 
+    # ── Brain Registry & Constellation topics (Phase 6.2) ──
+    BRAIN_DISCOVERED = "brain.discovered"
+    BRAIN_REGISTERED = "brain.registered"
+    BRAIN_UPDATED = "brain.updated"
+    BRAIN_CONNECTED = "brain.connected"
+    BRAIN_DISCONNECTED = "brain.disconnected"
+    BRAIN_HEALTH_CHANGED = "brain.health_changed"
+    BRAIN_BUSY = "brain.busy"
+    BRAIN_IDLE = "brain.idle"
+    BRAIN_EXECUTING = "brain.executing"
+    BRAIN_COMPLETED = "brain.completed"
+    BRAIN_FAILED = "brain.failed"
+    BRAIN_REMOVED = "brain.removed"
+    BRAIN_GRAPH_UPDATED = "brain.graph_updated"
+    BRAIN_RELATIONSHIP_CHANGED = "brain.relationship_changed"
+
 
 class EventEnvelope(BaseModel):
     """Wire format for everything published to the bus."""

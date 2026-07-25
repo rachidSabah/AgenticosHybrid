@@ -20,6 +20,42 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
+from agentic_os.api.runtime_diagnostics import (
+    bindings as rt_bindings,
+)
+from agentic_os.api.runtime_diagnostics import (
+    brains as rt_brains,
+)
+from agentic_os.api.runtime_diagnostics import (
+    diagnostics as rt_diagnostics,
+)
+from agentic_os.api.runtime_diagnostics import (
+    discovery as rt_discovery,
+)
+from agentic_os.api.runtime_diagnostics import (
+    errors as rt_errors,
+)
+from agentic_os.api.runtime_diagnostics import (
+    eventbus as rt_eventbus,
+)
+from agentic_os.api.runtime_diagnostics import (
+    graph as rt_graph,
+)
+from agentic_os.api.runtime_diagnostics import (
+    health as rt_health,
+)
+from agentic_os.api.runtime_diagnostics import (
+    pipeline as rt_pipeline,
+)
+from agentic_os.api.runtime_diagnostics import (
+    providers as rt_providers,
+)
+from agentic_os.api.runtime_diagnostics import (
+    registries as rt_registries,
+)
+from agentic_os.api.runtime_diagnostics import (
+    status as rt_status,
+)
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.domain.agent import Role, Task
@@ -200,6 +236,10 @@ class _UnavailableSentinel:
 
 
 def create_app(platform: Platform) -> FastAPI:
+    from agentic_os.api.diagnostics_service import RuntimeDiagnosticsService
+
+    _diag_svc = RuntimeDiagnosticsService()
+
     app = FastAPI(title="Agentic OS", version="1.0.0-rc1")
 
     app.add_middleware(
@@ -314,7 +354,36 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
-        return [a.model_dump(mode="json") for a in orch.registry.agents()]
+        """List all registered agents (Orchestrator agents + discovered brains)."""
+        # Primary: Orchestrator-registered agents (task workers)
+        agents = [a.model_dump(mode="json") for a in orch.registry.agents()]
+
+        # Fallback: discovered AI brains that aren't yet tracked by Orchestrator
+        if platform.brain_registry is not None:
+            brains = await platform.brain_registry.list_all()
+            known = {a.get("id") or a.get("name") for a in agents}
+            for b in brains:
+                if b.id not in known and b.health >= 50:
+                    agents.append(
+                        {
+                            "id": b.id,
+                            "name": b.display_name,
+                            "provider": b.display_name,
+                            "role": "assistant",
+                            "status": b.status.value
+                            if hasattr(b.status, "value")
+                            else str(b.status),
+                            "capabilities": list(b.capabilities),
+                            "health": "healthy"
+                            if b.health >= 80
+                            else "degraded"
+                            if b.health >= 50
+                            else "unknown",
+                            "latency_ms": b.latency,
+                        }
+                    )
+
+        return agents
 
     # ── Local Agent Discovery API (Phase 6.1) ──────────────────────────────
 
@@ -444,6 +513,247 @@ def create_app(platform: Platform) -> FastAPI:
         await platform.local_discovery.remove_agent(agent_id)
         return {"status": "removed", "agent_id": agent_id}
 
+    # ── Brain Registry & Constellation API (Phase 6.2) ─────────────────────
+
+    @app.get("/api/brains")
+    async def list_brains() -> list[dict]:
+        """List all registered AI brains (local + cloud)."""
+        if platform.brain_registry is None:
+            return []
+        brains = await platform.brain_registry.list_all()
+        return [b.to_dict() for b in brains]
+
+    @app.get("/api/brains/{brain_id}")
+    async def get_brain(brain_id: str) -> dict:
+        """Get a single brain by ID."""
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        brain = await platform.brain_registry.get(brain_id)
+        if brain is None:
+            raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
+        return brain.to_dict()
+
+    @app.get("/api/brains/graph")
+    async def get_brain_graph() -> dict:
+        """Get the current agent constellation graph."""
+        if platform.brain_graph is None:
+            return {"nodes": [], "edges": [], "updated_at": ""}
+        graph = await platform.brain_graph.to_constellation_graph()
+        return graph.to_dict()
+
+    @app.get("/api/brains/relationships")
+    async def get_brain_relationships() -> list[dict]:
+        """Get all brain relationships."""
+        if platform.brain_graph is None:
+            return []
+        edges = await platform.brain_graph.get_edges()
+        return [e.to_dict() for e in edges]
+
+    @app.get("/api/brains/health")
+    async def get_brains_health() -> dict:
+        """Get aggregate brain health statistics."""
+        if platform.brain_registry is None or platform.brain_stats is None:
+            return {"avg_health": 0, "total": 0, "online": 0, "by_status": {}}
+        brains = await platform.brain_registry.list_all()
+        snapshot = await platform.brain_stats.compute(brains)
+        return snapshot.to_dict()
+
+    @app.post("/api/brains/refresh")
+    async def refresh_brains() -> dict:
+        """Refresh health + capabilities for all brains."""
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        brains = await platform.brain_registry.list_all()
+        for brain in brains:
+            if platform.brain_health:
+                await platform.brain_health.record_heartbeat(brain.id)
+        count = await platform.brain_registry.count()
+        return {"status": "refreshed", "count": count}
+
+    @app.post("/api/brains/rescan")
+    async def rescan_brains() -> dict:
+        """Trigger a full discovery + registration cycle from runtime bridge.
+
+        Uses the combined connector-based and Windows OS-level scanner so
+        both installed CLI tools AND running processes are captured.
+        """
+        if platform.brain_runtime_bridge is None:
+            raise HTTPException(status_code=503, detail="Runtime bridge not available")
+        detected = await platform.brain_runtime_bridge.detect_all_with_windows()
+        count = 0
+        if platform.brain_registry:
+            for record in detected:
+                await platform.brain_registry.register(record)
+                count += 1
+                # Publish provider.registered + agent.started so the frontend
+                # main store (Mission Overview) populates without UI changes.
+                if platform.bus:
+                    await platform.bus.publish(
+                        EventEnvelope(
+                            type=Topic.PROVIDER_REGISTERED.value,
+                            source="api:rescan",
+                            topic=Topic.PROVIDER_REGISTERED.value,
+                            payload={
+                                "name": record.display_name,
+                                "provider": record.display_name,
+                                "vendor": record.vendor,
+                                "status": "healthy" if record.health >= 80 else "degraded",
+                                "latency_ms": record.latency,
+                            },
+                        ),
+                    )
+                    if record.health >= 50:
+                        await platform.bus.publish(
+                            EventEnvelope(
+                                type=Topic.AGENT_STARTED.value,
+                                source="api:rescan",
+                                topic=Topic.AGENT_STARTED.value,
+                                payload={
+                                    "id": record.id,
+                                    "name": record.display_name,
+                                    "provider": record.display_name,
+                                    "role": "assistant",
+                                    "status": "running"
+                                    if record.status in ("connected", "busy", "executing")
+                                    else "idle",
+                                    "capabilities": list(record.capabilities),
+                                },
+                            ),
+                        )
+        return {"status": "rescanned", "detected": len(detected), "registered": count}
+
+    @app.post("/api/brains/register")
+    async def register_brain(body: dict) -> dict:
+        """Manually register a brain."""
+        if platform.brain_registry is None or platform.brain_catalog is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        record = platform.brain_catalog.create_from_dict(body)
+        stored = await platform.brain_registry.register(record)
+        return stored.to_dict()
+
+    @app.delete("/api/brains/{brain_id}")
+    async def remove_brain(brain_id: str) -> dict:
+        """Remove/unregister a brain from the registry."""
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        ok = await platform.brain_registry.unregister(brain_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
+        return {"status": "removed", "brain_id": brain_id}
+
+    @app.post("/api/brains/{brain_id}/restart")
+    async def restart_brain(brain_id: str) -> dict:
+        """Restart a brain (lifecycle transition)."""
+        if platform.brain_manager is None:
+            raise HTTPException(status_code=503, detail="Brain manager not available")
+        result = await platform.brain_manager.restart(brain_id)
+        return {"status": "restarted" if result else "failed", "brain_id": brain_id}
+
+    @app.get("/api/brains/events")
+    async def brains_sse(request: Request):
+        """SSE stream of brain lifecycle events.
+
+        Emits ``event: brain-discovered``, ``event: brain-registered``,
+        ``event: brain-updated``, ``event: brain-health-changed``,
+        ``event: brain-removed``, etc.
+        """
+
+        async def _sse_stream():
+            queue: asyncio.Queue[dict] = asyncio.Queue()
+            bus = getattr(platform, "bus", None)
+            unsub: collections.abc.Callable | None = None
+            if bus is not None:
+
+                async def _on_event(event):
+                    await queue.put(event)
+
+                try:
+                    unsub = await bus.subscribe(
+                        [
+                            Topic.BRAIN_DISCOVERED.value,
+                            Topic.BRAIN_REGISTERED.value,
+                            Topic.BRAIN_UPDATED.value,
+                            Topic.BRAIN_CONNECTED.value,
+                            Topic.BRAIN_DISCONNECTED.value,
+                            Topic.BRAIN_HEALTH_CHANGED.value,
+                            Topic.BRAIN_BUSY.value,
+                            Topic.BRAIN_IDLE.value,
+                            Topic.BRAIN_EXECUTING.value,
+                            Topic.BRAIN_COMPLETED.value,
+                            Topic.BRAIN_FAILED.value,
+                            Topic.BRAIN_REMOVED.value,
+                            Topic.BRAIN_GRAPH_UPDATED.value,
+                            Topic.BRAIN_RELATIONSHIP_CHANGED.value,
+                        ],
+                        _on_event,
+                    )
+                except Exception:
+                    pass
+
+            try:
+                yield "event: connected\ndata: {}\n\n"
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        topic = event.get("topic", "unknown")
+                        payload = event.get("payload", {})
+                        # Transform to unnamed SSE with BrainSSEEvent format
+                        sse_type = topic.replace(".", "_")
+                        sse_data: dict[str, object] = {"type": sse_type}
+                        if isinstance(payload, dict):
+                            brain_id = payload.get("id") or payload.get("brain_id")
+                            if brain_id:
+                                sse_data["brain_id"] = brain_id
+                            if any(
+                                k in payload for k in ("display_name", "id", "status", "health")
+                            ):
+                                sse_data["brain"] = {
+                                    "id": payload.get("id", ""),
+                                    "display_name": payload.get("display_name", ""),
+                                    "brain_type": payload.get("brain_type", "custom"),
+                                    "vendor": payload.get("vendor", "custom"),
+                                    "runtime": payload.get("runtime", "unknown"),
+                                    "version": payload.get("version", ""),
+                                    "status": payload.get("status", "discovered"),
+                                    "health": payload.get("health", "unknown"),
+                                    "capabilities": payload.get("capabilities", []),
+                                    "memory_usage": payload.get("memory_usage", 0),
+                                    "cpu_usage": payload.get("cpu_usage", 0),
+                                    "latency": payload.get("latency", 0),
+                                    "current_tasks": payload.get("current_tasks", 0),
+                                    "error_count": payload.get("error_count", 0),
+                                }
+                            if "source_id" in payload or "relationship_type" in payload:
+                                sse_data["relationship"] = {
+                                    "id": payload.get("id", ""),
+                                    "source_id": payload.get("source_id", ""),
+                                    "target_id": payload.get("target_id", ""),
+                                    "relationship_type": payload.get("relationship_type", "peer"),
+                                    "weight": payload.get("weight", 1.0),
+                                    "active": payload.get("active", True),
+                                }
+                        yield f"data: {json.dumps(sse_data)}\n\n"
+                    except TimeoutError:
+                        yield ": keepalive\n\n"
+            finally:
+                if unsub is not None:
+                    try:
+                        await unsub()
+                    except Exception:
+                        pass
+
+        return StreamingResponse(
+            _sse_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     @app.post("/api/tasks")
     async def create_task(task: Task) -> dict:
         created = await orch.create_task(task.title, task.role, task.description)
@@ -452,7 +762,27 @@ def create_app(platform: Platform) -> FastAPI:
     # ── Provider Management API (Phase 2, Subsystem 1) ──
     @app.get("/api/providers")
     async def list_providers() -> list[dict]:
-        return [p.model_dump(mode="json") for p in pm.list_providers()]
+        """List all registered providers (from ProviderManager + discovered brains)."""
+        providers: list[dict] = [p.model_dump(mode="json") for p in pm.list_providers()]
+        # Include discovered brains as providers so Mission Overview shows them
+        if platform.brain_registry is not None:
+            brains = await platform.brain_registry.list_all()
+            known = {p.get("provider") or p.get("name") for p in providers}
+            for b in brains:
+                if b.display_name not in known and b.health >= 50:
+                    providers.append(
+                        {
+                            "provider": b.display_name,
+                            "name": b.display_name,
+                            "vendor": str(b.vendor),
+                            "status": "healthy" if b.health >= 80 else "degraded",
+                            "latency_ms": b.latency,
+                            "health": b.health,
+                            "brain_id": b.id,
+                            "description": f"Discovered brain: {b.display_name}",
+                        }
+                    )
+        return providers
 
     @app.get("/api/provider-configs")
     async def list_provider_configs() -> list[dict]:
@@ -3502,6 +3832,42 @@ def create_app(platform: Platform) -> FastAPI:
             await websocket.close(code=1011, reason="Dashboard not available")
             return
         await websocket.accept()
+
+        # ── Replay current brain state so new clients immediately see agents ──
+        if platform.brain_registry is not None:
+            brains = await platform.brain_registry.list_all()
+            for b in brains:
+                # Send as provider.registered
+                await websocket.send_json(
+                    {
+                        "topic": "provider.registered",
+                        "payload": {
+                            "name": b.display_name,
+                            "provider": b.display_name,
+                            "vendor": str(b.vendor),
+                            "status": "healthy" if b.health >= 80 else "degraded",
+                            "latency_ms": b.latency,
+                        },
+                    }
+                )
+                # Send as agent.started if healthy enough
+                if b.health >= 50:
+                    await websocket.send_json(
+                        {
+                            "topic": "agent.started",
+                            "payload": {
+                                "id": b.id,
+                                "name": b.display_name,
+                                "provider": b.display_name,
+                                "role": "assistant",
+                                "status": "running"
+                                if b.status in ("connected", "busy", "executing")
+                                else "idle",
+                                "capabilities": list(b.capabilities),
+                            },
+                        }
+                    )
+
         recv, send = dashboard.add_client()
         log.info("dashboard.connected")
 
@@ -4114,6 +4480,194 @@ def create_app(platform: Platform) -> FastAPI:
             log.warning("gateway.not_available", error=str(exc))
     else:
         log.warning("gateway.skipped_no_provider_mgr")
+
+    @app.get("/api/provider-management")
+    async def provider_management_page() -> HTMLResponse:
+        return HTMLResponse(_PROVIDER_PAGE)
+
+    # ── Runtime Diagnostics API ────────────────────────────────────────────
+    @app.get("/api/runtime/status")
+    async def runtime_status():
+        return await rt_status(platform, platform.brain_runtime_bridge, platform.bus)
+
+    @app.get("/api/runtime/discovery")
+    async def runtime_discovery():
+        return await rt_discovery(platform, platform.brain_runtime_bridge)
+
+    @app.get("/api/runtime/pipeline")
+    async def runtime_pipeline():
+        return await rt_pipeline(platform, platform.brain_runtime_bridge, platform.bus)
+
+    @app.get("/api/runtime/eventbus")
+    async def runtime_eventbus():
+        return await rt_eventbus(platform.bus, platform.dashboard)
+
+    @app.get("/api/runtime/registries")
+    async def runtime_registries():
+        return await rt_registries(
+            platform,
+            platform.brain_registry,
+            platform.brain_stats,
+            platform.brain_health,
+        )
+
+    @app.get("/api/runtime/brains")
+    async def runtime_brains():
+        return await rt_brains(platform, platform.brain_registry)
+
+    @app.get("/api/runtime/providers")
+    async def runtime_providers():
+        return await rt_providers(platform)
+
+    @app.get("/api/runtime/bindings")
+    async def runtime_bindings():
+        return await rt_bindings(
+            platform,
+            platform.brain_runtime_bridge,
+            platform.brain_registry,
+        )
+
+    @app.get("/api/runtime/diagnostics")
+    async def runtime_diagnostics():
+        return await rt_diagnostics(
+            platform,
+            platform.brain_runtime_bridge,
+            platform.brain_registry,
+            platform.bus,
+            platform.brain_stats,
+            platform.brain_health,
+            platform.dashboard,
+        )
+
+    @app.get("/api/runtime/errors")
+    async def runtime_errors():
+        return await rt_errors(platform)
+
+    @app.get("/api/runtime/health")
+    async def runtime_health():
+        return await rt_health(
+            platform,
+            platform.brain_runtime_bridge,
+            platform.brain_registry,
+            platform.bus,
+        )
+
+    @app.get("/api/runtime/graph")
+    async def runtime_graph():
+        return await rt_graph(platform)
+
+    # ── Runtime Diagnostics (Phase 6.2.2) ──────────────────────────────────────
+    @app.get("/api/diagnostics")
+    async def diagnostics_summary() -> dict:
+        return await _diag_svc.collect_summary(platform)
+
+    @app.get("/api/diagnostics/runtime")
+    async def diagnostics_runtime() -> dict:
+        return await _diag_svc.collect_runtime(platform)
+
+    @app.get("/api/diagnostics/health")
+    async def diagnostics_health() -> dict:
+        return await _diag_svc.collect_health(platform)
+
+    @app.get("/api/diagnostics/discovery")
+    async def diagnostics_discovery() -> dict:
+        return await _diag_svc.collect_discovery(platform)
+
+    @app.get("/api/diagnostics/eventbus")
+    async def diagnostics_eventbus() -> dict:
+        return await _diag_svc.collect_eventbus(platform)
+
+    @app.get("/api/diagnostics/brains")
+    async def diagnostics_brains() -> dict:
+        return await _diag_svc.collect_brains(platform)
+
+    @app.get("/api/diagnostics/agents")
+    async def diagnostics_agents() -> dict:
+        return await _diag_svc.collect_agents(platform)
+
+    @app.get("/api/diagnostics/capabilities")
+    async def diagnostics_capabilities() -> dict:
+        return await _diag_svc.collect_capabilities(platform)
+
+    @app.get("/api/diagnostics/threads")
+    async def diagnostics_threads() -> dict:
+        return await _diag_svc.collect_threads(platform)
+
+    @app.get("/api/diagnostics/resources")
+    async def diagnostics_resources() -> dict:
+        return await _diag_svc.collect_resources(platform)
+
+    @app.get("/api/diagnostics/queues")
+    async def diagnostics_queues() -> dict:
+        return await _diag_svc.collect_queues(platform)
+
+    @app.get("/api/diagnostics/logs")
+    async def diagnostics_logs(limit: int = 200) -> dict:
+        return await _diag_svc.collect_logs(platform, limit=limit)
+
+    @app.get("/api/diagnostics/mcp")
+    async def diagnostics_mcp() -> dict:
+        return await _diag_svc.collect_mcp(platform)
+
+    @app.get("/api/diagnostics/providers")
+    async def diagnostics_providers_detail() -> dict:
+        return await _diag_svc.collect_providers(platform)
+
+    @app.get("/api/diagnostics/apis")
+    async def diagnostics_apis() -> dict:
+        return await _diag_svc.collect_apis(platform)
+
+    @app.get("/api/diagnostics/sse-clients")
+    async def diagnostics_sse_clients() -> dict:
+        return await _diag_svc.collect_sse_clients(platform)
+
+    @app.post("/api/diagnostics/self-test")
+    async def diagnostics_self_test() -> dict:
+        return await _diag_svc.run_self_test(platform)
+
+    @app.get("/api/diagnostics/report")
+    async def diagnostics_report(format: str = "json") -> dict:
+        return await _diag_svc.generate_report(platform, format=format)
+
+    @app.get("/api/diagnostics/export")
+    async def diagnostics_export(format: str = "json"):
+        report = await _diag_svc.generate_report(platform, format="json")
+        content = json.dumps(report, indent=2, default=str)
+        return Response(
+            content=content,
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=diagnostics-report.json"},
+        )
+
+    @app.get("/api/diagnostics/events")
+    async def diagnostics_sse_stream(request: Request):
+        """SSE stream for live diagnostics updates."""
+
+        async def _stream():
+            yield "event: connected\ndata: {}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    snapshot = await _diag_svc.collect_summary(platform)
+                    line = (
+                        f"event: DIAGNOSTICS_UPDATED\ndata: {json.dumps(snapshot, default=str)}\n\n"
+                    )
+                    yield line
+                    await asyncio.sleep(5.0)
+                except Exception as exc:
+                    yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+                    await asyncio.sleep(5.0)
+
+        return StreamingResponse(
+            _stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app
 

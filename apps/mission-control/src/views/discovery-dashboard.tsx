@@ -120,8 +120,8 @@ function DiscoveryDashboardTab() {
           <>
             <Stat label="Total Scans" value={stats.total_scans} />
             <Stat label="Engines Found" value={stats.total_engines_found} tone="accent" />
-            <Stat label="Avg Duration" value={`${stats.avg_duration_ms.toFixed(0)}ms`} />
-            <Stat label="Failure Rate" value={`${(stats.failure_rate * 100).toFixed(1)}%`} tone={stats.failure_rate > 0.1 ? "warn" : "ok"} />
+            <Stat label="Avg Duration" value={`${(stats.avg_duration_ms ?? 0).toFixed(0)}ms`} />
+            <Stat label="Failure Rate" value={`${((stats.failure_rate ?? 0) * 100).toFixed(1)}%`} tone={(stats.failure_rate ?? 0) > 0.1 ? "warn" : "ok"} />
           </>
         )}
       </div>

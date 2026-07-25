@@ -278,19 +278,19 @@ export function SystemMonitor() {
             <MetricTile label="Windows" value={perf.window_count} />
             <MetricTile
               label="Free Disk"
-              value={`${perf.disk_free_gb.toFixed(1)} GB`}
+              value={`${(perf.disk_free_gb ?? 0).toFixed(1)} GB`}
             />
             <MetricTile
               label="Memory Used"
-              value={`${perf.memory_used_mb.toFixed(0)} MB`}
+              value={`${(perf.memory_used_mb ?? 0).toFixed(0)} MB`}
             />
             <MetricTile
               label="Total Memory"
-              value={`${perf.memory_total_mb.toFixed(0)} MB`}
+              value={`${(perf.memory_total_mb ?? 0).toFixed(0)} MB`}
             />
             <MetricTile
               label="Total Disk"
-              value={`${perf.disk_total_gb.toFixed(1)} GB`}
+              value={`${(perf.disk_total_gb ?? 0).toFixed(1)} GB`}
             />
           </div>
         ) : (

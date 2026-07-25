@@ -49,6 +49,7 @@ export const NAV: NavItem[] = [
   { id: "workspace", label: "Workspace Explorer", hint: "S", icon: FolderTree, group: "observe" },
   { id: "timeline", label: "Task Timeline", hint: "T", icon: History, group: "observe" },
   { id: "monitor", label: "System Monitor", hint: "Y", icon: Gauge, group: "observe" },
+  { id: "runtime-diagnostics", label: "Diagnostics", hint: "X", icon: Activity, group: "observe" },
   { id: "discovery", label: "Discovery", hint: "D", icon: Search, group: "observe" },
   { id: "healing", label: "Self-Healing", hint: "H", icon: Shield, group: "observe" },
   { id: "swarm", label: "Swarm Orchestration", hint: "S", icon: Globe, group: "core" },

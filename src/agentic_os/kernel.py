@@ -37,6 +37,16 @@ from agentic_os.adapters.security.encrypted_store import EncryptedSecretStore
 from agentic_os.api.dashboard import DashboardBroadcaster
 from agentic_os.api.mcp_ws import MCPBroadcaster
 from agentic_os.config import settings
+from agentic_os.core.brains import (
+    BrainCatalog,
+    BrainDiscoveryBridge,
+    BrainHealthMonitor,
+    BrainManager,
+    BrainRegistry,
+    BrainRelationshipGraph,
+    BrainStatistics,
+    RuntimeBridge,
+)
 from agentic_os.core.capability.engine import CapabilityEngine
 
 # Phase 4, M6: Desktop Runtime Foundation
@@ -97,6 +107,7 @@ from agentic_os.core.scheduler import Scheduler
 from agentic_os.core.security.framework import SecurityFramework
 from agentic_os.core.workflow.engine import WorkflowEngineImpl
 from agentic_os.domain.discovery import DiscoveryProfile, DiscoveryProviderConfig
+from agentic_os.domain.events import EventEnvelope  # EventEnvelope for event publishing
 from agentic_os.domain.execution import EngineType
 from agentic_os.infrastructure.logging import configure_logging, get_logger
 from agentic_os.ports.event_bus import EventBus
@@ -192,6 +203,15 @@ class Platform:
     mission_planner: MissionPlannerImpl | None = None
     # Phase 6.1: Local Agent Discovery & Auto-Binding
     local_discovery: LocalDiscoveryService | None = None
+    # Phase 6.2: AI Brain Registry & Agent Constellation
+    brain_registry: BrainRegistry | None = None
+    brain_manager: BrainManager | None = None
+    brain_catalog: BrainCatalog | None = None
+    brain_graph: BrainRelationshipGraph | None = None
+    brain_stats: BrainStatistics | None = None
+    brain_health: BrainHealthMonitor | None = None
+    brain_discovery_bridge: BrainDiscoveryBridge | None = None
+    brain_runtime_bridge: RuntimeBridge | None = None
 
 
 class Kernel:
@@ -254,7 +274,8 @@ class Kernel:
         self.capability = CapabilityEngine(self.bus)
         self.mission_planner = MissionPlannerImpl(self.bus, settings)
         self._plugins: list = []
-
+        self._started = False
+        self.local_discovery = None
         # Phase 4: Runtime Manager — universal execution engine framework
         runtime_registry = RuntimeRegistryImpl(self.bus)
         discovery_engine = DiscoveryEngine()
@@ -446,6 +467,96 @@ class Kernel:
                 _diag("DesktopRuntime", "FAILED", str(exc))
 
         _diag("Kernel", "STARTED", f"bus={settings.bus_type} plugins={len(self._plugins)}")
+
+        # ── Brain Registry & Constellation (Phase 6.2) ────────────────────
+        _diag("Brains", "INITIALIZING")
+        try:
+            self.brain_registry = BrainRegistry()
+            self.brain_catalog = BrainCatalog()
+            self.brain_graph = BrainRelationshipGraph()
+            self.brain_stats = BrainStatistics()
+            self.brain_health = BrainHealthMonitor()
+
+            await self.brain_registry.start(event_bus=self.bus)
+            await self.brain_graph.start(event_bus=self.bus)
+
+            # Manager needs registry callbacks
+            self.brain_manager = BrainManager(
+                get_brain=self.brain_registry.get,
+                update_brain=self.brain_registry.update,
+                event_bus=self.bus,
+            )
+
+            # Health monitor needs registry access
+            await self.brain_health.start(
+                get_brains=self.brain_registry.list_all,
+                update_brain=self.brain_registry.update,
+                event_bus=self.bus,
+            )
+
+            # Bridge subscribes to Phase 6.1 local agent discovery events
+            self.brain_discovery_bridge = BrainDiscoveryBridge()
+            await self.brain_discovery_bridge.start(
+                event_bus=self.bus,
+                on_brain_registered=self.brain_registry.register,
+            )
+
+            # Runtime bridge for CLI tool detection
+            self.brain_runtime_bridge = RuntimeBridge()
+
+            # ── Auto-detect locally installed brains ──
+            _diag("Brains", "AUTO_DETECTING")
+            try:
+                detected = await self.brain_runtime_bridge.detect_all_with_windows()
+                registered = 0
+                for record in detected:
+                    await self.brain_registry.register(record)
+                    registered += 1
+                    # Publish events the frontend main store understands
+                    if self.bus:
+                        await self.bus.publish(
+                            EventEnvelope(
+                                type="provider.registered",
+                                source="kernel",
+                                topic="provider.registered",
+                                payload={
+                                    "name": record.display_name,
+                                    "provider": record.display_name,
+                                    "vendor": record.vendor,
+                                    "status": "healthy" if record.health >= 80 else "degraded",
+                                    "latency_ms": record.latency,
+                                },
+                            )
+                        )
+                        if record.health >= 50:
+                            await self.bus.publish(
+                                EventEnvelope(
+                                    type="agent.started",
+                                    source="kernel",
+                                    topic="agent.started",
+                                    payload={
+                                        "id": record.id,
+                                        "name": record.display_name,
+                                        "provider": record.display_name,
+                                        "role": "assistant",
+                                        "status": "running"
+                                        if record.status in ("connected", "busy", "executing")
+                                        else "idle",
+                                        "capabilities": list(record.capabilities),
+                                    },
+                                )
+                            )
+                _diag("Brains", "AUTO_DETECTED", f"{registered} runtimes found")
+            except Exception as exc:
+                _diag("Brains", "AUTO_DETECT_FAILED", str(exc))
+
+            _diag(
+                "Brains",
+                "INITIALIZED",
+                f"registry={await self.brain_registry.count()}, graph=ready",
+            )
+        except Exception as exc:
+            _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
@@ -681,6 +792,15 @@ class Kernel:
             desktop=self.desktop,
             learning=self.learning,
             mission_planner=self.mission_planner,
+            local_discovery=self.local_discovery,
+            brain_registry=self.brain_registry,
+            brain_manager=self.brain_manager,
+            brain_catalog=self.brain_catalog,
+            brain_graph=self.brain_graph,
+            brain_stats=self.brain_stats,
+            brain_health=self.brain_health,
+            brain_discovery_bridge=self.brain_discovery_bridge,
+            brain_runtime_bridge=self.brain_runtime_bridge,
         )
 
 
