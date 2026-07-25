@@ -523,16 +523,7 @@ def create_app(platform: Platform) -> FastAPI:
         brains = await platform.brain_registry.list_all()
         return [b.to_dict() for b in brains]
 
-    @app.get("/api/brains/{brain_id}")
-    async def get_brain(brain_id: str) -> dict:
-        """Get a single brain by ID."""
-        if platform.brain_registry is None:
-            raise HTTPException(status_code=503, detail="Brain registry not available")
-        brain = await platform.brain_registry.get(brain_id)
-        if brain is None:
-            raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
-        return brain.to_dict()
-
+    # ── Static sub-routes MUST be registered before /api/brains/{brain_id} ──
     @app.get("/api/brains/graph")
     async def get_brain_graph() -> dict:
         """Get the current agent constellation graph."""
@@ -557,97 +548,6 @@ def create_app(platform: Platform) -> FastAPI:
         brains = await platform.brain_registry.list_all()
         snapshot = await platform.brain_stats.compute(brains)
         return snapshot.to_dict()
-
-    @app.post("/api/brains/refresh")
-    async def refresh_brains() -> dict:
-        """Refresh health + capabilities for all brains."""
-        if platform.brain_registry is None:
-            raise HTTPException(status_code=503, detail="Brain registry not available")
-        brains = await platform.brain_registry.list_all()
-        for brain in brains:
-            if platform.brain_health:
-                await platform.brain_health.record_heartbeat(brain.id)
-        count = await platform.brain_registry.count()
-        return {"status": "refreshed", "count": count}
-
-    @app.post("/api/brains/rescan")
-    async def rescan_brains() -> dict:
-        """Trigger a full discovery + registration cycle from runtime bridge.
-
-        Uses the combined connector-based and Windows OS-level scanner so
-        both installed CLI tools AND running processes are captured.
-        """
-        if platform.brain_runtime_bridge is None:
-            raise HTTPException(status_code=503, detail="Runtime bridge not available")
-        detected = await platform.brain_runtime_bridge.detect_all_with_windows()
-        count = 0
-        if platform.brain_registry:
-            for record in detected:
-                await platform.brain_registry.register(record)
-                count += 1
-                # Publish provider.registered + agent.started so the frontend
-                # main store (Mission Overview) populates without UI changes.
-                if platform.bus:
-                    await platform.bus.publish(
-                        EventEnvelope(
-                            type=Topic.PROVIDER_REGISTERED.value,
-                            source="api:rescan",
-                            topic=Topic.PROVIDER_REGISTERED.value,
-                            payload={
-                                "name": record.display_name,
-                                "provider": record.display_name,
-                                "vendor": record.vendor,
-                                "status": "healthy" if record.health >= 80 else "degraded",
-                                "latency_ms": record.latency,
-                            },
-                        ),
-                    )
-                    if record.health >= 50:
-                        await platform.bus.publish(
-                            EventEnvelope(
-                                type=Topic.AGENT_STARTED.value,
-                                source="api:rescan",
-                                topic=Topic.AGENT_STARTED.value,
-                                payload={
-                                    "id": record.id,
-                                    "name": record.display_name,
-                                    "provider": record.display_name,
-                                    "role": "assistant",
-                                    "status": "running"
-                                    if record.status in ("connected", "busy", "executing")
-                                    else "idle",
-                                    "capabilities": list(record.capabilities),
-                                },
-                            ),
-                        )
-        return {"status": "rescanned", "detected": len(detected), "registered": count}
-
-    @app.post("/api/brains/register")
-    async def register_brain(body: dict) -> dict:
-        """Manually register a brain."""
-        if platform.brain_registry is None or platform.brain_catalog is None:
-            raise HTTPException(status_code=503, detail="Brain registry not available")
-        record = platform.brain_catalog.create_from_dict(body)
-        stored = await platform.brain_registry.register(record)
-        return stored.to_dict()
-
-    @app.delete("/api/brains/{brain_id}")
-    async def remove_brain(brain_id: str) -> dict:
-        """Remove/unregister a brain from the registry."""
-        if platform.brain_registry is None:
-            raise HTTPException(status_code=503, detail="Brain registry not available")
-        ok = await platform.brain_registry.unregister(brain_id)
-        if not ok:
-            raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
-        return {"status": "removed", "brain_id": brain_id}
-
-    @app.post("/api/brains/{brain_id}/restart")
-    async def restart_brain(brain_id: str) -> dict:
-        """Restart a brain (lifecycle transition)."""
-        if platform.brain_manager is None:
-            raise HTTPException(status_code=503, detail="Brain manager not available")
-        result = await platform.brain_manager.restart(brain_id)
-        return {"status": "restarted" if result else "failed", "brain_id": brain_id}
 
     @app.get("/api/brains/events")
     async def brains_sse(request: Request):
@@ -753,6 +653,107 @@ def create_app(platform: Platform) -> FastAPI:
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @app.get("/api/brains/{brain_id}")
+    async def get_brain(brain_id: str) -> dict:
+        """Get a single brain by ID."""
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        brain = await platform.brain_registry.get(brain_id)
+        if brain is None:
+            raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
+        return brain.to_dict()
+
+    @app.post("/api/brains/refresh")
+    async def refresh_brains() -> dict:
+        """Refresh health + capabilities for all brains."""
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        brains = await platform.brain_registry.list_all()
+        for brain in brains:
+            if platform.brain_health:
+                await platform.brain_health.record_heartbeat(brain.id)
+        count = await platform.brain_registry.count()
+        return {"status": "refreshed", "count": count}
+
+    @app.post("/api/brains/rescan")
+    async def rescan_brains() -> dict:
+        """Trigger a full discovery + registration cycle from runtime bridge.
+
+        Uses the combined connector-based and Windows OS-level scanner so
+        both installed CLI tools AND running processes are captured.
+        """
+        if platform.brain_runtime_bridge is None:
+            raise HTTPException(status_code=503, detail="Runtime bridge not available")
+        detected = await platform.brain_runtime_bridge.detect_all_with_windows()
+        count = 0
+        if platform.brain_registry:
+            for record in detected:
+                await platform.brain_registry.register(record)
+                count += 1
+                # Publish provider.registered + agent.started so the frontend
+                # main store (Mission Overview) populates without UI changes.
+                if platform.bus:
+                    await platform.bus.publish(
+                        EventEnvelope(
+                            type=Topic.PROVIDER_REGISTERED.value,
+                            source="api:rescan",
+                            topic=Topic.PROVIDER_REGISTERED.value,
+                            payload={
+                                "name": record.display_name,
+                                "provider": record.display_name,
+                                "vendor": record.vendor,
+                                "status": "healthy" if record.health >= 80 else "degraded",
+                                "latency_ms": record.latency,
+                            },
+                        ),
+                    )
+                    if record.health >= 50:
+                        await platform.bus.publish(
+                            EventEnvelope(
+                                type=Topic.AGENT_STARTED.value,
+                                source="api:rescan",
+                                topic=Topic.AGENT_STARTED.value,
+                                payload={
+                                    "id": record.id,
+                                    "name": record.display_name,
+                                    "provider": record.display_name,
+                                    "role": "assistant",
+                                    "status": "running"
+                                    if record.status in ("connected", "busy", "executing")
+                                    else "idle",
+                                    "capabilities": list(record.capabilities),
+                                },
+                            ),
+                        )
+        return {"status": "rescanned", "detected": len(detected), "registered": count}
+
+    @app.post("/api/brains/register")
+    async def register_brain(body: dict) -> dict:
+        """Manually register a brain."""
+        if platform.brain_registry is None or platform.brain_catalog is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        record = platform.brain_catalog.create_from_dict(body)
+        stored = await platform.brain_registry.register(record)
+        return stored.to_dict()
+
+    @app.delete("/api/brains/{brain_id}")
+    async def remove_brain(brain_id: str) -> dict:
+        """Remove/unregister a brain from the registry."""
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+        ok = await platform.brain_registry.unregister(brain_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
+        return {"status": "removed", "brain_id": brain_id}
+
+    @app.post("/api/brains/{brain_id}/restart")
+    async def restart_brain(brain_id: str) -> dict:
+        """Restart a brain (lifecycle transition)."""
+        if platform.brain_manager is None:
+            raise HTTPException(status_code=503, detail="Brain manager not available")
+        result = await platform.brain_manager.restart(brain_id)
+        return {"status": "restarted" if result else "failed", "brain_id": brain_id}
 
     @app.post("/api/tasks")
     async def create_task(task: Task) -> dict:
