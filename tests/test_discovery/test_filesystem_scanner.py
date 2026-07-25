@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -34,7 +34,9 @@ class TestFilesystemScanner:
             assert len(results) == 1
             assert results[0]["tool_type"] == "ollama"
 
-    async def test_scan_returns_empty_when_nothing_found(self, scanner_linux: FilesystemScanner) -> None:
+    async def test_scan_returns_empty_when_nothing_found(
+        self, scanner_linux: FilesystemScanner
+    ) -> None:
         with (
             patch.object(scanner_linux, "_get_search_dirs", return_value=["/opt"]),
             patch("os.path.isdir", return_value=True),
@@ -61,7 +63,9 @@ class TestFilesystemScanner:
             results = await scanner_linux.scan()
             assert results == []
 
-    async def test_scan_docker_in_local_bin_windows(self, scanner_windows: FilesystemScanner) -> None:
+    async def test_scan_docker_in_local_bin_windows(
+        self, scanner_windows: FilesystemScanner
+    ) -> None:
         with (
             patch.object(scanner_windows, "_get_search_dirs", return_value=["C:\\Program Files"]),
             patch("os.path.isdir", return_value=True),
@@ -70,8 +74,6 @@ class TestFilesystemScanner:
             patch("os.path.isfile", side_effect=lambda p: "docker" in p or "docker.exe" in p),
         ):
             results = await scanner_windows.scan()
-            # Docker is a directory, so we look inside for binary
-            docker_results = [r for r in results if r["tool_type"] == "docker"]
             # Could be found or not depending on mocking
             assert isinstance(results, list)
 

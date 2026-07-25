@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from agentic_os.core.discovery.local.process_scanner import ProcessScanner
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ProcessScanner — Windows (tasklist)
@@ -29,9 +27,7 @@ class TestProcessScannerWindows:
         )
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(tasklist_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(tasklist_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -44,9 +40,7 @@ class TestProcessScannerWindows:
         tasklist_output = '"hermes.exe","9999","Console","1","12,345 K"\r\n'
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(tasklist_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(tasklist_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -73,9 +67,7 @@ class TestProcessScannerWindows:
         tasklist_output = '"notepad.exe","1234","Console","1","10,000 K"\r\n'
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(tasklist_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(tasklist_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -101,9 +93,7 @@ class TestProcessScannerWindows:
         tasklist_output = '"codex.exe","1111","Console","1","50 M"\r\n'
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(tasklist_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(tasklist_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -115,9 +105,7 @@ class TestProcessScannerWindows:
         tasklist_output = '"test.exe","2222","Console","1","100000"\r\n'
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(tasklist_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(tasklist_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -146,9 +134,7 @@ class TestProcessScannerPosix:
         with patch.object(scanner, "_system", "linux"):
             with patch("asyncio.create_subprocess_exec") as mock_exec:
                 proc = AsyncMock()
-                proc.communicate = AsyncMock(
-                    return_value=(ps_output.encode("utf-8"), b"")
-                )
+                proc.communicate = AsyncMock(return_value=(ps_output.encode("utf-8"), b""))
                 proc.returncode = 0
                 mock_exec.return_value = proc
 
@@ -162,9 +148,7 @@ class TestProcessScannerPosix:
         )
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(ps_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(ps_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -206,9 +190,7 @@ class TestProcessScannerPosix:
         )
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(ps_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(ps_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
 
@@ -216,15 +198,10 @@ class TestProcessScannerPosix:
             assert len(results) == 0
 
     async def test_posix_no_header_uses_fallback(self, scanner: ProcessScanner) -> None:
-        ps_output = (
-            " 1234  1.0  2.0  python /usr/bin/python\n"
-            " 5678  0.5  1.0  ollama serve\n"
-        )
+        ps_output = " 1234  1.0  2.0  python /usr/bin/python\n 5678  0.5  1.0  ollama serve\n"
         with patch("asyncio.create_subprocess_exec") as mock_exec:
             proc = AsyncMock()
-            proc.communicate = AsyncMock(
-                return_value=(ps_output.encode("utf-8"), b"")
-            )
+            proc.communicate = AsyncMock(return_value=(ps_output.encode("utf-8"), b""))
             proc.returncode = 0
             mock_exec.return_value = proc
             # The fallback uses last column as command; these lines won't
@@ -258,7 +235,19 @@ class TestProcessScannerHelpers:
         assert result2 == "hermes"
 
     def test_find_cmd_idx_standard(self) -> None:
-        cols = ["user", "pid", "%cpu", "%mem", "vsz", "rss", "tt", "stat", "started", "time", "command"]
+        cols = [
+            "user",
+            "pid",
+            "%cpu",
+            "%mem",
+            "vsz",
+            "rss",
+            "tt",
+            "stat",
+            "started",
+            "time",
+            "command",
+        ]
         idx = ProcessScanner._find_cmd_idx(cols)
         assert idx == cols.index("command")
 

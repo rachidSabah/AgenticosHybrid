@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from agentic_os.domain.discovery import (
     AgentCapability,
     AgentDiscoveryConfig,
@@ -14,7 +12,6 @@ from agentic_os.domain.discovery import (
     DiscoveryResult,
     LocalAgent,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # LocalAgent
@@ -90,7 +87,9 @@ class TestLocalAgentCreation:
 
 class TestLocalAgentRunning:
     def test_running_returns_true_for_running(self) -> None:
-        agent = LocalAgent(id="r1", name="R", tool_type="t", version="1", status=AgentStatus.RUNNING)
+        agent = LocalAgent(
+            id="r1", name="R", tool_type="t", version="1", status=AgentStatus.RUNNING
+        )
         assert agent.running() is True
 
     def test_running_returns_true_for_idle(self) -> None:
@@ -102,23 +101,33 @@ class TestLocalAgentRunning:
         assert agent.running() is True
 
     def test_running_returns_false_for_stopped(self) -> None:
-        agent = LocalAgent(id="s1", name="S", tool_type="t", version="1", status=AgentStatus.STOPPED)
+        agent = LocalAgent(
+            id="s1", name="S", tool_type="t", version="1", status=AgentStatus.STOPPED
+        )
         assert agent.running() is False
 
     def test_running_returns_false_for_crashed(self) -> None:
-        agent = LocalAgent(id="c1", name="C", tool_type="t", version="1", status=AgentStatus.CRASHED)
+        agent = LocalAgent(
+            id="c1", name="C", tool_type="t", version="1", status=AgentStatus.CRASHED
+        )
         assert agent.running() is False
 
     def test_running_returns_false_for_unknown(self) -> None:
-        agent = LocalAgent(id="u1", name="U", tool_type="t", version="1", status=AgentStatus.UNKNOWN)
+        agent = LocalAgent(
+            id="u1", name="U", tool_type="t", version="1", status=AgentStatus.UNKNOWN
+        )
         assert agent.running() is False
 
     def test_running_returns_false_for_updating(self) -> None:
-        agent = LocalAgent(id="up1", name="Up", tool_type="t", version="1", status=AgentStatus.UPDATING)
+        agent = LocalAgent(
+            id="up1", name="Up", tool_type="t", version="1", status=AgentStatus.UPDATING
+        )
         assert agent.running() is False
 
     def test_running_returns_false_for_restarting(self) -> None:
-        agent = LocalAgent(id="rt1", name="Rt", tool_type="t", version="1", status=AgentStatus.RESTARTING)
+        agent = LocalAgent(
+            id="rt1", name="Rt", tool_type="t", version="1", status=AgentStatus.RESTARTING
+        )
         assert agent.running() is False
 
 
@@ -151,11 +160,29 @@ class TestLocalAgentToDict:
         agent = LocalAgent(id="k1", name="KeysTest", tool_type="t", version="1")
         d = agent.to_dict()
         expected_keys = {
-            "id", "name", "tool_type", "version", "status", "executable_path",
-            "working_directory", "pid", "capabilities", "supported_models",
-            "supported_providers", "health_score", "last_seen", "discovered_at",
-            "latency_ms", "memory_mb", "cpu_percent", "threads", "uptime_seconds",
-            "restart_count", "configuration", "tags", "error",
+            "id",
+            "name",
+            "tool_type",
+            "version",
+            "status",
+            "executable_path",
+            "working_directory",
+            "pid",
+            "capabilities",
+            "supported_models",
+            "supported_providers",
+            "health_score",
+            "last_seen",
+            "discovered_at",
+            "latency_ms",
+            "memory_mb",
+            "cpu_percent",
+            "threads",
+            "uptime_seconds",
+            "restart_count",
+            "configuration",
+            "tags",
+            "error",
         }
         assert set(d.keys()) == expected_keys
 
@@ -206,15 +233,27 @@ class TestAgentHealthRecord:
     def test_checked_at_defaults_to_now(self) -> None:
         now = datetime.now(UTC)
         rec = AgentHealthRecord(
-            agent_id="h2", status=AgentStatus.UNKNOWN, health_score=0.0,
-            latency_ms=0.0, memory_mb=0.0, cpu_percent=0.0, threads=0, pid=None,
+            agent_id="h2",
+            status=AgentStatus.UNKNOWN,
+            health_score=0.0,
+            latency_ms=0.0,
+            memory_mb=0.0,
+            cpu_percent=0.0,
+            threads=0,
+            pid=None,
         )
         assert (rec.checked_at - now).total_seconds() < 1.0
 
     def test_to_dict_keys(self) -> None:
         rec = AgentHealthRecord(
-            agent_id="h3", status=AgentStatus.BUSY, health_score=0.7,
-            latency_ms=10.0, memory_mb=128.0, cpu_percent=5.5, threads=4, pid=2002,
+            agent_id="h3",
+            status=AgentStatus.BUSY,
+            health_score=0.7,
+            latency_ms=10.0,
+            memory_mb=128.0,
+            cpu_percent=5.5,
+            threads=4,
+            pid=2002,
         )
         d = rec.to_dict()
         assert d["agent_id"] == "h3"
@@ -225,8 +264,14 @@ class TestAgentHealthRecord:
 
     def test_error_field(self) -> None:
         rec = AgentHealthRecord(
-            agent_id="h4", status=AgentStatus.CRASHED, health_score=0.0,
-            latency_ms=0.0, memory_mb=0.0, cpu_percent=0.0, threads=0, pid=None,
+            agent_id="h4",
+            status=AgentStatus.CRASHED,
+            health_score=0.0,
+            latency_ms=0.0,
+            memory_mb=0.0,
+            cpu_percent=0.0,
+            threads=0,
+            pid=None,
             error="Process died",
         )
         assert rec.error == "Process died"
@@ -341,10 +386,23 @@ class TestAgentCapability:
 
     def test_all_members_present(self) -> None:
         expected = {
-            "CODE_GENERATION", "CODE_REVIEW", "TESTING", "DEBUGGING",
-            "CHAT", "SEARCH", "FILE_OPS", "TERMINAL_OPS", "BROWSER_OPS",
-            "IMAGE_GENERATION", "EMBEDDINGS", "REASONING", "PLANNING",
-            "MEMORY", "MCP", "API_GATEWAY", "CUSTOM",
+            "CODE_GENERATION",
+            "CODE_REVIEW",
+            "TESTING",
+            "DEBUGGING",
+            "CHAT",
+            "SEARCH",
+            "FILE_OPS",
+            "TERMINAL_OPS",
+            "BROWSER_OPS",
+            "IMAGE_GENERATION",
+            "EMBEDDINGS",
+            "REASONING",
+            "PLANNING",
+            "MEMORY",
+            "MCP",
+            "API_GATEWAY",
+            "CUSTOM",
         }
         assert set(AgentCapability.__members__) == expected
 

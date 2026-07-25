@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from agentic_os.core.discovery.local.service import LocalDiscoveryService
-from agentic_os.domain.discovery import AgentDiscoveryConfig, AgentStatus, LocalAgent
+from agentic_os.domain.discovery import AgentDiscoveryConfig, AgentStatus
 from agentic_os.domain.events import Topic
 
 
@@ -50,10 +51,12 @@ class TestLocalDiscoveryServiceDiscovery:
             patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
         ):
             mock_scanner = MagicMock()
-            mock_scanner.scan = AsyncMock(return_value=[
-                ("hermes", "/usr/bin/hermes", "1.0.0"),
-                ("ollama", "/usr/bin/ollama", "0.1.0"),
-            ])
+            mock_scanner.scan = AsyncMock(
+                return_value=[
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),
+                    ("ollama", "/usr/bin/ollama", "0.1.0"),
+                ]
+            )
             mock_scanner_cls.return_value = mock_scanner
 
             mock_hm = MagicMock()
@@ -66,7 +69,9 @@ class TestLocalDiscoveryServiceDiscovery:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.run_discovery()
             assert result.agents_found == 2
 
@@ -91,7 +96,9 @@ class TestLocalDiscoveryServiceDiscovery:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.run_discovery()
             assert result.agents_found == 0
             assert len(result.errors) >= 1
@@ -104,10 +111,12 @@ class TestLocalDiscoveryServiceDiscovery:
             patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
         ):
             mock_scanner = MagicMock()
-            mock_scanner.scan = AsyncMock(return_value=[
-                ("hermes", "/usr/bin/hermes", "1.0.0"),
-                ("hermes", "/usr/bin/hermes", "1.0.0"),  # duplicate
-            ])
+            mock_scanner.scan = AsyncMock(
+                return_value=[
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),  # duplicate
+                ]
+            )
             mock_scanner_cls.return_value = mock_scanner
 
             mock_hm = MagicMock()
@@ -120,7 +129,9 @@ class TestLocalDiscoveryServiceDiscovery:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.run_discovery()
             # Should detect 2 agents (both scanned), but only 1 new (deduped)
             assert result.agents_found == 2
@@ -137,10 +148,12 @@ class TestLocalDiscoveryServiceAgentAccess:
             patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
         ):
             mock_scanner = MagicMock()
-            mock_scanner.scan = AsyncMock(return_value=[
-                ("hermes", "/usr/bin/hermes", "1.0.0"),
-                ("ollama", "/usr/bin/ollama", "0.1.0"),
-            ])
+            mock_scanner.scan = AsyncMock(
+                return_value=[
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),
+                    ("ollama", "/usr/bin/ollama", "0.1.0"),
+                ]
+            )
             mock_scanner_cls.return_value = mock_scanner
 
             mock_hm = MagicMock()
@@ -153,11 +166,15 @@ class TestLocalDiscoveryServiceAgentAccess:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.run_discovery()
             yield service
 
-    async def test_get_agents_returns_list(self, service_with_agents: LocalDiscoveryService) -> None:
+    async def test_get_agents_returns_list(
+        self, service_with_agents: LocalDiscoveryService
+    ) -> None:
         agents = await service_with_agents.get_agents()
         assert len(agents) == 2
 
@@ -201,7 +218,9 @@ class TestLocalDiscoveryServiceUpdate:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.run_discovery()
             agent = (await service.get_agents())[0]
             updated = await service.update_agent(agent.id, version="2.0.0")
@@ -229,7 +248,9 @@ class TestLocalDiscoveryServiceUpdate:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.update_agent("nonexistent", version="2.0")
             assert result is None
 
@@ -255,7 +276,9 @@ class TestLocalDiscoveryServiceUpdate:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             service._event_bus = event_bus
             await service.run_discovery()
             agent = (await service.get_agents())[0]
@@ -285,7 +308,9 @@ class TestLocalDiscoveryServiceRemove:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.run_discovery()
             agent = (await service.get_agents())[0]
             removed = await service.remove_agent(agent.id)
@@ -312,7 +337,9 @@ class TestLocalDiscoveryServiceRemove:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.remove_agent("nonexistent")
             assert result is False
 
@@ -340,7 +367,9 @@ class TestLocalDiscoveryServiceAutoRegister:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.run_discovery()
             agents = await service.auto_register(event_bus=event_bus)
             assert len(agents) == 1
@@ -367,7 +396,9 @@ class TestLocalDiscoveryServiceAutoRegister:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             agents = await service.auto_register()
             assert agents == []
 
@@ -395,7 +426,9 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.start(event_bus=event_bus)
             assert service.is_started is True
             assert mock_scanner.scan.called
@@ -427,7 +460,9 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.start(event_bus=event_bus)
             assert event_bus.publish.called  # auto_register publishes
 
@@ -441,13 +476,15 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
         ):
             mock_scanner = MagicMock()
-            mock_scanner.scan = AsyncMock(return_value=[
-                ("hermes", "/usr/bin/hermes", "1.0.0"),
-                ("ollama", "/usr/bin/ollama", "0.1.0"),
-                ("docker", "/usr/bin/docker", "24.0.0"),
-                ("python", "/usr/bin/python3", "3.12.0"),
-                ("git", "/usr/bin/git", "2.40.0"),
-            ])
+            mock_scanner.scan = AsyncMock(
+                return_value=[
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),
+                    ("ollama", "/usr/bin/ollama", "0.1.0"),
+                    ("docker", "/usr/bin/docker", "24.0.0"),
+                    ("python", "/usr/bin/python3", "3.12.0"),
+                    ("git", "/usr/bin/git", "2.40.0"),
+                ]
+            )
             mock_scanner_cls.return_value = mock_scanner
 
             mock_hm = MagicMock()
@@ -460,7 +497,9 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.run_discovery()
             assert result.agents_found == 5
             assert result.agents_new == 5
@@ -490,7 +529,9 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             service._event_bus = event_bus
             await service.run_discovery()
 
@@ -498,14 +539,20 @@ class TestLocalDiscoveryServiceStartStopIntegration:
 
             # Update
             await service.update_agent(agent.id, status=AgentStatus.BUSY)
-            update_topics = [call.kwargs["topic"] for call in event_bus.publish.call_args_list
-                           if call.kwargs["topic"] == Topic.AGENT_UPDATED.value]
+            update_topics = [
+                call.kwargs["topic"]
+                for call in event_bus.publish.call_args_list
+                if call.kwargs["topic"] == Topic.AGENT_UPDATED.value
+            ]
             assert update_topics
 
             # Remove
             await service.remove_agent(agent.id)
-            remove_topics = [call.kwargs["topic"] for call in event_bus.publish.call_args_list
-                           if call.kwargs["topic"] == Topic.AGENT_REMOVED.value]
+            remove_topics = [
+                call.kwargs["topic"]
+                for call in event_bus.publish.call_args_list
+                if call.kwargs["topic"] == Topic.AGENT_REMOVED.value
+            ]
             assert remove_topics
 
     async def test_concurrent_access_safety(self) -> None:
@@ -517,10 +564,12 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
         ):
             mock_scanner = MagicMock()
-            mock_scanner.scan = AsyncMock(return_value=[
-                ("hermes", "/usr/bin/hermes", "1.0.0"),
-                ("ollama", "/usr/bin/ollama", "0.1.0"),
-            ])
+            mock_scanner.scan = AsyncMock(
+                return_value=[
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),
+                    ("ollama", "/usr/bin/ollama", "0.1.0"),
+                ]
+            )
             mock_scanner_cls.return_value = mock_scanner
 
             mock_hm = MagicMock()
@@ -533,7 +582,9 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             await service.run_discovery()
 
             # Fire concurrent reads
@@ -552,10 +603,12 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
         ):
             mock_scanner = MagicMock()
-            mock_scanner.scan = AsyncMock(return_value=[
-                ("hermes", "/usr/bin/hermes", "1.0.0"),
-                ("ollama", "/usr/bin/ollama", "0.1.0"),
-            ])
+            mock_scanner.scan = AsyncMock(
+                return_value=[
+                    ("hermes", "/usr/bin/hermes", "1.0.0"),
+                    ("ollama", "/usr/bin/ollama", "0.1.0"),
+                ]
+            )
             mock_scanner_cls.return_value = mock_scanner
 
             mock_hm = MagicMock()
@@ -568,7 +621,9 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.run_discovery()
             assert result.agents_found == 2
             assert result.agents_new == 2
@@ -598,13 +653,11 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             mock_cap.detect = MagicMock(return_value=())
             mock_cap_cls.return_value = mock_cap
 
-            service = LocalDiscoveryService(config=cfg, scanner=mock_scanner, capability_detector=mock_cap)
+            service = LocalDiscoveryService(
+                config=cfg, scanner=mock_scanner, capability_detector=mock_cap
+            )
             result = await service.run_discovery()
             assert result.errors
             # Service should still be usable
             agents = await service.get_agents()
             assert agents == []
-
-
-# Need asyncio for concurrent tests
-import asyncio

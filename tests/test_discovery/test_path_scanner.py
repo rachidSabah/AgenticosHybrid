@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import os
-import platform
-import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from agentic_os.core.discovery.local.path_scanner import (
-    ExecutableLocator,
     KNOWN_TOOLS,
+    ExecutableLocator,
     PathScanner,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ExecutableLocator — find_in_path

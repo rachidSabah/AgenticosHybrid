@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import platform
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from agentic_os.core.discovery.local.registry_scanner import RegistryScanner
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # RegistryScanner — non-Windows
@@ -48,19 +45,19 @@ class TestRegistryScannerWindows:
         return s
 
     async def test_scan_returns_results_on_windows(self, scanner: RegistryScanner) -> None:
-        reg_output = (
-            "\r\n"
-            "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Ollama\r\n"
-            "    DisplayName    REG_SZ    Ollama\r\n"
-            "    DisplayVersion    REG_SZ    0.1.0\r\n"
-            "    InstallLocation    REG_SZ    C:\\Users\\test\\AppData\\Local\\Ollama\r\n"
-            "\r\n"
-        )
-        with patch.object(scanner, "_query_reg_path", AsyncMock(return_value=[{
-            "DisplayName": "Ollama",
-            "DisplayVersion": "0.1.0",
-            "InstallLocation": "C:\\Users\\test\\AppData\\Local\\Ollama",
-        }])):
+        with patch.object(
+            scanner,
+            "_query_reg_path",
+            AsyncMock(
+                return_value=[
+                    {
+                        "DisplayName": "Ollama",
+                        "DisplayVersion": "0.1.0",
+                        "InstallLocation": "C:\\Users\\test\\AppData\\Local\\Ollama",
+                    }
+                ]
+            ),
+        ):
             results = await scanner.scan()
             assert len(results) >= 1
             assert any(r["tool_type"] == "ollama" for r in results)
@@ -72,7 +69,9 @@ class TestRegistryScannerWindows:
         ]
         with (
             patch.object(scanner, "_query_reg_path", AsyncMock(return_value=items)),
-            patch("agentic_os.core.discovery.local.registry_scanner._REGISTRY_PATHS", ("HKCU\\Test",)),
+            patch(
+                "agentic_os.core.discovery.local.registry_scanner._REGISTRY_PATHS", ("HKCU\\Test",)
+            ),
         ):
             results = await scanner.scan()
             assert len(results) == 2
@@ -82,18 +81,26 @@ class TestRegistryScannerWindows:
 
     async def test_scan_case_insensitive_match(self, scanner: RegistryScanner) -> None:
         items = [
-            {"DisplayName": "OLLAMA Desktop", "DisplayVersion": "1.0", "InstallLocation": "C:\\Ollama"},
+            {
+                "DisplayName": "OLLAMA Desktop",
+                "DisplayVersion": "1.0",
+                "InstallLocation": "C:\\Ollama",
+            },
         ]
         with (
             patch.object(scanner, "_query_reg_path", AsyncMock(return_value=items)),
-            patch("agentic_os.core.discovery.local.registry_scanner._REGISTRY_PATHS", ("HKCU\\Test",)),
+            patch(
+                "agentic_os.core.discovery.local.registry_scanner._REGISTRY_PATHS", ("HKCU\\Test",)
+            ),
         ):
             results = await scanner.scan()
             assert len(results) == 1
             assert results[0]["tool_type"] == "ollama"
 
     async def test_scan_handles_file_not_found(self, scanner: RegistryScanner) -> None:
-        with patch.object(scanner, "_query_reg_path", AsyncMock(side_effect=FileNotFoundError("reg"))):
+        with patch.object(
+            scanner, "_query_reg_path", AsyncMock(side_effect=FileNotFoundError("reg"))
+        ):
             results = await scanner.scan()
             assert results == []
 
@@ -104,7 +111,11 @@ class TestRegistryScannerWindows:
 
     async def test_scan_no_matching_tools(self, scanner: RegistryScanner) -> None:
         items = [
-            {"DisplayName": "Microsoft Office", "DisplayVersion": "16.0", "InstallLocation": "C:\\Office"},
+            {
+                "DisplayName": "Microsoft Office",
+                "DisplayVersion": "16.0",
+                "InstallLocation": "C:\\Office",
+            },
         ]
         with patch.object(scanner, "_query_reg_path", AsyncMock(return_value=items)):
             results = await scanner.scan()
@@ -134,10 +145,7 @@ class TestRegistryScannerWindows:
 
 class TestParseRegOutput:
     def test_parse_reg_output_basic(self) -> None:
-        text = (
-            "    DisplayName    REG_SZ    Ollama\n"
-            "    DisplayVersion    REG_SZ    0.1.0\n"
-        )
+        text = "    DisplayName    REG_SZ    Ollama\n    DisplayVersion    REG_SZ    0.1.0\n"
         items = RegistryScanner._parse_reg_output(text)
         assert len(items) == 1
         assert items[0]["DisplayName"] == "Ollama"

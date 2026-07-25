@@ -12,11 +12,7 @@ import pytest
 
 from agentic_os.domain.discovery import (
     AgentDiscoveryConfig,
-    AgentHealthRecord,
-    AgentStatus,
-    LocalAgent,
 )
-
 
 # ── Path / Executable fixtures ─────────────────────────────────────────────
 
@@ -100,27 +96,19 @@ def sample_agent_data() -> dict[str, Any]:
 
 
 @pytest.fixture
-def local_discovery_service() -> (
-    tuple["LocalDiscoveryService", MagicMock, MagicMock, MagicMock]
-):  # noqa: F821
+def local_discovery_service() -> tuple["LocalDiscoveryService", MagicMock, MagicMock, MagicMock]:  # noqa: F821
     """Create a ``LocalDiscoveryService`` with all scanners mocked.
 
     Returns ``(service, mock_scanner, mock_health_monitor, mock_event_bus)``.
     """
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock
 
     from agentic_os.core.discovery.local.service import LocalDiscoveryService
 
     with (
-        patch(
-            "agentic_os.core.discovery.local.service.AgentScanner"
-        ) as mock_scanner_cls,
-        patch(
-            "agentic_os.core.discovery.local.service.HealthMonitor"
-        ) as mock_hm_cls,
-        patch(
-            "agentic_os.core.discovery.local.service.CapabilityDetector"
-        ) as mock_cap_cls,
+        patch("agentic_os.core.discovery.local.service.AgentScanner") as mock_scanner_cls,
+        patch("agentic_os.core.discovery.local.service.HealthMonitor") as mock_hm_cls,
+        patch("agentic_os.core.discovery.local.service.CapabilityDetector") as mock_cap_cls,
     ):
         mock_scanner = MagicMock()
         mock_scanner.scan = AsyncMock(return_value=[])

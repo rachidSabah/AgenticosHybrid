@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -28,7 +28,9 @@ class TestVersionDetector:
         assert ver == ""
         assert detector.get_cache_size() == 1
 
-    async def test_version_caching_same_call_returns_cached(self, detector: VersionDetector) -> None:
+    async def test_version_caching_same_call_returns_cached(
+        self, detector: VersionDetector
+    ) -> None:
         with patch.object(detector, "_run_version_command", return_value="3.0.0") as mock_run:
             v1 = await detector.get_version("/usr/bin/hermes", "hermes")
             v2 = await detector.get_version("/usr/bin/hermes", "hermes")
