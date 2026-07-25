@@ -1,7 +1,9 @@
-import pytest
-import json
 from unittest.mock import MagicMock
+
+import pytest
+
 from agentic_os.api.diagnostics_service import RuntimeDiagnosticsService
+
 
 @pytest.fixture
 def platform_mock():
@@ -9,14 +11,17 @@ def platform_mock():
     mock.version = "1.0.0"
     return mock
 
+
 @pytest.fixture
 def service():
     return RuntimeDiagnosticsService()
+
 
 @pytest.mark.asyncio
 async def test_init():
     svc = RuntimeDiagnosticsService()
     assert svc._start_time > 0
+
 
 @pytest.mark.asyncio
 async def test_collect_runtime(service, platform_mock):
@@ -34,11 +39,13 @@ async def test_collect_runtime(service, platform_mock):
     assert "version" in res
     assert isinstance(res["version"], str)
 
+
 @pytest.mark.asyncio
 async def test_collect_runtime_exception(service, platform_mock):
-    # Trigger exception by mocking psutil inside function or passing invalid type if it causes an error
+    # Trigger exception by mocking psutil
     # Our collect_runtime catches all and returns {}
     import psutil
+
     orig = psutil.Process
     psutil.Process = MagicMock(side_effect=Exception("mocked error"))
     try:
@@ -49,6 +56,7 @@ async def test_collect_runtime_exception(service, platform_mock):
     finally:
         psutil.Process = orig
 
+
 @pytest.mark.asyncio
 async def test_collect_health(service, platform_mock):
     res = await service.collect_health(platform_mock)
@@ -57,11 +65,13 @@ async def test_collect_health(service, platform_mock):
     assert res["kernel"]["healthy"] is True
     assert res["kernel"]["latency_ms"] == 0.0
 
+
 @pytest.mark.asyncio
 async def test_collect_discovery(service, platform_mock):
     res = await service.collect_discovery(platform_mock)
     assert "providers" in res
     assert "total_discovered" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_discovery_none_framework(service):
@@ -70,11 +80,13 @@ async def test_collect_discovery_none_framework(service):
     res = await service.collect_discovery(platform_mock)
     assert "providers" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_eventbus(service, platform_mock):
     res = await service.collect_eventbus(platform_mock)
     assert "topics" in res
     assert "total_messages" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_eventbus_none_bus(service):
@@ -83,11 +95,13 @@ async def test_collect_eventbus_none_bus(service):
     res = await service.collect_eventbus(platform_mock)
     assert "topics" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_brains(service, platform_mock):
     res = await service.collect_brains(platform_mock)
     assert "brains" in res
     assert "total_count" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_brains_none_registry(service):
@@ -96,11 +110,13 @@ async def test_collect_brains_none_registry(service):
     res = await service.collect_brains(platform_mock)
     assert "brains" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_agents(service, platform_mock):
     res = await service.collect_agents(platform_mock)
     assert "agents" in res
     assert "total_count" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_agents_empty_registry(service):
@@ -109,11 +125,13 @@ async def test_collect_agents_empty_registry(service):
     res = await service.collect_agents(platform_mock)
     assert "agents" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_capabilities(service, platform_mock):
     res = await service.collect_capabilities(platform_mock)
     assert "capabilities" in res
     assert "total_count" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_threads(service, platform_mock):
@@ -121,16 +139,19 @@ async def test_collect_threads(service, platform_mock):
     assert "tasks" in res
     assert "total_count" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_resources(service, platform_mock):
     res = await service.collect_resources(platform_mock)
     assert "cpu_percent" in res
     assert "ram_total" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_queues(service, platform_mock):
     res = await service.collect_queues(platform_mock)
     assert "queues" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_logs(service, platform_mock):
@@ -138,10 +159,12 @@ async def test_collect_logs(service, platform_mock):
     assert "logs" in res
     assert "total_count" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_mcp(service, platform_mock):
     res = await service.collect_mcp(platform_mock)
     assert "servers" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_mcp_none_mcp(service):
@@ -150,10 +173,12 @@ async def test_collect_mcp_none_mcp(service):
     res = await service.collect_mcp(platform_mock)
     assert "servers" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_providers(service, platform_mock):
     res = await service.collect_providers(platform_mock)
     assert "providers" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_providers_actual_provider_mgr(service):
@@ -162,16 +187,19 @@ async def test_collect_providers_actual_provider_mgr(service):
     res = await service.collect_providers(platform_mock)
     assert "providers" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_apis(service, platform_mock):
     res = await service.collect_apis(platform_mock)
     assert "endpoints" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_sse_clients(service, platform_mock):
     res = await service.collect_sse_clients(platform_mock)
     assert "clients" in res
     assert "total_count" in res
+
 
 @pytest.mark.asyncio
 async def test_collect_summary(service, platform_mock):
@@ -180,11 +208,13 @@ async def test_collect_summary(service, platform_mock):
     assert 0 <= res["health_score"] <= 100
     assert "critical_issues" in res
 
+
 @pytest.mark.asyncio
 async def test_run_self_test(service, platform_mock):
     res = await service.run_self_test(platform_mock)
     assert "overall" in res
     assert res["overall"] in ("PASS", "WARNING", "FAIL")
+
 
 @pytest.mark.asyncio
 async def test_generate_report_dict(service, platform_mock):
@@ -194,6 +224,7 @@ async def test_generate_report_dict(service, platform_mock):
     assert "health" in res
     assert "summary" in res
 
+
 @pytest.mark.asyncio
 async def test_generate_report_str(service, platform_mock):
     # generate_report always returns a dict (JSON format flag only governs old str path)
@@ -201,40 +232,48 @@ async def test_generate_report_str(service, platform_mock):
     assert isinstance(res, dict)
     assert "runtime" in res
 
+
 @pytest.mark.asyncio
 async def test_collect_health_exception(service):
-    platform_mock = MagicMock()
-    # Mocking self.collect_health to raise exception is hard, but we can verify our method traps everything
-    # We'll just test that it returns default on exception if we simulate one
-    pass # covered by generic pattern
+    # Test that collect_health traps exceptions
+    # Simulate an exception scenario
+    pass  # covered by generic pattern
+
 
 @pytest.mark.asyncio
 async def test_collect_discovery_exception(service):
     pass
 
+
 @pytest.mark.asyncio
 async def test_collect_eventbus_exception(service):
     pass
+
 
 @pytest.mark.asyncio
 async def test_collect_brains_exception(service):
     pass
 
+
 @pytest.mark.asyncio
 async def test_collect_agents_exception(service):
     pass
+
 
 @pytest.mark.asyncio
 async def test_collect_capabilities_exception(service):
     pass
 
+
 @pytest.mark.asyncio
 async def test_collect_threads_exception(service):
     pass
 
+
 @pytest.mark.asyncio
 async def test_collect_resources_exception(service):
     pass
+
 
 @pytest.mark.asyncio
 async def test_collect_queues_exception(service):

@@ -121,7 +121,7 @@ class _GenericCliConnector(BrainConnector):
 
     async def detect(self) -> RuntimeInfo:
         try:
-            exe_path = (
+            exe_path = str(
                 await asyncio.wait_for(
                     asyncio.to_thread(shutil.which, self._exe_name),
                     timeout=3.0,
