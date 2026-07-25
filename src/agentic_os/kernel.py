@@ -275,7 +275,17 @@ class Kernel:
         self.mission_planner = MissionPlannerImpl(self.bus, settings)
         self._plugins: list = []
         self._started = False
+        self._platform_instance: Platform | None = None
         self.local_discovery = None
+        # Phase 6.2: AI Brain Registry & Constellation (initialized in _start_subsystems)
+        self.brain_registry = None
+        self.brain_manager = None
+        self.brain_catalog = None
+        self.brain_graph = None
+        self.brain_stats = None
+        self.brain_health = None
+        self.brain_discovery_bridge = None
+        self.brain_runtime_bridge = None
         # Phase 4: Runtime Manager — universal execution engine framework
         runtime_registry = RuntimeRegistryImpl(self.bus)
         discovery_engine = DiscoveryEngine()
@@ -558,6 +568,17 @@ class Kernel:
                 "INITIALIZED",
                 f"registry={await self.brain_registry.count()}, graph=ready",
             )
+
+            # Update platform snapshot so existing API routes see live brains
+            if self._platform_instance is not None:
+                self._platform_instance.brain_registry = self.brain_registry
+                self._platform_instance.brain_manager = self.brain_manager
+                self._platform_instance.brain_catalog = self.brain_catalog
+                self._platform_instance.brain_graph = self.brain_graph
+                self._platform_instance.brain_stats = self.brain_stats
+                self._platform_instance.brain_health = self.brain_health
+                self._platform_instance.brain_discovery_bridge = self.brain_discovery_bridge
+                self._platform_instance.brain_runtime_bridge = self.brain_runtime_bridge
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
@@ -764,7 +785,9 @@ class Kernel:
                 self.provider_mgr.register_model(m)
 
     def platform(self) -> Platform:
-        return Platform(
+        if self._platform_instance is not None:
+            return self._platform_instance
+        self._platform_instance = Platform(
             bus=self.bus,
             registry=self.registry,
             providers=self.providers,
@@ -805,6 +828,7 @@ class Kernel:
             brain_discovery_bridge=self.brain_discovery_bridge,
             brain_runtime_bridge=self.brain_runtime_bridge,
         )
+        return self._platform_instance
 
 
 async def run_serve(host: str | None = None, port: int | None = None) -> None:
