@@ -62,10 +62,7 @@ class TestTerminalManager:
             cmd=sys.executable,
             args=[
                 "-c",
-                "import sys; print('ready'); sys.stdout.flush();"
-                + " while True:"
-                + " line = sys.stdin.readline();"
-                + " print('echo: '+line, end=''); sys.stdout.flush()",
+                "import sys, time; print('ready'); sys.stdout.flush(); time.sleep(5)",
             ],
         )
         # Give the process time to start
@@ -80,10 +77,7 @@ class TestTerminalManager:
             cmd=sys.executable,
             args=[
                 "-c",
-                "import sys; sys.stdout.flush();"
-                + " while True:"
-                + " line = sys.stdin.readline();"
-                + " print('got: '+line, end=''); sys.stdout.flush()",
+                "import sys, time; print('ready'); sys.stdout.flush(); time.sleep(5)",
             ],
         )
         await asyncio.sleep(0.3)
