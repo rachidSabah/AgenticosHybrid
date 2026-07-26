@@ -113,9 +113,9 @@ export default function DesktopRuntimes() {
         </button>
       </div>
 
-      {discoveryResult && discoveryResult.errors.length > 0 && (
+      {(discoveryResult?.errors?.length ?? 0) > 0 && (
         <div role="alert" className="rounded-lg border border-warn/40 bg-warn/5 px-4 py-2 text-xs text-warn">
-          {discoveryResult.errors.join("; ")}
+          {discoveryResult?.errors?.join("; ")}
         </div>
       )}
 

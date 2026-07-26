@@ -378,6 +378,34 @@ export const useStore = create<StoreState>((set, get) => ({
           telemetry.providers = Object.keys(providers).length;
           break;
         }
+        case "brain.registered":
+        case "brain.discovered":
+        case "brain.updated":
+        case "brain.health_changed": {
+          const name = String(p.display_name ?? p.name ?? p.id ?? "brain");
+          providers = { ...s.providers };
+          const healthNum = Number(p.health ?? 100);
+          const statusStr = healthNum >= 80 ? "healthy" : healthNum >= 50 ? "degraded" : "unknown";
+          providers[name] = {
+            provider: name,
+            status: statusStr,
+            latency_ms: Number(p.latency ?? 0),
+          };
+          const id = String(p.id ?? name);
+          agents = { ...s.agents };
+          agents[id] = {
+            id,
+            role: "assistant",
+            capabilities: (p.capabilities as string[]) ?? [],
+            status: statusStr === "healthy" ? "running" : "idle",
+            health: statusStr as AgentNode["health"],
+            provider: name,
+          };
+          telemetry = { ...s.telemetry };
+          telemetry.providers = Object.keys(providers).length;
+          telemetry.agents = Object.keys(agents).length;
+          break;
+        }
         case "provider.failed": {
           const name = String(p.name ?? p.provider ?? "provider");
           providers = { ...s.providers };

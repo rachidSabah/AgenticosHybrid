@@ -96,7 +96,7 @@ function FlightComms() {
           const isOk = e.topic?.includes("complete") || e.topic?.includes("start") || e.topic?.includes("healthy");
           return (
             <motion.div
-              key={e.id}
+              key={e.id || `evt-${i}`}
               layout
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: Math.max(0.3, 1 - i * 0.025), y: 0 }}
@@ -145,7 +145,7 @@ export function MissionOverview() {
   const allProviders = useMemo(() => {
     const merged = Array.isArray(providersData) ? [...providersData] : [];
     for (const p of Object.values(providers)) {
-      if (!merged.find((d) => d.provider === p.provider)) {
+      if (!merged.find((d) => d.provider?.toLowerCase() === p.provider?.toLowerCase())) {
         merged.push(p as unknown as ProviderHealthRecord);
       }
     }
@@ -203,7 +203,7 @@ export function MissionOverview() {
           </div>
           {allProviders.filter((p) => p?.provider).map((p, i) => (
             <AgentAircraft
-              key={p.provider}
+              key={`agent-${i}`}
               provider={p.provider}
               status={p.status}
               latency={p.latency_ms}
@@ -236,7 +236,7 @@ export function MissionOverview() {
           ) : (
             allProviders.map((p, idx) => (
               <motion.div
-                key={p.provider}
+                key={`exec-${idx}`}
                 className="flex items-center gap-2 rounded-lg border border-border/40 px-2.5 py-1.5 border-l-2"
                 style={{ borderLeftColor: cmdColor(p.provider) }}
                 initial={{ opacity: 0, x: -10 }}
@@ -258,8 +258,8 @@ export function MissionOverview() {
       {/* ── BOTTOM LEFT: Capabilities ── */}
       <Panel title="Available Capabilities" subtitle={`${caps.length} registered`} className="col-span-3 row-span-1">
         <div className="flex flex-wrap gap-1.5">
-          {caps.length > 0 ? caps.map((c) => (
-            <Badge key={c.name} tone={c.requires_approval ? "warn" : "default"}>{c.name}</Badge>
+          {caps.length > 0 ? caps.map((c, i) => (
+            <Badge key={`cap-${i}`} tone={c.requires_approval ? "warn" : "default"}>{c.name}</Badge>
           )) : <Empty title="No capabilities registered" hint="Capabilities appear when providers register with the Discovery Engine." />}
         </div>
       </Panel>

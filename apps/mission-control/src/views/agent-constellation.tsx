@@ -82,7 +82,7 @@ export function AgentConstellation() {
       const y = 44 + radiusY * Math.sin(angle);
 
       return {
-        id: p.provider.toLowerCase().replace(/\s+/g, "_"),
+        id: `${p.provider.toLowerCase().replace(/\s+/g, "_")}-${idx}`,
         name: p.provider.toUpperCase(),
         sub: p.status === "healthy" ? "Discovered Runtime" : p.status,
         status: p.status === "healthy" ? "ACTIVE" : p.status.toUpperCase(),

@@ -32,6 +32,9 @@ from agentic_os.core.desktop.update import AutoUpdateManager
 from agentic_os.core.desktop.window import NativeWindowManager
 from agentic_os.core.desktop.windows_platform import WindowsPlatformIntegration
 from agentic_os.core.desktop.workspace import WorkspaceManager
+
+# Phase 6.3 — Universal Runtime Control
+from agentic_os.core.runtime.runtime_manager import RuntimeManager
 from agentic_os.domain.desktop import (
     DesktopRuntimeState,
     DesktopRuntimeStatus,
@@ -100,6 +103,9 @@ class DesktopRuntimeManager:
 
         # Phase 4 M6 Part 3 — Production Hardening
         self.hardening: DesktopHardeningPort = DesktopHardeningManager()
+
+        # Phase 6.3 — Universal Runtime Control
+        self.runtime: RuntimeManager = RuntimeManager(bus=bus)
 
         # Keyboard shortcuts
         self._shortcuts: dict[str, KeyboardShortcut] = {}
@@ -185,6 +191,13 @@ class DesktopRuntimeManager:
         except Exception as exc:
             log.warning("Runtime auto-discovery failed", error=str(exc))
 
+        # Phase 6.3 — Initialize Runtime Manager
+        try:
+            await self.runtime.start()
+            log.info("Runtime manager started")
+        except Exception as exc:
+            log.warning("Runtime manager start failed", error=str(exc))
+
         # Create default workspace if none exist
         if await self.workspace.get_workspace_count() == 0:
             ws = await self.workspace.create_workspace("Default")
@@ -207,6 +220,13 @@ class DesktopRuntimeManager:
 
     async def stop(self) -> None:
         self._status = DesktopRuntimeStatus.STOPPING
+
+        # Phase 6.3 — Stop Runtime Manager
+        try:
+            await self.runtime.stop()
+        except Exception as exc:
+            log.warning("Runtime manager stop failed", error=str(exc))
+
         await self.hardening.plan_shutdown()
         await self.hardening.cleanup_resources()
         await self.performance.stop_monitoring()

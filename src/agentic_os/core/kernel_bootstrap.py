@@ -281,7 +281,7 @@ class EventBusService(ServiceProtocol):
         if not self._bus:
             return {"status": "failed", "error": "EventBus not built"}
         return {
-            "status": "started" if self._started else "stopped",
+            "status": "healthy" if self._started else "stopped",
             "bus_type": type(self._bus).__name__,
             "started": self._started,
         }
@@ -741,7 +741,7 @@ class ContainerKernel:
     # ── Platform generation (used by _build_app) ──
 
     def platform(self) -> Any:
-        return self._compatibility.generate_platform(overrides={})
+        return self._old_kernel.platform()
 
     # ── Startup ──
 

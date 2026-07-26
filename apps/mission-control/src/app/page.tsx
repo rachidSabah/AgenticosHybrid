@@ -128,6 +128,11 @@ const DisasterRecovery = lazyWithRetry(() =>
   import("@/views/disaster-recovery").then((m) => ({ default: m.DisasterRecovery }))
 );
 
+// Phase 6.3 — Universal Runtime Control
+const RuntimeDashboard = lazyWithRetry(() =>
+  import("@/views/runtime-dashboard").then((m) => ({ default: m.default }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
   governance: () => (
     <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
@@ -373,6 +378,14 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Local Agents" fallback={<ViewSkeleton title="Local Agents" />}>
       <Suspense fallback={<ViewSkeleton title="Local Agents" />}>
         <LocalAgents />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  // Phase 6.3 — Universal Runtime Control
+  "runtime": () => (
+    <ErrorBoundary viewName="Runtime Dashboard" fallback={<ViewSkeleton title="Runtime Dashboard" />}>
+      <Suspense fallback={<ViewSkeleton title="Runtime Dashboard" />}>
+        <RuntimeDashboard />
       </Suspense>
     </ErrorBoundary>
   ),

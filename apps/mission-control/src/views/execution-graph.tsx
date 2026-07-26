@@ -348,6 +348,18 @@ function AnimatedEdge({ sourceX, sourceY, targetX, targetY, style }: any) {
   );
 }
 
+// ── Stable type references (module-level — React Flow requires a stable identity) ──
+
+const nodeTypes: NodeTypes = {
+  task: TaskNode,
+  agent: AgentNode,
+  system: SystemNode,
+};
+
+const edgeTypes: EdgeTypes = {
+  default: AnimatedEdge,
+};
+
 // ── Main Component ──
 
 export function ExecutionGraph() {
@@ -357,11 +369,11 @@ export function ExecutionGraph() {
   const [selected, setSelected] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filters, setFilters] = useState<FilterState>({
-    status: ["running", "completed", "failed", "paused", "cancelled"],
+    status: ["running", "completed", "failed", "paused", "cancelled", "idle", "healthy", "down", "degraded", "recovered", "in_progress", "planned", "created", "dispatched", "assigned"],
     type: ["task", "agent", "system"],
     search: "",
     sort: "newest",
-    dimension: "3d",
+    dimension: "2d",
   });
 
   const { nodes, edges } = useMemo(() => {
@@ -411,6 +423,14 @@ export function ExecutionGraph() {
           style: { stroke: "#6366f1", strokeOpacity: 0.5, strokeWidth: 1.5 },
         });
       }
+      // Agent → system-health edge (live DAG connectivity)
+      executionEdges.push({
+        id: `edge-sys-${agent.id}`,
+        source: `system-health`,
+        target: `agent-${agent.id}`,
+        animated: false,
+        style: { stroke: "#10b981", strokeOpacity: 0.2, strokeWidth: 0.5 },
+      });
     });
 
     // System nodes
@@ -467,15 +487,7 @@ export function ExecutionGraph() {
     });
   }, [edges, nodes, filteredNodes]);
 
-  const nodeTypes: NodeTypes = useMemo(() => ({
-    task: TaskNode,
-    agent: AgentNode,
-    system: SystemNode,
-  }), []);
-
-  const edgeTypes: EdgeTypes = useMemo(() => ({
-    default: AnimatedEdge,
-  }), []);
+  // nodeTypes/edgeTypes are module-level constants (stable identity for React Flow)
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));

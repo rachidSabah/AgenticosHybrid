@@ -130,9 +130,13 @@ export function MissionOrchestrator() {
 
   useEffect(() => { loadMissions(); }, [loadMissions]);
 
-  // Merge live store updates
+  // Merge live store updates — guard against reference changes that cause infinite loops
+  const prevStoreKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (missionUpdates && Object.keys(missionStore).length > 0) {
+      const storeKey = JSON.stringify(missionStore);
+      if (prevStoreKeyRef.current === storeKey) return;
+      prevStoreKeyRef.current = storeKey;
       setMissions((prev) =>
         prev.map((m) => missionStore[m.id] ? { ...m, ...missionStore[m.id] } : m),
       );
@@ -142,7 +146,7 @@ export function MissionOrchestrator() {
         );
       }
     }
-  }, [missionUpdates, missionStore, selectedMission]);
+  }, [missionUpdates, missionStore]);
 
   return (
     <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
@@ -930,12 +934,12 @@ function AgentCommsLog({ missionId }: { missionId: string }) {
         <Empty title="No agent communication yet" hint="Events will appear as agents coordinate via the EventBus." />
       ) : (
         <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
-          {commsEvents.slice(0, 80).map((e) => {
+          {commsEvents.slice(0, 80).map((e, i) => {
             const p = e.payload as Record<string, any>;
             const source = String(p?.source ?? p?.agent_id ?? p?.provider ?? "system");
             const target = String(p?.target ?? p?.assigned_provider ?? "");
             return (
-              <div key={e.id} className="glass rounded-xl px-3 py-2 text-xs">
+              <div key={e.id || `evt-${i}`} className="glass rounded-xl px-3 py-2 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[10px] font-mono text-faint">
                     {new Date(e.timestamp).toLocaleTimeString()}

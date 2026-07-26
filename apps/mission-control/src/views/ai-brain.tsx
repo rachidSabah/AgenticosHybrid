@@ -82,7 +82,7 @@ export function AIBrain() {
       const agentCount = Object.values(storeAgents).filter(a => a.provider === p.provider).length;
 
       return {
-        id: p.provider.toLowerCase().replace(/\s+/g, "_"),
+        id: `${p.provider.toLowerCase().replace(/\s+/g, "_")}-${idx}`,
         name: p.provider.toUpperCase(),
         sub: p.status === "healthy" ? "Active Provider" : p.status,
         status: p.status.toUpperCase(),

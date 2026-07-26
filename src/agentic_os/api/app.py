@@ -696,6 +696,14 @@ def create_app(platform: Platform) -> FastAPI:
                 if platform.bus:
                     await platform.bus.publish(
                         EventEnvelope(
+                            type=Topic.BRAIN_REGISTERED.value,
+                            source="api:rescan",
+                            topic=Topic.BRAIN_REGISTERED.value,
+                            payload=record.to_dict(),
+                        )
+                    )
+                    await platform.bus.publish(
+                        EventEnvelope(
                             type=Topic.PROVIDER_REGISTERED.value,
                             source="api:rescan",
                             topic=Topic.PROVIDER_REGISTERED.value,
@@ -726,6 +734,15 @@ def create_app(platform: Platform) -> FastAPI:
                                 },
                             ),
                         )
+            if platform.bus:
+                await platform.bus.publish(
+                    EventEnvelope(
+                        type=Topic.BRAIN_GRAPH_UPDATED.value,
+                        source="api:rescan",
+                        topic=Topic.BRAIN_GRAPH_UPDATED.value,
+                        payload={"detected": len(detected), "registered": count},
+                    )
+                )
         return {"status": "rescanned", "detected": len(detected), "registered": count}
 
     @app.post("/api/brains/register")
@@ -3810,7 +3827,157 @@ def create_app(platform: Platform) -> FastAPI:
             result = await desktop.dragdrop.handle_drop(payload)
             return result
 
-    # ── Event history (REST replay for frontend cold-start) ──
+        # ── Runtime Management (Phase 6.3 — Universal Runtime Control) ──
+
+        runtime_mgr = desktop.runtime
+
+        if runtime_mgr is not None:
+
+            @app.get("/api/runtimes")
+            async def list_runtimes(
+                status: str | None = None,
+                runtime_type: str | None = None,
+            ) -> list[dict]:
+                all_runtimes = await runtime_mgr.list_all()
+                if status:
+                    all_runtimes = [r for r in all_runtimes if r.status.value == status]
+                if runtime_type:
+                    all_runtimes = [r for r in all_runtimes if r.type.value == runtime_type]
+                return [r.to_dict() for r in all_runtimes]
+
+            @app.get("/api/runtimes/{runtime_id}")
+            async def get_runtime(runtime_id: str) -> dict:
+                rt = await runtime_mgr.get(runtime_id)
+                if rt is None:
+                    raise HTTPException(404, f"Runtime not found: {runtime_id}")
+                return rt.to_dict()
+
+            @app.post("/api/runtimes/{runtime_id}/start")
+            async def start_runtime(runtime_id: str) -> dict:
+                rt = await runtime_mgr.launch(runtime_id)
+                if rt is None:
+                    raise HTTPException(404, f"Runtime not found: {runtime_id}")
+                return rt.to_dict()
+
+            @app.post("/api/runtimes/{runtime_id}/stop")
+            async def stop_runtime(runtime_id: str, body: dict | None = None) -> dict:
+                force = body.get("force", False) if body else False
+                rt = await runtime_mgr.stop_runtime(runtime_id, force=force)
+                return rt.to_dict() if rt else {"status": "stopped"}
+
+            @app.post("/api/runtimes/{runtime_id}/restart")
+            async def restart_runtime(runtime_id: str) -> dict:
+                rt = await runtime_mgr.restart_runtime(runtime_id)
+                return rt.to_dict() if rt else {"status": "restarted"}
+
+            @app.post("/api/runtimes/{runtime_id}/kill")
+            async def kill_runtime(runtime_id: str) -> dict:
+                rt = await runtime_mgr.kill(runtime_id)
+                return rt.to_dict() if rt else {"status": "killed"}
+
+            @app.get("/api/runtimes/{runtime_id}/logs")
+            async def get_runtime_logs(
+                runtime_id: str,
+                limit: int = 100,
+                stream: str | None = None,
+                level: str | None = None,
+                search: str | None = None,
+            ) -> list[dict]:
+                logs = await runtime_mgr.get_logs(
+                    runtime_id,
+                    limit=limit,
+                    stream=stream,
+                    level=level,
+                    search=search,
+                )
+                return logs
+
+            @app.get("/api/runtimes/{runtime_id}/metrics")
+            async def get_runtime_metrics(runtime_id: str) -> dict:
+                metrics = await runtime_mgr.get_metrics(runtime_id)
+                return metrics.to_dict() if metrics else {}
+
+            @app.get("/api/runtimes/{runtime_id}/health")
+            async def get_runtime_health(runtime_id: str) -> dict:
+                health = await runtime_mgr.get_health(runtime_id)
+                return {"status": health.value} if health else {"status": "unknown"}
+
+            @app.get("/api/runtimes/{runtime_id}/sessions")
+            async def list_runtime_sessions(runtime_id: str) -> list[dict]:
+                sessions = await runtime_mgr.list_sessions(runtime_id)
+                return [s.to_dict() for s in sessions]
+
+            @app.post("/api/runtimes/{runtime_id}/execute")
+            async def execute_runtime_command(runtime_id: str, body: dict) -> dict:
+                command = body.get("command", "")
+                if not command:
+                    raise HTTPException(400, "command is required")
+                output = await runtime_mgr.execute_command(runtime_id, command)
+                return {"output": output}
+
+            @app.post("/api/runtimes/{runtime_id}/terminal")
+            async def attach_runtime_terminal(runtime_id: str) -> dict:
+                terminal_id = await runtime_mgr.attach_terminal(runtime_id)
+                return {"terminal_id": terminal_id}
+
+            @app.post("/api/runtimes/discover")
+            async def discover_runtimes() -> list[dict]:
+                runtimes = await runtime_mgr.discover()
+                return [r.to_dict() for r in runtimes]
+
+            @app.websocket("/ws/runtimes")
+            async def runtimes_ws(websocket: WebSocket) -> None:
+                await websocket.accept()
+                try:
+                    while True:
+                        data = await websocket.receive_json()
+                        action = data.get("action")
+                        if action == "list":
+                            all_rts = await runtime_mgr.list_all()
+                            await websocket.send_json(
+                                {
+                                    "type": "runtimes.list",
+                                    "runtimes": [r.to_dict() for r in all_rts],
+                                }
+                            )
+                        elif action == "get":
+                            rid = data.get("runtime_id")
+                            if rid:
+                                rt = await runtime_mgr.get(rid)
+                                await websocket.send_json(
+                                    {
+                                        "type": "runtime.get",
+                                        "runtime": rt.to_dict() if rt else None,
+                                    }
+                                )
+                        elif action == "start":
+                            rid = data.get("runtime_id")
+                            if rid:
+                                rt = await runtime_mgr.launch(rid)
+                                await websocket.send_json(
+                                    {
+                                        "type": "runtime.started",
+                                        "runtime": rt.to_dict() if rt else None,
+                                    }
+                                )
+                        elif action == "stop":
+                            rid = data.get("runtime_id")
+                            if rid:
+                                rt = await runtime_mgr.stop_runtime(rid)
+                                await websocket.send_json(
+                                    {
+                                        "type": "runtime.stopped",
+                                        "runtime": rt.to_dict() if rt else None,
+                                    }
+                                )
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        await websocket.close()
+                    except Exception:
+                        pass
+
     @app.get("/api/events/recent")
     async def get_recent_events(limit: int = 50) -> list[dict]:
         return platform.dashboard.get_recent_events(limit)

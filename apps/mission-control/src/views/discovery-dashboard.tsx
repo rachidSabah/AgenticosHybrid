@@ -146,6 +146,26 @@ function DiscoveryDashboardTab() {
         >
           Clear Cache
         </button>
+        <button
+          onClick={async () => {
+            setScanning(true);
+            setScanResult(null);
+            try {
+              const res = await api.post<{ status: string; detected: number; registered: number }>("/api/brains/rescan", {});
+              setScanResult(`Rescanned: found ${res.detected} runtimes (${res.registered} registered)`);
+              await useStore.getState().hydrate();
+              load();
+            } catch (err) {
+              setScanResult(`Rescan failed: ${err}`);
+            } finally {
+              setScanning(false);
+            }
+          }}
+          disabled={scanning}
+          className="rounded-lg bg-emerald-600/20 border border-emerald-500/40 px-4 py-2 text-xs font-medium text-emerald-400 transition hover:bg-emerald-600/30 disabled:opacity-50"
+        >
+          {scanning ? "Rescanning…" : "Rescan Runtimes"}
+        </button>
         {scanResult && (
           <span className="text-xs text-muted">{scanResult}</span>
         )}

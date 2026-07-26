@@ -173,6 +173,7 @@ export function PromptCenter() {
         execution_mode: "hybrid",
       });
       if (mission?.id) {
+        await api.planMission(mission.id);
         await api.startMission(mission.id);
       }
       setPrompt("");

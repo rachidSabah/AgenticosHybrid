@@ -48,7 +48,7 @@ class RuntimeDiscoveryManager:
                     executable=item.executable or item.name,
                     capabilities=[
                         c.value if hasattr(c, "value") else str(c)
-                        for c in item.capabilities  # ty:ignore[unresolved-attribute]
+                        for c in getattr(item, "capabilities", [])
                     ],
                     verified=item.found,
                 )

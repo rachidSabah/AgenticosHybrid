@@ -67,6 +67,8 @@ export const NAV: NavItem[] = [
   { id: "agent-memory", label: "Agent Memory Manager", hint: "Y", icon: Database, group: "observe" },
   { id: "collaboration", label: "Live Collaboration", hint: "L", icon: Orbit, group: "build" },
   { id: "disaster-recovery", label: "Backup & Recovery", hint: "K", icon: RefreshCw, group: "desktop" },
+  // Phase 6.3 — Universal Runtime Control
+  { id: "runtime", label: "Runtime Dashboard", hint: "7", icon: Terminal, group: "desktop" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

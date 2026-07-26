@@ -366,7 +366,7 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
                     if installed
                     else BrainStatus.REMOVED
                 ),
-                health=100.0 if running_proc else (50.0 if installed else 0.0),
+                health=100.0 if installed else 0.0,
                 memory_usage=running_proc.memory_mb if running_proc else 0.0,
                 cpu_usage=running_proc.cpu_percent if running_proc else 0.0,
                 latency=5.0 if running_proc else 0.0,

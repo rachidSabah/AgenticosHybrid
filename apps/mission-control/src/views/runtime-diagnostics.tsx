@@ -287,7 +287,7 @@ function TabRuntimeOverview({ autoRefresh }: { autoRefresh: boolean }) {
           <div className="space-y-2">
             <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">CPU Architecture</span><span className="text-sm font-mono">{data.cpu}</span></div>
             <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Total RAM</span><span className="text-sm font-mono">{data.ram}</span></div>
-            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Git Branch / Commit</span><span className="text-sm font-mono">{data.gitBranch} ({data.gitCommit.substring(0, 7)})</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Git Branch / Commit</span><span className="text-sm font-mono">{data.gitBranch ?? "—"} ({data.gitCommit?.substring(0, 7) ?? "—"})</span></div>
           </div>
         </div>
       </div>
@@ -977,7 +977,7 @@ function TabDiagnosticsReport() {
     <Panel title="Generate Diagnostics Report">
       <div className="max-w-2xl">
         <p className="text-sm text-muted mb-6">
-          Generate a complete snapshot of the system's current state, including logs, metrics, active tasks, and configuration. 
+          Generate a complete snapshot of the system&apos;s current state, including logs, metrics, active tasks, and configuration. 
           This archive is suitable for support tickets and offline analysis.
         </p>
         
