@@ -10,6 +10,7 @@ This package provides the complete runtime management system:
 - **RuntimeEvent**: Typed event payloads with publish helpers
 """
 
+from agentic_os.core.runtime.coordinator import RuntimeCoordinator
 from agentic_os.core.runtime.runtime import (
     RestartPolicy,
     Runtime,
@@ -48,6 +49,7 @@ from agentic_os.core.runtime.runtime_manager import RuntimeManager
 from agentic_os.core.runtime.runtime_registry import RuntimeRegistry
 
 __all__ = [
+    "RuntimeCoordinator",
     # Domain model
     "Runtime",
     "RuntimeType",

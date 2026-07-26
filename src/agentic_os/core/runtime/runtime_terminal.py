@@ -259,7 +259,9 @@ class TerminalManager:
                         error=str(drain_exc),
                     )
                 else:
-                    log.warning("pipe error on drain", terminal_id=terminal_id, error=str(drain_exc))
+                    log.warning(
+                        "pipe error on drain", terminal_id=terminal_id, error=str(drain_exc)
+                    )
                     return False
             session.last_active = _utcnow()
         except BrokenPipeError as exc:

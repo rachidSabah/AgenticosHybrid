@@ -8,6 +8,7 @@ into the next test's event loop via the Windows kernel pipe handle pool.
 This conftest adds a finalizer that cancels pending background tasks and
 awaits subprocess termination to prevent cross-test contamination.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +16,6 @@ import gc
 import sys
 
 import pytest
-
 
 if sys.platform == "win32":
 
