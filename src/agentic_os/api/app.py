@@ -4493,22 +4493,22 @@ def create_app(platform: Platform) -> FastAPI:
     async def get_routing_agents() -> list[dict]:
         return [
             {
-                "id": "agent-claude",
-                "name": "Claude Code",
+                "agent_id": "agent-claude",
+                "agent_name": "Claude Code",
                 "provider": "anthropic",
-                "model": "claude-3-7-sonnet",
-                "status": "ready",
+                "capabilities": {"coding": 0.98, "reasoning": 0.95, "architecture": 0.92},
                 "cost_per_1k": 0.015,
-                "avg_latency_ms": 1200,
+                "latency_ms": 1200,
+                "reliability": 0.99,
             },
             {
-                "id": "agent-hermes",
-                "name": "Hermes",
+                "agent_id": "agent-hermes",
+                "agent_name": "Hermes 3",
                 "provider": "nous",
-                "model": "hermes-3-llama-3.1-70b",
-                "status": "ready",
+                "capabilities": {"coding": 0.88, "speed": 0.96, "chat": 0.90},
                 "cost_per_1k": 0.002,
-                "avg_latency_ms": 800,
+                "latency_ms": 800,
+                "reliability": 0.97,
             },
         ]
 

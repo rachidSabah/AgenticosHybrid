@@ -100,8 +100,9 @@ function ModelBadge({ model }: { model: OpenAIModelType }) {
 
 function AgentCard({ agent }: { agent: AgentRouteProfile }) {
   const color = getAgentColor(agent.provider);
-  const topCaps = Object.entries(agent.capabilities)
-    .sort(([, a], [, b]) => b - a)
+  const capsObj = agent.capabilities || {};
+  const topCaps = Object.entries(capsObj)
+    .sort(([, a], [, b]) => (b as number) - (a as number))
     .slice(0, 4);
 
   return (
@@ -116,7 +117,7 @@ function AgentCard({ agent }: { agent: AgentRouteProfile }) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">{agent.agent_name}</span>
+            <span className="text-sm font-semibold">{agent.agent_name || agent.agent_id || "Agent"}</span>
             <span className="rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-medium text-faint">
               {agent.provider}
             </span>
@@ -126,16 +127,16 @@ function AgentCard({ agent }: { agent: AgentRouteProfile }) {
               <span
                 key={cap}
                 className="rounded bg-black/20 px-1.5 py-0.5 text-[10px]"
-                style={{ color: score > 0.7 ? "#22c55e" : score > 0.4 ? "#f59e0b" : "#ef4444" }}
+                style={{ color: (score as number) > 0.7 ? "#22c55e" : (score as number) > 0.4 ? "#f59e0b" : "#ef4444" }}
               >
-                {cap}: {(score * 100).toFixed(0)}%
+                {cap}: {((score as number) * 100).toFixed(0)}%
               </span>
             ))}
           </div>
         </div>
         <div className="text-right text-[11px] text-faint">
           <div>{agent.cost_per_1k > 0 ? `$${agent.cost_per_1k}/1k` : "Free"}</div>
-          <div>{agent.latency_ms}ms</div>
+          <div>{agent.latency_ms || 0}ms</div>
         </div>
       </div>
     </motion.div>
@@ -334,8 +335,8 @@ export function GatewayDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {agents.map((a) => (
-              <AgentCard key={a.agent_id} agent={a} />
+            {agents.map((a, idx) => (
+              <AgentCard key={a.agent_id || `agent-${idx}`} agent={a} />
             ))}
           </div>
         )}
