@@ -131,6 +131,7 @@ export function MissionOverview() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    void useStore.getState().hydrate();
     api.providerHealth().then((data) => setProvidersData(Array.isArray(data) ? data : [])).catch((err) => { setError(String(err)); });
     api.capabilities().then((data) => setCaps(Array.isArray(data) ? data : [])).catch((err) => { setError(String(err)); });
     api.audit().then((data) => setAudit(Array.isArray(data) ? data : [])).catch((err) => { setError(String(err)); });
