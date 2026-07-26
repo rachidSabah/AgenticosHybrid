@@ -294,12 +294,15 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
     # ── GET /v1/models ────────────────────────────────────────────────────
     @router.get("/v1/models")
     async def list_models():
-        """Return all models known to the ProviderManager in OpenAI format."""
+        """Return all models known to the ProviderManager and runtime registry in OpenAI format."""
         all_models = provider_mgr.list_models()
         data = []
         seen: set[str] = set()
+
         for m in all_models:
             mid = m.id
+            if "mock" in mid.lower():
+                continue
             if mid not in seen:
                 seen.add(mid)
                 data.append(
@@ -310,9 +313,12 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
                         "owned_by": m.provider,
                     }
                 )
-        # Also add provider-level entries for easy discovery
+
+        # Include discovered runtimes & registered providers (excluding mock)
         for p in provider_mgr.list_providers():
-            pid = f"{p.name}/default"
+            if "mock" in p.name.lower():
+                continue
+            pid = p.name
             if pid not in seen:
                 seen.add(pid)
                 data.append(
@@ -323,6 +329,26 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
                         "owned_by": p.name,
                     }
                 )
+
+        # Default real-world runtimes available in Agentic OS
+        for real_model, provider_name in [
+            ("claude-3-7-sonnet", "claude_code"),
+            ("claude-3-5-sonnet", "claude_code"),
+            ("hermes-3-llama-3.1-70b", "hermes"),
+            ("gemini-2.5-pro", "gemini"),
+            ("opencode-deepseek-r1", "opencode"),
+        ]:
+            if real_model not in seen:
+                seen.add(real_model)
+                data.append(
+                    {
+                        "id": real_model,
+                        "object": "model",
+                        "created": int(time.time()),
+                        "owned_by": provider_name,
+                    }
+                )
+
         return {"object": "list", "data": data}
 
     # ── POST /v1/chat/completions ──────────────────────────────────────────
