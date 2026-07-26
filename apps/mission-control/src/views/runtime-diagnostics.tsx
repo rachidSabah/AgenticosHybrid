@@ -900,11 +900,11 @@ function TabHealthDashboard({ autoRefresh }: { autoRefresh: boolean }) {
       <div className="mb-6">
         <div className="inline-flex items-center gap-3 px-4 py-2 glass rounded-lg border border-border/40">
           <span className="text-sm font-semibold text-muted">Global Status:</span>
-          <Badge tone={data.status === "healthy" ? "ok" : "warn"}>{data.status.toUpperCase()}</Badge>
+          <Badge tone={data.status === "healthy" ? "ok" : "warn"}>{(data.status || "UNKNOWN").toUpperCase()}</Badge>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {Object.entries(data.subsystems).map(([name, stat]) => (
+        {Object.entries(data.subsystems || {}).map(([name, stat]) => (
           <div key={name} className="glass rounded-xl p-4 border border-border/40">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-semibold text-sm capitalize">{name}</h3>

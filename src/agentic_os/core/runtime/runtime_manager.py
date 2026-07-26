@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import subprocess  # noqa: PLC0415
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
