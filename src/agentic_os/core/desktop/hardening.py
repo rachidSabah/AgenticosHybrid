@@ -496,14 +496,34 @@ class DesktopHardeningManager:
             cpu = process.cpu_percent(interval=0.1)
             mem = process.memory_info().rss / (1024 * 1024)
             threads_count = len(threading.enumerate())
-            connections = len(process.connections())
-            io = process.io_counters()
-            disk_io = (io.read_bytes + io.write_bytes) / max(time.time() - process.create_time(), 1)
+            try:
+                open_handles = process.num_handles()
+            except (AttributeError, Exception):
+                try:
+                    open_handles = len(process.open_files())
+                except Exception:
+                    open_handles = 0
+            try:
+                conn_list = getattr(
+                    process, "net_connections", getattr(process, "connections", lambda: [])
+                )()
+                connections = len(conn_list)
+            except Exception:
+                connections = 0
+
+            try:
+                io = process.io_counters()
+                disk_io = (io.read_bytes + io.write_bytes) / max(
+                    time.time() - process.create_time(), 1
+                )
+            except Exception:
+                disk_io = 0.0
+
             return ResourceUsageSummary(
                 cpu_percent=cpu,
                 memory_mb=round(mem, 1),
                 thread_count=threads_count,
-                open_handles=process.num_handles(),
+                open_handles=open_handles,
                 network_connections=connections,
                 disk_io_bytes_per_sec=round(disk_io, 1),
             )
