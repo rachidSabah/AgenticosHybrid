@@ -497,12 +497,13 @@ class DesktopHardeningManager:
             mem = process.memory_info().rss / (1024 * 1024)
             threads_count = len(threading.enumerate())
             try:
-                open_handles = process.num_handles()
-            except (AttributeError, Exception):
-                try:
+                num_h_fn = getattr(process, "num_handles", None)
+                if num_h_fn is not None and callable(num_h_fn):
+                    open_handles = num_h_fn()
+                else:
                     open_handles = len(process.open_files())
-                except Exception:
-                    open_handles = 0
+            except Exception:
+                open_handles = 0
             try:
                 conn_list = getattr(
                     process, "net_connections", getattr(process, "connections", lambda: [])
