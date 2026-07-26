@@ -277,6 +277,20 @@ export async function runSelfTest(): Promise<DiagnosticsSelfTestResult> {
 
 export function fetchDiagnosticsSSE(onEvent: (event: any) => void, onError: (err: any) => void): () => void {
   const source = new EventSource(`${BASE}/api/diagnostics/events`);
+  
+  source.addEventListener("connected", (event) => {
+    onEvent({ type: "connected" });
+  });
+
+  source.addEventListener("DIAGNOSTICS_UPDATED", (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onEvent(data);
+    } catch (e) {
+      console.error("Failed to parse SSE event", e);
+    }
+  });
+
   source.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
@@ -285,9 +299,11 @@ export function fetchDiagnosticsSSE(onEvent: (event: any) => void, onError: (err
       console.error("Failed to parse SSE event", e);
     }
   };
+
   source.onerror = (err) => {
     onError(err);
   };
+
   return () => {
     source.close();
   };
