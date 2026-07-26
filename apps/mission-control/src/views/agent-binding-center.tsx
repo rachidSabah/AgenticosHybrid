@@ -249,15 +249,19 @@ export function AgentBindingCenter() {
       } else {
         await api.bindingDeepScan();
       }
+      await api.post("/api/brains/rescan");
+      await useStore.getState().hydrate();
       setTimeout(() => {
         setScanningMode("idle");
         addLog("Scan Engine", "success", `${mode === "deep" ? "Deep" : "Surface"} scan complete: 6 agents validated and bound.`);
-      }, 2500);
+      }, 1500);
     } catch {
+      await api.post("/api/brains/rescan");
+      await useStore.getState().hydrate();
       setTimeout(() => {
         setScanningMode("idle");
         addLog("Scan Engine", "info", `Local scan verified 6 active installed executables on host machine.`);
-      }, 2000);
+      }, 1500);
     }
   };
 
