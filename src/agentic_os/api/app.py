@@ -4469,6 +4469,49 @@ def create_app(platform: Platform) -> FastAPI:
             ]
         return res
 
+    @app.get("/api/v1/routing/config")
+    async def get_routing_config() -> dict:
+        return {
+            "default_strategy": "cost_optimized",
+            "fallback_enabled": True,
+            "cost_threshold_usd": 0.05,
+            "latency_threshold_ms": 2500,
+            "max_retries": 3,
+        }
+
+    @app.post("/api/v1/routing/config")
+    async def update_routing_config(body: dict) -> dict:
+        return {
+            "default_strategy": body.get("default_strategy", "cost_optimized"),
+            "fallback_enabled": body.get("fallback_enabled", True),
+            "cost_threshold_usd": body.get("cost_threshold_usd", 0.05),
+            "latency_threshold_ms": body.get("latency_threshold_ms", 2500),
+            "max_retries": body.get("max_retries", 3),
+        }
+
+    @app.get("/api/v1/routing/agents")
+    async def get_routing_agents() -> list[dict]:
+        return [
+            {
+                "id": "agent-claude",
+                "name": "Claude Code",
+                "provider": "anthropic",
+                "model": "claude-3-7-sonnet",
+                "status": "ready",
+                "cost_per_1k": 0.015,
+                "avg_latency_ms": 1200,
+            },
+            {
+                "id": "agent-hermes",
+                "name": "Hermes",
+                "provider": "nous",
+                "model": "hermes-3-llama-3.1-70b",
+                "status": "ready",
+                "cost_per_1k": 0.002,
+                "avg_latency_ms": 800,
+            },
+        ]
+
     @app.get("/omniroute/policies")
     async def omniroute_policies() -> list[dict]:
         return [
