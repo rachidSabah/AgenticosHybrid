@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess  # noqa: PLC0415
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -174,8 +176,6 @@ class RuntimeManager:
         if launcher is not None and hasattr(launcher, "execute"):
             return await launcher.execute(runtime, command)
 
-        import subprocess  # noqa: PLC0415
-
         try:
             result = subprocess.run(
                 command,
@@ -211,6 +211,13 @@ class RuntimeManager:
         runtime.terminal = terminal_id
         await self._update_immutable(runtime)
         return terminal_id
+
+    async def list_sessions(self, runtime_id: str) -> list:
+        """List sessions for a runtime."""
+        session_manager = self.controller._session_manager  # noqa: SLF001
+        if session_manager is not None and hasattr(session_manager, "list_sessions"):
+            return await session_manager.list_sessions(runtime_id)
+        return []
 
     # ── Logs & metrics ──────────────────────────────────────────────────
 

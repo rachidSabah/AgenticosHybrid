@@ -301,7 +301,7 @@ function TabRuntimeDiscovery({ autoRefresh, search }: { autoRefresh: boolean; se
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const tools = data?.tools.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.type.toLowerCase().includes(search.toLowerCase())) || [];
+  const tools = (data?.tools || []).filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.type.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Panel title="Discovered Runtimes & Tools">
