@@ -14,6 +14,7 @@ import collections.abc
 import dataclasses
 import json
 import time
+from collections import deque
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -4382,7 +4383,9 @@ def create_app(platform: Platform) -> FastAPI:
 
     # ── OmniRoute AI Subsystem REST API ────────────────────────────────────
 
-    _omniroute_log: list[dict] = []
+    # Bounded ring buffer; the previous unbounded list could grow without limit
+    # for the lifetime of the process. 1000 entries is enough for the status UI.
+    _omniroute_log: deque[dict] = deque(maxlen=1000)
 
     @app.get("/omniroute/status")
     async def omniroute_status() -> dict:

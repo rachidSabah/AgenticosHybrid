@@ -146,7 +146,7 @@ export function MissionOrchestrator() {
         );
       }
     }
-  }, [missionUpdates, missionStore]);
+  }, [missionUpdates, missionStore, selectedMission]);
 
   return (
     <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">

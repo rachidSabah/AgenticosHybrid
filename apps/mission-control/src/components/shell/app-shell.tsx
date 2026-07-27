@@ -50,8 +50,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         return;
       }
       // Single-key navigation when not typing
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.metaKey || e.ctrlKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        (target?.isContentEditable ?? false) ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      )
+        return;
       const item = NAV.find((n) => n.hint.toLowerCase() === e.key.toLowerCase());
       if (item) setActive(item.id);
     };

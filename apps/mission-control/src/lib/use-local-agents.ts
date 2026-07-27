@@ -126,7 +126,7 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
   fetchAgents: async () => {
     set({ loading: true, error: null });
     try {
-      const data = await api.get<LocalAgent[]>("/api/agents");
+      const data = await api.get<LocalAgent[]>("/api/local-agents");
       set({ agents: Array.isArray(data) ? data : [], loading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -143,7 +143,7 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
     }
 
     const sseBase = resolveSSEBase();
-    const url = `${sseBase}/api/agents/sse`;
+    const url = `${sseBase}/api/local-agents/sse`;
     let eventSource: EventSource;
 
     try {
@@ -158,27 +158,23 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
       set({ sseConnected: true, error: null });
     };
 
-    // Generic message handler for all event types
-    eventSource.onmessage = (ev) => {
-      try {
-        const event = JSON.parse(ev.data) as SSEDiscoveryEvent;
-        handleSSEEvent(event);
-      } catch {
-        // Ignore malformed frames
-      }
-    };
-
-    // Named event handlers (browser EventSource also supports them via addEventListener)
+    // Named event handlers — the backend always sets the SSE `event:` field per frame,
+    // so `onmessage` would never fire. Subscribe to each named type explicitly.
     const eventTypes = [
       "agent-discovered",
       "agent-updated",
       "agent-health-changed",
       "agent-removed",
       "discovery-completed",
+      "connected",
     ] as const;
 
     for (const eventType of eventTypes) {
       eventSource.addEventListener(eventType, (ev: MessageEvent) => {
+        if (eventType === "connected") {
+          set({ sseConnected: true, error: null });
+          return;
+        }
         try {
           const data = JSON.parse(ev.data) as Record<string, unknown>;
           const event: SSEDiscoveryEvent = { type: eventType, data } as SSEDiscoveryEvent;
@@ -266,7 +262,7 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
 
   startAgent: async (id: string) => {
     try {
-      await api.post<{ status: string }>(`/api/agents/${encodeURIComponent(id)}/start`);
+      await api.post<{ status: string }>(`/api/local-agents/${encodeURIComponent(id)}/start`);
       // Optimistically update local state
       const agents = get().agents.map((a) =>
         a.id === id ? { ...a, status: "running" as AgentStatus } : a
@@ -280,7 +276,7 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
 
   stopAgent: async (id: string) => {
     try {
-      await api.post<{ status: string }>(`/api/agents/${encodeURIComponent(id)}/stop`);
+      await api.post<{ status: string }>(`/api/local-agents/${encodeURIComponent(id)}/stop`);
       const agents = get().agents.map((a) =>
         a.id === id ? { ...a, status: "stopped" as AgentStatus } : a
       );
@@ -298,7 +294,7 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
         a.id === id ? { ...a, status: "restarting" as AgentStatus } : a
       );
       set({ agents });
-      await api.post<{ status: string }>(`/api/agents/${encodeURIComponent(id)}/restart`);
+      await api.post<{ status: string }>(`/api/local-agents/${encodeURIComponent(id)}/restart`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({ error: message });
@@ -307,11 +303,10 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
 
   forgetAgent: async (id: string) => {
     try {
+      await api.post<{ status: string }>(`/api/local-agents/${encodeURIComponent(id)}/forget`);
       // Optimistically remove from local state
       const agents = get().agents.filter((a) => a.id !== id);
       set({ agents });
-      // If there's a delete/forget endpoint:
-      // await api.del(`/api/agents/${encodeURIComponent(id)}`);
     } catch (err) {
       // Revert on error by re-fetching
       get().fetchAgents();
@@ -322,7 +317,10 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
 
   refreshAgent: async (id: string) => {
     try {
-      const agent = await api.get<LocalAgent>(`/api/agents/${encodeURIComponent(id)}`);
+      // No GET-by-id endpoint exists; fetch the full list and pick the matching agent.
+      const all = await api.get<LocalAgent[]>(`/api/local-agents`);
+      const agent = (Array.isArray(all) ? all : []).find((a) => a.id === id);
+      if (!agent) return;
       const agents = get().agents.map((a) =>
         a.id === id ? { ...a, ...agent } : a
       );
@@ -336,7 +334,7 @@ export const useLocalAgentsStore = create<LocalAgentsState>((set, get) => ({
   rescan: async () => {
     set({ loading: true, error: null });
     try {
-      await api.post<{ status: string }>("/api/agents/rescan");
+      await api.post<{ status: string }>("/api/local-agents/rescan");
       // After triggering the scan, fetch the updated list
       await get().fetchAgents();
     } catch (err) {

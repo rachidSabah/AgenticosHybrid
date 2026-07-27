@@ -33,18 +33,21 @@ export function ThreeDGraph({ nodes, edges, onNodeClick }: ThreeDGraphProps) {
   useEffect(() => {
     if (!mountRef.current) return;
 
+    // Capture the mount node locally so cleanup uses the same node even if the ref changes.
+    const mountNode = mountRef.current;
+
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x080a10);
     scene.fog = new THREE.Fog(0x080a10, 5, 15);
 
-    const camera = new THREE.PerspectiveCamera(75, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(75, mountNode.clientWidth / mountNode.clientHeight, 0.1, 1000);
     camera.position.set(0, 0, 10);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    renderer.setSize(mountNode.clientWidth, mountNode.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    mountRef.current.appendChild(renderer.domElement);
+    mountNode.appendChild(renderer.domElement);
 
     // Controls
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -57,7 +60,7 @@ export function ThreeDGraph({ nodes, edges, onNodeClick }: ThreeDGraphProps) {
     // Post-processing for glow effect
     const renderScene = new RenderPass(scene, camera);
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(mountRef.current.clientWidth, mountRef.current.clientHeight),
+      new THREE.Vector2(mountNode.clientWidth, mountNode.clientHeight),
       1.5, 0.4, 0.85
     );
     bloomPass.threshold = 0;
@@ -141,10 +144,10 @@ export function ThreeDGraph({ nodes, edges, onNodeClick }: ThreeDGraphProps) {
 
     // Handle window resize
     const handleResize = () => {
-      camera.aspect = mountRef.current!.clientWidth / mountRef.current!.clientHeight;
+      camera.aspect = mountNode.clientWidth / mountNode.clientHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(mountRef.current!.clientWidth, mountRef.current!.clientHeight);
-      composer.setSize(mountRef.current!.clientWidth, mountRef.current!.clientHeight);
+      renderer.setSize(mountNode.clientWidth, mountNode.clientHeight);
+      composer.setSize(mountNode.clientWidth, mountNode.clientHeight);
     };
     window.addEventListener("resize", handleResize);
 
@@ -153,10 +156,9 @@ export function ThreeDGraph({ nodes, edges, onNodeClick }: ThreeDGraphProps) {
     const mouse = new THREE.Vector2();
 
     const onMouseClick = (event: MouseEvent) => {
-      if (!mountRef.current) return;
+      const rect = mountNode.getBoundingClientRect();
 
       // Calculate mouse position in normalized device coordinates
-      const rect = mountRef.current.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
@@ -172,14 +174,36 @@ export function ThreeDGraph({ nodes, edges, onNodeClick }: ThreeDGraphProps) {
         onNodeClick?.(nodeId);
       }
     };
-    mountRef.current.addEventListener("click", onMouseClick);
+    mountNode.addEventListener("click", onMouseClick);
 
-    // Cleanup
+    // Cleanup: dispose all GPU resources to prevent memory leaks across re-renders.
     return () => {
       window.removeEventListener("resize", handleResize);
-      if (mountRef.current) {
-        mountRef.current.removeEventListener("click", onMouseClick);
-        mountRef.current.removeChild(renderer.domElement);
+      mountNode.removeEventListener("click", onMouseClick);
+      // Dispose node geometries/materials
+      nodeGroup.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) {
+          mat.forEach((m) => m.dispose());
+        } else if (mat) {
+          (mat as THREE.Material).dispose();
+        }
+      });
+      // Dispose edge geometries/materials
+      edgeGroup.children.forEach((line) => {
+        const l = line as THREE.Line;
+        if (l.geometry) l.geometry.dispose();
+        const m = l.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(m)) m.forEach((mm) => mm.dispose());
+        else if (m) m.dispose();
+      });
+      composer.dispose();
+      renderer.dispose();
+      controls.dispose();
+      if (renderer.domElement.parentNode === mountNode) {
+        mountNode.removeChild(renderer.domElement);
       }
     };
   }, [nodes, edges, onNodeClick]);

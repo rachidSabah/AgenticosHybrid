@@ -118,13 +118,30 @@ class DashboardBroadcaster:
         self._bus = bus
         self._clients: set[MemoryObjectSendStream] = set()
         self._history: deque[dict[str, Any]] = deque(maxlen=_MAX_HISTORY)
+        self._subscriptions: list[str] = []
 
     async def start(self) -> None:
+        # Track subscription IDs so stop() can cleanly unsubscribe and avoid
+        # leaking subscriptions across kernel restarts / hot reloads.
+        self._subscriptions = []
         for topic in _DASHBOARD_TOPICS:
-            await self._bus.subscribe(topic.value, self._on_event)
+            sub_id = await self._bus.subscribe(topic.value, self._on_event)
+            self._subscriptions.append(sub_id)
 
     async def stop(self) -> None:
-        pass
+        for sub_id in self._subscriptions:
+            try:
+                await self._bus.unsubscribe(sub_id)
+            except Exception:
+                log.warning("Failed to unsubscribe %s", sub_id, exc_info=True)
+        self._subscriptions.clear()
+        # Close any remaining client streams so their WS handlers exit promptly.
+        for client in list(self._clients):
+            try:
+                client.close()
+            except Exception:
+                pass
+        self._clients.clear()
 
     def add_client(self) -> tuple[Any, MemoryObjectSendStream]:
         send, recv = anyio.create_memory_object_stream(max_buffer_size=256)
@@ -142,8 +159,15 @@ class DashboardBroadcaster:
     async def _on_event(self, event: EventEnvelope) -> None:
         snapshot = event.model_dump(mode="json")
         self._history.append(snapshot)
+        # Snapshot the client set so removals during iteration don't skip clients.
         for client in list(self._clients):
             try:
                 await client.send(snapshot)
             except anyio.BrokenResourceError:
+                self._clients.discard(client)
+            except anyio.ClosedResourceError:
+                self._clients.discard(client)
+            except Exception:
+                # Don't let one bad client abort delivery to the rest.
+                log.debug("Failed to deliver event to a client", exc_info=True)
                 self._clients.discard(client)

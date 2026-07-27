@@ -12,7 +12,6 @@ import gc
 import inspect
 import os
 import platform as os_platform
-import subprocess
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -46,32 +45,48 @@ class RuntimeDiagnosticsService:
     # ── Git helpers ──────────────────────────────────────────────────────────
 
     @staticmethod
-    def _git_commit() -> str:
+    async def _git_commit() -> str:
+        """Return the current git HEAD commit, or 'unknown' on failure.
+
+        Uses ``asyncio.create_subprocess_exec`` so the event loop is not blocked
+        while git runs.
+        """
         try:
-            return (
-                subprocess.check_output(
-                    ["git", "rev-parse", "HEAD"],
-                    timeout=2,
-                    stderr=subprocess.DEVNULL,
-                )
-                .decode()
-                .strip()
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                "rev-parse",
+                "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
             )
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return "unknown"
+            return stdout.decode().strip() if stdout else "unknown"
         except Exception:  # noqa: BLE001
             return "unknown"
 
     @staticmethod
-    def _git_branch() -> str:
+    async def _git_branch() -> str:
         try:
-            return (
-                subprocess.check_output(
-                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                    timeout=2,
-                    stderr=subprocess.DEVNULL,
-                )
-                .decode()
-                .strip()
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                "rev-parse",
+                "--abbrev-ref",
+                "HEAD",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
             )
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return "unknown"
+            return stdout.decode().strip() if stdout else "unknown"
         except Exception:  # noqa: BLE001
             return "unknown"
 
@@ -101,8 +116,8 @@ class RuntimeDiagnosticsService:
                 "gc_counts": list(gc.get_count()),
                 "asyncio_tasks_count": len(tasks),
                 "version": "1.0.0-rc2",
-                "git_commit": self._git_commit(),
-                "git_branch": self._git_branch(),
+                "git_commit": await self._git_commit(),
+                "git_branch": await self._git_branch(),
                 "build_timestamp": _utcnow_iso(),
                 "environment": os.getenv("ENVIRONMENT", "development"),
                 "workspace": os.getenv("WORKSPACE_PATH", os.getcwd()),

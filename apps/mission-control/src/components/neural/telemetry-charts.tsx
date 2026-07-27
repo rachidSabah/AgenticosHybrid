@@ -242,7 +242,7 @@ export function TelemetryPanel({ className = "" }: { className?: string }) {
       mem: [...history.current.mem.slice(1), perf.memory_usage_percent],
       net: [...history.current.net.slice(1), Math.min(perf.process_count * 10, 100)],
     };
-  }, [perf?.cpu_usage_percent, perf?.memory_usage_percent, perf?.process_count]);
+  }, [perf]);
 
   return (
     <motion.div 

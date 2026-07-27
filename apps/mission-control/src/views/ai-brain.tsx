@@ -113,9 +113,9 @@ export function AIBrain() {
   const activeAgentsCount = useMemo(() => {
     const list = Object.values(storeProviders);
     return list.length > 0 ? list.filter(p => p.status === "healthy").length : 0;
-  }, [storeProviders, brainNodes]);
+  }, [storeProviders]);
 
-  const totalAgentsCount = useMemo(() => Math.max(brainNodes.length - 1, Object.keys(storeAgents).length), [brainNodes, storeAgents]);
+  const totalAgentsCount = useMemo(() => Math.max(brainNodes.length - 1, Object.keys(storeAgents).length), [brainNodes.length, storeAgents]);
 
   const runningTasksCount = useMemo(() => {
     const tasks = Object.values(storeTasks);

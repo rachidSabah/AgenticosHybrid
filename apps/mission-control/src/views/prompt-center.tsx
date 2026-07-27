@@ -127,6 +127,15 @@ export function PromptCenter() {
 
   const connected = useStore((s) => s.connected);
 
+  // Revoke any outstanding blob URLs on unmount to prevent memory leaks.
+  useEffect(() => {
+    return () => {
+      for (const att of attachments) {
+        if (att.preview) URL.revokeObjectURL(att.preview);
+      }
+    };
+  }, [attachments]);
+
   // Auto-resize textarea like claude.ai
   useEffect(() => {
     if (textareaRef.current) {
@@ -177,6 +186,9 @@ export function PromptCenter() {
         await api.startMission(mission.id);
       }
       setPrompt("");
+      for (const att of attachments) {
+        if (att.preview) URL.revokeObjectURL(att.preview);
+      }
       setAttachments([]);
     } catch (e) {
       console.error("Submission failed:", e);
@@ -208,6 +220,16 @@ export function PromptCenter() {
       ]);
     }
     if (e.target) e.target.value = "";
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.preview) {
+        URL.revokeObjectURL(target.preview);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
   };
 
   return (
@@ -314,13 +336,16 @@ export function PromptCenter() {
               {attachments.map((att) => (
                 <div key={att.id} className="group relative flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/90">
                   {att.preview ? (
+                    // Blob URL preview — next/image optimization does not apply to
+                    // ephemeral object URLs, so a plain <img> is the correct choice.
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={att.preview} alt="" className="h-6 w-6 rounded object-cover" />
                   ) : (
                     <FileText size={14} className="text-amber-400" />
                   )}
                   <span className="truncate max-w-[140px] text-[11px] font-medium">{att.name}</span>
                   <button
-                    onClick={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                    onClick={() => removeAttachment(att.id)}
                     className="text-white/40 hover:text-red-400 ml-1"
                   >
                     <X size={12} />

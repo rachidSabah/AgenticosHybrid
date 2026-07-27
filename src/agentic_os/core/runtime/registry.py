@@ -57,11 +57,23 @@ class RuntimeRegistryImpl:
     _sessions: dict[str, ExecutionSession] = field(default_factory=dict)
     _locks: dict[str, asyncio.Lock] = field(default_factory=dict)
     _adapter_map: dict[str, str] = field(default_factory=dict)  # engine_id -> adapter_key
+    _registry_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _max_sessions: int = 500
 
-    def _get_lock(self, engine_id: str) -> asyncio.Lock:
-        if engine_id not in self._locks:
-            self._locks[engine_id] = asyncio.Lock()
-        return self._locks[engine_id]
+    async def _get_lock(self, engine_id: str) -> asyncio.Lock:
+        """Return the per-engine lock, creating it if needed.
+
+        Guarded by ``_registry_lock`` so two concurrent callers cannot each create
+        distinct ``asyncio.Lock`` instances for the same engine_id (which would
+        defeat the purpose of the lock). Callers must NOT already hold
+        ``_registry_lock`` — asyncio.Lock is not reentrant.
+        """
+        async with self._registry_lock:
+            lock = self._locks.get(engine_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks[engine_id] = lock
+            return lock
 
     async def _emit(self, topic: Topic, payload: dict[str, Any]) -> None:
         """Emit an event to the event bus."""
@@ -94,12 +106,28 @@ class RuntimeRegistryImpl:
             capabilities=tuple(ExecutionCapability.from_type(c) for c in data.capabilities),
         )
 
-        # Check for duplicate by name (user-facing identifier)
-        existing = self._registry.get_engine_by_name(engine.name)
-        if existing is not None:
-            raise ValueError(f"Engine already registered: {engine.name}")
+        # Check for duplicate by name (user-facing identifier) under the registry
+        # lock so two concurrent register_engine calls for the same name cannot
+        # both pass the duplicate check before either takes the per-engine lock.
+        # We also create the per-engine lock here (still under _registry_lock) so
+        # the lookup-then-create is atomic; then we release _registry_lock and
+        # acquire the engine lock separately. asyncio.Lock is NOT reentrant, so
+        # we must not call _get_lock() while holding _registry_lock.
+        async with self._registry_lock:
+            existing = self._registry.get_engine_by_name(engine.name)
+            if existing is not None:
+                raise ValueError(f"Engine already registered: {engine.name}")
+            engine_lock = self._locks.get(engine.id)
+            if engine_lock is None:
+                engine_lock = asyncio.Lock()
+                self._locks[engine.id] = engine_lock
 
-        async with self._get_lock(engine.id):
+        async with engine_lock:
+            # Re-check under the engine lock in case a concurrent caller won
+            # the race between the duplicate check above and acquiring the lock.
+            existing = self._registry.get_engine_by_name(engine.name)
+            if existing is not None:
+                raise ValueError(f"Engine already registered: {engine.name}")
             self._registry = self._registry.with_engine(engine)
 
         await self._emit(Topic.ENGINE_REGISTERED, {"engine_id": engine.id, "name": engine.name})
@@ -194,7 +222,7 @@ class RuntimeRegistryImpl:
             created_by=engine.created_by,
         )
 
-        async with self._get_lock(engine_id):
+        async with await self._get_lock(engine_id):
             self._registry = self._registry.with_engine(updated)
 
         await self._emit(Topic.ENGINE_UPDATED, {"engine_id": engine_id, "changes": changes})
@@ -206,10 +234,17 @@ class RuntimeRegistryImpl:
         if engine is None:
             return False
 
-        async with self._get_lock(engine_id):
+        async with await self._get_lock(engine_id):
             self._registry = self._registry.without_engine(engine_id)
             self._health_cache.pop(engine_id, None)
             self._adapter_map.pop(engine_id, None)
+            # Drop sessions belonging to this engine so the _sessions dict
+            # cannot grow unboundedly across engine churn.
+            self._sessions = {
+                sid: s for sid, s in self._sessions.items() if s.engine_id != engine_id
+            }
+            # Discard the per-engine lock to avoid lingering state for unregistered engines.
+            self._locks.pop(engine_id, None)
 
         await self._emit(Topic.ENGINE_UNREGISTERED, {"engine_id": engine_id})
         log.info("Engine unregistered", engine_id=engine_id)
@@ -226,7 +261,7 @@ class RuntimeRegistryImpl:
             return None
 
         updated = engine.with_status(status)
-        async with self._get_lock(engine_id):
+        async with await self._get_lock(engine_id):
             self._registry = self._registry.with_engine(updated)
 
         # Emit online/offline specific events
@@ -248,7 +283,7 @@ class RuntimeRegistryImpl:
             return None
 
         updated = engine.with_capabilities(capabilities)
-        async with self._get_lock(engine_id):
+        async with await self._get_lock(engine_id):
             self._registry = self._registry.with_engine(updated)
 
         await self._emit(
@@ -270,7 +305,7 @@ class RuntimeRegistryImpl:
         updated = engine.with_health(health)
         self._health_cache[engine_id] = health
 
-        async with self._get_lock(engine_id):
+        async with await self._get_lock(engine_id):
             self._registry = self._registry.with_engine(updated)
 
         await self._emit(
@@ -289,7 +324,19 @@ class RuntimeRegistryImpl:
     # ── Session Tracking ──
 
     async def track_session(self, session: ExecutionSession) -> None:
-        """Track an execution session."""
+        """Track an execution session.
+
+        Keeps ``_sessions`` bounded: if we are at ``_max_sessions`` and a new
+        session arrives, the oldest session (by ``started_at``) is evicted.
+        """
+        if len(self._sessions) >= self._max_sessions:
+            oldest_id = min(
+                self._sessions.keys(),
+                key=lambda sid: self._sessions[sid].started_at,
+                default=None,
+            )
+            if oldest_id is not None:
+                self._sessions.pop(oldest_id, None)
         self._sessions[session.id] = session
 
     async def update_session(self, session: ExecutionSession) -> None:

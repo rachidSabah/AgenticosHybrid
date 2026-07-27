@@ -335,18 +335,24 @@ class RuntimeManager:
                 )
             engine_id = best.id
         elif self._adapters:
-            # Pick the engine with the most capabilities using async properly
-            best_eid: str | None = None
-            best_count = -1
-            for eid, adap in self._adapters.items():
+            # Pick the engine with the most capabilities. Query all adapters
+            # concurrently — the previous sequential loop added per-adapter
+            # latency to every "execute on best" call.
+            adapter_items = list(self._adapters.items())
+
+            async def _count_caps(eid: str, adap: Any) -> tuple[str, int]:
                 try:
                     desc = await adap.get_descriptor()
-                    count = len(desc.capabilities)
-                    if count > best_count:
-                        best_count = count
-                        best_eid = eid
+                    return eid, len(desc.capabilities)
                 except Exception:
-                    continue
+                    return eid, -1
+
+            results = await asyncio.gather(*[_count_caps(eid, a) for eid, a in adapter_items])
+            best_eid, best_count = None, -1
+            for eid, count in results:
+                if count > best_count:
+                    best_count = count
+                    best_eid = eid
             engine_id = best_eid
             if engine_id is None:
                 return ExecutionResult(

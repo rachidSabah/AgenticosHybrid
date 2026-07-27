@@ -85,11 +85,14 @@ class BrainManager:
                     current.status.value,
                 )
                 return None
-            updated = replace(current, status=BrainStatus.PAUSED)
             result = await self._update(brain_id, status=BrainStatus.PAUSED)  # type: ignore[misc]
 
-        await self._publish(Topic.BRAIN_DISCONNECTED, updated)
-        log.info("Paused brain %s (%s)", brain_id, updated.display_name)
+        # Publish the canonical record returned by the registry, not the local
+        # snapshot — avoids emitting events for brains that were concurrently
+        # removed or modified between get() and update().
+        if result is not None:
+            await self._publish(Topic.BRAIN_DISCONNECTED, result)
+            log.info("Paused brain %s (%s)", brain_id, result.display_name)
         return result
 
     async def resume(self, brain_id: str) -> BrainRecord | None:

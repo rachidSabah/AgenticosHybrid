@@ -52,7 +52,7 @@ export function Brains() {
     return () => {
       disconnectSSE();
     };
-  }, []);
+  }, [fetchBrains, fetchRelationships, connectSSE, disconnectSSE]);
 
   // Filtered data
   const brainList = useMemo(() => Object.values(brains), [brains]);

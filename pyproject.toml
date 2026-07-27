@@ -52,11 +52,16 @@ packages = ["src/agentic_os"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 pythonpath = ["src", "services"]
 filterwarnings = [
     "ignore::DeprecationWarning:pytest_asyncio",
     "ignore::DeprecationWarning:asyncio",
+    # asyncio subprocess transports emit unraisable warnings during GC after
+    # the event loop closes. These are pytest-asyncio teardown artifacts, not
+    # real test failures.
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.ruff]

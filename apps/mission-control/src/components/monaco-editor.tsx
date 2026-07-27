@@ -65,10 +65,9 @@ export function MonacoEditor({ value, language = "json", readOnly = false, onCha
       editor.dispose();
       editorInstanceRef.current = null;
     };
-  }, [language, readOnly]);
+  }, [language, readOnly, theme]);
 
   // Update editor value when prop changes (but not when we're typing)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const editor = editorInstanceRef.current;
     if (editor && editor.getValue() !== valueRef.current) {

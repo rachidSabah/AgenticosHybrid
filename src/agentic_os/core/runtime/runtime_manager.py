@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess  # noqa: PLC0415
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -176,16 +175,23 @@ class RuntimeManager:
             return await launcher.execute(runtime, command)
 
         try:
-            result = subprocess.run(
+            # Run via the shell for backward compatibility (the upstream
+            # contract accepts a single command string), but do so without
+            # blocking the event loop.
+            proc = await asyncio.create_subprocess_shell(
                 command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=60,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            return result.stdout + result.stderr
-        except subprocess.TimeoutExpired:
-            return "Command timed out after 60s"
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return "Command timed out after 60s"
+            return (stdout or b"").decode(errors="replace") + (stderr or b"").decode(
+                errors="replace"
+            )
         except Exception as exc:
             return f"Command failed: {exc}"
 

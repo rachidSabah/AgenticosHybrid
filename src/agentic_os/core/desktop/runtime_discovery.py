@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from collections.abc import Sequence
 from typing import Any
@@ -69,11 +70,11 @@ class RuntimeDiscoveryManager:
             errors=errors,
         )
 
-    def _detect_one(self, provider: dict[str, Any]) -> RuntimeInfo | None:
+    async def _detect_one(self, provider: dict[str, Any]) -> RuntimeInfo | None:
         for name in provider["names"]:
             path = shutil.which(name)
             if path:
-                version = self._get_version(path, provider.get("version_flag", "--version"))
+                version = await self._get_version(path, provider.get("version_flag", "--version"))
                 capabilities = self._detect_capabilities(provider["type"])
                 return RuntimeInfo(
                     runtime_type=provider["type"],
@@ -87,12 +88,24 @@ class RuntimeDiscoveryManager:
         return None
 
     @staticmethod
-    def _get_version(path: str, flag: str) -> str:
-        import subprocess
-
+    async def _get_version(path: str, flag: str) -> str:
+        """Probe ``path --flag`` for a version string without blocking the loop."""
         try:
-            result = subprocess.run([path, flag], capture_output=True, text=True, timeout=10)
-            output = result.stdout.strip() or result.stderr.strip()
+            proc = await asyncio.create_subprocess_exec(
+                path,
+                flag,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return "unknown"
+            output = (stdout or b"").decode(errors="replace").strip()
+            if not output:
+                output = (stderr or b"").decode(errors="replace").strip()
             return output.split("\n")[0] if output else "unknown"
         except Exception:
             return "unknown"

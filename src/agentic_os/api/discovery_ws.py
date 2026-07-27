@@ -79,14 +79,28 @@ class DiscoveryBroadcaster:
     def __init__(self, bus: EventBus) -> None:
         self._bus = bus
         self._clients: set[MemoryObjectSendStream] = set()
+        self._subscriptions: list[str] = []
 
     async def start(self) -> None:
+        self._subscriptions = []
         for topic in _DISCOVERY_TOPICS:
-            await self._bus.subscribe(topic.value, self._on_event)
+            sub_id = await self._bus.subscribe(topic.value, self._on_event)
+            self._subscriptions.append(sub_id)
         log.info("discovery_ws.started", topics=len(_DISCOVERY_TOPICS))
 
     async def stop(self) -> None:
-        pass
+        for sub_id in self._subscriptions:
+            try:
+                await self._bus.unsubscribe(sub_id)
+            except Exception:
+                log.warning("Failed to unsubscribe %s", sub_id, exc_info=True)
+        self._subscriptions.clear()
+        for client in list(self._clients):
+            try:
+                client.close()
+            except Exception:
+                pass
+        self._clients.clear()
 
     def add_client(self) -> tuple[Any, MemoryObjectSendStream]:
         send, recv = anyio.create_memory_object_stream(max_buffer_size=256)
@@ -102,6 +116,11 @@ class DiscoveryBroadcaster:
             try:
                 await client.send(snapshot)
             except anyio.BrokenResourceError:
+                self._clients.discard(client)
+            except anyio.ClosedResourceError:
+                self._clients.discard(client)
+            except Exception:
+                log.debug("Failed to deliver discovery event to a client", exc_info=True)
                 self._clients.discard(client)
 
 

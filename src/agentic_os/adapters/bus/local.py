@@ -12,6 +12,7 @@ cancelled on stop, which is safe across tasks/loops.
 from __future__ import annotations
 
 import asyncio
+from uuid import uuid4
 
 from agentic_os.domain.events import EventEnvelope
 from agentic_os.infrastructure.logging import get_logger
@@ -22,13 +23,23 @@ log = get_logger("bus.local")
 
 class LocalBus:
     def __init__(self) -> None:
+        # topic -> {sub_id -> handler}
         self._topics: dict[str, dict[str, Handler]] = {}
         self._tasks: set[asyncio.Task] = set()
         self._lock = asyncio.Lock()
         self._started = False
+        # Buffer events published before start() so subscribers don't miss them
+        # and callers don't crash during subsystem initialization.
+        self._pending: list[EventEnvelope] = []
 
     async def start(self) -> None:
-        self._started = True
+        async with self._lock:
+            self._started = True
+            pending = list(self._pending)
+            self._pending.clear()
+        # Flush anything that was published before start().
+        for event in pending:
+            await self._dispatch(event)
 
     async def drain(self) -> None:
         """Await all in-flight event dispatches (test/inspection helper)."""
@@ -40,11 +51,20 @@ class LocalBus:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
-        self._started = False
+        async with self._lock:
+            self._started = False
+            self._pending.clear()
 
     async def publish(self, event: EventEnvelope) -> None:
-        if not self._started:
-            raise RuntimeError("LocalBus.publish called before start()")
+        async with self._lock:
+            if not self._started:
+                # Queue for later — many kernel subsystems publish during their
+                # initialize() which runs before bus.start().
+                self._pending.append(event)
+                return
+        await self._dispatch(event)
+
+    async def _dispatch(self, event: EventEnvelope) -> None:
         handlers = list(self._topics.get(event.topic, {}).values())
         for handler in handlers:
             task = asyncio.create_task(self._safe_dispatch(handler, event))
@@ -58,7 +78,10 @@ class LocalBus:
             log.exception("Dispatch failed for topic %s", event.topic)
 
     async def subscribe(self, topic: str, handler: Handler) -> str:
-        sub_id = f"{topic}:{id(handler)}"
+        # Use a UUID sub_id rather than id(handler): id() can be recycled by
+        # the GC, and keying on it would let a new handler overwrite an
+        # existing subscription silently.
+        sub_id = f"{topic}:{uuid4().hex}"
         async with self._lock:
             self._topics.setdefault(topic, {})[sub_id] = handler
         return sub_id

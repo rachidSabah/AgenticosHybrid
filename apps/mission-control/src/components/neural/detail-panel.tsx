@@ -166,7 +166,7 @@ export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceI
       const newVal = Math.min(recent.length * 5, 100);
       return [...prev.slice(1), newVal];
     });
-  }, [events.length]);
+  }, [events]);
 
   return (
     <motion.div

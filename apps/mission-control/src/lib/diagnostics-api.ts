@@ -240,7 +240,7 @@ export async function fetchEventBus(): Promise<DiagnosticsEventBus> {
 }
 
 export async function fetchSSE(): Promise<DiagnosticsSSEClients> {
-  return get<DiagnosticsSSEClients>("/api/diagnostics/sse", { clients: [] });
+  return get<DiagnosticsSSEClients>("/api/diagnostics/sse-clients", { clients: [] });
 }
 
 export async function fetchAPIs(): Promise<DiagnosticsAPIs> {
