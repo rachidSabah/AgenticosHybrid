@@ -88,13 +88,14 @@ const CLAUDE_STYLE_STARTERS = [
   },
 ];
 
-const AVAILABLE_MODELS = [
-  { id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", provider: "Anthropic", tag: "Most Intelligent" },
-  { id: "claude-3-5-haiku", name: "Claude 3.5 Haiku", provider: "Anthropic", tag: "Fast & Light" },
-  { id: "hermes-3-405b", name: "Hermes 3 (405B)", provider: "Nous Research", tag: "Reasoning" },
-  { id: "opencode-agent", name: "OpenCode Engine", provider: "OpenAI", tag: "Autonomous" },
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google", tag: "Multimodal" },
-];
+// Available models are fetched LIVE from /v1/models (the API Gateway).
+// No hardcoded model list — only models from discovered runtimes appear.
+interface AvailableModel {
+  id: string;
+  name: string;
+  provider: string;
+  tag: string;
+}
 
 export function PromptCenter() {
   const [prompt, setPrompt] = useState<string>(() => {
@@ -114,7 +115,30 @@ export function PromptCenter() {
     }
   });
 
-  const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0]);
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState<AvailableModel | null>(null);
+
+  // Fetch live models from the API Gateway
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.gatewayModels();
+        if (cancelled) return;
+        const models: AvailableModel[] = (res?.data ?? []).map((m: { id: string; owned_by?: string }) => ({
+          id: m.id,
+          name: m.id,
+          provider: m.owned_by ?? "unknown",
+          tag: "",
+        }));
+        setAvailableModels(models);
+        setSelectedModel((prev) => prev && models.find((m) => m.id === prev.id) ? prev : (models[0] ?? null));
+      } catch {
+        // Keep empty — no fake fallback.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -243,10 +267,12 @@ export function PromptCenter() {
             className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-lg hover:bg-white/10 transition shadow-sm"
           >
             <Sparkles size={15} className="text-amber-400" />
-            <span>{selectedModel.name}</span>
-            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-300 font-mono">
-              {selectedModel.tag}
-            </span>
+            <span>{selectedModel?.name ?? "No models available"}</span>
+            {selectedModel?.tag && (
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-300 font-mono">
+                {selectedModel.tag}
+              </span>
+            )}
             <ChevronDown size={14} className="text-white/50" />
           </button>
 
@@ -258,26 +284,32 @@ export function PromptCenter() {
                 exit={{ opacity: 0, y: 6 }}
                 className="absolute left-0 top-11 z-50 w-64 rounded-2xl border border-white/10 bg-[#161822]/95 p-2 shadow-2xl backdrop-blur-xl"
               >
-                {AVAILABLE_MODELS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => {
-                      setSelectedModel(m);
-                      setShowModelPicker(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs transition ${
-                      selectedModel.id === m.id ? "bg-amber-500/15 text-amber-300 font-medium" : "text-white/80 hover:bg-white/5"
-                    }`}
-                  >
-                    <div>
-                      <div className="font-semibold">{m.name}</div>
-                      <div className="text-[10px] text-white/40">{m.provider}</div>
-                    </div>
-                    <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-white/60">
-                      {m.tag}
-                    </span>
-                  </button>
-                ))}
+                {availableModels.length === 0 ? (
+                  <div className="px-3 py-2.5 text-xs text-white/40">No models discovered</div>
+                ) : (
+                  availableModels.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        setSelectedModel(m);
+                        setShowModelPicker(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs transition ${
+                        selectedModel?.id === m.id ? "bg-amber-500/15 text-amber-300 font-medium" : "text-white/80 hover:bg-white/5"
+                      }`}
+                    >
+                      <div>
+                        <div className="font-semibold">{m.name}</div>
+                        <div className="text-[10px] text-white/40">{m.provider}</div>
+                      </div>
+                      {m.tag && (
+                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-white/60">
+                          {m.tag}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -502,7 +534,7 @@ export function PromptCenter() {
           <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400 animate-pulse" : "bg-emerald-500"}`} />
           <span>{connected ? "EventBus Live" : "Mission Control Core Active"}</span>
         </div>
-        <div>Claude 3.7 & Multi-Agent Orchestration Ready</div>
+        <div>Multi-Agent Orchestration Ready</div>
       </div>
     </div>
   );

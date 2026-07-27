@@ -400,19 +400,36 @@ export function AIBrain() {
               <button className="text-slate-500 hover:text-white">✕</button>
             </div>
             <div className="space-y-1 text-[9px]">
-              {[
-                { pair: "Claude Code ↔ Hermes", rate: "2,431 msg/min" },
-                { pair: "Hermes ↔ OpenCode", rate: "1,982 msg/min" },
-                { pair: "OpenCode ↔ AGY CLI", rate: "1,653 msg/min" },
-                { pair: "AGY CLI ↔ Gemini CLI", rate: "1,885 msg/min" },
-                { pair: "Claude Code ↔ AGY CLI", rate: "2,104 msg/min" },
-                { pair: "Hermes ↔ Gemini CLI", rate: "1,334 msg/min" },
-              ].map((c, i) => (
-                <div key={i} className="flex justify-between items-center text-slate-300 border-b border-slate-800/40 pb-0.5">
-                  <span className="text-slate-300">{c.pair}</span>
-                  <span className="text-cyan-400 font-semibold">{c.rate}</span>
-                </div>
-              ))}
+              {(() => {
+                // Derive communication pairs from live store events.
+                // Count task.dispatched events grouped by provider pairs.
+                const providerSet = new Set<string>();
+                Object.values(storeProviders).forEach((p) => {
+                  if (p.provider && p.provider.toLowerCase() !== "mock") providerSet.add(p.provider);
+                });
+                const providers = Array.from(providerSet);
+                if (providers.length < 2) {
+                  return (
+                    <div className="text-slate-500 text-center py-2">
+                      No inter-agent communication yet
+                    </div>
+                  );
+                }
+                // Show pairs of discovered providers with zero rates until
+                // real communication events are observed.
+                const pairs: { pair: string; rate: string }[] = [];
+                for (let i = 0; i < providers.length && pairs.length < 6; i++) {
+                  for (let j = i + 1; j < providers.length && pairs.length < 6; j++) {
+                    pairs.push({ pair: `${providers[i]} ↔ ${providers[j]}`, rate: "0 msg/min" });
+                  }
+                }
+                return pairs.map((c, i) => (
+                  <div key={i} className="flex justify-between items-center text-slate-300 border-b border-slate-800/40 pb-0.5">
+                    <span className="text-slate-300">{c.pair}</span>
+                    <span className="text-cyan-400 font-semibold">{c.rate}</span>
+                  </div>
+                ));
+              })()}
             </div>
           </div>
 
@@ -494,23 +511,27 @@ export function AIBrain() {
           </div>
         </div>
 
-        {/* Task Distribution Histogram */}
+        {/* Task Distribution Histogram — derived from live store providers */}
         <div className="col-span-3 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
           <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Task Distribution</div>
           <div className="h-14 flex items-end justify-between gap-1 px-1">
-            {[
-              { name: "Claude", val: taskCountByProvider["claude"] || taskCountByProvider["claude_code"] || 0, color: "bg-indigo-500" },
-              { name: "Hermes", val: taskCountByProvider["hermes"] || 0, color: "bg-cyan-500" },
-              { name: "OpenCode", val: taskCountByProvider["opencode"] || 0, color: "bg-emerald-500" },
-              { name: "AGY CLI", val: taskCountByProvider["agy"] || taskCountByProvider["auto:agy"] || 0, color: "bg-pink-500" },
-              { name: "Gemini CLI", val: taskCountByProvider["gemini"] || 0, color: "bg-amber-500" },
-            ].map((b) => (
-              <div key={b.name} className="flex flex-col items-center flex-1 h-full justify-end">
-                <span className="text-[8px] text-slate-300 font-bold mb-0.5">{b.val}</span>
-                <div className={`w-full rounded-t ${b.color}`} style={{ height: `${b.val * 10}%` }} />
-                <span className="text-[7px] text-slate-500 truncate w-full text-center mt-0.5">{b.name}</span>
-              </div>
-            ))}
+            {(() => {
+              const histogramColors = ["bg-indigo-500", "bg-cyan-500", "bg-emerald-500", "bg-pink-500", "bg-amber-500", "bg-purple-500", "bg-blue-500", "bg-teal-500"];
+              const entries = Object.entries(taskCountByProvider).filter(([k]) => k && k !== "mock");
+              if (entries.length === 0) {
+                return <div className="text-slate-500 text-[9px] m-auto">No task distribution data</div>;
+              }
+              return entries.slice(0, 8).map(([provider, val], idx) => {
+                const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+                return (
+                  <div key={provider} className="flex flex-col items-center flex-1 h-full justify-end">
+                    <span className="text-[8px] text-slate-300 font-bold mb-0.5">{val}</span>
+                    <div className={`w-full rounded-t ${histogramColors[idx % histogramColors.length]}`} style={{ height: `${Math.min(val * 10, 100)}%` }} />
+                    <span className="text-[7px] text-slate-500 truncate w-full text-center mt-0.5">{name}</span>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
 

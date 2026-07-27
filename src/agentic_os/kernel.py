@@ -815,23 +815,21 @@ class Kernel:
         return manager
 
     def _seed_default_models(self) -> None:
-        """Register example models so routing/cost have candidates.
+        """Register the mock model so routing/cost have at least one candidate.
 
-        Real providers would populate this from their /models endpoint; for the
-        foundation we seed representative entries (mock is free; claude_code is
-        a placeholder economy). OpenAI-compatible providers add models via the
-        API at runtime.
+        Only the mock model is seeded — it is the only guaranteed-present
+        provider (registered by the MockProviderPlugin). Real provider models
+        are populated from their /models endpoint at runtime, and discovered
+        local CLI brains surface their models via the BrainRegistry →
+        /v1/models gateway path. The previous ``claude-code`` placeholder
+        seed was removed because it injected a model for a runtime that may
+        not be installed on the host.
         """
         from agentic_os.ports.provider_management import ModelInfo
 
         seeds = [
             ModelInfo(
                 id="mock-fast", provider="mock", capabilities=["reasoning", "coding", "research"]
-            ),
-            ModelInfo(
-                id="claude-code",
-                provider="claude_code",
-                capabilities=["coding", "planning", "terminal", "filesystem"],
             ),
         ]
         for m in seeds:

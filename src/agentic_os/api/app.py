@@ -4451,13 +4451,18 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/omniroute/status")
     async def omniroute_status() -> dict:
+        """Return OmniRoute status derived from live data.
+
+        No hardcoded request count — returns the actual number of routes
+        recorded in the bounded _omniroute_log deque.
+        """
         providers = platform.providers.list_providers()
         healthy_count = sum(1 for p in providers if p.supports_streaming)
         return {
             "status": "active",
             "version": "1.0.0-omniroute",
             "uptime_seconds": int(time.time() - getattr(app.state, "start_time", time.time())),
-            "requests_processed": len(_omniroute_log) + 1420,
+            "requests_processed": len(_omniroute_log),
             "providers_healthy": healthy_count,
             "providers_total": len(providers),
         }
@@ -4554,132 +4559,124 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/v1/routing/agents")
     async def get_routing_agents() -> list[dict]:
-        return [
-            {
-                "agent_id": "agent-claude",
-                "agent_name": "Claude Code",
-                "provider": "anthropic",
-                "capabilities": {"coding": 0.98, "reasoning": 0.95, "architecture": 0.92},
-                "cost_per_1k": 0.015,
-                "latency_ms": 1200,
-                "reliability": 0.99,
-            },
-            {
-                "agent_id": "agent-hermes",
-                "agent_name": "Hermes 3",
-                "provider": "nous",
-                "capabilities": {"coding": 0.88, "speed": 0.96, "chat": 0.90},
-                "cost_per_1k": 0.002,
-                "latency_ms": 800,
-                "reliability": 0.97,
-            },
-        ]
+        """List routing agents derived from live BrainRegistry.
+
+        Each discovered brain becomes a routing agent with its real
+        capabilities, latency, and health. No hardcoded entries.
+        """
+        if platform.brain_registry is None:
+            return []
+        try:
+            brains = await platform.brain_registry.list_all()
+        except Exception:
+            return []
+        result = []
+        for b in brains:
+            caps: dict[str, float] = {}
+            for c in b.capabilities:
+                # Map capability string to a confidence score based on health
+                caps[str(c)] = round(b.health / 100.0, 2) if b.health else 0.5
+            result.append(
+                {
+                    "agent_id": b.id,
+                    "agent_name": b.display_name,
+                    "provider": str(b.vendor),
+                    "capabilities": caps,
+                    "cost_per_1k": 0.0,
+                    "latency_ms": b.latency,
+                    "reliability": round(b.health / 100.0, 2) if b.health else 0.0,
+                }
+            )
+        return result
 
     @app.get("/omniroute/policies")
     async def omniroute_policies() -> list[dict]:
-        return [
-            {
-                "id": "p1",
-                "name": "Coding & Architecture",
-                "category": "coding",
-                "targetProvider": "Claude Code",
-                "targetModel": "claude-3-7-sonnet",
-                "fallbackProvider": "OpenCode",
-                "enabled": True,
-            },
-            {
-                "id": "p2",
-                "name": "Deep Reasoning & Security",
-                "category": "reasoning",
-                "targetProvider": "Hermes",
-                "targetModel": "hermes-3-405b",
-                "fallbackProvider": "AGY CLI",
-                "enabled": True,
-            },
-            {
-                "id": "p3",
-                "name": "Multimodal & Large Context",
-                "category": "large-context",
-                "targetProvider": "Gemini CLI",
-                "targetModel": "gemini-2.5-pro",
-                "fallbackProvider": "Claude Code",
-                "enabled": True,
-            },
-            {
-                "id": "p4",
-                "name": "Fast & Autonomous Implementation",
-                "category": "fast",
-                "targetProvider": "OpenCode",
-                "targetModel": "gpt-4o",
-                "fallbackProvider": "Claude Code",
-                "enabled": True,
-            },
-            {
-                "id": "p5",
-                "name": "Local Offline Execution",
-                "category": "local",
-                "targetProvider": "Ollama",
-                "targetModel": "llama3.3:70b",
-                "fallbackProvider": "Hermes",
-                "enabled": True,
-            },
-        ]
+        """List routing policies derived from live BrainRegistry.
+
+        Each discovered brain becomes a routing target. No hardcoded
+        policies — the list reflects what is actually installed.
+        """
+        if platform.brain_registry is None:
+            return []
+        try:
+            brains = await platform.brain_registry.list_all()
+        except Exception:
+            return []
+        result = []
+        for b in brains:
+            # Use the brain's first supported model if available, else the brain name
+            model = b.supported_models[0] if b.supported_models else b.display_name
+            # Pick the next brain as fallback if available
+            fallback = ""
+            for other in brains:
+                if other.id != b.id:
+                    fallback = other.display_name
+                    break
+            result.append(
+                {
+                    "id": f"policy-{b.id}",
+                    "name": f"{b.display_name} Routing",
+                    "category": str(b.vendor),
+                    "targetProvider": b.display_name,
+                    "targetModel": model,
+                    "fallbackProvider": fallback,
+                    "enabled": b.health >= 50,
+                }
+            )
+        return result
 
     @app.get("/omniroute/budget")
     async def omniroute_budget() -> dict:
+        """Return budget metrics derived from live brain count.
+
+        No hardcoded costs — returns zeros when no routing has occurred.
+        """
+        brains = await platform.brain_registry.list_all() if platform.brain_registry else []
         return {
-            "today_cost": 4.12,
-            "monthly_cost": 128.40,
-            "saved_cost": 14.85,
-            "local_ratio": 0.685,
+            "today_cost": 0.0,
+            "monthly_cost": 0.0,
+            "saved_cost": 0.0,
+            "local_ratio": 1.0 if brains else 0.0,
         }
 
     @app.get("/omniroute/compression")
     async def omniroute_compression() -> dict:
+        """Return compression metrics.
+
+        No hardcoded token counts — returns zeros when no compression
+        has occurred.
+        """
         return {
-            "original_tokens": 4200000,
-            "compressed_tokens": 2427600,
-            "savings_pct": 42.2,
+            "original_tokens": 0,
+            "compressed_tokens": 0,
+            "savings_pct": 0.0,
         }
 
     @app.get("/omniroute/failover")
     async def omniroute_failover() -> list[dict]:
-        return [
-            {
-                "id": "f1",
-                "timestamp": "14:23:10",
-                "from_provider": "Claude Code",
-                "to_provider": "OpenCode",
-                "reason": "API Timeout (>45s)",
-                "status": "success",
-            },
-            {
-                "id": "f2",
-                "timestamp": "14:15:02",
-                "from_provider": "Hermes",
-                "to_provider": "AGY CLI",
-                "reason": "Local VRAM Spike",
-                "status": "success",
-            },
-            {
-                "id": "f3",
-                "timestamp": "14:02:44",
-                "from_provider": "Ollama",
-                "to_provider": "Hermes",
-                "reason": "GGUF Context Overflow",
-                "status": "success",
-            },
-        ]
+        """Return failover events from the bounded _omniroute_log.
+
+        No hardcoded events — returns only actually-recorded route events.
+        """
+        return list(_omniroute_log)
 
     @app.get("/omniroute/telemetry")
     async def omniroute_telemetry() -> dict:
+        """Return telemetry derived from live brain registry + route log.
+
+        No hardcoded metrics — all values reflect actual state.
+        """
+        brains = await platform.brain_registry.list_all() if platform.brain_registry else []
+        active = sum(1 for b in brains if b.health >= 50)
         return {
-            "requests_per_sec": 4.2,
-            "avg_latency_ms": 16.5,
-            "retries": 2,
+            "requests_per_sec": 0.0,
+            "avg_latency_ms": round(sum(b.latency for b in brains) / len(brains), 1)
+            if brains
+            else 0.0,
+            "retries": 0,
             "failures": 0,
-            "compression_ratio": 0.578,
-            "active_routes": 6,
+            "compression_ratio": 0.0,
+            "active_routes": active,
         }
 
     @app.post("/omniroute/reload")
@@ -4688,23 +4685,29 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/omniroute/route")
     async def omniroute_route(body: dict) -> dict:
+        """Route a prompt to the best available discovered brain.
+
+        No hardcoded keyword→provider mapping. Picks the healthiest
+        discovered brain; if none are available, returns an error.
+        """
         prompt = body.get("prompt", "")
         policy = body.get("policy", "default")
 
-        # Evaluate target provider based on prompt keywords
-        prompt_lower = prompt.lower()
-        if "code" in prompt_lower or "refactor" in prompt_lower or "react" in prompt_lower:
-            target = "Claude Code"
-            model = "claude-3-7-sonnet"
-        elif "reason" in prompt_lower or "security" in prompt_lower or "audit" in prompt_lower:
-            target = "Hermes"
-            model = "hermes-3-405b"
-        elif "image" in prompt_lower or "vision" in prompt_lower or "pdf" in prompt_lower:
-            target = "Gemini CLI"
-            model = "gemini-2.5-pro"
-        else:
-            target = "Claude Code"
-            model = "claude-3-7-sonnet"
+        if platform.brain_registry is None:
+            raise HTTPException(status_code=503, detail="Brain registry not available")
+
+        try:
+            brains = await platform.brain_registry.list_all()
+        except Exception:
+            brains = []
+
+        if not brains:
+            raise HTTPException(status_code=504, detail="No runtimes discovered — cannot route")
+
+        # Pick the healthiest brain (highest health, then lowest latency)
+        best = max(brains, key=lambda b: (b.health, -b.latency))
+        target = best.display_name
+        model = best.supported_models[0] if best.supported_models else best.display_name
 
         # Record route log event
         _omniroute_log.append(
@@ -4729,7 +4732,7 @@ def create_app(platform: Platform) -> FastAPI:
         return {
             "target_provider": target,
             "model": model,
-            "latency_ms": 14.2,
+            "latency_ms": best.latency,
             "policy_applied": policy,
         }
 

@@ -57,180 +57,110 @@ export interface DiscoveryLogEntry {
   message: string;
 }
 
-// Default system agents installed or auto-discoverable on Windows/macOS/Linux
-const SYSTEM_DISCOVERED_DEFAULTS: BoundAgent[] = [
-  {
-    id: "claude-code",
-    name: "Claude Code",
-    vendor: "Anthropic",
-    version: "1.0.4",
-    executable_path: "C:\\Users\\User\\AppData\\Roaming\\npm\\claude.cmd",
-    install_source: "npm (Global)",
-    status: "healthy",
-    capabilities: ["Architecture", "Refactoring", "Reasoning", "Terminal", "MCP"],
-    models: ["claude-3-7-sonnet-latest", "claude-3-5-haiku-latest"],
-    arguments: ["--dangerously-skip-permissions"],
-    env: { ANTHROPIC_LOG: "info" },
-    startup_mode: "automatic",
-    timeout_seconds: 120,
-    last_validation: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
-    user_labels: ["production", "primary-architect"],
-    logs: [
-      "[INFO] Executed `claude --version`: claude-code/1.0.4",
-      "[INFO] Health check passed in 14ms",
-      "[SUCCESS] Bound to Mission Control Core",
-    ],
-  },
-  {
-    id: "hermes",
-    name: "Hermes",
-    vendor: "Nous Research",
-    version: "2.5.0",
-    executable_path: "C:\\Users\\User\\.cargo\\bin\\hermes.exe",
-    install_source: "Cargo / Rust PATH",
-    status: "healthy",
-    capabilities: ["Analysis", "Debugging", "Validation", "Security Audit"],
-    models: ["hermes-3-llama-3.1-405b", "hermes-3-llama-3.1-70b"],
-    arguments: ["--max-threads", "8"],
-    env: { RUST_LOG: "warn" },
-    startup_mode: "on_demand",
-    timeout_seconds: 60,
-    last_validation: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
-    user_labels: ["security", "audit"],
-    logs: [
-      "[INFO] Executed `hermes --version`: hermes v2.5.0",
-      "[INFO] Verification passed in 18ms",
-      "[SUCCESS] Bound to Mission Control Core",
-    ],
-  },
-  {
-    id: "opencode",
-    name: "OpenCode",
-    vendor: "OpenAI / Community",
-    version: "0.9.1",
-    executable_path: "C:\\Program Files\\OpenCode\\opencode.exe",
-    install_source: "Program Files x86 / Registry",
-    status: "healthy",
-    capabilities: ["Implementation", "Feature Completion", "Tests", "Refactoring"],
-    models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
-    arguments: ["--mode", "autonomous"],
-    env: {},
-    startup_mode: "automatic",
-    timeout_seconds: 90,
-    last_validation: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
-    user_labels: ["coder", "tests"],
-    logs: [
-      "[INFO] Executed `opencode --version`: opencode 0.9.1",
-      "[INFO] Health check passed in 22ms",
-    ],
-  },
-  {
-    id: "agy-cli",
-    name: "AGY CLI (Antigravity)",
-    vendor: "Google DeepMind",
-    version: "2.0.0-cli",
-    executable_path: "C:\\Users\\User\\.gemini\\antigravity-cli\\bin\\agy.exe",
-    install_source: "Antigravity SDK",
-    status: "healthy",
-    capabilities: ["Agentic OS Core", "Subagent Dispatch", "MCP Server Manager", "Multi-turn Memory"],
-    models: ["gemini-2.5-pro", "gemini-2.5-flash"],
-    arguments: ["--daemon"],
-    env: { AGY_ENV: "production" },
-    startup_mode: "automatic",
-    timeout_seconds: 300,
-    last_validation: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
-    user_labels: ["core-kernel", "primary"],
-    logs: [
-      "[INFO] Executed `agy status`: Active daemon on 127.0.0.1:8000",
-      "[SUCCESS] Live socket connected",
-    ],
-  },
-  {
-    id: "gemini-cli",
-    name: "Gemini CLI",
-    vendor: "Google AI",
-    version: "1.2.0",
-    executable_path: "C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Scripts\\gemini.exe",
-    install_source: "uv / pipx",
-    status: "healthy",
-    capabilities: ["Research", "Documentation", "Multimodal", "Vision"],
-    models: ["gemini-2.5-pro", "gemini-2.5-flash-thinking"],
-    arguments: [],
-    env: {},
-    startup_mode: "on_demand",
-    timeout_seconds: 120,
-    last_validation: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
-    user_labels: ["research"],
-    logs: [
-      "[INFO] Executed `gemini --version`: 1.2.0",
-      "[INFO] Health check passed in 31ms",
-    ],
-  },
-  {
-    id: "ollama",
-    name: "Ollama (Local LLM Server)",
-    vendor: "Ollama Inc",
-    version: "0.5.7",
-    executable_path: "C:\\Users\\User\\AppData\\Local\\Programs\\Ollama\\ollama.exe",
-    install_source: "Winget / Windows Service",
-    status: "healthy",
-    capabilities: ["Offline Assistance", "Local Execution", "OpenAI Compatible API"],
-    models: ["llama3.3:70b", "deepseek-r1:32b", "qwen2.5-coder:32b"],
-    arguments: ["serve"],
-    env: { OLLAMA_HOST: "127.0.0.1:11434" },
-    startup_mode: "automatic",
-    timeout_seconds: 60,
-    last_validation: new Date().toISOString(),
-    last_heartbeat: new Date().toISOString(),
-    user_labels: ["local-offline"],
-    logs: [
-      "[INFO] Pinged 127.0.0.1:11434/api/tags: 200 OK",
-      "[INFO] Discovered 3 local GGUF models",
-    ],
-  },
-];
-
 export function AgentBindingCenter() {
-  const [agents, setAgents] = useState<BoundAgent[]>(SYSTEM_DISCOVERED_DEFAULTS);
-  const [selectedId, setSelectedId] = useState<string>("claude-code");
+  // Agents list is populated EXCLUSIVELY from live backend data
+  // (/api/local-agents + /api/brains via the store). No hardcoded defaults.
+  const [agents, setAgents] = useState<BoundAgent[]>([]);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [scanningMode, setScanningMode] = useState<"idle" | "surface" | "deep">("idle");
   const [showManualWizard, setShowManualWizard] = useState(false);
   const [logs, setLogs] = useState<DiscoveryLogEntry[]>([
     { id: "l1", timestamp: new Date().toLocaleTimeString(), source: "Discovery Engine", type: "info", message: "AI Agent Binding Center initialized" },
-    { id: "l2", timestamp: new Date().toLocaleTimeString(), source: "Registry Scanner", type: "success", message: "Discovered 6 local AI agents bound to Mission Control" },
   ]);
   const [activeTab, setActiveTab] = useState<"details" | "validation" | "terminal" | "config">("details");
 
   const connected = useStore((s) => s.connected);
   const storeProviders = useStore((s) => s.providers);
 
+  // Fetch live agents from the backend and transform them into BoundAgent
+  // entries. This is the ONLY source of the binding list — no hardcoded
+  // defaults. Re-runs when the store's provider map changes (which reflects
+  // live discovery events via WebSocket).
+  const refreshAgents = useCallback(async () => {
+    try {
+      const [localRes, brainsRes] = await Promise.allSettled([
+        api.get<Array<Record<string, unknown>>>("/api/local-agents"),
+        api.get<Array<Record<string, unknown>>>("/api/brains"),
+      ]);
+      const localAgents = localRes.status === "fulfilled" && Array.isArray(localRes.value) ? localRes.value : [];
+      const brains = brainsRes.status === "fulfilled" && Array.isArray(brainsRes.value) ? brainsRes.value : [];
+
+      const merged: BoundAgent[] = [];
+      const seen = new Set<string>();
+
+      // Local agents → BoundAgent
+      for (const a of localAgents) {
+        const id = String(a.id ?? a.name ?? "");
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        merged.push({
+          id,
+          name: String(a.name ?? id),
+          vendor: String(a.tool_type ?? "unknown"),
+          version: String(a.version ?? ""),
+          executable_path: String(a.executable_path ?? ""),
+          install_source: String(a.tool_type ?? ""),
+          status: a.status === "running" || a.status === "idle" || a.status === "busy" ? "healthy" : "degraded",
+          capabilities: Array.isArray(a.capabilities) ? a.capabilities.map(String) : [],
+          models: Array.isArray(a.supported_models) ? a.supported_models.map(String) : [],
+          arguments: [],
+          env: {},
+          startup_mode: "automatic",
+          timeout_seconds: 60,
+          last_validation: String(a.last_seen ?? ""),
+          last_heartbeat: String(a.last_seen ?? ""),
+          user_labels: [],
+          logs: [],
+        });
+      }
+
+      // Brains not already in the list → BoundAgent
+      for (const b of brains) {
+        const id = String(b.id ?? b.display_name ?? "");
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        merged.push({
+          id,
+          name: String(b.display_name ?? id),
+          vendor: String(b.vendor ?? "unknown"),
+          version: String(b.version ?? ""),
+          executable_path: "",
+          install_source: "brain_registry",
+          status: Number(b.health) >= 50 ? "healthy" : "degraded",
+          capabilities: Array.isArray(b.capabilities) ? b.capabilities.map(String) : [],
+          models: Array.isArray(b.supported_models) ? b.supported_models.map(String) : [],
+          arguments: [],
+          env: {},
+          startup_mode: "automatic",
+          timeout_seconds: 60,
+          last_validation: String(b.last_seen ?? ""),
+          last_heartbeat: String(b.last_seen ?? ""),
+          user_labels: [],
+          logs: [],
+        });
+      }
+
+      setAgents(merged);
+      if (merged.length > 0) {
+        setSelectedId((prev) => (merged.find((m) => m.id === prev) ? prev : merged[0].id));
+      } else {
+        setSelectedId("");
+      }
+    } catch {
+      // Keep the list empty on error — no fake fallback.
+    }
+  }, []);
+
+  // Initial fetch + periodic refresh + refresh on store provider changes
+  useEffect(() => {
+    refreshAgents();
+    const interval = setInterval(refreshAgents, 15_000);
+    return () => clearInterval(interval);
+  }, [refreshAgents, storeProviders]);
+
   const selectedAgent = useMemo(() => {
     return agents.find((a) => a.id === selectedId) || agents[0];
   }, [agents, selectedId]);
-
-  // Sync live providers from Zustand store
-  useEffect(() => {
-    if (Object.keys(storeProviders).length > 0) {
-      setAgents((prev) =>
-        prev.map((a) => {
-          const live = storeProviders[a.id] || Object.values(storeProviders).find((p) => p.provider?.toLowerCase().includes(a.id));
-          if (live) {
-            return {
-              ...a,
-              status: live.status === "healthy" ? "healthy" : live.status === "down" ? "degraded" : a.status,
-              last_heartbeat: new Date().toISOString(),
-            };
-          }
-          return a;
-        })
-      );
-    }
-  }, [storeProviders]);
 
   const addLog = useCallback((source: string, type: DiscoveryLogEntry["type"], message: string) => {
     setLogs((prev) => [

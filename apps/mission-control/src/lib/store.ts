@@ -410,6 +410,22 @@ export const useStore = create<StoreState>((set, get) => ({
           telemetry.agents = Object.keys(agents).length;
           break;
         }
+        case "brain.removed": {
+          // When a brain is unregistered (runtime disappears), remove its
+          // entries from both the agents and providers maps so the UI
+          // reflects the removal immediately — without waiting for the next
+          // 30s hydrate() to correct the stale state.
+          const name = String(p.display_name ?? p.name ?? p.id ?? "brain");
+          const id = String(p.id ?? name);
+          providers = { ...s.providers };
+          agents = { ...s.agents };
+          delete providers[name];
+          delete agents[id];
+          telemetry = { ...s.telemetry };
+          telemetry.providers = Object.keys(providers).length;
+          telemetry.agents = Object.keys(agents).length;
+          break;
+        }
         case "provider.failed": {
           const name = String(p.name ?? p.provider ?? "provider");
           providers = { ...s.providers };

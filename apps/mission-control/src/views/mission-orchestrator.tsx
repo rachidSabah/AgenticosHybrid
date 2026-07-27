@@ -32,15 +32,17 @@ const TASK_COLORS: Record<string, string> = {
   blocked: "#ef4444", skipped: "#6b7280",
 };
 
-// ── Agent provider definitions ──
-const AGENT_PROVIDERS = [
-  { id: "claude", label: "Claude Code", color: "#d97706", role: "Architecture, Refactoring, Reasoning" },
-  { id: "hermes", label: "Hermes", color: "#8b5cf6", role: "Analysis, Debugging, Validation, Security" },
-  { id: "opencode", label: "OpenCode", color: "#06b6d4", role: "Implementation, Feature Completion, Tests" },
-  { id: "codex", label: "Codex CLI", color: "#10b981", role: "Code Generation, API Implementation" },
-  { id: "gemini", label: "Gemini CLI", color: "#4285f4", role: "Research, Documentation, Alternatives" },
-  { id: "ollama", label: "Ollama", color: "#f97316", role: "Offline Assistance, Local Execution" },
+// ── Agent provider color palette ──
+// Used to assign consistent colors to discovered providers. Not a hardcoded
+// provider list — the actual agent list is derived from the live store.
+const PROVIDER_COLORS = [
+  "#d97706", "#8b5cf6", "#06b6d4", "#10b981", "#4285f4", "#f97316",
+  "#ec4899", "#14b8a6", "#6366f1", "#eab308",
 ];
+
+function providerColor(name: string, index: number): string {
+  return PROVIDER_COLORS[index % PROVIDER_COLORS.length];
+}
 
 // ── Events relevant for inter-agent comms ──
 const COMMS_TOPICS = new Set([
@@ -365,20 +367,27 @@ function AgentStatusList() {
     return counts;
   }, [events]);
 
-  const agents = AGENT_PROVIDERS.map((ap) => {
-    const live: ProviderHealthRecord | undefined = providers[ap.id] || Object.values(providers).find((p) => p.provider?.toLowerCase().includes(ap.id));
-    const statusStr = (live?.status ?? (connected ? "healthy" : "offline")) as string;
-    const q = queueDepth[ap.id] ?? 0;
-    return {
-      ...ap,
-      status: statusStr,
-      latency: live?.latency_ms ?? (connected ? 12 : 0),
-      queue: q,
-      model: "",
-    };
-  });
+  // Derive agents EXCLUSIVELY from the live store providers. No hardcoded
+  // agent list — only discovered runtimes appear. When the backend is
+  // disconnected, agents are empty (not fake "healthy").
+  const agents = Object.values(providers)
+    .filter((p) => p.provider && p.provider.toLowerCase() !== "mock")
+    .map((p, idx) => {
+      const id = (p.provider ?? "").toLowerCase().replace(/\s+/g, "-");
+      const q = queueDepth[id] ?? 0;
+      return {
+        id,
+        label: p.provider ?? "unknown",
+        color: providerColor(p.provider ?? "", idx),
+        role: p.provider ?? "agent",
+        status: p.status ?? "unknown",
+        latency: p.latency_ms ?? 0,
+        queue: q,
+        model: "",
+      };
+    });
 
-  const online = agents.filter((a) => a.status === "healthy" || a.status === "idle" || a.status === "degraded").length;
+  const online = agents.filter((a) => a.status === "healthy" || a.status === "degraded").length;
   const busy = agents.filter((a) => a.queue > 0).length;
 
   return (
@@ -394,7 +403,7 @@ function AgentStatusList() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium truncate">{a.label}</span>
-                {(a.status === "healthy" || a.status === "idle") && (
+                {a.status === "healthy" && (
                   <span className="text-[9px] text-faint tabular-nums">{a.latency.toFixed(0)}ms</span>
                 )}
               </div>
@@ -407,8 +416,8 @@ function AgentStatusList() {
                 </span>
               )}
               <span className={`text-[9px] capitalize ${
-                a.status === "healthy" || a.status === "executing" ? "text-ok" :
-                a.status === "idle" ? "text-accent" : a.status === "offline" ? "text-danger" : "text-warn"
+                a.status === "healthy" ? "text-ok" :
+                a.status === "down" ? "text-danger" : "text-warn"
               }`}>
                 {a.status}
               </span>
@@ -773,6 +782,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // ══════════════════════════════════════════════════════════════
 
 function ExecutionTimeline({ plan }: { plan: MissionPlanType | null }) {
+  // Read live providers from the store so swimlane colors are derived from
+  // discovered runtimes (no hardcoded agent list).
+  const storeProviders = useStore((s) => s.providers);
+
   if (!plan) {
     return (
       <Panel title="Execution Timeline" subtitle="No plan available" className="h-full">
@@ -806,14 +819,15 @@ function ExecutionTimeline({ plan }: { plan: MissionPlanType | null }) {
 
       {/* Agent swimlanes */}
       <div className="space-y-3">
-        {Object.entries(byProvider).map(([provider, tasks]) => {
-          const agentInfo = AGENT_PROVIDERS.find((a) => a.id === provider);
+        {Object.entries(byProvider).map(([provider, tasks], providerIdx) => {
+          // Derive color from the live store providers; fall back to palette.
+          const color = providerColor(provider, providerIdx);
           return (
             <div key={provider}>
               <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: agentInfo?.color ?? "#6b7280" }} />
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: agentInfo?.color }}>
-                  {agentInfo?.label ?? provider}
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color }}>
+                  {provider}
                 </span>
               </div>
               <div className="relative ml-3 pl-3 border-l border-border/30 space-y-1">

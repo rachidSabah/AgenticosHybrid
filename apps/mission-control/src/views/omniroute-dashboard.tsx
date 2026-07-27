@@ -30,23 +30,11 @@ interface FailoverEvent {
   status: "success" | "retry" | "failed";
 }
 
-const DEFAULT_POLICIES: RoutePolicy[] = [
-  { id: "p1", name: "Coding & Architecture", category: "coding", targetProvider: "Claude Code", targetModel: "claude-3-7-sonnet", fallbackProvider: "OpenCode", enabled: true },
-  { id: "p2", name: "Deep Reasoning & Security", category: "reasoning", targetProvider: "Hermes", targetModel: "hermes-3-405b", fallbackProvider: "AGY CLI", enabled: true },
-  { id: "p3", name: "Multimodal & Large Context", category: "large-context", targetProvider: "Gemini CLI", targetModel: "gemini-2.5-pro", fallbackProvider: "Claude Code", enabled: true },
-  { id: "p4", name: "Fast & Autonomous Implementation", category: "fast", targetProvider: "OpenCode", targetModel: "gpt-4o", fallbackProvider: "Claude Code", enabled: true },
-  { id: "p5", name: "Local Offline Execution", category: "local", targetProvider: "Ollama", targetModel: "llama3.3:70b", fallbackProvider: "Hermes", enabled: true },
-];
-
-const DEFAULT_FAILOVERS: FailoverEvent[] = [
-  { id: "f1", timestamp: new Date(Date.now() - 120000).toLocaleTimeString(), fromProvider: "Claude Code", toProvider: "OpenCode", reason: "API Timeout (>45s)", status: "success" },
-  { id: "f2", timestamp: new Date(Date.now() - 480000).toLocaleTimeString(), fromProvider: "Hermes", toProvider: "AGY CLI", reason: "Local VRAM Spike", status: "success" },
-  { id: "f3", timestamp: new Date(Date.now() - 920000).toLocaleTimeString(), fromProvider: "Ollama", toProvider: "Hermes", reason: "GGUF Context Overflow", status: "success" },
-];
-
 export function OmniRouteDashboard() {
-  const [policies, setPolicies] = useState<RoutePolicy[]>(DEFAULT_POLICIES);
-  const [failovers, setFailovers] = useState<FailoverEvent[]>(DEFAULT_FAILOVERS);
+  // Policies and failovers are populated EXCLUSIVELY from live backend data.
+  // No hardcoded defaults — empty arrays until the API responds.
+  const [policies, setPolicies] = useState<RoutePolicy[]>([]);
+  const [failovers, setFailovers] = useState<FailoverEvent[]>([]);
   const [activeTab, setActiveTab] = useState<"routing" | "composer" | "policies" | "compression" | "budget">("routing");
   const [testPrompt, setTestPrompt] = useState("");
   const [routeResult, setRouteResult] = useState<any>(null);
@@ -56,29 +44,44 @@ export function OmniRouteDashboard() {
   const connected = useStore((s) => s.connected);
   const providers = useStore((s) => s.providers);
 
-  // Live telemetry data
+  // Live telemetry data — all zeros until the API returns real values.
   const [telemetry, setTelemetry] = useState({
-    requestsProcessed: 1420,
-    activeRoutes: 6,
-    avgLatencyMs: 16,
-    compressionSavingsPct: 42.8,
-    totalTokensSaved: 1842000,
-    todayCostSaved: 14.85,
-    localExecutionRatio: 68.5,
+    requestsProcessed: 0,
+    activeRoutes: 0,
+    avgLatencyMs: 0,
+    compressionSavingsPct: 0,
+    totalTokensSaved: 0,
+    todayCostSaved: 0,
+    localExecutionRatio: 0,
   });
 
   const loadData = useCallback(async () => {
     try {
-      const [status, pol, bg, comp] = await Promise.all([
+      const [status, pol, bg, comp, tel, fail] = await Promise.all([
         api.omnirouteStatus().catch(() => null),
         api.omniroutePolicies().catch(() => null),
         api.omnirouteBudget().catch(() => null),
         api.omnirouteCompression().catch(() => null),
+        api.omnirouteTelemetry().catch(() => null),
+        api.omnirouteFailover().catch(() => null),
       ]);
-      if (bg?.today_cost) {
-        setTelemetry((prev) => ({ ...prev, todayCostSaved: bg.saved_cost, localExecutionRatio: bg.local_ratio * 100 }));
+      if (Array.isArray(pol)) {
+        setPolicies(pol as unknown as RoutePolicy[]);
       }
-    } catch { /* fallback */ }
+      if (Array.isArray(fail)) {
+        setFailovers(fail as unknown as FailoverEvent[]);
+      }
+      setTelemetry((prev) => ({
+        ...prev,
+        requestsProcessed: status?.requests_processed ?? prev.requestsProcessed,
+        activeRoutes: tel?.active_routes ?? prev.activeRoutes,
+        avgLatencyMs: tel?.avg_latency_ms ?? prev.avgLatencyMs,
+        compressionSavingsPct: comp?.savings_pct ?? prev.compressionSavingsPct,
+        totalTokensSaved: prev.totalTokensSaved,
+        todayCostSaved: bg?.saved_cost ?? prev.todayCostSaved,
+        localExecutionRatio: bg ? bg.local_ratio * 100 : prev.localExecutionRatio,
+      }));
+    } catch { /* keep empty state */ }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -89,7 +92,8 @@ export function OmniRouteDashboard() {
       const res = await api.omnirouteRoute(testPrompt);
       setRouteResult(res);
     } catch {
-      setRouteResult({ target_provider: "Claude Code", model: "claude-3-7-sonnet", latency_ms: 14 });
+      // No fake fallback — show the error state.
+      setRouteResult({ error: "Routing failed — no runtimes available" });
     }
   };
 
@@ -99,9 +103,8 @@ export function OmniRouteDashboard() {
       const res = await api.omnirouteCompress(compressText);
       setCompressResult(res);
     } catch {
-      const orig = Math.ceil(compressText.length / 4);
-      const comp = Math.ceil(orig * 0.58);
-      setCompressResult({ original_tokens: orig, compressed_tokens: comp, compressed_text: compressText.slice(0, Math.floor(compressText.length * 0.6)) });
+      // No fake fallback.
+      setCompressResult({ error: "Compression failed" });
     }
   };
 
@@ -189,25 +192,29 @@ export function OmniRouteDashboard() {
 
                 <div className="h-6 w-0.5 bg-accent/40" />
 
-                {/* Target Provider Nodes */}
+                {/* Target Provider Nodes — derived from live store providers */}
                 <div className="grid grid-cols-3 gap-3 w-full">
-                  {[
-                    { name: "Claude Code", model: "claude-3-7-sonnet", latency: "14ms", status: "Active Target" },
-                    { name: "Hermes", model: "hermes-3-405b", latency: "18ms", status: "Active Target" },
-                    { name: "OpenCode", model: "gpt-4o", latency: "22ms", status: "Standby" },
-                  ].map((target) => (
-                    <div key={target.name} className="glass rounded-xl p-3 border border-border/50 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold">{target.name}</span>
-                        <StatusDot status="healthy" pulse />
-                      </div>
-                      <div className="text-[10px] font-mono text-purple-300">{target.model}</div>
-                      <div className="flex justify-between text-[10px] text-faint">
-                        <span>{target.latency}</span>
-                        <span className="text-ok font-medium">{target.status}</span>
-                      </div>
-                    </div>
-                  ))}
+                  {Object.values(providers)
+                    .filter((p) => p.provider && p.provider.toLowerCase() !== "mock")
+                    .slice(0, 6)
+                    .map((p) => {
+                      const name = p.provider ?? "unknown";
+                      const latency = `${Math.round(p.latency_ms ?? 0)}ms`;
+                      const status = p.status === "healthy" ? "Active Target" : p.status === "degraded" ? "Standby" : "Offline";
+                      return (
+                        <div key={name} className="glass rounded-xl p-3 border border-border/50 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold">{name}</span>
+                            <StatusDot status={p.status === "healthy" ? "healthy" : p.status === "degraded" ? "degraded" : "down"} pulse />
+                          </div>
+                          <div className="text-[10px] font-mono text-purple-300">{name}</div>
+                          <div className="flex justify-between text-[10px] text-faint">
+                            <span>{latency}</span>
+                            <span className={p.status === "healthy" ? "text-ok font-medium" : "text-faint font-medium"}>{status}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             </Panel>
