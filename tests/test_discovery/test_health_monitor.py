@@ -166,8 +166,11 @@ class TestHealthMonitorEventPublishing:
             pid=1001,
         )
         await monitor._publish_health_changed(rec, AgentStatus.UNKNOWN)
-        _, kwargs = event_bus.publish.call_args
-        assert kwargs["topic"] == Topic.AGENT_HEALTH_CHANGED.value
+        # publish() now takes a single EventEnvelope argument; the topic lives
+        # on the envelope, not in kwargs.
+        args, _ = event_bus.publish.call_args
+        envelope = args[0]
+        assert envelope.topic == Topic.AGENT_HEALTH_CHANGED.value
 
 
 class TestHealthMonitorPIDCheck:

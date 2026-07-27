@@ -539,19 +539,21 @@ class TestLocalDiscoveryServiceStartStopIntegration:
 
             # Update
             await service.update_agent(agent.id, status=AgentStatus.BUSY)
+            # publish() now takes a single EventEnvelope argument; the topic
+            # lives on the envelope, not in kwargs.
             update_topics = [
-                call.kwargs["topic"]
+                call.args[0].topic
                 for call in event_bus.publish.call_args_list
-                if call.kwargs["topic"] == Topic.AGENT_UPDATED.value
+                if getattr(call.args[0], "topic", None) == Topic.AGENT_UPDATED.value
             ]
             assert update_topics
 
             # Remove
             await service.remove_agent(agent.id)
             remove_topics = [
-                call.kwargs["topic"]
+                call.args[0].topic
                 for call in event_bus.publish.call_args_list
-                if call.kwargs["topic"] == Topic.AGENT_REMOVED.value
+                if getattr(call.args[0], "topic", None) == Topic.AGENT_REMOVED.value
             ]
             assert remove_topics
 

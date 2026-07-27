@@ -127,23 +127,13 @@ function titleFor(topic: string, payload: Record<string, unknown>): string {
 export const useStore = create<StoreState>((set, get) => ({
   connected: false,
   events: [],
-  agents: {
-    "claude-code": { id: "claude-code", role: "architect", capabilities: ["Architecture", "Refactoring", "Terminal", "MCP"], status: "running", health: "healthy", provider: "Claude Code" },
-    "hermes": { id: "hermes", role: "reasoner", capabilities: ["Reasoning", "Security Audit", "Debugging"], status: "running", health: "healthy", provider: "Hermes" },
-    "agy-cli": { id: "agy-cli", role: "core", capabilities: ["Subagent Dispatch", "MCP Server Manager", "Memory"], status: "running", health: "healthy", provider: "AGY CLI" },
-    "opencode": { id: "opencode", role: "coder", capabilities: ["Implementation", "Tests", "Autonomous Code"], status: "running", health: "healthy", provider: "OpenCode" },
-    "gemini-cli": { id: "gemini-cli", role: "researcher", capabilities: ["Research", "Multimodal", "Vision"], status: "running", health: "healthy", provider: "Gemini CLI" },
-    "ollama": { id: "ollama", role: "local_llm", capabilities: ["Offline Execution", "Local LLM Server"], status: "running", health: "healthy", provider: "Ollama" },
-  },
+  // Initial agent/provider maps are empty — populated exclusively from live
+  // backend data via hydrate() + WebSocket events. Hardcoded seed data was
+  // removed so that counts on Mission Overview / Fleet / Constellation match
+  // the real BrainRegistry / RuntimeRegistry counts exactly.
+  agents: {},
   tasks: {},
-  providers: {
-    "Claude Code": { provider: "Claude Code", status: "healthy", latency_ms: 18 },
-    "Hermes": { provider: "Hermes", status: "healthy", latency_ms: 22 },
-    "AGY CLI": { provider: "AGY CLI", status: "healthy", latency_ms: 14 },
-    "OpenCode": { provider: "OpenCode", status: "healthy", latency_ms: 25 },
-    "Gemini CLI": { provider: "Gemini CLI", status: "healthy", latency_ms: 31 },
-    "Ollama": { provider: "Ollama", status: "healthy", latency_ms: 12 },
-  },
+  providers: {},
   memory: [],
   audit: [],
   notifications: [],
@@ -152,12 +142,12 @@ export const useStore = create<StoreState>((set, get) => ({
   missionUpdates: 0,
   telemetry: {
     tasks: 0,
-    agents: 6,
-    providers: 6,
+    agents: 0,
+    providers: 0,
     pipelines: 0,
     tokens: 0,
     cost: 0,
-    latency: 18,
+    latency: 0,
     errors: 0,
     pulses: [],
   },
@@ -571,14 +561,20 @@ export const useStore = create<StoreState>((set, get) => ({
       // ── Local Agents → surface as providers + agents ──────────────────────
       if (rawLocalAgents.status === "fulfilled" && Array.isArray(rawLocalAgents.value)) {
         for (const a of rawLocalAgents.value) {
-          if (!a.running) continue;
+          // LocalAgent.to_dict() exposes `status` (not `running`). Include
+          // every discovered agent — "discovered" means "installed on this
+          // machine", which is exactly what the Fleet/Constellation/Binding
+          // views need to display. The previous `!a.running` check was always
+          // false (no such field) so local agents never appeared in the store.
           const name = String(a.name ?? "");
           if (!name) continue;
+          const status = String(a.status ?? "unknown");
+          const isHealthy = status === "running" || status === "idle" || status === "busy";
           if (!providersMap[name]) {
             providersMap[name] = {
               provider: name,
-              status: a.health === "healthy" || a.health === "ok" ? "healthy" : "degraded",
-              latency_ms: 0,
+              status: isHealthy ? "healthy" : "degraded",
+              latency_ms: Number(a.latency_ms ?? 0),
             };
           }
           const id = String(a.id ?? a.name ?? "");
@@ -595,45 +591,19 @@ export const useStore = create<StoreState>((set, get) => ({
         }
       }
 
-      // ── Ensure default discovered real-world AI runtimes are registered ──
-      const DEFAULT_REAL_RUNTIMES = [
-        { name: "Claude Code", role: "architect", caps: ["Architecture", "Refactoring", "Terminal", "MCP"] },
-        { name: "Hermes", role: "reasoner", caps: ["Reasoning", "Security Audit", "Debugging"] },
-        { name: "AGY CLI", role: "core", caps: ["Subagent Dispatch", "MCP Server Manager", "Memory"] },
-        { name: "OpenCode", role: "coder", caps: ["Implementation", "Tests", "Autonomous Code"] },
-        { name: "Gemini CLI", role: "researcher", caps: ["Research", "Multimodal", "Vision"] },
-        { name: "Ollama", role: "local_llm", caps: ["Offline Execution", "Local LLM Server"] },
-      ];
-
-      for (const r of DEFAULT_REAL_RUNTIMES) {
-        if (!providersMap[r.name]) {
-          providersMap[r.name] = {
-            provider: r.name,
-            status: "healthy",
-            latency_ms: 18,
-          };
-        }
-        const id = r.name.toLowerCase().replace(/\s+/g, "-");
-        if (!agentsMap[id]) {
-          agentsMap[id] = {
-            id,
-            role: r.role,
-            capabilities: r.caps,
-            status: "running",
-            health: "healthy",
-            provider: r.name,
-          };
-        }
-      }
-
       // ── Commit snapshot + update telemetry counters ───────────────────────
+      // Replace (not merge) agents/providers so that runtimes which disappeared
+      // from the backend are also removed from the store. The previous merge
+      // logic (`{ ...s.agents, ...agentsMap }`) kept stale entries forever.
+      // Preserve the rest of telemetry (tasks/tokens/cost/pulses) which is
+      // accumulated from WebSocket events and must not be reset on every hydrate.
       set((s) => ({
-        agents: { ...s.agents, ...agentsMap },
-        providers: { ...s.providers, ...providersMap },
+        agents: agentsMap,
+        providers: providersMap,
         telemetry: {
           ...s.telemetry,
-          agents: Object.keys({ ...s.agents, ...agentsMap }).length,
-          providers: Object.keys({ ...s.providers, ...providersMap }).length,
+          agents: Object.keys(agentsMap).length,
+          providers: Object.keys(providersMap).length,
         },
       }));
     } catch (e) {

@@ -268,10 +268,26 @@ async def _adapter_chat_completion(
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
+def create_gateway_router(
+    provider_mgr: ProviderManagerImpl,
+    brain_registry: Any | None = None,
+    platform: Any | None = None,
+) -> APIRouter:
     """Build the OpenAI-compatible /v1 router.
 
     Call from ``create_app()`` and mount via ``app.include_router()``.
+
+    Args:
+        provider_mgr: The provider manager (source of provider-registered models).
+        brain_registry: Optional brain registry at construction time. If both
+            ``brain_registry`` and ``platform`` are provided, ``platform`` wins
+            (read lazily at request time) so the gateway sees brains registered
+            after the router was built.
+        platform: Optional platform instance — when provided, the gateway reads
+            ``platform.brain_registry`` at request time so live-discovered brains
+            (Claude Code, Hermes, Gemini CLI, Codex, OpenCode, Aider, Continue,
+            Ollama, LM Studio, …) appear as gateway models without requiring a
+            router rebuild.
     """
     router = APIRouter(prefix="")
 
@@ -294,7 +310,20 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
     # ── GET /v1/models ────────────────────────────────────────────────────
     @router.get("/v1/models")
     async def list_models():
-        """Return all models known to the ProviderManager and runtime registry in OpenAI format."""
+        """Return all models known to the ProviderManager and BrainRegistry in OpenAI format.
+
+        Models are sourced from:
+        1. ``provider_mgr.list_models()`` — provider-registered models
+        2. ``provider_mgr.list_providers()`` — registered providers (as models)
+        3. ``brain_registry.list_all()`` — live discovered local CLI brains
+           (Claude Code, Hermes, Gemini CLI, Codex, OpenCode, Aider, Continue,
+           Ollama, LM Studio, …). Each brain's ``supported_models`` are expanded
+           individually; brains without explicit models are surfaced under their
+           display name so they still appear as routable targets.
+
+        No hardcoded/demo models are injected. If nothing is discovered, the
+        response is an empty list.
+        """
         all_models = provider_mgr.list_models()
         data = []
         seen: set[str] = set()
@@ -314,7 +343,7 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
                     }
                 )
 
-        # Include discovered runtimes & registered providers (excluding mock)
+        # Include registered providers (excluding mock)
         for p in provider_mgr.list_providers():
             if "mock" in p.name.lower():
                 continue
@@ -330,24 +359,49 @@ def create_gateway_router(provider_mgr: ProviderManagerImpl) -> APIRouter:
                     }
                 )
 
-        # Default real-world runtimes available in Agentic OS
-        for real_model, provider_name in [
-            ("claude-3-7-sonnet", "claude_code"),
-            ("claude-3-5-sonnet", "claude_code"),
-            ("hermes-3-llama-3.1-70b", "hermes"),
-            ("gemini-2.5-pro", "gemini"),
-            ("opencode-deepseek-r1", "opencode"),
-        ]:
-            if real_model not in seen:
-                seen.add(real_model)
-                data.append(
-                    {
-                        "id": real_model,
-                        "object": "model",
-                        "created": int(time.time()),
-                        "owned_by": provider_name,
-                    }
-                )
+        # Include live discovered brains from the BrainRegistry. This is the
+        # canonical source of "what local CLI AI tools are installed on this
+        # machine". Each brain contributes its supported_models (if any) plus
+        # itself as a routable target. We read from ``platform.brain_registry``
+        # at request time (not at router-construction time) so brains registered
+        # after the router was built — including via the event-driven
+        # LocalDiscoveryService → BrainDiscoveryBridge pipeline — are visible.
+        br = None
+        if platform is not None:
+            br = getattr(platform, "brain_registry", None)
+        if br is None:
+            br = brain_registry
+        if br is not None:
+            try:
+                brains = await br.list_all()
+            except Exception:
+                log.exception("Failed to list brains for /v1/models")
+                brains = []
+            for b in brains:
+                # Expand each brain's declared supported models
+                for model_id in b.supported_models:
+                    if model_id and model_id not in seen:
+                        seen.add(model_id)
+                        data.append(
+                            {
+                                "id": model_id,
+                                "object": "model",
+                                "created": int(time.time()),
+                                "owned_by": b.display_name,
+                            }
+                        )
+                # Surface the brain itself as a routable target (by display name)
+                bid = b.display_name
+                if bid and bid not in seen:
+                    seen.add(bid)
+                    data.append(
+                        {
+                            "id": bid,
+                            "object": "model",
+                            "created": int(time.time()),
+                            "owned_by": str(b.vendor),
+                        }
+                    )
 
         return {"object": "list", "data": data}
 

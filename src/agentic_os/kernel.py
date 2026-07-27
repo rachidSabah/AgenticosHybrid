@@ -362,6 +362,19 @@ class Kernel:
         """Start all non-critical subsystems in the background."""
         import asyncio
 
+        # Ensure the legacy kernel's bus is started. When ContainerKernel is
+        # used, it starts its OWN container-resolved bus but does NOT call
+        # legacy._start_critical() — so self.bus (the legacy kernel's bus)
+        # may still be unstarted. Without this, events published during
+        # subsystem init (e.g. AGENT_DISCOVERED from LocalDiscoveryService)
+        # are queued in _pending and never dispatched, breaking the entire
+        # Discovery → BrainRegistry → API synchronization pipeline.
+        # LocalBus.start() is idempotent.
+        try:
+            await self.bus.start()
+        except Exception:
+            log.exception("Failed to start legacy kernel bus in _start_subsystems")
+
         # ── Plugins ──
         _diag("Plugins", "LOADING")
         try:
@@ -592,11 +605,39 @@ class Kernel:
                 self._platform_instance.brain_health = self.brain_health
                 self._platform_instance.brain_discovery_bridge = self.brain_discovery_bridge
                 self._platform_instance.brain_runtime_bridge = self.brain_runtime_bridge
+
+            # ── Phase 6.1: Local Agent Discovery Service ──
+            # Wire LocalDiscoveryService so that /api/local-agents* endpoints
+            # work and AGENT_DISCOVERED/REGISTERED/UPDATED/REMOVED events fire
+            # on the bus. BrainDiscoveryBridge subscribes to those events and
+            # converts them into BrainRecord registrations, so this is the
+            # event-driven path that keeps BrainRegistry in sync with the
+            # installed tools at runtime (not just at startup auto-detect).
+            _diag("LocalDiscovery", "STARTING")
+            try:
+                self.local_discovery = LocalDiscoveryService()
+                await self.local_discovery.start(event_bus=self.bus)
+                if self._platform_instance is not None:
+                    self._platform_instance.local_discovery = self.local_discovery
+                _diag(
+                    "LocalDiscovery",
+                    "STARTED",
+                    f"{len(await self.local_discovery.get_agents())} agents found",
+                )
+            except Exception as exc:
+                _diag("LocalDiscovery", "FAILED", str(exc))
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 6.1: Stop Local Discovery Service
+        if self.local_discovery is not None:
+            try:
+                await self.local_discovery.stop()
+            except Exception:
+                log.exception("Failed to stop LocalDiscoveryService")
+            self.local_discovery = None
         # Phase 4, M6: Stop Desktop Runtime
         if self.desktop and settings.desktop_enabled:
             await self.desktop.stop()

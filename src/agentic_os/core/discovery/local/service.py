@@ -24,7 +24,7 @@ from agentic_os.domain.discovery import (
     DiscoveryResult,
     LocalAgent,
 )
-from agentic_os.domain.events import Topic
+from agentic_os.domain.events import EventEnvelope, Topic
 
 log = logging.getLogger("agentic_os.local_discovery.service")
 
@@ -454,9 +454,12 @@ class LocalDiscoveryService:
         payload = agent.to_dict()
         try:
             await bus.publish(
-                topic=topic.value,
-                payload=payload,
-                source="local_discovery",
+                EventEnvelope(
+                    type=topic.value,
+                    source="local_discovery",
+                    topic=topic.value,
+                    payload=payload,
+                )
             )
             log.debug("Published %s for agent %s", topic.value, agent.id)
         except Exception:

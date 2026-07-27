@@ -359,12 +359,16 @@ def create_app(platform: Platform) -> FastAPI:
         # Primary: Orchestrator-registered agents (task workers)
         agents = [a.model_dump(mode="json") for a in orch.registry.agents()]
 
-        # Fallback: discovered AI brains that aren't yet tracked by Orchestrator
+        # Fallback: discovered AI brains that aren't yet tracked by Orchestrator.
+        # All discovered brains are included regardless of health — "discovered"
+        # means "installed on this machine". The health filter (>= 50) was
+        # removed because it caused count mismatches: brains appeared in
+        # /api/brains but not in /api/agents.
         if platform.brain_registry is not None:
             brains = await platform.brain_registry.list_all()
             known = {a.get("id") or a.get("name") for a in agents}
             for b in brains:
-                if b.id not in known and b.health >= 50:
+                if b.id not in known:
                     agents.append(
                         {
                             "id": b.id,
@@ -783,18 +787,27 @@ def create_app(platform: Platform) -> FastAPI:
     async def list_providers() -> list[dict]:
         """List all registered providers (from ProviderManager + discovered brains)."""
         providers: list[dict] = [p.model_dump(mode="json") for p in pm.list_providers()]
-        # Include discovered brains as providers so Mission Overview shows them
+        # Include discovered brains as providers so Mission Overview shows them.
+        # All discovered brains are included regardless of health — "discovered"
+        # means "installed on this machine", which is what the Fleet/Constellation/
+        # Gateway views need. The health filter (>= 50) was removed because it
+        # caused count mismatches: brains appeared in /api/brains but not in
+        # /api/providers or /api/agents.
         if platform.brain_registry is not None:
             brains = await platform.brain_registry.list_all()
             known = {p.get("provider") or p.get("name") for p in providers}
             for b in brains:
-                if b.display_name not in known and b.health >= 50:
+                if b.display_name not in known:
                     providers.append(
                         {
                             "provider": b.display_name,
                             "name": b.display_name,
                             "vendor": str(b.vendor),
-                            "status": "healthy" if b.health >= 80 else "degraded",
+                            "status": "healthy"
+                            if b.health >= 80
+                            else "degraded"
+                            if b.health >= 50
+                            else "unknown",
                             "latency_ms": b.latency,
                             "health": b.health,
                             "brain_id": b.id,
@@ -3839,12 +3852,61 @@ def create_app(platform: Platform) -> FastAPI:
                 status: str | None = None,
                 runtime_type: str | None = None,
             ) -> list[dict]:
+                """List all runtimes.
+
+                Combines:
+                1. Desktop runtime manager (Stack #2 — universal runtime control)
+                2. BrainRegistry (discovered local CLI AI brains) — so that
+                   brains discovered via RuntimeBridge / LocalDiscoveryService
+                   also appear in the runtime list. Without this, a brain like
+                   Claude Code would appear in /api/brains but NOT in
+                   /api/runtimes, causing count mismatches between the Fleet,
+                   Constellation, and Runtime Dashboard views.
+                """
                 all_runtimes = await runtime_mgr.list_all()
+                result = [r.to_dict() for r in all_runtimes]
+                seen_ids = {r.get("id") for r in result}
+                seen_names = {r.get("name") for r in result}
+
+                # Merge in live discovered brains
+                if platform.brain_registry is not None:
+                    try:
+                        brains = await platform.brain_registry.list_all()
+                    except Exception:
+                        brains = []
+                    for b in brains:
+                        if b.id in seen_ids or b.display_name in seen_names:
+                            continue
+                        seen_ids.add(b.id)
+                        seen_names.add(b.display_name)
+                        rt_status = "running" if b.health >= 50 else "stopped"
+                        if status and rt_status != status:
+                            continue
+                        rt_type = str(b.vendor)
+                        if runtime_type and rt_type != runtime_type:
+                            continue
+                        result.append(
+                            {
+                                "id": b.id,
+                                "name": b.display_name,
+                                "type": rt_type,
+                                "status": rt_status,
+                                "version": b.version or "",
+                                "path": "",
+                                "executable": b.display_name,
+                                "capabilities": list(b.capabilities) if b.capabilities else [],
+                                "verified": True,
+                                "health": b.health,
+                                "latency_ms": b.latency,
+                                "source": "brain_registry",
+                            }
+                        )
+
                 if status:
-                    all_runtimes = [r for r in all_runtimes if r.status.value == status]
+                    result = [r for r in result if r.get("status") == status]
                 if runtime_type:
-                    all_runtimes = [r for r in all_runtimes if r.type.value == runtime_type]
-                return [r.to_dict() for r in all_runtimes]
+                    result = [r for r in result if r.get("type") == runtime_type]
+                return result
 
             @app.get("/api/runtimes/{runtime_id}")
             async def get_runtime(runtime_id: str) -> dict:
@@ -4402,16 +4464,36 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/omniroute/providers")
     async def omniroute_providers() -> list[dict]:
-        providers = platform.providers.list_providers()
-        res = []
-        for p in providers:
+        """List routing targets for OmniRoute.
+
+        Sources (all live, no hardcoded fallback):
+        1. ``provider_mgr.list_providers()`` — registered provider adapters
+        2. ``brain_registry.list_all()`` — discovered local CLI brains
+           (Claude Code, Hermes, Gemini CLI, Codex, OpenCode, Aider, Continue,
+           Ollama, LM Studio, …). Each healthy brain becomes a routing target
+           with its real version, capabilities, and health.
+
+        If nothing is installed/discovered, the response is an empty list —
+        the previous hardcoded demo list (Claude Code / Hermes / OpenCode /
+        AGY CLI / Gemini CLI / Ollama) was removed because it showed fake
+        runtimes that don't exist on the host.
+        """
+        res: list[dict] = []
+        seen: set[str] = set()
+
+        # Registered provider adapters
+        for p in platform.providers.list_providers():
+            name = p.name
+            if name in seen:
+                continue
+            seen.add(name)
             res.append(
                 {
-                    "name": p.name,
+                    "name": name,
                     "kind": p.kind,
                     "installed": True,
                     "healthy": True,
-                    "version": "1.0.0",
+                    "version": getattr(p, "version", "") or "",
                     "capabilities": (
                         ["text", "tools", "streaming"] if p.supports_streaming else ["text"]
                     ),
@@ -4419,57 +4501,35 @@ def create_app(platform: Platform) -> FastAPI:
                     "tools": p.supports_tools,
                 }
             )
-        if not res:
-            res = [
-                {
-                    "name": "Claude Code",
-                    "kind": "claude_code",
-                    "installed": True,
-                    "healthy": True,
-                    "version": "1.0.4",
-                    "capabilities": ["text", "tools", "streaming"],
-                },
-                {
-                    "name": "Hermes",
-                    "kind": "hermes",
-                    "installed": True,
-                    "healthy": True,
-                    "version": "2.5.0",
-                    "capabilities": ["text", "reasoning"],
-                },
-                {
-                    "name": "OpenCode",
-                    "kind": "openai_compatible",
-                    "installed": True,
-                    "healthy": True,
-                    "version": "0.9.1",
-                    "capabilities": ["text", "code"],
-                },
-                {
-                    "name": "AGY CLI",
-                    "kind": "antigravity",
-                    "installed": True,
-                    "healthy": True,
-                    "version": "2.0.0",
-                    "capabilities": ["text", "mcp"],
-                },
-                {
-                    "name": "Gemini CLI",
-                    "kind": "gemini",
-                    "installed": True,
-                    "healthy": True,
-                    "version": "1.2.0",
-                    "capabilities": ["text", "multimodal"],
-                },
-                {
-                    "name": "Ollama",
-                    "kind": "ollama",
-                    "installed": True,
-                    "healthy": True,
-                    "version": "0.5.7",
-                    "capabilities": ["text", "local"],
-                },
-            ]
+
+        # Live discovered brains
+        if platform.brain_registry is not None:
+            try:
+                brains = await platform.brain_registry.list_all()
+            except Exception:
+                brains = []
+            for b in brains:
+                name = b.display_name
+                if name in seen:
+                    continue
+                seen.add(name)
+                caps = list(b.capabilities) if b.capabilities else ["text"]
+                res.append(
+                    {
+                        "name": name,
+                        "kind": str(b.vendor),
+                        "installed": True,
+                        "healthy": b.health >= 50,
+                        "version": b.version or "",
+                        "capabilities": caps,
+                        "streaming": "streaming" in caps,
+                        "tools": "tools" in caps,
+                        "brain_id": b.id,
+                        "health_score": b.health,
+                        "latency_ms": b.latency,
+                    }
+                )
+
         return res
 
     @app.get("/api/v1/routing/config")
@@ -4690,7 +4750,11 @@ def create_app(platform: Platform) -> FastAPI:
         try:
             from agentic_os.api.gateway import create_gateway_router
 
-            gw_router = create_gateway_router(platform.provider_mgr)
+            gw_router = create_gateway_router(
+                platform.provider_mgr,
+                brain_registry=getattr(platform, "brain_registry", None),
+                platform=platform,
+            )
             app.include_router(gw_router)
             log.info("gateway.mounted")
         except ImportError as exc:

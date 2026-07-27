@@ -16,7 +16,7 @@ import time
 from typing import Any
 
 from agentic_os.domain.discovery import AgentHealthRecord, AgentStatus
-from agentic_os.domain.events import Topic
+from agentic_os.domain.events import EventEnvelope, Topic
 
 log = logging.getLogger("agentic_os.local_discovery.health_monitor")
 
@@ -266,9 +266,12 @@ class HealthMonitor:
 
         try:
             await self._event_bus.publish(
-                topic=Topic.AGENT_HEALTH_CHANGED.value,
-                payload=payload,
-                source="local_discovery",
+                EventEnvelope(
+                    type=Topic.AGENT_HEALTH_CHANGED.value,
+                    source="local_discovery",
+                    topic=Topic.AGENT_HEALTH_CHANGED.value,
+                    payload=payload,
+                )
             )
             log.info(
                 "Published health change for %s: %s -> %s",
