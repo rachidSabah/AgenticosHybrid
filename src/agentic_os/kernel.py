@@ -216,6 +216,8 @@ class Platform:
     brain_runtime_bridge: RuntimeBridge | None = None
     # Phase 11: Executive Intelligence Layer
     executive_controller: Any = None  # ExecutiveController | None
+    # Phase 12: Cognitive Intelligence Layer
+    cognitive_controller: Any = None  # CognitiveController | None
 
 
 class Kernel:
@@ -282,6 +284,7 @@ class Kernel:
         self._platform_instance: Platform | None = None
         self.local_discovery = None
         self.executive_controller = None
+        self.cognitive_controller = None
         # Phase 6.2: AI Brain Registry & Constellation (initialized in _start_subsystems)
         self.brain_registry = None
         self.brain_manager = None
@@ -651,11 +654,44 @@ class Kernel:
             except Exception as exc:
                 _diag("Executive", "FAILED", str(exc))
 
+            # ── Phase 12: Cognitive Intelligence Layer ──
+            _diag("Cognitive", "STARTING")
+            try:
+                from agentic_os.core.cognitive import CognitiveController
+
+                self.cognitive_controller = CognitiveController(
+                    bus=self.bus,
+                    brain_registry=self.brain_registry,
+                    goal_manager=(
+                        self.executive_controller.goal_manager
+                        if self.executive_controller is not None
+                        else None
+                    ),
+                    exec_memory=(
+                        self.executive_controller.memory
+                        if self.executive_controller is not None
+                        else None
+                    ),
+                )
+                await self.cognitive_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.cognitive_controller = self.cognitive_controller
+                _diag("Cognitive", "STARTED")
+            except Exception as exc:
+                _diag("Cognitive", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 12: Stop Cognitive Intelligence Layer
+        if self.cognitive_controller is not None:
+            try:
+                await self.cognitive_controller.stop()
+            except Exception:
+                log.exception("Failed to stop CognitiveController")
+            self.cognitive_controller = None
         # Phase 11: Stop Executive Intelligence Layer
         if self.executive_controller is not None:
             try:
@@ -912,6 +948,7 @@ class Kernel:
             brain_discovery_bridge=self.brain_discovery_bridge,
             brain_runtime_bridge=self.brain_runtime_bridge,
             executive_controller=self.executive_controller,
+            cognitive_controller=self.cognitive_controller,
         )
         return self._platform_instance
 

@@ -2012,6 +2012,160 @@ def create_app(platform: Platform) -> FastAPI:
             "memory": memory_metrics,
         }
 
+    # ── Cognitive Intelligence Layer (Phase 12) ──────────────────────────
+
+    @app.get("/api/cognitive/status")
+    async def cognitive_status() -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return {"started": False, "message": "CognitiveController not wired"}
+        return ctrl.status()
+
+    @app.get("/api/cognitive/world")
+    async def cognitive_world() -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return {}
+        return await ctrl.world_model.snapshot()
+
+    @app.get("/api/cognitive/graph")
+    async def cognitive_graph() -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return {"nodes": [], "edges": []}
+        return await ctrl.knowledge_graph.get_graph()
+
+    @app.get("/api/cognitive/objectives")
+    async def cognitive_list_objectives() -> list[dict]:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return []
+        objs = await ctrl.objective_manager.list_all()
+        return [o.to_dict() for o in objs]
+
+    @app.post("/api/cognitive/objectives")
+    async def cognitive_create_objective(body: dict) -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            raise HTTPException(503, detail="CognitiveController not available")
+        from agentic_os.core.cognitive.domain import ObjectivePriority
+
+        title = body.get("title", "")
+        if not title:
+            raise HTTPException(400, detail="title required")
+        obj = await ctrl.objective_manager.create(
+            title=title,
+            description=body.get("description", ""),
+            priority=ObjectivePriority(body.get("priority", "normal")),
+            owner=body.get("owner", ""),
+            success_metrics=body.get("success_metrics", []),
+            deadline=body.get("deadline", ""),
+            estimated_value=body.get("estimated_value", 0.0),
+            estimated_cost=body.get("estimated_cost", 0.0),
+            risk=body.get("risk", 0.0),
+        )
+        return obj.to_dict()
+
+    @app.post("/api/cognitive/objectives/{obj_id}/activate")
+    async def cognitive_activate_objective(obj_id: str) -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            raise HTTPException(503, detail="CognitiveController not available")
+        obj = await ctrl.objective_manager.activate(obj_id)
+        if obj is None:
+            raise HTTPException(404, detail=f"Objective {obj_id} not found")
+        return obj.to_dict()
+
+    @app.get("/api/cognitive/predictions")
+    async def cognitive_predictions(limit: int = 50) -> list[dict]:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return []
+        return ctrl.prediction_engine.get_history(limit=limit)
+
+    @app.post("/api/cognitive/predict")
+    async def cognitive_predict(body: dict) -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            raise HTTPException(503, detail="CognitiveController not available")
+        pred = await ctrl.prediction_engine.predict(
+            goal_id=body.get("goal_id", ""),
+            required_capability=body.get("capability", ""),
+        )
+        await ctrl.publish("cognitive.prediction.created", pred.to_dict())
+        return pred.to_dict()
+
+    @app.get("/api/cognitive/improvements")
+    async def cognitive_improvements(limit: int = 50) -> list[dict]:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return []
+        return ctrl.improvement_planner.get_history(limit=limit)
+
+    @app.post("/api/cognitive/improvements/generate")
+    async def cognitive_generate_improvements() -> list[dict]:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            raise HTTPException(503, detail="CognitiveController not available")
+        proposals = await ctrl.improvement_planner.generate()
+        for p in proposals:
+            await ctrl.publish("cognitive.improvement.created", p.to_dict())
+        return [p.to_dict() for p in proposals]
+
+    @app.get("/api/cognitive/evaluation")
+    async def cognitive_evaluation() -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return {}
+        latest = ctrl.evaluation_engine.get_latest()
+        if latest is None:
+            return {"message": "No evaluations yet — run POST /api/cognitive/evaluate"}
+        return latest
+
+    @app.post("/api/cognitive/evaluate")
+    async def cognitive_run_evaluation() -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            raise HTTPException(503, detail="CognitiveController not available")
+        score = await ctrl.evaluation_engine.evaluate()
+        await ctrl.publish("cognitive.evaluation.completed", score.to_dict())
+        return score.to_dict()
+
+    @app.get("/api/cognitive/experience")
+    async def cognitive_experience(limit: int = 50) -> list[dict]:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return []
+        return ctrl.experience_replay.get_history(limit=limit)
+
+    @app.post("/api/cognitive/replay")
+    async def cognitive_replay(body: dict) -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            raise HTTPException(503, detail="CognitiveController not available")
+        record = await ctrl.experience_replay.replay(
+            mission_id=body.get("mission_id", ""),
+            goal_id=body.get("goal_id", ""),
+        )
+        await ctrl.publish("cognitive.experience.replayed", record.to_dict())
+        return record.to_dict()
+
+    @app.get("/api/cognitive/dashboard")
+    async def cognitive_dashboard() -> dict:
+        ctrl = getattr(platform, "cognitive_controller", None)
+        if ctrl is None:
+            return {"message": "CognitiveController not wired"}
+        world = await ctrl.world_model.snapshot()
+        eval_latest = ctrl.evaluation_engine.get_latest()
+        mem_metrics = await ctrl.memory.metrics()
+        return {
+            "status": ctrl.status(),
+            "world_model": world,
+            "evaluation": eval_latest or {},
+            "memory": mem_metrics,
+            "strategic_planner_available": ctrl.world_model is not None,
+        }
+
     # ── Memory System API (Phase 2, Subsystem 2) ──
     @app.post("/api/memory")
     async def write_memory(body: dict) -> dict:
