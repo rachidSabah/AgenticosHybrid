@@ -8,6 +8,7 @@ API layer receives.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from agentic_os.adapters.bus.factory import build_bus
 from agentic_os.adapters.discovery.cargo import CargoDiscovery
@@ -213,6 +214,8 @@ class Platform:
     brain_health: BrainHealthMonitor | None = None
     brain_discovery_bridge: BrainDiscoveryBridge | None = None
     brain_runtime_bridge: RuntimeBridge | None = None
+    # Phase 11: Executive Intelligence Layer
+    executive_controller: Any = None  # ExecutiveController | None
 
 
 class Kernel:
@@ -278,6 +281,7 @@ class Kernel:
         self._started = False
         self._platform_instance: Platform | None = None
         self.local_discovery = None
+        self.executive_controller = None
         # Phase 6.2: AI Brain Registry & Constellation (initialized in _start_subsystems)
         self.brain_registry = None
         self.brain_manager = None
@@ -627,11 +631,38 @@ class Kernel:
                 )
             except Exception as exc:
                 _diag("LocalDiscovery", "FAILED", str(exc))
+
+            # ── Phase 11: Executive Intelligence Layer ──
+            _diag("Executive", "STARTING")
+            try:
+                from agentic_os.core.executive import ExecutiveController
+
+                self.executive_controller = ExecutiveController(
+                    bus=self.bus,
+                    brain_registry=self.brain_registry,
+                    mission_planner=self.mission_planner,
+                    memory=self.memory,
+                    learning=self.learning,
+                )
+                await self.executive_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.executive_controller = self.executive_controller
+                _diag("Executive", "STARTED")
+            except Exception as exc:
+                _diag("Executive", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 11: Stop Executive Intelligence Layer
+        if self.executive_controller is not None:
+            try:
+                await self.executive_controller.stop()
+            except Exception:
+                log.exception("Failed to stop ExecutiveController")
+            self.executive_controller = None
         # Phase 6.1: Stop Local Discovery Service
         if self.local_discovery is not None:
             try:
@@ -880,6 +911,7 @@ class Kernel:
             brain_health=self.brain_health,
             brain_discovery_bridge=self.brain_discovery_bridge,
             brain_runtime_bridge=self.brain_runtime_bridge,
+            executive_controller=self.executive_controller,
         )
         return self._platform_instance
 

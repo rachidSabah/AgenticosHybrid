@@ -1787,6 +1787,220 @@ def create_app(platform: Platform) -> FastAPI:
         except Exception:
             return {"permissions": {}, "auto_approved": [], "requires_approval": []}
 
+    # ── Executive Intelligence Layer (Phase 11) ────────────────────────────
+
+    @app.get("/api/executive/status")
+    async def executive_status() -> dict:
+        """Return the ExecutiveController's live status."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return {"started": False, "message": "ExecutiveController not wired"}
+        return exec_ctrl.status()
+
+    @app.get("/api/executive/goals")
+    async def executive_goals(status: str = "") -> list[dict]:
+        """List all executive goals, optionally filtered by status."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return []
+        if status:
+            from agentic_os.core.executive.domain import GoalStatus
+
+            try:
+                st = GoalStatus(status)
+                goals = await exec_ctrl.goal_manager.list_by_status(st)
+            except ValueError:
+                goals = []
+        else:
+            goals = await exec_ctrl.goal_manager.list_all()
+        return [g.to_dict() for g in goals]
+
+    @app.post("/api/executive/goals")
+    async def executive_create_goal(body: dict) -> dict:
+        """Create a new executive goal."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        from agentic_os.core.executive.domain import GoalPriority
+
+        title = body.get("title", "")
+        if not title:
+            raise HTTPException(400, detail="title required")
+        priority = GoalPriority(body.get("priority", "normal"))
+        goal = await exec_ctrl.goal_manager.create_goal(
+            title=title,
+            description=body.get("description", ""),
+            priority=priority,
+            dependencies=body.get("dependencies", []),
+            tags=body.get("tags", []),
+        )
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/{goal_id}/activate")
+    async def executive_activate_goal(goal_id: str) -> dict:
+        """Activate a goal (creates a mission via the existing MissionPlanner)."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        goal = await exec_ctrl.goal_manager.activate(goal_id)
+        if goal is None:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found")
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/{goal_id}/cancel")
+    async def executive_cancel_goal(goal_id: str) -> dict:
+        """Cancel a goal."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        goal = await exec_ctrl.goal_manager.cancel_goal(goal_id)
+        if goal is None:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found")
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/{goal_id}/suspend")
+    async def executive_suspend_goal(goal_id: str) -> dict:
+        """Suspend a goal."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        goal = await exec_ctrl.goal_manager.suspend(goal_id)
+        if goal is None:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found")
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/{goal_id}/resume")
+    async def executive_resume_goal(goal_id: str) -> dict:
+        """Resume a suspended goal."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        goal = await exec_ctrl.goal_manager.resume(goal_id)
+        if goal is None:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found")
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/{goal_id}/reprioritize")
+    async def executive_reprioritize_goal(goal_id: str, body: dict) -> dict:
+        """Change a goal's priority."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        from agentic_os.core.executive.domain import GoalPriority
+
+        priority = GoalPriority(body.get("priority", "normal"))
+        goal = await exec_ctrl.goal_manager.reprioritize(goal_id, priority)
+        if goal is None:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found")
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/merge")
+    async def executive_merge_goals(body: dict) -> dict:
+        """Merge multiple goals into one."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        goal_ids = body.get("goal_ids", [])
+        new_title = body.get("title", "Merged Goal")
+        if len(goal_ids) < 2:
+            raise HTTPException(400, detail="at least 2 goal_ids required")
+        goal = await exec_ctrl.goal_manager.merge_goals(goal_ids, new_title)
+        if goal is None:
+            raise HTTPException(400, detail="merge failed")
+        return goal.to_dict()
+
+    @app.post("/api/executive/goals/{goal_id}/split")
+    async def executive_split_goal(goal_id: str, body: dict) -> list[dict]:
+        """Split a goal into multiple sub-goals."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        sub_titles = body.get("titles", [])
+        if len(sub_titles) < 2:
+            raise HTTPException(400, detail="at least 2 titles required")
+        children = await exec_ctrl.goal_manager.split_goal(goal_id, sub_titles)
+        if not children:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found or split failed")
+        return [c.to_dict() for c in children]
+
+    @app.get("/api/executive/queue")
+    async def executive_queue() -> dict:
+        """Return the pending goal queue (sorted by priority)."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return {"goals": [], "total": 0}
+        pending = await exec_ctrl.goal_manager.list_pending()
+        return {
+            "goals": [g.to_dict() for g in pending],
+            "total": len(pending),
+        }
+
+    @app.get("/api/executive/reflections")
+    async def executive_reflections(limit: int = 50) -> list[dict]:
+        """Return recent reflections."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return []
+        return exec_ctrl.reflection_engine.get_history(limit=limit)
+
+    @app.get("/api/executive/decisions")
+    async def executive_decisions(limit: int = 50) -> list[dict]:
+        """Return recent executive decisions."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return []
+        return exec_ctrl.decision_engine.get_history(limit=limit)
+
+    @app.post("/api/executive/decisions/select")
+    async def executive_decision_select(body: dict) -> dict:
+        """Make a routing decision for a task using the DecisionEngine."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        decision = await exec_ctrl.decision_engine.select(
+            required_capability=body.get("capability", ""),
+            goal_id=body.get("goal_id", ""),
+            task_id=body.get("task_id", ""),
+        )
+        if decision is None:
+            raise HTTPException(504, detail="No runtimes available for decision")
+        return decision.to_dict()
+
+    @app.get("/api/executive/history")
+    async def executive_history() -> dict:
+        """Return executive history (goals, reflections, decisions, failures)."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return {"goals": [], "reflections": [], "decisions": [], "failures": []}
+        goals = await exec_ctrl.memory.list_goals()
+        reflections = await exec_ctrl.memory.list_reflections()
+        decisions = await exec_ctrl.memory.list_decisions()
+        failures = await exec_ctrl.memory.list_failures()
+        return {
+            "goals": goals,
+            "reflections": reflections,
+            "decisions": decisions,
+            "failures": failures,
+        }
+
+    @app.get("/api/executive/metrics")
+    async def executive_metrics() -> dict:
+        """Return aggregate executive metrics for observability."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            return {"message": "ExecutiveController not wired"}
+        goal_metrics = await exec_ctrl.goal_manager.metrics()
+        reflection_metrics = exec_ctrl.reflection_engine.get_metrics()
+        decision_metrics = exec_ctrl.decision_engine.get_metrics()
+        memory_metrics = await exec_ctrl.memory.metrics()
+        return {
+            "controller": exec_ctrl.status(),
+            "goals": goal_metrics,
+            "reflections": reflection_metrics,
+            "decisions": decision_metrics,
+            "memory": memory_metrics,
+        }
+
     # ── Memory System API (Phase 2, Subsystem 2) ──
     @app.post("/api/memory")
     async def write_memory(body: dict) -> dict:
