@@ -39,22 +39,32 @@ class MissionStatus(StrEnum):
     DRAFT = "draft"
     PLANNING = "planning"
     PLANNED = "planned"
+    QUEUED = "queued"
     EXECUTING = "executing"
+    RUNNING = "running"
+    WAITING = "waiting"
+    BLOCKED = "blocked"
+    RETRYING = "retrying"
     PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    RECOVERED = "recovered"
 
 
 class TaskStatus(StrEnum):
     PENDING = "pending"
     PLANNED = "planned"
+    QUEUED = "queued"
     ASSIGNED = "assigned"
     RUNNING = "running"
+    WAITING = "waiting"
+    BLOCKED = "blocked"
+    RETRYING = "retrying"
     COMPLETED = "completed"
     FAILED = "failed"
-    BLOCKED = "blocked"
     SKIPPED = "skipped"
+    RECOVERED = "recovered"
 
 
 class AgentRole(StrEnum):

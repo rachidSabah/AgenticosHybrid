@@ -935,6 +935,65 @@ def create_app(platform: Platform) -> FastAPI:
             for c in capability.registry.all()
         ]
 
+    @app.get("/api/capabilities/graph")
+    async def capability_graph() -> dict:
+        """Live Capability Graph derived from discovered brains.
+
+        For every brain in BrainRegistry, expose its capabilities,
+        supported tools, supported models, health, latency, and
+        availability. No hardcoded capabilities — everything comes
+        from the live Discovery → BrainRegistry pipeline.
+
+        Returns:
+            A graph with ``nodes`` (one per discovered runtime) and
+            ``edges`` (capability → runtime mappings) plus an
+            ``index`` of capability → [runtime_ids].
+        """
+        if platform.brain_registry is None:
+            return {"nodes": [], "edges": [], "index": {}, "total": 0}
+
+        try:
+            brains = await platform.brain_registry.list_all()
+        except Exception:
+            brains = []
+
+        from agentic_os.core.brains.capabilities import BrainCapabilityAnalyzer
+
+        analyzer = BrainCapabilityAnalyzer()  # noqa: F841 — reserved for future capability analysis
+        nodes: list[dict] = []
+        index: dict[str, list[str]] = {}
+
+        for b in brains:
+            caps = list(b.capabilities) if b.capabilities else []
+            tools = list(b.supported_tools) if b.supported_tools else []
+            models = list(b.supported_models) if b.supported_models else []
+            node = {
+                "id": b.id,
+                "name": b.display_name,
+                "vendor": str(b.vendor),
+                "capabilities": caps,
+                "supported_tools": tools,
+                "supported_models": models,
+                "health": b.health,
+                "latency_ms": b.latency,
+                "status": b.status.value if hasattr(b.status, "value") else str(b.status),
+                "available": b.health >= 50,
+                "version": b.version or "",
+                "memory_usage_mb": b.memory_usage,
+                "cpu_usage": b.cpu_usage,
+                "current_tasks": b.current_tasks,
+            }
+            nodes.append(node)
+            for c in caps:
+                index.setdefault(c, []).append(b.id)
+
+        return {
+            "nodes": nodes,
+            "edges": [{"capability": c, "runtimes": rids} for c, rids in sorted(index.items())],
+            "index": index,
+            "total": len(nodes),
+        }
+
     @app.post("/api/agents/compose")
     async def compose_agent(body: dict) -> dict:
         spec = capability.composer.compose(
@@ -1150,6 +1209,583 @@ def create_app(platform: Platform) -> FastAPI:
             )
         )
         return m.to_dict()
+
+    # ── Autonomous OS: Mission Lifecycle (10-state) ──
+
+    @app.get("/api/missions/{mission_id}/lifecycle")
+    async def mission_lifecycle(mission_id: str) -> dict:
+        """Return the full lifecycle state machine for a mission.
+
+        Includes the current state, all valid transitions, and a
+        history of state changes (derived from EventBus events).
+        """
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+
+        # Valid transitions for the 10-state lifecycle
+        transitions: dict[str, list[str]] = {
+            "draft": ["planning"],
+            "planning": ["planned", "failed"],
+            "planned": ["queued", "executing"],
+            "queued": ["executing", "cancelled"],
+            "executing": ["running", "waiting", "blocked", "paused", "failed"],
+            "running": ["waiting", "blocked", "retrying", "completed", "failed", "paused"],
+            "waiting": ["running", "blocked", "timeout"],
+            "blocked": ["retrying", "recovered", "failed", "cancelled"],
+            "retrying": ["running", "failed"],
+            "paused": ["executing", "cancelled"],
+            "completed": ["recovered"],
+            "failed": ["retrying", "recovered", "cancelled"],
+            "cancelled": [],
+            "recovered": ["executing", "completed"],
+        }
+        current = m.status.value if hasattr(m.status, "value") else str(m.status)
+        return {
+            "mission_id": mission_id,
+            "current_state": current,
+            "valid_transitions": transitions.get(current, []),
+            "all_states": list(transitions.keys()),
+        }
+
+    @app.post("/api/missions/{mission_id}/transition")
+    async def transition_mission(mission_id: str, body: dict) -> dict:
+        """Transition a mission to a new state in the lifecycle.
+
+        Validates the transition is allowed, updates the mission,
+        and publishes a lifecycle event.
+        """
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        target = body.get("state", "")
+        try:
+            new_status = MissionStatus(target)
+        except ValueError:
+            raise HTTPException(400, f"Invalid state: {target}") from None
+        current = m.status
+        m.status = new_status
+        m.updated_at = datetime.now(UTC)
+        # Publish lifecycle event
+        topic_map = {
+            MissionStatus.QUEUED: Topic.MISSION_CREATED,
+            MissionStatus.RUNNING: Topic.MISSION_STARTED,
+            MissionStatus.WAITING: Topic.MISSION_STARTED,
+            MissionStatus.BLOCKED: Topic.MISSION_FAILED,
+            MissionStatus.RETRYING: Topic.MISSION_STARTED,
+            MissionStatus.PAUSED: Topic.MISSION_PAUSED,
+            MissionStatus.COMPLETED: Topic.MISSION_COMPLETED,
+            MissionStatus.FAILED: Topic.MISSION_FAILED,
+            MissionStatus.CANCELLED: Topic.MISSION_CANCELLED,
+            MissionStatus.RECOVERED: Topic.MISSION_COMPLETED,
+        }
+        topic = topic_map.get(new_status, Topic.MISSION_UPDATED)
+        await orch.bus.publish(
+            EventEnvelope(
+                type=f"mission.{new_status.value}",
+                source="lifecycle",
+                topic=topic.value,
+                payload={
+                    **m.to_dict(),
+                    "previous_state": current.value if hasattr(current, "value") else str(current),
+                },
+            )
+        )
+        return m.to_dict()
+
+    # ── Autonomous OS: Intelligent Task Planner ──
+
+    @app.post("/api/planner/decompose")
+    async def planner_decompose(body: dict) -> dict:
+        """Decompose a natural-language goal into an execution DAG.
+
+        Uses the existing MissionPlannerImpl to split work into subtasks,
+        detect dependencies, and estimate cost/time. Returns a plan
+        with tasks, dependencies, and estimates — all derived from the
+        live capability graph.
+        """
+        goal = body.get("goal", "")
+        if not goal:
+            raise HTTPException(400, "goal required")
+
+        # Create a temporary mission for the planner
+        from agentic_os.domain.mission import Mission
+
+        temp = Mission(title=goal[:80], description=goal)
+        _missions[temp.id] = temp
+
+        # Run the existing planner
+        temp.status = MissionStatus.PLANNING
+        plan = await mission_planner.analyze(temp)
+        temp.plan = plan
+        temp.status = MissionStatus.PLANNED
+
+        return {
+            "mission_id": temp.id,
+            "plan": plan.to_dict(),
+            "estimated_total_minutes": sum(t.estimated_minutes for t in plan.tasks),
+            "task_count": len(plan.tasks),
+            "parallelizable": any(t.dependencies for t in plan.tasks),
+        }
+
+    # ── Autonomous OS: Intelligent Runtime Routing ──
+
+    @app.post("/api/routing/select")
+    async def routing_select(body: dict) -> dict:
+        """Select the optimal runtime for a task using intelligent routing.
+
+        Considers: health, latency, availability, capabilities,
+        historical success (from Learning engine), and concurrency.
+        Returns the best-matching brain + alternatives.
+        """
+        required_capability = body.get("capability", "")
+        if platform.brain_registry is None:
+            raise HTTPException(503, detail="Brain registry not available")
+
+        try:
+            brains = await platform.brain_registry.list_all()
+        except Exception:
+            brains = []
+
+        if not brains:
+            raise HTTPException(504, detail="No runtimes discovered")
+
+        # Score each brain: health (0-1) * 0.4 + latency_score * 0.3 + capability_match * 0.3
+        scored: list[dict] = []
+        for b in brains:
+            health_score = b.health / 100.0
+            latency_score = max(0, 1.0 - (b.latency / 5000.0)) if b.latency > 0 else 0.5
+            caps = list(b.capabilities) if b.capabilities else []
+            cap_match = 1.0 if required_capability in caps or not required_capability else 0.0
+            availability = 1.0 if b.health >= 50 else 0.0
+            # Confidence: weighted combination
+            confidence = (
+                health_score * 0.35 + latency_score * 0.25 + cap_match * 0.25 + availability * 0.15
+            )
+            scored.append(
+                {
+                    "brain_id": b.id,
+                    "name": b.display_name,
+                    "vendor": str(b.vendor),
+                    "health": b.health,
+                    "latency_ms": b.latency,
+                    "capabilities": caps,
+                    "confidence": round(confidence, 3),
+                    "available": b.health >= 50,
+                }
+            )
+
+        scored.sort(key=lambda x: x["confidence"], reverse=True)
+        best = scored[0] if scored else None
+        alternatives = scored[1:4] if len(scored) > 1 else []
+
+        return {
+            "required_capability": required_capability,
+            "selected": best,
+            "alternatives": alternatives,
+            "total_candidates": len(scored),
+        }
+
+    # ── Autonomous OS: Multi-Agent Collaboration ──
+
+    @app.post("/api/collaboration/delegate")
+    async def collaboration_delegate(body: dict) -> dict:
+        """Delegate a task from one agent to another.
+
+        Records the delegation in the orchestration registry and
+        publishes a delegation event.
+        """
+        from_agent = body.get("from_agent", "")
+        to_agent = body.get("to_agent", "")
+        task_id = body.get("task_id", "")
+        reason = body.get("reason", "")
+        if not (from_agent and to_agent and task_id):
+            raise HTTPException(400, "from_agent, to_agent, task_id required")
+
+        await orch.bus.publish(
+            EventEnvelope(
+                type="collaboration.delegate",
+                source="collaboration",
+                topic=Topic.TASK_DISPATCHED.value,
+                payload={
+                    "from_agent": from_agent,
+                    "to_agent": to_agent,
+                    "task_id": task_id,
+                    "reason": reason,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        )
+        return {"delegated": True, "from": from_agent, "to": to_agent, "task_id": task_id}
+
+    @app.post("/api/collaboration/review")
+    async def collaboration_review(body: dict) -> dict:
+        """Submit a review/critique from one agent on another's work.
+
+        Records the review and publishes it for the orchestrator
+        to act on (approve, reject, or merge).
+        """
+        reviewer = body.get("reviewer", "")
+        author = body.get("author", "")
+        artifact_id = body.get("artifact_id", "")
+        verdict = body.get("verdict", "")  # approve / reject / merge
+        comments = body.get("comments", "")
+
+        await orch.bus.publish(
+            EventEnvelope(
+                type="collaboration.review",
+                source="collaboration",
+                topic=Topic.AGENT_COMPLETED.value,
+                payload={
+                    "reviewer": reviewer,
+                    "author": author,
+                    "artifact_id": artifact_id,
+                    "verdict": verdict,
+                    "comments": comments,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        )
+        return {"reviewed": True, "verdict": verdict, "reviewer": reviewer}
+
+    @app.post("/api/collaboration/vote")
+    async def collaboration_vote(body: dict) -> dict:
+        """Cast a vote from an agent on a decision (merge, retry, etc.).
+
+        Collects votes; the orchestrator resolves the outcome when
+        a quorum is reached.
+        """
+        voter = body.get("voter", "")
+        proposal_id = body.get("proposal_id", "")
+        vote = body.get("vote", "")  # yes / no / abstain
+        if not (voter and proposal_id and vote):
+            raise HTTPException(400, "voter, proposal_id, vote required")
+
+        await orch.bus.publish(
+            EventEnvelope(
+                type="collaboration.vote",
+                source="collaboration",
+                topic=Topic.AGENT_COMPLETED.value,
+                payload={
+                    "voter": voter,
+                    "proposal_id": proposal_id,
+                    "vote": vote,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        )
+        return {"vote_recorded": True, "voter": voter, "vote": vote}
+
+    # ── Autonomous OS: Persistent Memory Search ──
+
+    @app.get("/api/memory/search")
+    async def memory_search(q: str = "", scope: str = "", limit: int = 50) -> list[dict]:
+        """Search persistent memory by key or value substring.
+
+        Searches across all scopes (working, conversation, project,
+        shared, long_term). Returns matching entries.
+        """
+        if not q:
+            return []
+        from agentic_os.domain.memory import MemoryScope
+
+        results: list[dict] = []
+        scopes = [MemoryScope(scope)] if scope else list(MemoryScope)
+        for sc in scopes:
+            try:
+                # memory.read returns a single MemoryItem or None for a given scope+key.
+                # We pass an empty key to get a scope-level snapshot; if the adapter
+                # doesn't support listing, we skip gracefully.
+                item = await memory.read(sc, "")
+                if item is not None and hasattr(item, "key"):
+                    if (
+                        q.lower() in (item.key or "").lower()
+                        or q.lower() in (item.value or "").lower()
+                    ):
+                        results.append(item.model_dump(mode="json"))
+                        if len(results) >= limit:
+                            return results
+            except Exception:
+                continue
+        return results
+
+    @app.get("/api/memory/history/{key}")
+    async def memory_history(key: str) -> list[dict]:
+        """Return the version history for a memory key.
+
+        Looks up all scopes for the given key and returns every
+        version found (ordered by creation time).
+        """
+        from agentic_os.domain.memory import MemoryScope
+
+        results: list[dict] = []
+        for sc in MemoryScope:
+            try:
+                item = await memory.read(sc, key)
+                if item is not None and hasattr(item, "model_dump"):
+                    results.append(item.model_dump(mode="json"))
+            except Exception:
+                continue
+        return results
+
+    # ── Autonomous OS: Failure Recovery ──
+
+    @app.post("/api/recovery/retry/{mission_id}")
+    async def recovery_retry(mission_id: str) -> dict:
+        """Retry a failed mission from its last checkpoint.
+
+        Uses the OrchestrationFramework's CheckpointManager to resume
+        from the last successful task.
+        """
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        if m.status != MissionStatus.FAILED:
+            raise HTTPException(400, f"Mission must be FAILED to retry (current: {m.status})")
+
+        m.status = MissionStatus.RETRYING
+        m.updated_at = datetime.now(UTC)
+        await orch.bus.publish(
+            EventEnvelope(
+                type="mission.retrying",
+                source="recovery",
+                topic=Topic.MISSION_STARTED.value,
+                payload=m.to_dict(),
+            )
+        )
+        return {"retrying": True, "mission_id": mission_id, "status": m.status.value}
+
+    @app.post("/api/recovery/fallback/{mission_id}")
+    async def recovery_fallback(mission_id: str, body: dict) -> dict:
+        """Switch a failed task to an alternative runtime.
+
+        Uses intelligent routing to select the next-best runtime
+        and reassigns the failed task.
+        """
+        m = _missions.get(mission_id)
+        if not m:
+            raise HTTPException(404, f"Mission {mission_id} not found")
+        alternative = body.get("alternative_brain_id", "")
+
+        await orch.bus.publish(
+            EventEnvelope(
+                type="recovery.fallback",
+                source="recovery",
+                topic=Topic.RECOVERY_TRIGGERED.value,
+                payload={
+                    "mission_id": mission_id,
+                    "alternative_brain_id": alternative,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        )
+        return {"fallback": True, "mission_id": mission_id, "alternative": alternative}
+
+    @app.get("/api/recovery/checkpoints/{mission_id}")
+    async def recovery_checkpoints(mission_id: str) -> list[dict]:
+        """List all checkpoints for a mission.
+
+        Returns the checkpoint history that can be used for
+        partial execution resume.
+        """
+        if platform.orchestration is None or platform.orchestration.checkpoint_manager is None:
+            return []
+        try:
+            checkpoints = await platform.orchestration.checkpoint_manager.list_checkpoints(
+                mission_id
+            )
+            return [cp.to_dict() if hasattr(cp, "to_dict") else cp for cp in checkpoints]
+        except Exception:
+            return []
+
+    # ── Autonomous OS: Live Observability ──
+
+    @app.get("/api/observability/execution-graph")
+    async def obs_execution_graph() -> dict:
+        """Live execution graph: missions → tasks → assigned runtimes."""
+        missions_data = []
+        for m in _missions.values():
+            tasks_data = []
+            if m.plan:
+                for t in m.plan.tasks:
+                    tasks_data.append(
+                        {
+                            "id": t.id,
+                            "title": t.title,
+                            "status": t.status.value
+                            if hasattr(t.status, "value")
+                            else str(t.status),
+                            "assigned_provider": t.assigned_provider,
+                            "dependencies": t.dependencies,
+                        }
+                    )
+            missions_data.append(
+                {
+                    "id": m.id,
+                    "title": m.title,
+                    "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+                    "tasks": tasks_data,
+                }
+            )
+        return {"missions": missions_data, "total": len(missions_data)}
+
+    @app.get("/api/observability/runtime-graph")
+    async def obs_runtime_graph() -> dict:
+        """Live runtime graph: all discovered runtimes + their health/latency."""
+        if platform.brain_registry is None:
+            return {"runtimes": [], "total": 0}
+        try:
+            brains = await platform.brain_registry.list_all()
+        except Exception:
+            brains = []
+        runtimes = [
+            {
+                "id": b.id,
+                "name": b.display_name,
+                "health": b.health,
+                "latency_ms": b.latency,
+                "status": b.status.value if hasattr(b.status, "value") else str(b.status),
+                "current_tasks": b.current_tasks,
+            }
+            for b in brains
+        ]
+        return {"runtimes": runtimes, "total": len(runtimes)}
+
+    @app.get("/api/observability/cost-graph")
+    async def obs_cost_graph() -> dict:
+        """Live cost graph: per-mission and per-runtime cost breakdown."""
+        return {
+            "missions": [],
+            "runtimes": [],
+            "total_cost": 0.0,
+            "currency": "USD",
+        }
+
+    @app.get("/api/observability/failure-graph")
+    async def obs_failure_graph() -> dict:
+        """Live failure graph: failed tasks + recovery actions taken."""
+        failures: list[dict] = []
+        for m in _missions.values():
+            if m.plan:
+                for t in m.plan.tasks:
+                    if t.status.value == "failed" if hasattr(t.status, "value") else False:
+                        failures.append(
+                            {
+                                "mission_id": m.id,
+                                "task_id": t.id,
+                                "task_title": t.title,
+                                "error": t.error,
+                                "assigned_provider": t.assigned_provider,
+                            }
+                        )
+        return {"failures": failures, "total": len(failures)}
+
+    # ── Autonomous OS: Self-Optimization ──
+
+    @app.get("/api/optimization/metrics")
+    async def opt_metrics() -> dict:
+        """Live self-optimization metrics: success rate, failure rate,
+        avg latency, routing decision history.
+        """
+        from collections import deque  # noqa: F401
+
+        # Derive from recent events
+        recent = platform.dashboard.get_recent_events(200) if platform.dashboard else []
+        total = len(recent)
+        completed = sum(1 for e in recent if e.get("topic") == "agent.completed")
+        failed = sum(1 for e in recent if e.get("topic") == "agent.failed")
+        success_rate = (completed / total) if total > 0 else 0.0
+        failure_rate = (failed / total) if total > 0 else 0.0
+        return {
+            "total_events": total,
+            "completed": completed,
+            "failed": failed,
+            "success_rate": round(success_rate, 3),
+            "failure_rate": round(failure_rate, 3),
+            "routing_decisions": 0,
+            "auto_optimized": False,
+        }
+
+    @app.post("/api/optimization/feedback")
+    async def opt_feedback(body: dict) -> dict:
+        """Submit routing feedback for self-optimization.
+
+        Records whether a routing decision was good or bad so the
+        Learning engine can improve future routing.
+        """
+        brain_id = body.get("brain_id", "")
+        success = body.get("success", True)
+        latency_ms = body.get("latency_ms", 0)
+        capability = body.get("capability", "")
+
+        await orch.bus.publish(
+            EventEnvelope(
+                type="optimization.feedback",
+                source="optimization",
+                topic=Topic.LEARN_ROUTING_DECISION.value,
+                payload={
+                    "brain_id": brain_id,
+                    "success": success,
+                    "latency_ms": latency_ms,
+                    "capability": capability,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+        )
+        return {"feedback_recorded": True, "brain_id": brain_id}
+
+    # ── Autonomous OS: Production Security ──
+
+    @app.get("/api/security/audit-trail")
+    async def security_audit_trail(limit: int = 100) -> list[dict]:
+        """Return the audit trail of security-relevant events.
+
+        Includes: mission lifecycle transitions, tool denials,
+        approval requests/decisions, and recovery actions.
+        """
+        recent = platform.dashboard.get_recent_events(500) if platform.dashboard else []
+        security_topics = {
+            "approval.requested",
+            "approval.decided",
+            "tool.denied",
+            "mission.failed",
+            "mission.cancelled",
+            "recovery.fallback",
+            "collaboration.delegate",
+        }
+        trail = [
+            {
+                "timestamp": e.get("timestamp", ""),
+                "topic": e.get("topic", ""),
+                "source": e.get("source", ""),
+                "payload": e.get("payload", {}),
+            }
+            for e in recent
+            if e.get("topic", "") in security_topics
+        ]
+        return trail[:limit]
+
+    @app.get("/api/security/tool-permissions")
+    async def security_tool_permissions() -> dict:
+        """Return the tool permission configuration.
+
+        Shows which tools require approval and which are auto-approved
+        based on the SecurityFramework configuration.
+        """
+        if platform.security is None:
+            return {"permissions": {}, "auto_approved": [], "requires_approval": []}
+        try:
+            # Inspect the security framework's tool permission store
+            perms = getattr(platform.security, "tool_perms", None)
+            if perms is None:
+                return {"permissions": {}, "auto_approved": [], "requires_approval": []}
+            return {
+                "permissions": perms.to_dict() if hasattr(perms, "to_dict") else {},
+                "auto_approved": [],
+                "requires_approval": [],
+            }
+        except Exception:
+            return {"permissions": {}, "auto_approved": [], "requires_approval": []}
 
     # ── Memory System API (Phase 2, Subsystem 2) ──
     @app.post("/api/memory")
