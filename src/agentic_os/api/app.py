@@ -468,10 +468,19 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/local-agents/rescan")
     async def rescan_local_agents() -> dict:
-        """Trigger a full re-scan of the local machine for AI tools."""
+        """Trigger a full re-scan of the local machine for AI tools.
+
+        After scanning, also calls ``auto_register()`` so that newly
+        discovered agents publish AGENT_DISCOVERED / AGENT_REGISTERED events
+        on the bus — the BrainDiscoveryBridge converts these into BrainRecord
+        registrations so newly discovered runtimes appear in BrainRegistry /
+        AI Brain / Constellation / Fleet / Binding without a restart.
+        """
         if platform.local_discovery is None:
             raise HTTPException(status_code=503, detail="Local discovery service not available")
         result = await platform.local_discovery.run_discovery()
+        # Publish discovery/registration events so the bridge registers new brains.
+        await platform.local_discovery.auto_register()
         return result.to_dict()
 
     @app.post("/api/local-agents/{agent_id}/start")

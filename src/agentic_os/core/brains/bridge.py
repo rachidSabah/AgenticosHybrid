@@ -91,6 +91,7 @@ class BrainDiscoveryBridge:
         self._subscriptions: list[str] = []
         self._event_bus: EventBus | None = None
         self._on_brain: Any = None
+        self._on_brain_removed: Any = None
         self._started = False
 
     # ── Lifecycle ───────────────────────────────────────────────────────────
@@ -99,17 +100,25 @@ class BrainDiscoveryBridge:
         self,
         event_bus: EventBus,
         on_brain_registered: Any | None = None,
+        on_brain_removed: Any | None = None,
     ) -> None:
         """Subscribe to local agent discovery events.
 
         Args:
             event_bus: The event bus to subscribe to.
             on_brain_registered: An async callback ``(BrainRecord) -> None``
-                that will be called for every converted brain record.
-                Typically this is ``BrainRegistry.register``.
+                that will be called for AGENT_DISCOVERED / AGENT_REGISTERED /
+                AGENT_UPDATED events. Typically this is ``BrainRegistry.register``.
+            on_brain_removed: An async callback ``(brain_id: str) -> None``
+                that will be called for AGENT_REMOVED events. Typically this
+                is ``BrainRegistry.unregister``. When provided, AGENT_REMOVED
+                triggers unregister (which deletes the brain and publishes
+                BRAIN_REMOVED) instead of register (which would only merge a
+                REMOVED status).
         """
         self._event_bus = event_bus
         self._on_brain = on_brain_registered
+        self._on_brain_removed = on_brain_removed
 
         topics = [
             Topic.AGENT_DISCOVERED,
@@ -153,6 +162,15 @@ class BrainDiscoveryBridge:
         try:
             payload = event.payload
             if not payload or "id" not in payload:
+                return
+
+            # AGENT_REMOVED: unregister the brain (delete + publish BRAIN_REMOVED)
+            # so the store's brain.removed handler deletes it from agents/providers.
+            # Other events (DISCOVERED/REGISTERED/UPDATED): register/merge the brain.
+            if event.topic == Topic.AGENT_REMOVED.value and self._on_brain_removed is not None:
+                brain_id = str(payload.get("id", ""))
+                if brain_id:
+                    await self._on_brain_removed(brain_id)
                 return
 
             record = self._convert(payload, event.topic)

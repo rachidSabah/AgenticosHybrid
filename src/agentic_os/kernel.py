@@ -523,6 +523,7 @@ class Kernel:
             await self.brain_discovery_bridge.start(
                 event_bus=self.bus,
                 on_brain_registered=self.brain_registry.register,
+                on_brain_removed=self.brain_registry.unregister,
             )
 
             # Runtime bridge for CLI tool detection
