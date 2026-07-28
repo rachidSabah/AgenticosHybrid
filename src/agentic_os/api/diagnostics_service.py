@@ -324,8 +324,14 @@ class RuntimeDiagnosticsService:
             total_messages = 0
 
             if bus is not None:
-                # Try to read subscriber registry
-                subs = getattr(bus, "_subscribers", None) or getattr(bus, "subscriptions", None)
+                # Try to read subscriber registry. LocalBus uses _topics
+                # (dict[str, dict[str, Handler]]); other adapters may use
+                # _subscribers or subscriptions. Inspect all known field names.
+                subs = (
+                    getattr(bus, "_topics", None)
+                    or getattr(bus, "_subscribers", None)
+                    or getattr(bus, "subscriptions", None)
+                )
                 if isinstance(subs, dict):
                     for topic, handlers in subs.items():
                         count = len(handlers) if hasattr(handlers, "__len__") else 0

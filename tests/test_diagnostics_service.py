@@ -97,6 +97,36 @@ async def test_collect_eventbus_none_bus(service):
 
 
 @pytest.mark.asyncio
+async def test_collect_eventbus_local_bus_topics_visible(service):
+    """Verify that collect_eventbus can see LocalBus._topics subscribers.
+
+    This is a production-grade diagnostics requirement: operators must be
+    able to see the actual subscriber topology to debug orphan events.
+    """
+    from agentic_os.adapters.bus.local import LocalBus
+    from agentic_os.domain.events import EventEnvelope, Topic
+
+    bus = LocalBus()
+    await bus.start()
+
+    async def _handler(event: EventEnvelope) -> None:
+        pass
+
+    await bus.subscribe(Topic.TASK_CREATED.value, _handler)
+    await bus.subscribe(Topic.BRAIN_REGISTERED.value, _handler)
+
+    platform_mock = MagicMock()
+    platform_mock.bus = bus
+    res = await service.collect_eventbus(platform_mock)
+    assert res["bus_type"] == "LocalBus"
+    topic_names = {t["topic"] for t in res["topics"]}
+    assert Topic.TASK_CREATED.value in topic_names
+    assert Topic.BRAIN_REGISTERED.value in topic_names
+    assert res["total_topics"] >= 2
+    await bus.stop()
+
+
+@pytest.mark.asyncio
 async def test_collect_brains(service, platform_mock):
     res = await service.collect_brains(platform_mock)
     assert "brains" in res

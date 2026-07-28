@@ -73,4 +73,67 @@ describe("event store", () => {
     expect(n.topic).toBe("task.created");
     expect(n.level).toBe("info");
   });
+
+  it("ingests brain.registered into agents + providers", () => {
+    useStore.getState().ingest(
+      envelope("brain.registered", {
+        id: "b1",
+        display_name: "Claude Code",
+        health: 80,
+        latency: 12,
+        capabilities: ["coding"],
+      })
+    );
+    expect(useStore.getState().agents["b1"]).toBeDefined();
+    expect(useStore.getState().agents["b1"].provider).toBe("Claude Code");
+    expect(useStore.getState().providers["Claude Code"]).toBeDefined();
+    expect(useStore.getState().providers["Claude Code"].status).toBe("healthy");
+    expect(useStore.getState().telemetry.agents).toBe(1);
+    expect(useStore.getState().telemetry.providers).toBe(1);
+  });
+
+  it("removes agent + provider on brain.removed", () => {
+    // Seed: register a brain
+    useStore.getState().ingest(
+      envelope("brain.registered", {
+        id: "b2",
+        display_name: "Hermes",
+        health: 80,
+        latency: 12,
+      })
+    );
+    expect(useStore.getState().agents["b2"]).toBeDefined();
+    expect(useStore.getState().providers["Hermes"]).toBeDefined();
+
+    // Remove
+    useStore.getState().ingest(
+      envelope("brain.removed", {
+        id: "b2",
+        display_name: "Hermes",
+      })
+    );
+    expect(useStore.getState().agents["b2"]).toBeUndefined();
+    expect(useStore.getState().providers["Hermes"]).toBeUndefined();
+  });
+
+  it("updates health on brain.health_changed", () => {
+    useStore.getState().ingest(
+      envelope("brain.registered", {
+        id: "b3",
+        display_name: "Ollama",
+        health: 80,
+        latency: 12,
+      })
+    );
+    useStore.getState().ingest(
+      envelope("brain.health_changed", {
+        id: "b3",
+        display_name: "Ollama",
+        health: 30,
+        latency: 50,
+      })
+    );
+    // health < 50 → status "unknown"
+    expect(useStore.getState().providers["Ollama"].status).toBe("unknown");
+  });
 });
