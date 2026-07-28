@@ -420,26 +420,89 @@ class TestGoalResult:
     def test_creation(self):
         gr = GoalResult(
             goal_id="g1",
-            achieved=True,
-            final_status="completed",
             mission_id="m1",
-            total_retries=0,
-            execution_time_seconds=42.5,
-            runtimes_used=["python", "node"],
-            cost_estimate=0.05,
+            achieved=True,
+            completion_status="completed",
+            start_time="2026-01-01T00:00:00Z",
+            end_time="2026-01-01T00:05:00Z",
+            duration=300.0,
+            execution_cost=0.05,
+            runtime_used="python",
+            alternative_runtimes=["node", "git"],
+            failure_reason="",
+            reflection_summary="Goal achieved successfully",
+            metrics={"tasks_completed": 5, "tasks_failed": 0},
         )
         assert gr.achieved is True
-        assert gr.final_status == "completed"
-        assert gr.total_retries == 0
-        assert gr.execution_time_seconds == 42.5
-        assert gr.runtimes_used == ["python", "node"]
+        assert gr.completion_status == "completed"
+        assert gr.start_time == "2026-01-01T00:00:00Z"
+        assert gr.end_time == "2026-01-01T00:05:00Z"
+        assert gr.duration == 300.0
+        assert gr.execution_cost == 0.05
+        assert gr.runtime_used == "python"
+        assert gr.alternative_runtimes == ["node", "git"]
+        assert gr.failure_reason == ""
+        assert gr.reflection_summary == "Goal achieved successfully"
+        assert gr.metrics["tasks_completed"] == 5
 
     def test_to_dict(self):
-        gr = GoalResult(goal_id="g1", achieved=False, final_status="failed")
+        gr = GoalResult(
+            goal_id="g1",
+            achieved=False,
+            completion_status="failed",
+            failure_reason="timeout",
+        )
         d = gr.to_dict()
         assert d["goal_id"] == "g1"
         assert d["achieved"] is False
-        assert d["final_status"] == "failed"
+        assert d["completion_status"] == "failed"
+        assert d["failure_reason"] == "timeout"
+        assert "start_time" in d
+        assert "end_time" in d
+        assert "duration" in d
+        assert "execution_cost" in d
+        assert "runtime_used" in d
+        assert "alternative_runtimes" in d
+        assert "reflection_summary" in d
+        assert "metrics" in d
+        assert "decision_timestamp" not in d  # GoalResult doesn't have this
+
+    def test_from_dict_roundtrip(self):
+        gr = GoalResult(
+            goal_id="g2",
+            mission_id="m2",
+            achieved=True,
+            completion_status="completed",
+            start_time="2026-01-01T00:00:00Z",
+            end_time="2026-01-01T00:10:00Z",
+            duration=600.0,
+            execution_cost=0.10,
+            runtime_used="python",
+            alternative_runtimes=["node"],
+            metrics={"tasks": 3},
+        )
+        d = gr.to_dict()
+        gr2 = GoalResult.from_dict(d)
+        assert gr2.goal_id == "g2"
+        assert gr2.achieved is True
+        assert gr2.completion_status == "completed"
+        assert gr2.duration == 600.0
+        assert gr2.runtime_used == "python"
+        assert gr2.alternative_runtimes == ["node"]
+        assert gr2.metrics["tasks"] == 3
+
+    def test_failed_goal_result(self):
+        gr = GoalResult(
+            goal_id="g3",
+            achieved=False,
+            completion_status="failed",
+            failure_reason="runtime crashed",
+            runtime_used="claude-code",
+        )
+        d = gr.to_dict()
+        assert d["achieved"] is False
+        assert d["failure_reason"] == "runtime crashed"
+        assert d["runtime_used"] == "claude-code"
 
 
 # ── Archive ──────────────────────────────────────────────────────────
@@ -485,6 +548,8 @@ class TestEnhancedReflection:
         assert "improvements" in d
         assert "routing_issues" in d
         assert "capability_gaps" in d
+        assert "recommended_actions" in d
+        assert "estimated_future_success" in d
 
     @pytest.mark.asyncio
     async def test_reflection_failure_analysis(self, reflection_engine):
@@ -499,6 +564,8 @@ class TestEnhancedReflection:
         d = r.to_dict()
         assert "claude-code" in d["failed_runtimes"]
         assert d["routing_could_improve"] is True
+        assert isinstance(d["recommended_actions"], list)
+        assert isinstance(d["estimated_future_success"], (int, float))
 
 
 # ── Enhanced Decision ─────────────────────────────────────────────────
@@ -519,3 +586,81 @@ class TestEnhancedDecision:
         assert dd["risk"] == 0.2
         assert "reasoning" in dd
         assert "health" in dd["reasoning"]
+
+    def test_decision_has_risk_factors(self):
+        d = Decision(
+            goal_id="g1",
+            task_id="t1",
+            selected_runtime="b1",
+            confidence=0.85,
+            risk=0.15,
+            risk_factors={
+                "runtime_health": 0.1,
+                "capability_mismatch": 0.0,
+                "historical_failures": 0.05,
+                "current_load": 0.2,
+                "unavailability": 0.0,
+                "latency_risk": 0.1,
+            },
+            reasoning=(
+                "Runtime selected because health=90%; latency=65ms; "
+                "capability matched; historical success=94%; load=2 tasks."
+            ),
+        )
+        dd = d.to_dict()
+        assert "risk_factors" in dd
+        assert dd["risk_factors"]["runtime_health"] == 0.1
+        assert dd["risk_factors"]["capability_mismatch"] == 0.0
+        assert dd["risk_factors"]["historical_failures"] == 0.05
+        assert "decision_timestamp" in dd
+        assert dd["decision_timestamp"] == dd["created_at"]
+
+    def test_decision_timestamp_property(self):
+        d = Decision(goal_id="g1")
+        assert d.decision_timestamp == d.created_at
+
+    def test_decision_reasoning_format(self):
+        reasoning = (
+            "Runtime selected because health=98%; latency=65ms; "
+            "capability matched; historical success=94%; load=2 tasks."
+        )
+        d = Decision(reasoning=reasoning)
+        dd = d.to_dict()
+        assert "Runtime selected because" in dd["reasoning"]
+        assert "health=98%" in dd["reasoning"]
+        assert "historical success=94%" in dd["reasoning"]
+
+
+# ── GoalResult Memory ─────────────────────────────────────────────────
+
+
+class TestGoalResultMemory:
+    @pytest.mark.asyncio
+    async def test_store_and_get_goal_result(self, executive_memory):
+        gr = GoalResult(
+            goal_id="g1",
+            achieved=True,
+            completion_status="completed",
+            runtime_used="python",
+        )
+        await executive_memory.store_goal_result("g1", gr.to_dict())
+        retrieved = await executive_memory.get_goal_result("g1")
+        assert retrieved is not None
+        assert retrieved["achieved"] is True
+        assert retrieved["runtime_used"] == "python"
+
+    @pytest.mark.asyncio
+    async def test_list_goal_results(self, executive_memory):
+        gr1 = GoalResult(goal_id="g1", achieved=True)
+        gr2 = GoalResult(goal_id="g2", achieved=False)
+        await executive_memory.store_goal_result("g1", gr1.to_dict())
+        await executive_memory.store_goal_result("g2", gr2.to_dict())
+        results = await executive_memory.list_goal_results()
+        assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_goal_results_in_metrics(self, executive_memory):
+        gr = GoalResult(goal_id="g1")
+        await executive_memory.store_goal_result("g1", gr.to_dict())
+        m = await executive_memory.metrics()
+        assert m["goal_results_indexed"] == 1

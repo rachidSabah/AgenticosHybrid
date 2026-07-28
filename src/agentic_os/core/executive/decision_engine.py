@@ -115,13 +115,29 @@ class DecisionEngine:
                 3,
             )
 
-            # Human-readable reasoning
-            reasoning_parts = [f"health={b.health:.0f}", f"latency={b.latency:.0f}ms"]
+            # Structured risk factors for machine consumption
+            risk_factors: dict[str, float] = {
+                "runtime_health": round(1.0 - health_score, 3),
+                "capability_mismatch": round(1.0 - cap_match, 3),
+                "historical_failures": round(1.0 - success_rate, 3),
+                "current_load": round(1.0 - load_score, 3),
+                "unavailability": round(1.0 - availability, 3),
+                "latency_risk": round(1.0 - latency_score, 3),
+            }
+
+            # Human-readable reasoning — full format per spec
+            reasoning_parts = [
+                f"health={b.health:.0f}%",
+                f"latency={b.latency:.0f}ms",
+                f"capability {'matched' if cap_match > 0 else 'mismatched'}",
+                f"historical success={success_rate * 100:.0f}%",
+                f"load={b.current_tasks} tasks",
+            ]
             if required_capability and cap_match == 0.0:
                 reasoning_parts.append(f"missing capability '{required_capability}'")
-            if b.current_tasks > 0:
-                reasoning_parts.append(f"load={b.current_tasks} tasks")
-            reasoning = "; ".join(reasoning_parts)
+            if availability == 0.0:
+                reasoning_parts.append("runtime unavailable (health < 50)")
+            reasoning = f"Runtime selected because {'; '.join(reasoning_parts)}."
 
             decision = Decision(
                 goal_id=goal_id,
@@ -130,6 +146,7 @@ class DecisionEngine:
                 alternatives=[],
                 confidence=round(confidence, 3),
                 risk=risk,
+                risk_factors=risk_factors,
                 reasoning=reasoning,
                 factors={
                     "health": round(health_score, 3),

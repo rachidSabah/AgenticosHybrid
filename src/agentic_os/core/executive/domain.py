@@ -217,6 +217,8 @@ class Reflection:
         "improvements",
         "routing_issues",
         "capability_gaps",
+        "recommended_actions",
+        "estimated_future_success",
     )
 
     def __init__(
@@ -235,6 +237,8 @@ class Reflection:
         improvements: list[str] | None = None,
         routing_issues: list[str] | None = None,
         capability_gaps: list[str] | None = None,
+        recommended_actions: list[str] | None = None,
+        estimated_future_success: float = 0.0,
     ) -> None:
         self.id: str = reflection_id or _new_id()
         self.goal_id: str = goal_id
@@ -251,6 +255,8 @@ class Reflection:
         self.improvements: list[str] = improvements or []
         self.routing_issues: list[str] = routing_issues or []
         self.capability_gaps: list[str] = capability_gaps or []
+        self.recommended_actions: list[str] = recommended_actions or []
+        self.estimated_future_success: float = estimated_future_success
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -269,6 +275,8 @@ class Reflection:
             "improvements": list(self.improvements),
             "routing_issues": list(self.routing_issues),
             "capability_gaps": list(self.capability_gaps),
+            "recommended_actions": list(self.recommended_actions),
+            "estimated_future_success": self.estimated_future_success,
         }
 
 
@@ -291,6 +299,7 @@ class Decision:
         "alternatives",
         "confidence",
         "risk",
+        "risk_factors",
         "reasoning",
         "factors",
         "created_at",
@@ -304,6 +313,7 @@ class Decision:
         alternatives: list[str] | None = None,
         confidence: float = 0.0,
         risk: float = 0.0,
+        risk_factors: dict[str, float] | None = None,
         reasoning: str = "",
         factors: dict[str, Any] | None = None,
         decision_id: str = "",
@@ -315,9 +325,15 @@ class Decision:
         self.alternatives: list[str] = alternatives or []
         self.confidence: float = confidence
         self.risk: float = risk
+        self.risk_factors: dict[str, float] = risk_factors or {}
         self.reasoning: str = reasoning
         self.factors: dict[str, Any] = factors or {}
         self.created_at: str = _now_iso()
+
+    @property
+    def decision_timestamp(self) -> str:
+        """Alias for ``created_at`` — the timestamp the decision was made."""
+        return self.created_at
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -328,8 +344,10 @@ class Decision:
             "alternatives": list(self.alternatives),
             "confidence": self.confidence,
             "risk": self.risk,
+            "risk_factors": dict(self.risk_factors),
             "reasoning": self.reasoning,
             "factors": dict(self.factors),
+            "decision_timestamp": self.created_at,
             "created_at": self.created_at,
         }
 
@@ -340,60 +358,93 @@ class Decision:
 class GoalResult:
     """The outcome of a completed or failed goal.
 
-    Captures whether the goal was achieved, the final state, key
-    metrics, and a reference to the Reflection that analyzed it.
+    Captures whether the goal was achieved, the final state, timing,
+    cost, runtimes used, and a reference to the Reflection that
+    analyzed it. Supports serialization and deserialization.
     """
 
     __slots__ = (
         "goal_id",
-        "achieved",
-        "final_status",
         "mission_id",
-        "reflection_id",
-        "total_retries",
-        "execution_time_seconds",
-        "runtimes_used",
-        "cost_estimate",
-        "summary",
+        "achieved",
+        "completion_status",
+        "start_time",
+        "end_time",
+        "duration",
+        "execution_cost",
+        "runtime_used",
+        "alternative_runtimes",
+        "failure_reason",
+        "reflection_summary",
+        "metrics",
         "created_at",
     )
 
     def __init__(
         self,
         goal_id: str = "",
-        achieved: bool = False,
-        final_status: str = "",
         mission_id: str = "",
-        reflection_id: str = "",
-        total_retries: int = 0,
-        execution_time_seconds: float = 0.0,
-        runtimes_used: list[str] | None = None,
-        cost_estimate: float = 0.0,
-        summary: str = "",
+        achieved: bool = False,
+        completion_status: str = "",
+        start_time: str = "",
+        end_time: str = "",
+        duration: float = 0.0,
+        execution_cost: float = 0.0,
+        runtime_used: str = "",
+        alternative_runtimes: list[str] | None = None,
+        failure_reason: str = "",
+        reflection_summary: str = "",
+        metrics: dict[str, Any] | None = None,
     ) -> None:
         self.goal_id: str = goal_id
-        self.achieved: bool = achieved
-        self.final_status: str = final_status
         self.mission_id: str = mission_id
-        self.reflection_id: str = reflection_id
-        self.total_retries: int = total_retries
-        self.execution_time_seconds: float = execution_time_seconds
-        self.runtimes_used: list[str] = runtimes_used or []
-        self.cost_estimate: float = cost_estimate
-        self.summary: str = summary
+        self.achieved: bool = achieved
+        self.completion_status: str = completion_status
+        self.start_time: str = start_time
+        self.end_time: str = end_time
+        self.duration: float = duration
+        self.execution_cost: float = execution_cost
+        self.runtime_used: str = runtime_used
+        self.alternative_runtimes: list[str] = alternative_runtimes or []
+        self.failure_reason: str = failure_reason
+        self.reflection_summary: str = reflection_summary
+        self.metrics: dict[str, Any] = metrics or {}
         self.created_at: str = _now_iso()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "goal_id": self.goal_id,
-            "achieved": self.achieved,
-            "final_status": self.final_status,
             "mission_id": self.mission_id,
-            "reflection_id": self.reflection_id,
-            "total_retries": self.total_retries,
-            "execution_time_seconds": self.execution_time_seconds,
-            "runtimes_used": list(self.runtimes_used),
-            "cost_estimate": self.cost_estimate,
-            "summary": self.summary,
+            "achieved": self.achieved,
+            "completion_status": self.completion_status,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "duration": self.duration,
+            "execution_cost": self.execution_cost,
+            "runtime_used": self.runtime_used,
+            "alternative_runtimes": list(self.alternative_runtimes),
+            "failure_reason": self.failure_reason,
+            "reflection_summary": self.reflection_summary,
+            "metrics": dict(self.metrics),
             "created_at": self.created_at,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GoalResult:
+        gr = cls(
+            goal_id=data.get("goal_id", ""),
+            mission_id=data.get("mission_id", ""),
+            achieved=data.get("achieved", False),
+            completion_status=data.get("completion_status", ""),
+            start_time=data.get("start_time", ""),
+            end_time=data.get("end_time", ""),
+            duration=data.get("duration", 0.0),
+            execution_cost=data.get("execution_cost", 0.0),
+            runtime_used=data.get("runtime_used", ""),
+            alternative_runtimes=data.get("alternative_runtimes", []),
+            failure_reason=data.get("failure_reason", ""),
+            reflection_summary=data.get("reflection_summary", ""),
+            metrics=data.get("metrics", {}),
+        )
+        gr.created_at = data.get("created_at", gr.created_at)
+        return gr

@@ -44,6 +44,7 @@ class ExecutiveMemory:
         self._reflections: dict[str, dict[str, Any]] = {}
         self._decisions: dict[str, dict[str, Any]] = {}
         self._failures: dict[str, dict[str, Any]] = {}
+        self._goal_results: dict[str, dict[str, Any]] = {}  # goal_id → GoalResult dict
 
     def set_memory(self, memory: MemoryManagerImpl) -> None:
         """Inject the existing MemoryManager."""
@@ -109,6 +110,21 @@ class ExecutiveMemory:
         async with self._lock:
             return [v for k, v in self._goals.items() if k.startswith("runtime:")][-limit:]
 
+    # ── GoalResult index ──────────────────────────────────────────────────
+
+    async def store_goal_result(self, goal_id: str, result_dict: dict[str, Any]) -> None:
+        """Index a GoalResult by goal_id."""
+        async with self._lock:
+            self._goal_results[goal_id] = result_dict
+
+    async def get_goal_result(self, goal_id: str) -> dict[str, Any] | None:
+        async with self._lock:
+            return self._goal_results.get(goal_id)
+
+    async def list_goal_results(self, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._lock:
+            return list(self._goal_results.values())[-limit:]
+
     # ── MemoryManager bridge ─────────────────────────────────────────
 
     async def write_to_memory(self, scope: str, key: str, value: str) -> None:
@@ -149,4 +165,5 @@ class ExecutiveMemory:
                 "decisions_indexed": len(self._decisions),
                 "failures_indexed": len(self._failures),
                 "runtime_events_indexed": len([k for k in self._goals if k.startswith("runtime:")]),
+                "goal_results_indexed": len(self._goal_results),
             }
