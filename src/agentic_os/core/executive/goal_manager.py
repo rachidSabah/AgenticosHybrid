@@ -231,6 +231,31 @@ class GoalManager:
         async with self._lock:
             return self._goals.get(goal_id)
 
+    async def archive(self, goal_id: str) -> Goal | None:
+        """Archive a completed/failed/cancelled goal.
+
+        Moves the goal to ARCHIVED status so it no longer appears in
+        active queries but is retained for history.
+        """
+        async with self._lock:
+            goal = self._goals.get(goal_id)
+            if goal is None:
+                return None
+            # Only archive goals in a terminal state
+            if goal.status not in (
+                GoalStatus.COMPLETED,
+                GoalStatus.FAILED,
+                GoalStatus.CANCELLED,
+                GoalStatus.MERGED,
+                GoalStatus.SPLIT,
+            ):
+                return None
+            goal.status = GoalStatus.ARCHIVED
+            goal.updated_at = datetime.now(UTC).isoformat()
+        await self._publish("executive.goal.archived", goal.to_dict())
+        log.info("Archived goal %s", goal_id)
+        return goal
+
     async def list_all(self) -> list[Goal]:
         async with self._lock:
             return list(self._goals.values())

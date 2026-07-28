@@ -109,12 +109,28 @@ class DecisionEngine:
             if availability == 0.0:
                 confidence *= 0.1
 
+            # Risk: inverse of confidence, amplified by load and low health
+            risk = round(
+                (1.0 - confidence) * 0.5 + (1.0 - load_score) * 0.3 + (1.0 - availability) * 0.2,
+                3,
+            )
+
+            # Human-readable reasoning
+            reasoning_parts = [f"health={b.health:.0f}", f"latency={b.latency:.0f}ms"]
+            if required_capability and cap_match == 0.0:
+                reasoning_parts.append(f"missing capability '{required_capability}'")
+            if b.current_tasks > 0:
+                reasoning_parts.append(f"load={b.current_tasks} tasks")
+            reasoning = "; ".join(reasoning_parts)
+
             decision = Decision(
                 goal_id=goal_id,
                 task_id=task_id,
                 selected_runtime=b.id,
                 alternatives=[],
                 confidence=round(confidence, 3),
+                risk=risk,
+                reasoning=reasoning,
                 factors={
                     "health": round(health_score, 3),
                     "latency": round(latency_score, 3),
@@ -122,6 +138,7 @@ class DecisionEngine:
                     "success_rate": round(success_rate, 3),
                     "load": round(load_score, 3),
                     "availability": availability,
+                    "risk": risk,
                     "brain_name": b.display_name,
                     "health_raw": b.health,
                     "latency_raw": b.latency,

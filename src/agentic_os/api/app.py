@@ -1923,6 +1923,17 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(404, detail=f"Goal {goal_id} not found or split failed")
         return [c.to_dict() for c in children]
 
+    @app.post("/api/executive/goals/{goal_id}/archive")
+    async def executive_archive_goal(goal_id: str) -> dict:
+        """Archive a completed/failed/cancelled goal."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        goal = await exec_ctrl.goal_manager.archive(goal_id)
+        if goal is None:
+            raise HTTPException(404, detail=f"Goal {goal_id} not found or not in a terminal state")
+        return goal.to_dict()
+
     @app.get("/api/executive/queue")
     async def executive_queue() -> dict:
         """Return the pending goal queue (sorted by priority)."""

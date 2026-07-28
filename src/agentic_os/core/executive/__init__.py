@@ -18,6 +18,7 @@ from agentic_os.core.executive.domain import (
     Goal,
     GoalDependency,
     GoalPriority,
+    GoalResult,
     GoalStatus,
     Reflection,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "GoalDependency",
     "GoalManager",
     "GoalPriority",
+    "GoalResult",
     "GoalStatus",
     "Reflection",
     "ReflectionEngine",

@@ -16,6 +16,7 @@ from agentic_os.core.executive.domain import (
     Decision,
     Goal,
     GoalPriority,
+    GoalResult,
     GoalStatus,
     Reflection,
 )
@@ -407,5 +408,114 @@ class TestGoalStatusEnum:
             "cancelled",
             "merged",
             "split",
+            "archived",
         }
         assert required.issubset(states)
+
+
+# ── GoalResult ─────────────────────────────────────────────────────────
+
+
+class TestGoalResult:
+    def test_creation(self):
+        gr = GoalResult(
+            goal_id="g1",
+            achieved=True,
+            final_status="completed",
+            mission_id="m1",
+            total_retries=0,
+            execution_time_seconds=42.5,
+            runtimes_used=["python", "node"],
+            cost_estimate=0.05,
+        )
+        assert gr.achieved is True
+        assert gr.final_status == "completed"
+        assert gr.total_retries == 0
+        assert gr.execution_time_seconds == 42.5
+        assert gr.runtimes_used == ["python", "node"]
+
+    def test_to_dict(self):
+        gr = GoalResult(goal_id="g1", achieved=False, final_status="failed")
+        d = gr.to_dict()
+        assert d["goal_id"] == "g1"
+        assert d["achieved"] is False
+        assert d["final_status"] == "failed"
+
+
+# ── Archive ──────────────────────────────────────────────────────────
+
+
+class TestArchive:
+    @pytest.mark.asyncio
+    async def test_archive_completed_goal(self, goal_manager):
+        g = await goal_manager.create_goal("Test")
+        await goal_manager.complete(g.id, "Done")
+        archived = await goal_manager.archive(g.id)
+        assert archived is not None
+        assert archived.status == GoalStatus.ARCHIVED
+
+    @pytest.mark.asyncio
+    async def test_archive_active_goal_fails(self, goal_manager):
+        g = await goal_manager.create_goal("Test")
+        # Active goals cannot be archived
+        archived = await goal_manager.archive(g.id)
+        assert archived is None
+
+    @pytest.mark.asyncio
+    async def test_archive_not_found(self, goal_manager):
+        result = await goal_manager.archive("nonexistent")
+        assert result is None
+
+
+# ── Enhanced Reflection ───────────────────────────────────────────────
+
+
+class TestEnhancedReflection:
+    @pytest.mark.asyncio
+    async def test_reflection_with_analysis_fields(self, reflection_engine):
+        r = await reflection_engine.reflect(
+            goal_id="g1",
+            mission_id="m1",
+            goal_achieved=True,
+            best_runtime="python",
+        )
+        d = r.to_dict()
+        assert "success_factors" in d
+        assert "failures" in d
+        assert "improvements" in d
+        assert "routing_issues" in d
+        assert "capability_gaps" in d
+
+    @pytest.mark.asyncio
+    async def test_reflection_failure_analysis(self, reflection_engine):
+        r = await reflection_engine.reflect(
+            goal_id="g2",
+            mission_id="m2",
+            goal_achieved=False,
+            failed_runtimes=["claude-code"],
+            routing_could_improve=True,
+            summary="Failed due to timeout",
+        )
+        d = r.to_dict()
+        assert "claude-code" in d["failed_runtimes"]
+        assert d["routing_could_improve"] is True
+
+
+# ── Enhanced Decision ─────────────────────────────────────────────────
+
+
+class TestEnhancedDecision:
+    def test_decision_has_risk_and_reasoning(self):
+        d = Decision(
+            goal_id="g1",
+            task_id="t1",
+            selected_runtime="b1",
+            confidence=0.8,
+            risk=0.2,
+            reasoning="health=90; latency=100ms",
+        )
+        dd = d.to_dict()
+        assert "risk" in dd
+        assert dd["risk"] == 0.2
+        assert "reasoning" in dd
+        assert "health" in dd["reasoning"]

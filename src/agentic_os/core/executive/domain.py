@@ -32,6 +32,7 @@ class GoalStatus(StrEnum):
     CANCELLED = "cancelled"
     MERGED = "merged"
     SPLIT = "split"
+    ARCHIVED = "archived"
 
 
 class GoalPriority(StrEnum):
@@ -211,6 +212,11 @@ class Reflection:
         "routing_could_improve",
         "summary",
         "created_at",
+        "success_factors",
+        "failures",
+        "improvements",
+        "routing_issues",
+        "capability_gaps",
     )
 
     def __init__(
@@ -224,6 +230,11 @@ class Reflection:
         routing_could_improve: bool = False,
         summary: str = "",
         reflection_id: str = "",
+        success_factors: list[str] | None = None,
+        failures: list[str] | None = None,
+        improvements: list[str] | None = None,
+        routing_issues: list[str] | None = None,
+        capability_gaps: list[str] | None = None,
     ) -> None:
         self.id: str = reflection_id or _new_id()
         self.goal_id: str = goal_id
@@ -235,6 +246,11 @@ class Reflection:
         self.routing_could_improve: bool = routing_could_improve
         self.summary: str = summary
         self.created_at: str = _now_iso()
+        self.success_factors: list[str] = success_factors or []
+        self.failures: list[str] = failures or []
+        self.improvements: list[str] = improvements or []
+        self.routing_issues: list[str] = routing_issues or []
+        self.capability_gaps: list[str] = capability_gaps or []
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -248,6 +264,11 @@ class Reflection:
             "routing_could_improve": self.routing_could_improve,
             "summary": self.summary,
             "created_at": self.created_at,
+            "success_factors": list(self.success_factors),
+            "failures": list(self.failures),
+            "improvements": list(self.improvements),
+            "routing_issues": list(self.routing_issues),
+            "capability_gaps": list(self.capability_gaps),
         }
 
 
@@ -258,7 +279,8 @@ class Decision:
     """A routing/allocation decision made by the DecisionEngine.
 
     Stored for auditability and for the Learning engine to improve
-    future routing decisions.
+    future routing decisions. Includes a risk score (0.0=safe,
+    1.0=dangerous) and human-readable reasoning.
     """
 
     __slots__ = (
@@ -268,6 +290,8 @@ class Decision:
         "selected_runtime",
         "alternatives",
         "confidence",
+        "risk",
+        "reasoning",
         "factors",
         "created_at",
     )
@@ -279,6 +303,8 @@ class Decision:
         selected_runtime: str = "",
         alternatives: list[str] | None = None,
         confidence: float = 0.0,
+        risk: float = 0.0,
+        reasoning: str = "",
         factors: dict[str, Any] | None = None,
         decision_id: str = "",
     ) -> None:
@@ -288,6 +314,8 @@ class Decision:
         self.selected_runtime: str = selected_runtime
         self.alternatives: list[str] = alternatives or []
         self.confidence: float = confidence
+        self.risk: float = risk
+        self.reasoning: str = reasoning
         self.factors: dict[str, Any] = factors or {}
         self.created_at: str = _now_iso()
 
@@ -299,6 +327,73 @@ class Decision:
             "selected_runtime": self.selected_runtime,
             "alternatives": list(self.alternatives),
             "confidence": self.confidence,
+            "risk": self.risk,
+            "reasoning": self.reasoning,
             "factors": dict(self.factors),
+            "created_at": self.created_at,
+        }
+
+
+# ── Goal Result ──────────────────────────────────────────────────────
+
+
+class GoalResult:
+    """The outcome of a completed or failed goal.
+
+    Captures whether the goal was achieved, the final state, key
+    metrics, and a reference to the Reflection that analyzed it.
+    """
+
+    __slots__ = (
+        "goal_id",
+        "achieved",
+        "final_status",
+        "mission_id",
+        "reflection_id",
+        "total_retries",
+        "execution_time_seconds",
+        "runtimes_used",
+        "cost_estimate",
+        "summary",
+        "created_at",
+    )
+
+    def __init__(
+        self,
+        goal_id: str = "",
+        achieved: bool = False,
+        final_status: str = "",
+        mission_id: str = "",
+        reflection_id: str = "",
+        total_retries: int = 0,
+        execution_time_seconds: float = 0.0,
+        runtimes_used: list[str] | None = None,
+        cost_estimate: float = 0.0,
+        summary: str = "",
+    ) -> None:
+        self.goal_id: str = goal_id
+        self.achieved: bool = achieved
+        self.final_status: str = final_status
+        self.mission_id: str = mission_id
+        self.reflection_id: str = reflection_id
+        self.total_retries: int = total_retries
+        self.execution_time_seconds: float = execution_time_seconds
+        self.runtimes_used: list[str] = runtimes_used or []
+        self.cost_estimate: float = cost_estimate
+        self.summary: str = summary
+        self.created_at: str = _now_iso()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "goal_id": self.goal_id,
+            "achieved": self.achieved,
+            "final_status": self.final_status,
+            "mission_id": self.mission_id,
+            "reflection_id": self.reflection_id,
+            "total_retries": self.total_retries,
+            "execution_time_seconds": self.execution_time_seconds,
+            "runtimes_used": list(self.runtimes_used),
+            "cost_estimate": self.cost_estimate,
+            "summary": self.summary,
             "created_at": self.created_at,
         }
