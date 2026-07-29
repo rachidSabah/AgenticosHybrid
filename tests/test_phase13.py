@@ -215,5 +215,5 @@ class TestOrchestrator:
         import asyncio
 
         await asyncio.sleep(0.1)
-        ws = await orchestrator.get_world_state()
+        await orchestrator.get_world_state()  # noqa: F841
         assert "m1" in orchestrator._world.missions

@@ -2211,6 +2211,103 @@ def create_app(platform: Platform) -> FastAPI:
             "strategic_planner_available": ctrl.world_model is not None,
         }
 
+    # ── Phase 14: Autonomous Swarm Execution & Collaborative Agent Fabric ──
+
+    @app.get("/api/swarm/status")
+    async def swarm_phase14_status() -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            return {"started": False}
+        return {
+            "started": sc._started,
+            "swarm_count": len(sc._swarm_phases),
+            "subscriptions": len(sc._subs),
+        }
+
+    @app.get("/api/swarm/list")
+    async def swarm_phase14_list() -> list[dict]:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            return []
+        return sc.list_swarms()
+
+    @app.get("/api/swarm/{swarm_id}")
+    async def swarm_phase14_get(swarm_id: str) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        status = sc.get_swarm_status(swarm_id)
+        if "error" in status:
+            raise HTTPException(404, detail=status["error"])
+        return status
+
+    @app.get("/api/swarm/members")
+    async def swarm_phase14_members(swarm_id: str = "") -> list[dict]:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None or not swarm_id:
+            return []
+        return sc.get_swarm_members(swarm_id)
+
+    @app.get("/api/swarm/history")
+    async def swarm_phase14_history(limit: int = 50) -> list[dict]:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            return []
+        return sc.get_history(limit=limit)
+
+    @app.post("/api/swarm/create")
+    async def swarm_phase14_create(body: dict) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        return await sc.create_team(
+            goal=body.get("goal", ""),
+            required_capabilities=body.get("required_capabilities", ["chat"]),
+            max_members=body.get("max_members", 5),
+        )
+
+    @app.post("/api/swarm/execute")
+    async def swarm_phase14_execute(body: dict) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        swarm_id = body.get("swarm_id", "")
+        tasks = body.get("tasks", [])
+        return await sc.execute_swarm(swarm_id, tasks)
+
+    @app.post("/api/swarm/rebalance")
+    async def swarm_phase14_rebalance(body: dict) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        swarm_id = body.get("swarm_id", "")
+        return await sc.rebalance(swarm_id)
+
+    @app.post("/api/swarm/consensus")
+    async def swarm_phase14_consensus(body: dict) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        swarm_id = body.get("swarm_id", "")
+        proposal = body.get("proposal", "")
+        votes = body.get("votes", {})
+        consensus_type = body.get("consensus_type", "majority")
+        from agentic_os.core.orchestration.swarm_coordinator import ConsensusType
+
+        try:
+            ct = ConsensusType(consensus_type)
+        except ValueError:
+            ct = ConsensusType.MAJORITY
+        return await sc.run_consensus(swarm_id, proposal, votes, ct)
+
+    @app.post("/api/swarm/disband")
+    async def swarm_phase14_disband(body: dict) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        swarm_id = body.get("swarm_id", "")
+        return await sc.disband(swarm_id)
+
     # ── Phase 13: Autonomous Executive Decision & Mission Orchestration ──
 
     @app.get("/api/executive/world")

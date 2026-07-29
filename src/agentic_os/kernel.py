@@ -218,6 +218,7 @@ class Platform:
     executive_controller: Any = None  # ExecutiveController | None
     # Phase 12: Cognitive Intelligence Layer
     cognitive_controller: Any = None  # CognitiveController | None
+    swarm_coordinator: Any = None  # SwarmCoordinator | None
 
 
 class Kernel:
@@ -285,6 +286,7 @@ class Kernel:
         self.local_discovery = None
         self.executive_controller = None
         self.cognitive_controller = None
+        self.swarm_coordinator = None
         # Phase 6.2: AI Brain Registry & Constellation (initialized in _start_subsystems)
         self.brain_registry = None
         self.brain_manager = None
@@ -680,11 +682,34 @@ class Kernel:
             except Exception as exc:
                 _diag("Cognitive", "FAILED", str(exc))
 
+            # ── Phase 14: Swarm Coordinator ──
+            _diag("Swarm", "STARTING")
+            try:
+                from agentic_os.core.orchestration.swarm_coordinator import SwarmCoordinator
+
+                self.swarm_coordinator = SwarmCoordinator(
+                    bus=self.bus,
+                    brain_registry=self.brain_registry,
+                )
+                await self.swarm_coordinator.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.swarm_coordinator = self.swarm_coordinator
+                _diag("Swarm", "STARTED")
+            except Exception as exc:
+                _diag("Swarm", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 14: Stop Swarm Coordinator
+        if self.swarm_coordinator is not None:
+            try:
+                await self.swarm_coordinator.stop()
+            except Exception:
+                log.exception("Failed to stop SwarmCoordinator")
+            self.swarm_coordinator = None
         # Phase 12: Stop Cognitive Intelligence Layer
         if self.cognitive_controller is not None:
             try:
@@ -949,6 +974,7 @@ class Kernel:
             brain_runtime_bridge=self.brain_runtime_bridge,
             executive_controller=self.executive_controller,
             cognitive_controller=self.cognitive_controller,
+            swarm_coordinator=self.swarm_coordinator,
         )
         return self._platform_instance
 
