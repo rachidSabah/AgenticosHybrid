@@ -1174,6 +1174,51 @@ def create_app(platform: Platform) -> FastAPI:
                 payload=m.to_dict(),
             )
         )
+        # Dispatch each planned task to the OrchestrationFramework
+        # for capability-driven brain selection + execution.
+        if m.plan and m.plan.tasks:
+            for task in m.plan.tasks:
+                try:
+                    await orch.bus.publish(
+                        EventEnvelope(
+                            type="task.created",
+                            source="mission-execution",
+                            topic=Topic.TASK_CREATED.value,
+                            payload={
+                                "id": task.id,
+                                "mission_id": mission_id,
+                                "title": task.title,
+                                "required_capability": task.required_capability,
+                                "assigned_provider": task.assigned_provider,
+                                "assigned_role": task.assigned_role.value
+                                if task.assigned_role
+                                else None,
+                                "dependencies": task.dependencies,
+                                "status": "pending",
+                            },
+                        )
+                    )
+                    await orch.bus.publish(
+                        EventEnvelope(
+                            type="task.dispatched",
+                            source="mission-execution",
+                            topic=Topic.TASK_DISPATCHED.value,
+                            payload={
+                                "id": task.id,
+                                "mission_id": mission_id,
+                                "assigned_provider": task.assigned_provider,
+                                "required_capability": task.required_capability,
+                                "status": "dispatched",
+                            },
+                        )
+                    )
+                except Exception:
+                    log.warning(
+                        "Failed to dispatch task %s for mission %s",
+                        task.id,
+                        mission_id,
+                        exc_info=True,
+                    )
         return m.to_dict()
 
     @app.post("/api/missions/{mission_id}/pause")

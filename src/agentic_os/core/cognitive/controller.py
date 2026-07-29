@@ -30,11 +30,14 @@ if TYPE_CHECKING:
 log = get_logger("cognitive.controller")
 
 # Topics the CognitiveController subscribes to for integration with Discovery
+# and Mission execution pipeline
 _COGNITIVE_OBSERVED_TOPICS = [
     "brain.registered",
     "brain.removed",
     "brain.health_changed",
     "brain.updated",
+    "mission.completed",
+    "mission.failed",
 ]
 
 
@@ -227,6 +230,56 @@ class CognitiveController:
                         "updated": True,
                     },
                 )
+
+            elif topic == "mission.completed":
+                # Cognitive feedback: after a mission completes, trigger
+                # the experience replay + evaluation + improvement cycle
+                # automatically — no manual API calls required.
+                mission_id = str(payload.get("id", payload.get("mission_id", "")))
+                goal_id = str(payload.get("goal_id", ""))
+                try:
+                    # 1. Run experience replay to extract patterns
+                    await self._experience.replay(mission_id=mission_id, goal_id=goal_id)
+                    # 2. Run evaluation to update quality scores
+                    await self._evaluation.evaluate()
+                    # 3. Generate improvement proposals (auto-creates Goals)
+                    await self._improvement.generate()
+                    # 4. Publish cognitive events
+                    await self.publish(
+                        "cognitive.evaluation.completed",
+                        self._evaluation.get_latest() or {},
+                    )
+                    log.info(
+                        "Cognitive feedback: mission %s completed → "
+                        "experience + evaluation + improvement triggered",
+                        mission_id,
+                    )
+                except Exception:
+                    log.exception("Cognitive feedback failed for mission %s", mission_id)
+
+            elif topic == "mission.failed":
+                # Cognitive feedback: after a mission fails, record the
+                # failure + run evaluation + trigger improvement proposals.
+                mission_id = str(payload.get("id", payload.get("mission_id", "")))
+                goal_id = str(payload.get("goal_id", ""))
+                try:
+                    await self._memory.store_failure(
+                        mission_id,
+                        {
+                            "id": mission_id,
+                            "goal_id": goal_id,
+                            "error": payload.get("error", ""),
+                        },
+                    )
+                    await self._evaluation.evaluate()
+                    await self._improvement.generate()
+                    log.info(
+                        "Cognitive feedback: mission %s failed → "
+                        "failure recorded + evaluation + improvement triggered",
+                        mission_id,
+                    )
+                except Exception:
+                    log.exception("Cognitive feedback failed for mission %s", mission_id)
 
         except Exception:
             log.exception("Failed to handle cognitive event %s", topic)

@@ -28,6 +28,7 @@ class CognitiveMemory:
         self._experience: dict[str, dict[str, Any]] = {}
         self._evaluations: dict[str, dict[str, Any]] = {}
         self._improvements: dict[str, dict[str, Any]] = {}
+        self._failures: dict[str, dict[str, Any]] = {}
         self._reflections: dict[str, dict[str, Any]] = {}  # mirror of exec reflections
         self._world_snapshots: list[dict[str, Any]] = []
         self._kg_nodes: dict[str, dict[str, Any]] = {}
@@ -74,6 +75,16 @@ class CognitiveMemory:
     async def list_experience(self, limit: int = 50) -> list[dict[str, Any]]:
         async with self._lock:
             return list(self._experience.values())[-limit:]
+
+    # ── Failures ────────────────────────────────────────────────────
+
+    async def store_failure(self, failure_id: str, data: dict[str, Any]) -> None:
+        async with self._lock:
+            self._failures[failure_id] = data
+
+    async def list_failures(self, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._lock:
+            return list(self._failures.values())[-limit:]
 
     # ── Evaluations ──────────────────────────────────────────────────
 
