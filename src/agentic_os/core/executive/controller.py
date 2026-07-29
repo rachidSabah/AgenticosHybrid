@@ -82,6 +82,16 @@ class ExecutiveController:
         self._decisions = DecisionEngine(brain_registry, learning)
         self._reflection = ReflectionEngine(bus, self._memory, self._goals)
 
+        # Phase 13: Executive Orchestrator (world state, policies, allocation, supervision)
+        from agentic_os.core.executive.orchestrator import ExecutiveOrchestrator
+
+        self._orchestrator = ExecutiveOrchestrator(
+            bus=bus,
+            brain_registry=brain_registry,
+            goal_manager=self._goals,
+            exec_memory=self._memory,
+        )
+
         # Wire cross-references
         self._decisions.set_registry(brain_registry) if brain_registry else None
         self._decisions.set_learning(learning) if learning else None
@@ -109,6 +119,11 @@ class ExecutiveController:
     def memory(self) -> ExecutiveMemory:
         return self._memory
 
+    @property
+    def orchestrator(self) -> Any:
+        """Phase 13 ExecutiveOrchestrator instance."""
+        return self._orchestrator
+
     async def start(self) -> None:
         """Start the controller: subscribe to events + launch background loop."""
         if self._started:
@@ -125,6 +140,9 @@ class ExecutiveController:
             except Exception:
                 log.exception("Failed to subscribe to %s", topic)
 
+        # Start Phase 13 orchestrator
+        await self._orchestrator.start()
+
         # Start background optimization loop (runs every 60s)
         self._task = asyncio.create_task(self._optimization_loop())
 
@@ -140,6 +158,8 @@ class ExecutiveController:
             except asyncio.CancelledError:
                 pass
             self._task = None
+        # Stop Phase 13 orchestrator
+        await self._orchestrator.stop()
         for sub_id in self._subscriptions:
             try:
                 await self._bus.unsubscribe(sub_id)

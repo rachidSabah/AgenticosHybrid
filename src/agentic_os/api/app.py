@@ -2211,6 +2211,99 @@ def create_app(platform: Platform) -> FastAPI:
             "strategic_planner_available": ctrl.world_model is not None,
         }
 
+    # ── Phase 13: Autonomous Executive Decision & Mission Orchestration ──
+
+    @app.get("/api/executive/world")
+    async def executive_world() -> dict:
+        """Return the live executive world state."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            return {}
+        return await exec_ctrl.orchestrator.get_world_state()
+
+    @app.get("/api/executive/policies")
+    async def executive_policies() -> dict:
+        """Return the current executive policy + history."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            return {"policy": {}, "history": []}
+        return {
+            "policy": exec_ctrl.orchestrator.get_policy().to_dict(),
+            "history": exec_ctrl.orchestrator.get_policy_history(),
+        }
+
+    @app.post("/api/executive/policy")
+    async def executive_set_policy(body: dict) -> dict:
+        """Switch the executive policy at runtime."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        from agentic_os.core.executive.phase13_domain import ExecutivePolicyType
+
+        policy_type_str = body.get("type", "balanced")
+        try:
+            policy_type = ExecutivePolicyType(policy_type_str)
+        except ValueError:
+            raise HTTPException(400, f"Invalid policy type: {policy_type_str}") from None
+        params = body.get("params", {})
+        policy = exec_ctrl.orchestrator.set_policy(policy_type, params)
+        return policy.to_dict()
+
+    @app.get("/api/executive/resources")
+    async def executive_resources(limit: int = 50) -> list[dict]:
+        """Return recent resource allocations."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            return []
+        return exec_ctrl.orchestrator.get_allocations(limit=limit)
+
+    @app.get("/api/executive/missions")
+    async def executive_missions() -> dict:
+        """Return missions tracked by the executive layer."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            return {"missions": [], "total": 0}
+        world = await exec_ctrl.orchestrator.get_world_state()
+        return {
+            "missions": world.get("missions", 0),
+            "queue_size": world.get("execution_queue_size", 0),
+            "active_brains": world.get("active_brains", []),
+        }
+
+    @app.get("/api/executive/dashboard")
+    async def executive_dashboard() -> dict:
+        """Return the executive dashboard with all live data."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            return {"message": "ExecutiveController not wired"}
+        return await exec_ctrl.orchestrator.dashboard()
+
+    @app.post("/api/executive/optimize")
+    async def executive_optimize() -> dict:
+        """Run an optimization cycle: reprioritize + supervise + allocate."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        return await exec_ctrl.orchestrator.optimize()
+
+    @app.post("/api/executive/recover")
+    async def executive_recover(body: dict) -> dict:
+        """Trigger automatic recovery for a mission."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        mission_id = body.get("mission_id", "")
+        reason = body.get("reason", "")
+        return await exec_ctrl.orchestrator.trigger_recovery(mission_id, reason)
+
+    @app.post("/api/executive/replan")
+    async def executive_replan() -> dict:
+        """Reprioritize goals and replan the execution queue."""
+        exec_ctrl = getattr(platform, "executive_controller", None)
+        if exec_ctrl is None or exec_ctrl.orchestrator is None:
+            raise HTTPException(503, detail="ExecutiveController not available")
+        return await exec_ctrl.orchestrator.reprioritize()
+
     # ── Memory System API (Phase 2, Subsystem 2) ──
     @app.post("/api/memory")
     async def write_memory(body: dict) -> dict:
