@@ -47,6 +47,7 @@ class CognitiveController:
         self._memory = CognitiveMemory()
         self._world = WorldModel(bus, brain_registry, goal_manager, exec_memory)
         self._planner = StrategicPlanner(self._world)
+        self._planner.set_bus(bus)
         self._predictor = PredictionEngine(self._world, self._memory)
         self._experience = ExperienceReplay(self._memory)
         self._evaluation = EvaluationEngine(self._world, self._memory)

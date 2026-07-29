@@ -22,9 +22,14 @@ class StrategicPlanner:
 
     def __init__(self, world_model: WorldModel | None = None) -> None:
         self._world = world_model
+        self._bus: Any = None
 
     def set_world_model(self, wm: WorldModel) -> None:
         self._world = wm
+
+    def set_bus(self, bus: Any) -> None:
+        """Inject the EventBus so the planner can publish strategy events."""
+        self._bus = bus
 
     async def generate_strategy(self) -> dict[str, Any]:
         """Generate strategic recommendations from the current world state."""
@@ -96,9 +101,27 @@ class StrategicPlanner:
         if goal_stats.get("failed", 0) > 0:
             mission_ordering.append({"priority": "high", "action": "retry_failed_goals"})
 
-        return {
+        result = {
             "recommendations": recommendations,
             "resource_allocation": resource_allocation,
             "mission_ordering": mission_ordering,
             "world_snapshot": world,
         }
+
+        # Publish cognitive.strategy.generated event
+        if self._bus is not None:
+            try:
+                from agentic_os.domain.events import EventEnvelope
+
+                await self._bus.publish(
+                    EventEnvelope(
+                        type="cognitive.strategy.generated",
+                        source="cognitive.strategic_planner",
+                        topic="cognitive.strategy.generated",
+                        payload=result,
+                    )
+                )
+            except Exception:
+                log.exception("Failed to publish cognitive.strategy.generated")
+
+        return result

@@ -114,6 +114,26 @@ class WorldModel:
                     0, self._state["system_load"]["tasks_running"] - 1
                 )
             self._state["last_updated"] = datetime.now(UTC).isoformat()
+        # Publish world.updated event after state mutation
+        await self._publish_world_updated()
+
+    async def _publish_world_updated(self) -> None:
+        """Publish cognitive.world.updated on the existing EventBus."""
+        if self._bus is None:
+            return
+        from agentic_os.domain.events import EventEnvelope
+
+        try:
+            await self._bus.publish(
+                EventEnvelope(
+                    type="cognitive.world.updated",
+                    source="cognitive.world_model",
+                    topic="cognitive.world.updated",
+                    payload={"last_updated": self._state.get("last_updated", "")},
+                )
+            )
+        except Exception:
+            log.exception("Failed to publish cognitive.world.updated")
 
     async def snapshot(self) -> dict[str, Any]:
         """Return a snapshot of the current world state."""
