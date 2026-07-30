@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum } from "@/lib/safe";
 
 /**
  * Phase 15 — Ecosystem Dashboard.
@@ -227,10 +228,10 @@ function OverviewTab() {
                 <div className="mt-1 h-2 w-full rounded-full bg-surface/40">
                   <div
                     className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500"
-                    style={{ width: `${(liveHealth.health_score * 100).toFixed(0)}%` }}
+                    style={{ width: `${safeFixed((safeNum(liveHealth?.health_score) * 100), 0)}%` }}
                   />
                 </div>
-                <div className="mt-1 text-[11px] text-faint">{(liveHealth.health_score * 100).toFixed(1)}%</div>
+                <div className="mt-1 text-[11px] text-faint">{safeFixed((safeNum(liveHealth?.health_score) * 100), 1)}%</div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
@@ -274,11 +275,11 @@ function OverviewTab() {
             <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-lg border border-border/60 p-2">
                 <div className="text-faint">Avg Health</div>
-                <div className="mt-0.5 text-sm font-medium">{liveStats.average_health.toFixed(1)}</div>
+                <div className="mt-0.5 text-sm font-medium">{safeFixed(liveStats?.average_health, 1)}</div>
               </div>
               <div className="rounded-lg border border-border/60 p-2">
                 <div className="text-faint">Avg Latency</div>
-                <div className="mt-0.5 text-sm font-medium">{liveStats.average_latency.toFixed(0)}ms</div>
+                <div className="mt-0.5 text-sm font-medium">{safeFixed(liveStats?.average_latency, 0)}ms</div>
               </div>
               <div className="rounded-lg border border-border/60 p-2">
                 <div className="text-faint">Active Swarms</div>
@@ -339,7 +340,7 @@ function RuntimeBar({
         <span className="text-xs text-text">{count} / {total}</span>
       </div>
       <div className="mt-1 h-2 w-full rounded-full bg-surface/40">
-        <div className={`h-2 rounded-full ${color}`} style={{ width: `${pct.toFixed(0)}%` }} />
+        <div className={`h-2 rounded-full ${color}`} style={{ width: `${safeFixed(pct, 0)}%` }} />
       </div>
     </div>
   );
@@ -529,11 +530,11 @@ function CollaborationsTab() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">{link.source} → {link.target}</span>
                     <Badge tone={link.trust_score > 0.7 ? "ok" : link.trust_score > 0.4 ? "warn" : "danger"}>
-                      trust {(link.trust_score * 100).toFixed(0)}%
+                      trust {safeFixed((safeNum(link?.trust_score) * 100), 0)}%
                     </Badge>
                   </div>
                   <div className="mt-1 text-[11px] text-faint">
-                    {link.successful} ok · {link.failed} fail · {((link.success_rate) * 100).toFixed(0)}% success
+                    {link.successful} ok · {link.failed} fail · {safeFixed((safeNum(link?.success_rate) * 100), 0)}% success
                   </div>
                 </div>
               ))}
@@ -558,7 +559,7 @@ function CollaborationsTab() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">{rid}</span>
                     <Badge tone={avg_trust > 0.7 ? "ok" : avg_trust > 0.4 ? "warn" : "danger"}>
-                      {(avg_trust * 100).toFixed(0)}%
+                      {safeFixed((safeNum(avg_trust) * 100), 0)}%
                     </Badge>
                   </div>
                   <div className="mt-1 text-[11px] text-faint">{total} collaboration{total === 1 ? "" : "s"}</div>
@@ -627,15 +628,15 @@ function EvolutionTab() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <Badge tone={rec.priority > 0.7 ? "danger" : rec.priority > 0.5 ? "warn" : "default"}>
-                        P{(rec.priority * 100).toFixed(0)}
+                        P{safeFixed((safeNum(rec?.priority) * 100), 0)}
                       </Badge>
                       <span className="text-sm font-medium">{rec.title}</span>
                     </div>
                     <div className="mt-1 text-[11px] text-faint">{rec.rationale}</div>
                   </div>
                   <div className="ml-3 text-right text-[11px] text-faint">
-                    <div>conf: {(rec.confidence * 100).toFixed(0)}%</div>
-                    <div>impact: {(rec.expected_impact * 100).toFixed(0)}%</div>
+                    <div>conf: {safeFixed((safeNum(rec?.confidence) * 100), 0)}%</div>
+                    <div>impact: {safeFixed((safeNum(rec?.expected_impact) * 100), 0)}%</div>
                   </div>
                 </div>
                 {rec.target_id && (
@@ -753,7 +754,7 @@ function MarketplaceTab() {
                     </div>
                     {task.selected_bid && (
                       <div className="mt-1 text-[11px] text-emerald-400">
-                        → {task.selected_bid.runtime_name} (score {(task.selected_bid.bid_score * 100).toFixed(0)}%)
+                        → {task.selected_bid.runtime_name} (score {safeFixed((safeNum(task?.selected_bid?.bid_score) * 100), 0)}%)
                       </div>
                     )}
                   </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain, LayoutGrid, GitBranch,
@@ -527,14 +528,14 @@ function TableRow({ brain, onClick }: { brain: BrainRecord; onClick: () => void 
       </td>
       <td className="py-2.5 px-2 text-right tabular-nums">
         <span className={brain.cpu_usage > 80 ? "text-danger" : brain.cpu_usage > 50 ? "text-warn" : ""}>
-          {brain.cpu_usage.toFixed(0)}%
+          {safeFixed(brain?.cpu_usage, 0)}%
         </span>
       </td>
       <td className="py-2.5 px-2 text-right tabular-nums text-faint">
-        {(brain.memory_usage / 1024).toFixed(1)}GB
+        {safeFixed((safeNum(brain?.memory_usage) / 1024), 1)}GB
       </td>
       <td className="py-2.5 px-2 text-right tabular-nums text-faint">
-        {brain.latency.toFixed(0)}ms
+        {safeFixed(brain?.latency, 0)}ms
       </td>
       <td className="py-2.5 px-2 text-right tabular-nums">
         {brain.current_tasks}

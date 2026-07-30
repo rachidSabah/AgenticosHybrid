@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { clsx } from "clsx";
 import {
   Play,
@@ -750,7 +751,7 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
         <div className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-3">
           <div className="text-[10px] uppercase tracking-wide text-gray-500">Memory</div>
           <div className="mt-1 text-lg font-semibold tabular-nums text-gray-100">
-            {metrics.memory_mb.toFixed(0)}
+            {safeFixed(metrics?.memory_mb, 0)}
             <span className="ml-0.5 text-xs text-gray-500">MB</span>
           </div>
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-700">
@@ -812,7 +813,7 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
             Cost
           </div>
           <div className="mt-1 text-lg font-semibold tabular-nums text-gray-100">
-            ${metrics.cost.toFixed(4)}
+            ${safeFixed(metrics?.cost, 4)}
           </div>
         </div>
       </div>

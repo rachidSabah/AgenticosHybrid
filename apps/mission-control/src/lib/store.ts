@@ -273,7 +273,7 @@ export const useStore = create<StoreState>((set, get) => ({
         if (hbWatchdogTimer) clearInterval(hbWatchdogTimer);
         hbWatchdogTimer = setInterval(() => {
           if (Date.now() - lastHeartbeat > WS_HEARTBEAT_TIMEOUT) {
-            console.warn("[WebSocket] No heartbeat for 90s — reconnecting");
+            // Silent reconnect — no console.warn to avoid spam
             ws?.close();
             if (hbWatchdogTimer) clearInterval(hbWatchdogTimer);
             hbWatchdogTimer = null;
@@ -288,7 +288,7 @@ export const useStore = create<StoreState>((set, get) => ({
     const scheduleReconnect = () => {
       if (isIntentionalDisconnect) return;
       if (retryCount >= WS_MAX_RETRIES) {
-        console.error("[WebSocket] Max retries reached, giving up");
+        // Silent — no console.error to avoid spam
         return;
       }
 
@@ -297,7 +297,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const jitter = delay * 0.1 * (Math.random() * 2 - 1);
       const finalDelay = Math.floor(delay + jitter);
 
-      console.log(`[WebSocket] Reconnecting in ${finalDelay}ms (attempt ${retryCount + 1}/${WS_MAX_RETRIES})`);
+      // Silent reconnect — no console.log to avoid spam
       retryCount++;
 
       if (reconnectTimer) clearTimeout(reconnectTimer);

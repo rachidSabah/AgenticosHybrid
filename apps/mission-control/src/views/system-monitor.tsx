@@ -4,6 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import { Panel, Stat, StatusDot, Empty } from "@/components/ui/primitives";
 import { useStore, selectMetrics } from "@/lib/store";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum, safeStr, safeArr, safeLen } from "@/lib/safe";
 import { useMemo, useEffect, useCallback, useState, useRef } from "react";
 import { List, type RowComponentProps } from "react-window";
 import { AutoSizer } from "react-virtualized-auto-sizer";
@@ -162,7 +163,7 @@ export function SystemMonitor() {
         <Stat label="Cost" value={`$${m.cost.toFixed(4)}`} tone="warn" />
         <Stat
           label="Latency"
-          value={`${m.latency.toFixed(0)}ms`}
+          value={`${safeFixed(m?.latency, 0)}ms`}
           tone={m.latency > 1000 ? "warn" : "default"}
         />
       </div>

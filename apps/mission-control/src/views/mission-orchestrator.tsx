@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Panel, Badge, StatusDot, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum, safeStr, safeArr, safeLen } from "@/lib/safe";
 import type {
   MissionType, MissionPlanType, MissionTaskType, EventEnvelope,
   MemoryItem, ProviderHealthRecord, MissionAttachment,

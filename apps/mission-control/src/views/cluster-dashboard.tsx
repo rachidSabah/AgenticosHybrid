@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum, safeStr, safeArr } from "@/lib/safe";
 
 /**
  * Phase 16 — Cluster Federation Dashboard.
@@ -200,14 +201,14 @@ function OverviewTab() {
               <div className="mt-1 h-2 w-full rounded-full bg-surface/40">
                 <div
                   className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500"
-                  style={{ width: `${liveStats.average_node_health.toFixed(0)}%` }}
+                  style={{ width: `${safeFixed(liveStats?.average_node_health, 0)}%` }}
                 />
               </div>
-              <div className="mt-1 text-[11px] text-faint">{liveStats.average_node_health.toFixed(1)}%</div>
+              <div className="mt-1 text-[11px] text-faint">{safeFixed(liveStats?.average_node_health, 1)}%</div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <Metric label="Avg Latency" value={`${liveStats.average_network_latency.toFixed(0)}ms`} />
-              <Metric label="Utilization" value={`${(liveStats.cluster_utilization * 100).toFixed(0)}%`} />
+              <Metric label="Avg Latency" value={`${safeFixed(liveStats?.average_network_latency, 0)}ms`} />
+              <Metric label="Utilization" value={`${safeFixed((safeNum(liveStats?.cluster_utilization) * 100), 0)}%`} />
               <Metric label="Active Missions" value={String(liveStats.active_missions)} />
               <Metric label="Consensuses" value={String(liveStats.consensus_count)} />
             </div>
@@ -338,7 +339,7 @@ function TopologyTab() {
                       <span className="text-faint">{c.source}</span>
                       <span className="mx-1 text-indigo-400">→</span>
                       <span className="text-faint">{c.target}</span>
-                      <div className="text-[10px] text-faint">{c.latency_ms.toFixed(0)}ms {c.healthy ? "✓" : "✗"}</div>
+                      <div className="text-[10px] text-faint">{safeFixed(c?.latency_ms, 0)}ms {c.healthy ? "✓" : "✗"}</div>
                     </div>
                   ))}
                 </div>
@@ -404,9 +405,9 @@ function NodesTab() {
                   <Metric label="Brains" value={String(n.brain_count)} />
                   <Metric label="Caps" value={String(n.capability_count)} />
                   <Metric label="Missions" value={String(n.active_missions)} />
-                  <Metric label="CPU" value={`${n.cpu_usage.toFixed(0)}%`} />
-                  <Metric label="Memory" value={`${n.memory_usage.toFixed(0)}%`} />
-                  <Metric label="Health" value={`${n.health_score.toFixed(0)}%`} />
+                  <Metric label="CPU" value={`${safeFixed(n?.cpu_usage, 0)}%`} />
+                  <Metric label="Memory" value={`${safeFixed(n?.memory_usage, 0)}%`} />
+                  <Metric label="Health" value={`${safeFixed(n?.health_score, 0)}%`} />
                 </div>
                 {n.issues.length > 0 && (
                   <div className="mt-2 text-[11px] text-rose-400">⚠ {n.issues.join("; ")}</div>
@@ -463,7 +464,7 @@ function BrainsTab() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{b.display_name || b.brain_id}</span>
                     <Badge tone={b.health >= 80 ? "ok" : b.health >= 50 ? "warn" : "danger"}>
-                      health {b.health.toFixed(0)}%
+                      health {safeFixed(b?.health, 0)}%
                     </Badge>
                   </div>
                   <div className="text-[11px] text-faint">{b.node_id} · {b.provider || "unknown"}</div>
@@ -474,7 +475,7 @@ function BrainsTab() {
                   ))}
                 </div>
                 <div className="mt-1 text-[10px] text-faint">
-                  latency {b.latency.toFixed(0)}ms · availability {(b.availability * 100).toFixed(0)}% · synced {b.last_synced.slice(0, 19)}
+                  latency {safeFixed(b?.latency, 0)}ms · availability {safeFixed((safeNum(b?.availability) * 100), 0)}% · synced {safeStr(b?.last_synced).slice(0, 19)}
                 </div>
               </div>
             ))}

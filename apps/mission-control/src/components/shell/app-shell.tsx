@@ -10,6 +10,7 @@ import { NAV } from "./nav";
 import { ActiveViewCtx } from "@/lib/active-view";
 import { LoadingScreen } from "@/components/ui/primitives";
 import { useSidebar } from "@/lib/use-sidebar";
+import { BackendStatus } from "@/components/backend-status";
 import { ChevronLeft, ChevronRight, Bot, Brain, Activity, Settings, Shield, Cpu, HardDrive, MemoryStick } from "lucide-react";
 
 const storeConnect = () => useStore.getState().connect();
@@ -125,6 +126,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Main Content */}
         <main className="grid h-screen grid-rows-[auto_1fr_auto] overflow-hidden">
+          {/* Backend offline indicator */}
+          <BackendStatus />
           {/* Navbar */}
           <div className="flex h-14 items-center justify-between border-b border-border/30 px-4">
             <div className="flex items-center gap-2">

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum, safeStr, safeArr, safeLen } from "@/lib/safe";
 import type { ReleaseInfo, UpdateManifest, UpdateHistoryRecord } from "@/lib/desktop-types";
 
 export default function DesktopUpdates() {

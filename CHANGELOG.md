@@ -4,6 +4,39 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-rc10] — 2026-07-30 — Production Hardening: React Crash Prevention + Offline Mode
+
+### Fixed — Frontend Runtime Safety
+- **React crash prevention** — Added `src/lib/safe.ts` utility module with `safeFixed()`, `safeNum()`, `safeStr()`, `safeArr()`, `safeLen()`, `safePercent()`, `safeMs()`, `safeKeys()`, `safeValues()`, `safeEntries()` functions that return safe defaults (0, "", []) for undefined/null/NaN inputs. Applied to all dashboard views to prevent "Cannot read properties of undefined (reading 'toFixed')" and "Cannot read properties of undefined (reading 'length')" crashes.
+- **Discovery Dashboard** — Fixed "Found undefined engines, registered undefined" rendering. API response fields (`engines_found`, `engines_registered`) are now guarded with `?? 0` nullish coalescing.
+- **Ecosystem Dashboard** — All `.toFixed()` calls on potentially undefined stats (health_score, average_health, average_latency, trust_score, success_rate, priority, confidence, expected_impact, bid_score) now use `safeFixed()`.
+- **Cluster Dashboard** — All `.toFixed()` calls on node metrics (cpu_usage, memory_usage, health_score, latency_ms, cluster_utilization, average_node_health, average_network_latency) and remote brain metrics (health, latency, availability) now use `safeFixed()`.
+- **Evolution Dashboard** — All `.toFixed()` calls on readiness/readiness_score/regression_risk/expected_impact/confidence/risk_score/overall_score now use `safeFixed()`.
+- **AI Brain view** — Brain metrics (energy, cpu, temperature, memory, cpu_usage, memory_usage, latency) now use `safeFixed()` + `safeNum()`.
+- **Brains Registry view** — Same metrics guarded.
+- **Mission Overview** — Latency `.toFixed()` calls guarded.
+- **System Monitor** — Metric `.toFixed()` calls guarded.
+- **Runtime Dashboard** — Memory/cost `.toFixed()` calls guarded.
+
+### Fixed — API Layer Safety
+- **`api.ts`** — All 4 HTTP methods (`get`, `post`, `put`, `del`) now NEVER throw. HTTP errors (4xx/5xx) return safe defaults (`[]`, `{ success: false }`) instead of re-throwing. Network errors return `{ status: "offline" }` for health/status endpoints, `[]` for list endpoints, and `{ success: false, status: "offline" }` for POST/PUT/DELETE. No uncaught exceptions possible.
+
+### Fixed — WebSocket Silent Reconnect
+- **`store.ts`** — Removed all `console.log`, `console.warn`, and `console.error` calls from the WebSocket reconnection logic. Reconnect is now completely silent (no console spam). Exponential backoff (3s → 6s → 12s → 24s → 30s cap) with ±10% jitter is preserved. Max retries stays at 999 (effectively unlimited for desktop runtime).
+
+### Added — Backend Offline Indicator
+- **`src/components/backend-status.tsx`** — New component that shows a non-intrusive amber banner ("Backend Offline — Retrying...") at the top of the page when the WebSocket is disconnected. Renders nothing when connected (zero visual clutter). The application remains fully usable when offline — all API calls return safe defaults.
+- **`app-shell.tsx`** — `BackendStatus` component mounted in the app shell, visible on every page.
+
+### Verified
+- 4797 backend tests pass (0 regressions)
+- 22 frontend tests pass
+- All quality gates green: ruff format/check, ty check, npm lint/typecheck/test/build
+- All 17 subsystems STARTED (zero FAILED)
+- Browser E2E: all 7 nav views load with zero console errors, zero React crashes
+- Offline mode: backend killed → all views render without crashing → safe defaults displayed
+- WebSocket reconnect: silent exponential backoff, no console spam
+
 ## [1.0.0-rc9] — 2026-07-30 — Pre-Phase 17 Production Readiness Audit
 
 ### Fixed

@@ -33,24 +33,22 @@ const BASE = resolveBase();
 async function get<T>(path: string, fallback?: T): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, { headers: { accept: "application/json" } });
-    if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
-    return (await res.json()) as T;
-  } catch (e) {
-    if (fallback !== undefined) return fallback;
-    const errStr = String(e);
-    if (
-      errStr.includes("fetch") ||
-      errStr.includes("NetworkError") ||
-      errStr.includes("Failed to fetch") ||
-      errStr.includes("Load failed") ||
-      e instanceof TypeError
-    ) {
+    if (!res.ok) {
+      // HTTP error (4xx/5xx) — return safe default, never throw
+      if (fallback !== undefined) return fallback;
       if (path.includes("health") || path.includes("status")) {
         return { status: "offline", healthy: false, state: "offline", bus: "offline" } as unknown as T;
       }
       return [] as unknown as T;
     }
-    throw e;
+    return (await res.json()) as T;
+  } catch {
+    // Network error / JSON parse error — return safe default, never throw
+    if (fallback !== undefined) return fallback;
+    if (path.includes("health") || path.includes("status")) {
+      return { status: "offline", healthy: false, state: "offline", bus: "offline" } as unknown as T;
+    }
+    return [] as unknown as T;
   }
 }
 
@@ -61,21 +59,16 @@ async function post<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
       headers: { "content-type": "application/json", accept: "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`POST ${path} -> ${res.status}`);
-    return (await res.json()) as T;
-  } catch (e) {
-    if (fallback !== undefined) return fallback;
-    const errStr = String(e);
-    if (
-      errStr.includes("fetch") ||
-      errStr.includes("NetworkError") ||
-      errStr.includes("Failed to fetch") ||
-      errStr.includes("Load failed") ||
-      e instanceof TypeError
-    ) {
-      return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
+    if (!res.ok) {
+      // HTTP error — return safe default, never throw
+      if (fallback !== undefined) return fallback;
+      return { success: false, status: "error", error: `HTTP ${res.status}` } as unknown as T;
     }
-    throw e;
+    return (await res.json()) as T;
+  } catch {
+    // Network error — return safe default, never throw
+    if (fallback !== undefined) return fallback;
+    return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
   }
 }
 
@@ -86,42 +79,28 @@ async function put<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
       headers: { "content-type": "application/json", accept: "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`PUT ${path} -> ${res.status}`);
-    return (await res.json()) as T;
-  } catch (e) {
-    if (fallback !== undefined) return fallback;
-    const errStr = String(e);
-    if (
-      errStr.includes("fetch") ||
-      errStr.includes("NetworkError") ||
-      errStr.includes("Failed to fetch") ||
-      errStr.includes("Load failed") ||
-      e instanceof TypeError
-    ) {
-      return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
+    if (!res.ok) {
+      if (fallback !== undefined) return fallback;
+      return { success: false, status: "error", error: `HTTP ${res.status}` } as unknown as T;
     }
-    throw e;
+    return (await res.json()) as T;
+  } catch {
+    if (fallback !== undefined) return fallback;
+    return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
   }
 }
 
 async function del<T>(path: string, fallback?: T): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
-    if (!res.ok) throw new Error(`DELETE ${path} -> ${res.status}`);
-    return (await res.json()) as T;
-  } catch (e) {
-    if (fallback !== undefined) return fallback;
-    const errStr = String(e);
-    if (
-      errStr.includes("fetch") ||
-      errStr.includes("NetworkError") ||
-      errStr.includes("Failed to fetch") ||
-      errStr.includes("Load failed") ||
-      e instanceof TypeError
-    ) {
-      return { deleted: "offline", success: false } as unknown as T;
+    if (!res.ok) {
+      if (fallback !== undefined) return fallback;
+      return { deleted: false, success: false } as unknown as T;
     }
-    throw e;
+    return (await res.json()) as T;
+  } catch {
+    if (fallback !== undefined) return fallback;
+    return { deleted: false, success: false } as unknown as T;
   }
 }
 

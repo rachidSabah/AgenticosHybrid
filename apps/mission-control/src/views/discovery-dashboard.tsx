@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { useStore } from "@/lib/store";
 import type {
   DiscoveryCacheEntry,
@@ -84,7 +85,9 @@ function DiscoveryDashboardTab() {
     setScanResult(null);
     try {
       const result = await api.runDiscoveryScan();
-      setScanResult(`Found ${result.engines_found} engines, registered ${result.engines_registered}`);
+      const found = result?.engines_found ?? 0;
+      const registered = result?.engines_registered ?? 0;
+      setScanResult(`Found ${found} engines, registered ${registered}`);
       load();
     } catch (err) {
       setScanResult(`Scan failed: ${err}`);
@@ -120,8 +123,8 @@ function DiscoveryDashboardTab() {
           <>
             <Stat label="Total Scans" value={stats.total_scans} />
             <Stat label="Engines Found" value={stats.total_engines_found} tone="accent" />
-            <Stat label="Avg Duration" value={`${(stats.avg_duration_ms ?? 0).toFixed(0)}ms`} />
-            <Stat label="Failure Rate" value={`${((stats.failure_rate ?? 0) * 100).toFixed(1)}%`} tone={(stats.failure_rate ?? 0) > 0.1 ? "warn" : "ok"} />
+            <Stat label="Avg Duration" value={`${safeFixed(stats?.avg_duration_ms, 0)}ms`} />
+            <Stat label="Failure Rate" value={`${safeFixed((safeNum(stats?.failure_rate) * 100), 1)}%`} tone={safeNum(stats?.failure_rate) > 0.1 ? "warn" : "ok"} />
           </>
         )}
       </div>
@@ -263,7 +266,7 @@ function DiscoveryHistoryTab() {
                 <span className="w-8 text-faint">{i + 1}</span>
                 <span className="w-32 truncate font-mono">{h.profile_name}</span>
                 <span className="w-20 text-faint">{new Date(h.started_at).toLocaleTimeString()}</span>
-                <span className="w-16 tabular-nums text-faint">{h.duration_ms.toFixed(0)}ms</span>
+                <span className="w-16 tabular-nums text-faint">{safeFixed(h?.duration_ms, 0)}ms</span>
                 <span className="w-14 text-right tabular-nums">{h.engines_found}</span>
                 <span className="w-14 text-right tabular-nums" style={{ color: h.providers_failed ? "var(--warn)" : undefined }}>
                   {h.providers_failed}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum } from "@/lib/safe";
 
 /**
  * Phase 17 — Evolution Dashboard.
@@ -181,15 +182,15 @@ function OverviewTab() {
               <div className="flex-1">
                 <div className="text-xs text-faint">Readiness Score</div>
                 <div className="mt-1 h-2 w-full rounded-full bg-surface/40">
-                  <div className="h-2 rounded-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500" style={{ width: `${(liveReadiness.readiness_score * 100).toFixed(0)}%` }} />
+                  <div className="h-2 rounded-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500" style={{ width: `${safeFixed((safeNum(liveReadiness?.readiness_score) * 100), 0)}%` }} />
                 </div>
-                <div className="mt-1 text-[11px] text-faint">{(liveReadiness.readiness_score * 100).toFixed(1)}%</div>
+                <div className="mt-1 text-[11px] text-faint">{safeFixed((safeNum(liveReadiness?.readiness_score) * 100), 1)}%</div>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <Metric label="Active" value={String(liveReadiness.active_improvements)} />
               <Metric label="Pending" value={String(liveReadiness.pending_validations)} />
-              <Metric label="Regression Risk" value={`${(liveReadiness.regression_risk * 100).toFixed(0)}%`} />
+              <Metric label="Regression Risk" value={`${safeFixed((safeNum(liveReadiness?.regression_risk) * 100), 0)}%`} />
               <Metric label="Avg Impact" value={`${((liveStats?.average_impact ?? 0) * 100).toFixed(0)}%`} />
             </div>
             {liveReadiness.issues.length > 0 && (
@@ -299,9 +300,9 @@ function ImprovementsTab() {
                   <Badge tone={imp.status === "applied" ? "ok" : imp.status === "rejected" ? "danger" : imp.status === "validated" || imp.status === "approved" ? "warn" : "default"}>{imp.status}</Badge>
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-                  <Metric label="Impact" value={`${(imp.expected_impact * 100).toFixed(0)}%`} />
-                  <Metric label="Confidence" value={`${(imp.confidence * 100).toFixed(0)}%`} />
-                  <Metric label="Risk" value={`${(imp.risk_score * 100).toFixed(0)}%`} />
+                  <Metric label="Impact" value={`${safeFixed((safeNum(imp?.expected_impact) * 100), 0)}%`} />
+                  <Metric label="Confidence" value={`${safeFixed((safeNum(imp?.confidence) * 100), 0)}%`} />
+                  <Metric label="Risk" value={`${safeFixed((safeNum(imp?.risk_score) * 100), 0)}%`} />
                 </div>
               </div>
             ))}
@@ -351,7 +352,7 @@ function SafetyTab() {
                   <span className="text-xs font-mono">{h.improvement_id}</span>
                   <Badge tone={h.approved ? "ok" : "danger"}>{h.overall_result}</Badge>
                 </div>
-                <div className="mt-1 text-[11px] text-faint">Score: {(h.overall_score * 100).toFixed(0)}%</div>
+                <div className="mt-1 text-[11px] text-faint">Score: {safeFixed((safeNum(h?.overall_score) * 100), 0)}%</div>
                 {h.blocking_issues.length > 0 && (
                   <div className="mt-1 text-[11px] text-rose-400">⚠ {h.blocking_issues.join("; ")}</div>
                 )}
@@ -406,7 +407,7 @@ function SchedulerTab() {
                   <span className="text-xs font-medium">{item.title}</span>
                   <Badge tone={item.priority === "critical" ? "danger" : item.priority === "high" ? "warn" : "default"}>{item.priority}</Badge>
                 </div>
-                <div className="mt-1 text-[10px] text-faint">risk: {(item.risk_score * 100).toFixed(0)}%</div>
+                <div className="mt-1 text-[10px] text-faint">risk: {safeFixed((safeNum(item?.risk_score) * 100), 0)}%</div>
               </div>
             ))}
           </div>
@@ -516,7 +517,7 @@ function KnowledgeTab() {
               <div key={s.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{s.topic}</span>
-                  <Badge tone={s.confidence > 0.6 ? "ok" : "warn"}>conf {(s.confidence * 100).toFixed(0)}%</Badge>
+                  <Badge tone={s.confidence > 0.6 ? "ok" : "warn"}>conf {safeFixed((safeNum(s?.confidence) * 100), 0)}%</Badge>
                 </div>
                 <div className="mt-1 text-[11px] text-faint">{s.summary}</div>
                 {s.key_insights.length > 0 && (

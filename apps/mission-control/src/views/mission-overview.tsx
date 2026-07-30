@@ -6,6 +6,7 @@ import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives
 import { useStore, selectMetrics } from "@/lib/store";
 import { useShallow } from "zustand/react/shallow";
 import { api } from "@/lib/api";
+import { safeFixed, safeNum, safeStr, safeArr, safeLen } from "@/lib/safe";
 import { SystemControl } from "@/components/system-control";
 import type { ProviderHealthRecord, CapabilityInfo, AuditEntry } from "@/lib/types";
 
@@ -62,7 +63,7 @@ function AgentAircraft({
             <StatusDot status={status} pulse={isHealthy} />
           </div>
           <div className="flex items-center gap-3 text-[9px] text-faint/70">
-            <span className="tabular-nums">{latency.toFixed(0)}ms</span>
+            <span className="tabular-nums">{safeFixed(latency, 0)}ms</span>
             {taskCount > 0 && <span>{taskCount} task{taskCount !== 1 ? "s" : ""}</span>}
             <span className="text-[8px]"><Badge tone={isHealthy ? "ok" : isDegraded ? "warn" : "danger"}>
               {status}
@@ -246,7 +247,7 @@ export function MissionOverview() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-[11px] font-medium leading-tight uppercase tracking-wider">{p.provider}</div>
-                  <div className="text-[9px] text-faint/60 truncate">Command Node · {p.latency_ms.toFixed(0)}ms</div>
+                  <div className="text-[9px] text-faint/60 truncate">Command Node · {safeFixed(p?.latency_ms, 0)}ms</div>
                 </div>
                 <StatusDot status={p.status} pulse={p.status === "healthy"} />
               </motion.div>

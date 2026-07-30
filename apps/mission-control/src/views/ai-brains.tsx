@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { motion, AnimatePresence } from "framer-motion";
 import { Panel, Stat, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
@@ -286,19 +287,19 @@ export function AIBrains() {
                       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-faint">
                         <div className="flex items-center gap-1.5">
                           <Zap size={12} />
-                          <span>{brain.energy.toFixed(0)}%</span>
+                          <span>{safeFixed(brain?.energy, 0)}%</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Cpu size={12} />
-                          <span>{brain.cpu.toFixed(0)}%</span>
+                          <span>{safeFixed(brain?.cpu, 0)}%</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <MemoryStick size={12} />
-                          <span>{(brain.memory / 1000).toFixed(1)}GB</span>
+                          <span>{safeFixed((safeNum(brain?.memory) / 1000), 1)}GB</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Thermometer size={12} />
-                          <span>{brain.temperature.toFixed(0)}°C</span>
+                          <span>{safeFixed(brain?.temperature, 0)}°C</span>
                         </div>
                       </div>
 
@@ -309,7 +310,7 @@ export function AIBrains() {
                             style={{ width: `${brain.energy}%`, backgroundColor: statusColor }}
                           />
                         </div>
-                        <span className="text-[9px] font-medium">{brain.energy.toFixed(0)}%</span>
+                        <span className="text-[9px] font-medium">{safeFixed(brain?.energy, 0)}%</span>
                       </div>
 
                       {isExpanded && (
@@ -390,7 +391,7 @@ function BrainDetails({ brain }: { brain?: BrainNode }) {
         </div>
         <div>
           <div className="font-medium">Energy</div>
-          <div>{brain.energy.toFixed(0)}%</div>
+          <div>{safeFixed(brain?.energy, 0)}%</div>
         </div>
         <div>
           <div className="font-medium">Neurons</div>
@@ -402,15 +403,15 @@ function BrainDetails({ brain }: { brain?: BrainNode }) {
         </div>
         <div>
           <div className="font-medium">CPU</div>
-          <div>{brain.cpu.toFixed(0)}%</div>
+          <div>{safeFixed(brain?.cpu, 0)}%</div>
         </div>
         <div>
           <div className="font-medium">Memory</div>
-          <div>{(brain.memory / 1000).toFixed(1)}GB</div>
+          <div>{safeFixed((safeNum(brain?.memory) / 1000), 1)}GB</div>
         </div>
         <div>
           <div className="font-medium">Temperature</div>
-          <div>{brain.temperature.toFixed(0)}°C</div>
+          <div>{safeFixed(brain?.temperature, 0)}°C</div>
         </div>
         <div>
           <div className="font-medium">Last Pulse</div>
