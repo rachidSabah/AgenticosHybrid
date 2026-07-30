@@ -24,6 +24,7 @@ import {
   MessageSquarePlus,
   Zap,
   Sparkles,
+  Cloud,
 } from "lucide-react";
 
 export interface NavItem {
@@ -72,6 +73,8 @@ export const NAV: NavItem[] = [
   { id: "runtime", label: "Runtime Dashboard", hint: "7", icon: Terminal, group: "desktop" },
   // Phase 15 — Autonomous Agent Ecosystem
   { id: "ecosystem", label: "Ecosystem", hint: "E", icon: Sparkles, group: "core" },
+  // Phase 16 — Distributed Runtime Federation
+  { id: "cluster", label: "Cluster Federation", hint: "F", icon: Cloud, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

@@ -6325,6 +6325,193 @@ def create_app(platform: Platform) -> FastAPI:
         ec = _ecosystem_controller()
         return ec.manager.marketplace.stats()
 
+    # ── Phase 16: Distributed Runtime Federation ───────────────────────
+    # All endpoints are LIVE — they read directly from ClusterController
+    # which derives its state from BrainRegistry + EventBus. Single-node
+    # deployments return a cluster of size 1 (the local node).
+
+    def _cluster_controller():
+        cc = getattr(platform, "cluster_controller", None)
+        if cc is None:
+            raise HTTPException(503, detail="ClusterController not available")
+        return cc
+
+    @app.get("/api/cluster/status")
+    async def cluster_status() -> dict:
+        cc = getattr(platform, "cluster_controller", None)
+        if cc is None:
+            return {
+                "started": False,
+                "events_processed": 0,
+                "subscriptions": 0,
+                "local_node_id": "",
+                "is_leader": False,
+                "cluster_id": "default",
+                "node_count": 0,
+                "remote_brain_count": 0,
+            }
+        return cc.status()
+
+    @app.get("/api/cluster/nodes")
+    async def cluster_nodes() -> list[dict]:
+        cc = _cluster_controller()
+        return [n.to_dict() for n in cc.topology.list_nodes()]
+
+    @app.get("/api/cluster/topology")
+    async def cluster_topology() -> dict:
+        cc = _cluster_controller()
+        return cc.topology.to_dict()
+
+    @app.get("/api/cluster/brains")
+    async def cluster_brains() -> dict:
+        cc = _cluster_controller()
+        return cc.distributed_registry.to_dict()
+
+    @app.get("/api/cluster/missions")
+    async def cluster_missions() -> dict:
+        """List active missions across the cluster (from scheduler decisions)."""
+        cc = _cluster_controller()
+        return {
+            "decisions": cc.scheduler.list_decisions(limit=50),
+            "stats": cc.scheduler.stats(),
+        }
+
+    @app.get("/api/cluster/failover")
+    async def cluster_failover_list() -> dict:
+        cc = _cluster_controller()
+        return cc.failover.to_dict()
+
+    @app.get("/api/cluster/scheduler")
+    async def cluster_scheduler() -> dict:
+        cc = _cluster_controller()
+        return cc.scheduler.stats()
+
+    @app.get("/api/cluster/dashboard")
+    async def cluster_dashboard() -> dict:
+        cc = _cluster_controller()
+        return cc.dashboard()
+
+    @app.get("/api/cluster/statistics")
+    async def cluster_statistics() -> dict:
+        cc = _cluster_controller()
+        return cc.dashboard()["statistics"]
+
+    @app.post("/api/cluster/discover")
+    async def cluster_discover() -> dict:
+        cc = _cluster_controller()
+        nodes = await cc.discover_nodes()
+        return {"discovered": len(nodes), "nodes": nodes}
+
+    @app.post("/api/cluster/rebalance")
+    async def cluster_rebalance() -> dict:
+        cc = _cluster_controller()
+        return await cc.rebalance()
+
+    @app.post("/api/cluster/failover")
+    async def cluster_failover_trigger(body: dict) -> dict:
+        cc = _cluster_controller()
+        brain_id = str(body.get("brain_id", ""))
+        node_id = str(body.get("node_id", ""))
+        mission_id = str(body.get("mission_id", ""))
+        if not brain_id or not node_id:
+            raise HTTPException(400, detail="brain_id and node_id required")
+        action = await cc.failover.trigger_manual_failover(
+            brain_id=brain_id, node_id=node_id, mission_id=mission_id
+        )
+        return action.to_dict()
+
+    @app.post("/api/cluster/synchronize")
+    async def cluster_synchronize() -> dict:
+        cc = _cluster_controller()
+        return await cc.synchronize()
+
+    @app.post("/api/cluster/elect-leader")
+    async def cluster_elect_leader(body: dict | None = None) -> dict:
+        cc = _cluster_controller()
+        candidates = None
+        if body and isinstance(body, dict):
+            raw = body.get("candidates")
+            if isinstance(raw, list):
+                candidates = [str(c) for c in raw]
+        leader = await cc.elect_leader(candidates)
+        return {"leader_id": leader, "elected": leader is not None}
+
+    @app.post("/api/cluster/rebuild")
+    async def cluster_rebuild() -> dict:
+        cc = _cluster_controller()
+        return await cc.rebuild()
+
+    # ── Phase 16: Cluster membership management (extension endpoints) ──
+    # These let external callers (or a cluster bootstrap script) register
+    # remote nodes so the federation manager can include them in topology.
+
+    @app.post("/api/cluster/nodes/add")
+    async def cluster_add_node(body: dict) -> dict:
+        cc = _cluster_controller()
+        node_id = str(body.get("node_id") or body.get("id") or "")
+        host = str(body.get("host", "localhost"))
+        port = int(body.get("port", 8000))
+        if not node_id:
+            node_id = f"node-{host}-{port}"
+        node = await cc.federation.add_remote_node(
+            node_id=node_id,
+            host=host,
+            port=port,
+            base_url=str(body.get("base_url", "")),
+            display_name=str(body.get("display_name", "")),
+            version=str(body.get("version", "1.0.0")),
+            metadata=body.get("metadata"),
+        )
+        return node.to_dict()
+
+    @app.post("/api/cluster/nodes/{node_id}/remove")
+    async def cluster_remove_node(node_id: str, body: dict | None = None) -> dict:
+        cc = _cluster_controller()
+        reason = str((body or {}).get("reason", ""))
+        removed = await cc.federation.remove_node(node_id, reason)
+        return {"removed": removed, "node_id": node_id}
+
+    @app.post("/api/cluster/consensus")
+    async def cluster_consensus(body: dict) -> dict:
+        """Run a consensus round. Body should contain proposal, votes, type."""
+        cc = _cluster_controller()
+        from agentic_os.core.cluster.domain import ConsensusVote
+
+        proposal = str(body.get("proposal", ""))
+        consensus_type = body.get("consensus_type", "majority")
+        raw_votes = body.get("votes", []) or []
+        votes: list[ConsensusVote] = []
+        for v in raw_votes:
+            votes.append(
+                ConsensusVote(
+                    node_id=str(v.get("node_id", "")),
+                    vote=str(v.get("vote", "abstain")),
+                    weight=float(v.get("weight", 1.0)),
+                    confidence=float(v.get("confidence", 1.0)),
+                    rationale=str(v.get("rationale", "")),
+                )
+            )
+        result = cc.consensus.run_consensus(
+            proposal=proposal,
+            votes=votes,
+            consensus_type=consensus_type,
+        )
+        # Publish event
+        try:
+            from agentic_os.domain.events import EventEnvelope
+
+            await platform.bus.publish(
+                EventEnvelope(
+                    type="cluster.consensus.completed",
+                    source="cluster.api",
+                    topic="cluster.consensus.completed",
+                    payload=result.to_dict(),
+                )
+            )
+        except Exception:
+            pass
+        return result.to_dict()
+
     return app
 
 

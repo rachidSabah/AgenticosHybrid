@@ -66,6 +66,14 @@ interface StoreState {
     evolutionStats: Record<string, unknown> | null;
     lastEventAt: number;
   } | null;
+  // Phase 16: Cluster federation snapshot — derived from cluster.* events
+  // and the /api/cluster/dashboard REST endpoint.
+  cluster: {
+    status: Record<string, unknown> | null;
+    topology: Record<string, unknown> | null;
+    statistics: Record<string, unknown> | null;
+    lastEventAt: number;
+  } | null;
 
   connect: () => void;
   disconnect: () => void;
@@ -80,6 +88,8 @@ interface StoreState {
   hydrate: () => Promise<void>;
   /** Phase 15: Fetch the ecosystem dashboard snapshot from REST. */
   hydrateEcosystem: () => Promise<void>;
+  /** Phase 16: Fetch the cluster dashboard snapshot from REST. */
+  hydrateCluster: () => Promise<void>;
 }
 
 const MAX_EVENTS = 400;
@@ -156,6 +166,9 @@ export const useStore = create<StoreState>((set, get) => ({
   // Phase 15: ecosystem snapshot — null until hydrateEcosystem() or the
   // first ecosystem.* WebSocket event populates it.
   ecosystem: null,
+  // Phase 16: cluster snapshot — null until hydrateCluster() or the
+  // first cluster.* WebSocket event populates it.
+  cluster: null,
   telemetry: {
     tasks: 0,
     agents: 0,
@@ -547,6 +560,46 @@ export const useStore = create<StoreState>((set, get) => ({
             ecosystem: next,
           };
         }
+        // ── Phase 16: Cluster federation events ─────────────────────
+        case "cluster.started":
+        case "cluster.updated":
+        case "cluster.node.joined":
+        case "cluster.node.left":
+        case "cluster.node.updated":
+        case "cluster.brain.discovered":
+        case "cluster.brain.removed":
+        case "cluster.scheduler.started":
+        case "cluster.scheduler.completed":
+        case "cluster.failover.started":
+        case "cluster.failover.completed":
+        case "cluster.consensus.completed":
+        case "cluster.topology.updated":
+        case "cluster.statistics.updated": {
+          const prevCluster = s.cluster ?? {
+            status: null,
+            topology: null,
+            statistics: null,
+            lastEventAt: 0,
+          };
+          const nextCluster = { ...prevCluster, lastEventAt: Date.now() };
+          if (e.topic === "cluster.started" || e.topic === "cluster.updated") {
+            nextCluster.status = p as Record<string, unknown>;
+          } else if (e.topic === "cluster.topology.updated") {
+            nextCluster.topology = p as Record<string, unknown>;
+          } else if (
+            e.topic === "cluster.statistics.updated"
+            || e.topic === "cluster.node.joined"
+            || e.topic === "cluster.node.left"
+            || e.topic === "cluster.node.updated"
+          ) {
+            // Node events include the node payload — keep topology slice fresh
+            nextCluster.status = p as Record<string, unknown>;
+          }
+          return {
+            events, notifications, agents, tasks, providers, telemetry,
+            cluster: nextCluster,
+          };
+        }
       }
 
       // Always clone telemetry to add the pulse
@@ -715,6 +768,29 @@ export const useStore = create<StoreState>((set, get) => ({
       // spamming the console when the ecosystem is intentionally disabled.
       if (get().ecosystem === null) {
         set({ ecosystem: null });
+      }
+    }
+  },
+  // Phase 16: Pull the live cluster snapshot from /api/cluster/dashboard.
+  hydrateCluster: async () => {
+    try {
+      const [dash, stats] = await Promise.all([
+        api.get<Record<string, unknown>>("/api/cluster/dashboard"),
+        api.get<Record<string, unknown>>("/api/cluster/statistics"),
+      ]);
+      set({
+        cluster: {
+          status: (dash.federation as Record<string, unknown>) ?? null,
+          topology: (dash.topology as Record<string, unknown>) ?? null,
+          statistics: stats ?? null,
+          lastEventAt: Date.now(),
+        },
+      });
+    } catch (e) {
+      // ClusterController may not be running (single-node deployment
+      // without federation). Silently leave cluster state as-is.
+      if (get().cluster === null) {
+        set({ cluster: null });
       }
     }
   },

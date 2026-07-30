@@ -160,6 +160,22 @@ _DASHBOARD_TOPICS = [
     "cognitive.improvement.generated",
     "cognitive.experience.recorded",
     "cognitive.objective.activated",
+    # Phase 16: Distributed Runtime Federation — cluster lifecycle, node
+    # membership, scheduler, failover, consensus, topology events.
+    "cluster.started",
+    "cluster.updated",
+    "cluster.node.joined",
+    "cluster.node.left",
+    "cluster.node.updated",
+    "cluster.brain.discovered",
+    "cluster.brain.removed",
+    "cluster.scheduler.started",
+    "cluster.scheduler.completed",
+    "cluster.failover.started",
+    "cluster.failover.completed",
+    "cluster.consensus.completed",
+    "cluster.topology.updated",
+    "cluster.statistics.updated",
 ]
 
 # Normalize the topic list to plain strings. The list above mixes

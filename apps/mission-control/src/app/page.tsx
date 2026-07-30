@@ -138,6 +138,11 @@ const EcosystemDashboard = lazyWithRetry(() =>
   import("@/views/ecosystem-dashboard").then((m) => ({ default: m.EcosystemDashboard }))
 );
 
+// Phase 16 — Distributed Runtime Federation
+const ClusterDashboard = lazyWithRetry(() =>
+  import("@/views/cluster-dashboard").then((m) => ({ default: m.ClusterDashboard }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
   governance: () => (
     <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
@@ -399,6 +404,14 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Ecosystem Dashboard" fallback={<ViewSkeleton title="Ecosystem Dashboard" />}>
       <Suspense fallback={<ViewSkeleton title="Ecosystem Dashboard" />}>
         <EcosystemDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  // Phase 16 — Distributed Runtime Federation
+  "cluster": () => (
+    <ErrorBoundary viewName="Cluster Federation" fallback={<ViewSkeleton title="Cluster Federation" />}>
+      <Suspense fallback={<ViewSkeleton title="Cluster Federation" />}>
+        <ClusterDashboard />
       </Suspense>
     </ErrorBoundary>
   ),

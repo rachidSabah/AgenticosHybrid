@@ -221,6 +221,8 @@ class Platform:
     swarm_coordinator: Any = None  # SwarmCoordinator | None
     # Phase 15: Autonomous Agent Ecosystem
     ecosystem_controller: Any = None  # EcosystemController | None
+    # Phase 16: Distributed Runtime Federation
+    cluster_controller: Any = None  # ClusterController | None
 
 
 class Kernel:
@@ -727,11 +729,45 @@ class Kernel:
             except Exception as exc:
                 _diag("Ecosystem", "FAILED", str(exc))
 
+            # ── Phase 16: Distributed Runtime Federation ──
+            _diag("Cluster", "STARTING")
+            try:
+                from agentic_os.core.cluster import ClusterController
+
+                # Use configured HTTP host/port for the local node identity
+                local_host = getattr(settings, "http_host", "localhost")
+                local_port = int(getattr(settings, "http_port", 8000))
+                self.cluster_controller = ClusterController(
+                    bus=self.bus,
+                    brain_registry=self.brain_registry,
+                    local_host=local_host,
+                    local_port=local_port,
+                    local_base_url=f"http://{local_host}:{local_port}",
+                    collaboration_network=(
+                        self.ecosystem_controller.manager.collaboration_network
+                        if self.ecosystem_controller is not None
+                        else None
+                    ),
+                )
+                await self.cluster_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.cluster_controller = self.cluster_controller
+                _diag("Cluster", "STARTED")
+            except Exception as exc:
+                _diag("Cluster", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 16: Stop Cluster Controller (stops first — depends on others)
+        if self.cluster_controller is not None:
+            try:
+                await self.cluster_controller.stop()
+            except Exception:
+                log.exception("Failed to stop ClusterController")
+            self.cluster_controller = None
         # Phase 15: Stop Ecosystem Controller (stops first — depends on others)
         if self.ecosystem_controller is not None:
             try:
