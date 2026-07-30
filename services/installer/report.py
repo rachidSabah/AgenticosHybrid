@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.installer.validator import ValidationReport, ValidationResult
-from core.logging import get_logger
+from agentic_os.infrastructure.logging import get_logger
 
 log = get_logger("installer.report")
 

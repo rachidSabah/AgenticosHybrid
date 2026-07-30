@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from core.logging import get_logger
+from agentic_os.infrastructure.logging import get_logger
 
 log = get_logger("installer.upgrade")
 

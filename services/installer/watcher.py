@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine
 
 from services.installer.provider_catalog import ProviderDef
-from core.logging import get_logger
+from agentic_os.infrastructure.logging import get_logger
 
 log = get_logger("installer.watcher")
 

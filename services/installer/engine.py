@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from core.logging import get_logger
+from agentic_os.infrastructure.logging import get_logger
 from services.installer.healer import HealReport, SelfHealingEngine
 from services.installer.provider_catalog import PROVIDER_CATALOG, ProviderDef
 from services.installer.report import InstallReport, InstallReportGenerator
