@@ -2231,16 +2231,6 @@ def create_app(platform: Platform) -> FastAPI:
             return []
         return sc.list_swarms()
 
-    @app.get("/api/swarm/{swarm_id}")
-    async def swarm_phase14_get(swarm_id: str) -> dict:
-        sc = getattr(platform, "swarm_coordinator", None)
-        if sc is None:
-            raise HTTPException(503, detail="SwarmCoordinator not available")
-        status = sc.get_swarm_status(swarm_id)
-        if "error" in status:
-            raise HTTPException(404, detail=status["error"])
-        return status
-
     @app.get("/api/swarm/members")
     async def swarm_phase14_members(swarm_id: str = "") -> list[dict]:
         sc = getattr(platform, "swarm_coordinator", None)
@@ -2254,6 +2244,19 @@ def create_app(platform: Platform) -> FastAPI:
         if sc is None:
             return []
         return sc.get_history(limit=limit)
+
+    # NOTE: /api/swarm/{swarm_id} must be registered AFTER all static
+    # /api/swarm/<literal> routes (list, members, history, create, etc.)
+    # otherwise FastAPI matches the literal path segment as a swarm_id.
+    @app.get("/api/swarm/{swarm_id}")
+    async def swarm_phase14_get(swarm_id: str) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        status = sc.get_swarm_status(swarm_id)
+        if "error" in status:
+            raise HTTPException(404, detail=status["error"])
+        return status
 
     @app.post("/api/swarm/create")
     async def swarm_phase14_create(body: dict) -> dict:

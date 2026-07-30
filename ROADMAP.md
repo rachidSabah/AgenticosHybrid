@@ -29,6 +29,14 @@
 | v0.9.3 | 2026-07-20 | Phase 4 M6 P3 — Hardening | DesktopHardeningManager: startup validation, integrity checks, memory leak detection, thread monitoring, self-diagnostics, recovery mode, heal/repair, shutdown planning |
 | v0.9.4 | 2026-07-20 | Phase 4 M6 — Stabilization | Full desktop runtime integration, keyboard shortcuts, command palette, global search, lifecycle management |
 | v1.0.0-rc1 | 2026-07-20 | Release Candidate | All Phase 1–5 features stabilized, 1500+ tests passing, zero known regressions |
+| v1.0.0-rc2 | 2026-07-29 | Phase 6 — Runtime Discovery & AI Brain Registry | LocalDiscoveryService, BrainRegistry (canonical source of truth), BrainDiscoveryBridge, DashboardBroadcaster WebSocket fan-out, 14 brain.* events, Mission Control store synchronization, live runtime add/remove via WebSocket |
+| v1.0.0-rc3 | 2026-07-29 | Phase 11 — Executive Intelligence | ExecutiveController (10 subscriptions), GoalManager (12 ops, 10 states), DecisionEngine (7-factor scoring + risk_factors + reasoning), ReflectionEngine (12-field analysis), ExecutiveMemory |
+| v1.0.0-rc4 | 2026-07-29 | Phase 12 — Cognitive Intelligence | CognitiveController, WorldModel, KnowledgeGraph (BFS), StrategicPlanner, PredictionEngine, ExperienceReplay, EvaluationEngine, ImprovementPlanner, ObjectiveManager |
+| v1.0.0-rc5 | 2026-07-29 | Phase 13 — Executive Orchestration | ExecutiveOrchestrator (world state, policies, resource allocation, mission supervision), 9 API endpoints, 12 executive.* events |
+| v1.0.0-rc6 | 2026-07-29 | Phase 14 — Swarm Execution | SwarmCoordinator, ConsensusManager (4 types), SharedMissionMemory, DynamicRoleAssigner (8 roles), automatic failure recovery, 12 swarm.* events |
+| v1.0.0-rc7 | 2026-07-30 | Phase 15 — Autonomous Ecosystem | EcosystemManager, CapabilityGraph (5 nodes/6 edges), CollaborationNetwork (EMA trust), EvolutionEngine (4 analyzers), TaskMarketplace (deterministic 6-factor bid selection), continuous self-optimization, 16 ecosystem.* events |
+| v1.0.0-rc8 | 2026-07-30 | Phase 16 — Distributed Federation | ClusterController, ClusterFederationManager, DistributedBrainRegistry, GlobalMissionScheduler (9-factor), ClusterConsensusManager (5 types), FailoverEngine (5 triggers/5 actions), ClusterTopology, FederatedKnowledgeGraph, 14 cluster.* events, single-node backward compatible |
+| v1.0.0-rc9 | 2026-07-30 | Pre-Phase 17 — Production Readiness Audit | Route ordering fix (swarm/history), version consistency (all files → rc9), documentation modernization (README/ARCHITECTURE/ROADMAP/CHANGELOG), cross-platform validation, 4733 tests passing, zero regressions |
 
 ### Cumulative Test Count
 
@@ -44,6 +52,14 @@ v0.7.0  → 1526 tests
 v0.8.0  → 1540+ tests
 v0.9.4  → 1550+ tests
 v1.0.0-rc1 → 1550+ tests
+v1.0.0-rc2 → 3600+ tests (Phase 6 discovery + brain registry)
+v1.0.0-rc3 → 4200+ tests (Phase 11 executive intelligence)
+v1.0.0-rc4 → 4400+ tests (Phase 12 cognitive intelligence)
+v1.0.0-rc5 → 4450+ tests (Phase 13 executive orchestration)
+v1.0.0-rc6 → 4550+ tests (Phase 14 swarm execution)
+v1.0.0-rc7 → 4600+ tests (Phase 15 autonomous ecosystem)
+v1.0.0-rc8 → 4700+ tests (Phase 16 distributed federation)
+v1.0.0-rc9 → 4733 tests (Pre-Phase 17 production audit)
 ```
 
 ---

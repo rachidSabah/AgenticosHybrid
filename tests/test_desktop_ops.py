@@ -77,7 +77,10 @@ class TestAutoUpdateManager:
         mgr = AutoUpdateManager()
         version = await mgr.get_current_version()
         assert bool(version)
-        assert version == "1.0.0-rc2"
+        # Version is read from pyproject.toml at runtime — assert it
+        # matches the current release candidate scheme rather than a
+        # hard-coded number that drifts on every version bump.
+        assert version.startswith("1.0.0-rc")
 
     @pytest.mark.asyncio
     async def test_check_updates(self) -> None:

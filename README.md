@@ -1,6 +1,6 @@
-# AgenticOS v1.0.0-rc1
+# AgenticOS v1.0.0-rc9
 
-A **desktop operating system for AI agents** that lets non-technical users install, run, and use local AI models, MCP tools, and plugins without ever touching a terminal.
+A **local-first, event-bus-driven AI Agent Operating System** that orchestrates autonomous agents, swarms, and distributed runtimes across a single node or an entire cluster — with a polished desktop runtime, an immersive Mission Control dashboard, and a fully autonomous self-improving ecosystem.
 
 [GitHub](https://github.com/rachidSabah/AgenticosHybrid) | [Changelog](CHANGELOG.md) | [Architecture](ARCHITECTURE.md) | [Security](SECURITY.md) | [Roadmap](ROADMAP.md)
 
@@ -34,6 +34,16 @@ Built on a hexagonal (clean) architecture with an event bus at its core, Agentic
 - **Learning & Optimization** — Performance tracking, model selection, prompt optimization, routing optimization, and cost analysis.
 - **Diagnostics** — System health checks, integrity verification, memory leak detection, thread monitoring, and performance metrics.
 - **Portable Mode** — Run AgenticOS from a USB drive without installation.
+
+### Autonomous Intelligence Layers
+
+On top of the core platform, AgenticOS ships five autonomous intelligence layers that turn the OS into a self-organizing, self-optimizing agent ecosystem:
+
+- **Executive Intelligence (Phase 11)** — `ExecutiveController` with `GoalManager` (12 operations, 10 goal states), `DecisionEngine` (7-factor runtime selection with risk_factors + reasoning), `ReflectionEngine` (12-field post-mission analysis), and `ExecutiveOrchestrator` (world state, policies, resource allocation, supervision).
+- **Cognitive Intelligence (Phase 12)** — `CognitiveController` with `WorldModel`, `KnowledgeGraph` (BFS traversal + impact analysis), `StrategicPlanner`, `PredictionEngine`, `ExperienceReplay`, `EvaluationEngine`, `ImprovementPlanner`, `ObjectiveManager`. Subscribes to `brain.*` + `mission.*` events for autonomous cognitive feedback.
+- **Swarm Execution (Phase 14)** — `SwarmCoordinator` with dynamic team formation, `ConsensusManager` (majority/weighted/confidence/leader-override), `SharedMissionMemory`, `DynamicRoleAssigner` (8 roles: leader/planner/researcher/coder/reviewer/validator/executor/observer), and automatic failure recovery (brain.removed → swarm detects → replaces).
+- **Autonomous Ecosystem (Phase 15)** — `EcosystemManager` with `CapabilityGraph` (Brain/Capability/Mission/Goal/Swarm nodes + 6 edge types), `CollaborationNetwork` (EMA-weighted trust + confidence), `EvolutionEngine` (4 analyzers: capability gaps, routing, collaboration, performance), `TaskMarketplace` (deterministic 6-factor bid selection). Every completed mission auto-triggers a self-optimization cycle (Reflection → Evaluation → Prediction → Learning → Capability → Evolution → Executive → Swarm).
+- **Distributed Federation (Phase 16)** — `ClusterController` with `ClusterFederationManager` (remote node discovery, heartbeat, leader election), `DistributedBrainRegistry` (extends BrainRegistry with remote brains), `GlobalMissionScheduler` (deterministic 9-factor cluster-wide scoring), `ClusterConsensusManager` (5 consensus types: majority/weighted/confidence/leader/quorum), `FailoverEngine` (5 triggers → 5 actions), `ClusterTopology` (live graph of hosts/connections), `FederatedKnowledgeGraph` (cross-host edges + global impact analysis). Fully backward compatible — single-node deployments auto-elect the local node as leader.
 
 ## Architecture
 
@@ -556,10 +566,101 @@ The WebSocket streams every EventBus event in real time, including:
 - Memory operations
 - Security authorization decisions
 - MCP server lifecycle events
-- Swarm orchestration events
+- Swarm orchestration events (`swarm.*`)
 - Desktop runtime events
+- Executive intelligence events (`executive.*`)
+- Cognitive intelligence events (`cognitive.*`)
+- Ecosystem events (`ecosystem.*` — 16 topics)
+- Cluster federation events (`cluster.*` — 14 topics)
+- Brain lifecycle events (`brain.*` — 14 topics)
 
 All messages are JSON-formatted `EventEnvelope` objects.
+
+### Autonomous Intelligence APIs
+
+The Phase 11–16 layers expose their own REST namespaces. All endpoints return live runtime data derived from `BrainRegistry` + `EventBus`.
+
+#### Executive (Phase 11)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/executive/status` | Controller status |
+| GET/POST | `/api/executive/goals` | List / create goals |
+| POST | `/api/executive/goals/{id}/{action}` | activate / cancel / suspend / resume / reprioritize / archive |
+| GET | `/api/executive/decisions` | List decisions |
+| POST | `/api/executive/decisions/select` | Run decision engine |
+| GET | `/api/executive/reflections` | List reflections |
+| GET | `/api/executive/metrics` | Executive metrics |
+
+#### Cognitive (Phase 12)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cognitive/status` | Controller status |
+| GET | `/api/cognitive/world` | World model snapshot |
+| GET | `/api/cognitive/graph` | Knowledge graph |
+| GET/POST | `/api/cognitive/objectives` | List / create objectives |
+| GET | `/api/cognitive/predictions` | List predictions |
+| POST | `/api/cognitive/predict` | Make a prediction |
+| GET | `/api/cognitive/improvements` | List improvement plans |
+
+#### Swarm (Phase 14)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/swarm/status` | Coordinator status |
+| GET | `/api/swarm/list` | List swarms |
+| GET | `/api/swarm/{swarm_id}` | Swarm status |
+| GET | `/api/swarm/members` | Swarm members |
+| GET | `/api/swarm/history` | Swarm history |
+| POST | `/api/swarm/create` | Form a new swarm |
+| POST | `/api/swarm/execute` | Execute a swarm mission |
+| POST | `/api/swarm/rebalance` | Rebalance swarm members |
+| POST | `/api/swarm/consensus` | Run a consensus vote |
+| POST | `/api/swarm/disband` | Disband a swarm |
+
+#### Ecosystem (Phase 15)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/ecosystem/status` | Controller status |
+| GET | `/api/ecosystem/health` | Ecosystem health snapshot |
+| GET | `/api/ecosystem/capabilities` | Capability graph |
+| GET | `/api/ecosystem/collaborations` | Collaboration network |
+| GET | `/api/ecosystem/evolution` | Evolution recommendations |
+| GET | `/api/ecosystem/dashboard` | Combined dashboard |
+| GET | `/api/ecosystem/statistics` | Aggregate statistics |
+| POST | `/api/ecosystem/analyze` | Run evolution analyzers |
+| POST | `/api/ecosystem/optimize` | Continuous self-optimization |
+| POST | `/api/ecosystem/evolve` | Force evolution cycle |
+| POST | `/api/ecosystem/rebuild` | Rebuild capability graph |
+| POST | `/api/ecosystem/marketplace/publish` | Publish a task |
+| POST | `/api/ecosystem/marketplace/select` | Select winning bid |
+| GET | `/api/ecosystem/marketplace/tasks` | List marketplace tasks |
+| GET | `/api/ecosystem/marketplace/stats` | Marketplace stats |
+
+#### Cluster Federation (Phase 16)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cluster/status` | Cluster controller status |
+| GET | `/api/cluster/nodes` | List cluster nodes |
+| GET | `/api/cluster/topology` | Cluster topology snapshot |
+| GET | `/api/cluster/brains` | Distributed brain registry |
+| GET | `/api/cluster/missions` | Cluster mission decisions |
+| GET | `/api/cluster/failover` | Failover action history |
+| GET | `/api/cluster/scheduler` | Scheduler stats |
+| GET | `/api/cluster/dashboard` | Combined cluster dashboard |
+| GET | `/api/cluster/statistics` | Cluster statistics |
+| POST | `/api/cluster/discover` | Trigger node discovery |
+| POST | `/api/cluster/rebalance` | Rebalance cluster workload |
+| POST | `/api/cluster/failover` | Manual failover trigger |
+| POST | `/api/cluster/synchronize` | Sync remote brains |
+| POST | `/api/cluster/elect-leader` | Force leader election |
+| POST | `/api/cluster/rebuild` | Rebuild federated graph |
+| POST | `/api/cluster/nodes/add` | Register a remote node |
+| POST | `/api/cluster/nodes/{id}/remove` | Remove a node |
+| POST | `/api/cluster/consensus` | Run a consensus round |
 
 ```javascript
 const ws = new WebSocket('ws://localhost:8000/ws');

@@ -314,3 +314,184 @@ structlog, Prometheus client, httpx, `cryptography` (Fernet), uv, Docker/WSL2.
 ## Diagrams
 
 C4 diagrams (mermaid) live in [`docs/c4/diagrams.md`](docs/c4/diagrams.md).
+
+## Autonomous Intelligence Layers (Phases 11–16)
+
+On top of the core hexagonal architecture, AgenticOS ships five
+event-driven intelligence layers. Each is a self-contained package
+under `src/agentic_os/core/` that subscribes to existing EventBus
+topics and publishes new ones. No layer duplicates the discovery
+pipeline, BrainRegistry, or EventBus — they are pure consumers.
+
+### Layer overview
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  Phase 16 — Cluster Federation (core/cluster/)                 │
+│  ClusterController · FederationManager · DistributedRegistry   │
+│  GlobalMissionScheduler · ConsensusManager · FailoverEngine    │
+│  ClusterTopology · FederatedKnowledgeGraph                     │
+├────────────────────────────────────────────────────────────────┤
+│  Phase 15 — Autonomous Ecosystem (core/ecosystem/)             │
+│  EcosystemController · EcosystemManager · CapabilityGraph      │
+│  CollaborationNetwork · EvolutionEngine · TaskMarketplace      │
+├────────────────────────────────────────────────────────────────┤
+│  Phase 14 — Swarm Execution (core/orchestration/)              │
+│  SwarmCoordinator · ConsensusManager · SharedMissionMemory     │
+│  DynamicRoleAssigner (8 roles) · Failure Recovery              │
+├────────────────────────────────────────────────────────────────┤
+│  Phase 13 — Executive Orchestration (core/executive/)          │
+│  ExecutiveOrchestrator · Policy · ResourceAllocation           │
+│  MissionSupervision · DynamicPriority                          │
+├────────────────────────────────────────────────────────────────┤
+│  Phase 12 — Cognitive Intelligence (core/cognitive/)           │
+│  CognitiveController · WorldModel · KnowledgeGraph             │
+│  StrategicPlanner · PredictionEngine · ExperienceReplay        │
+│  EvaluationEngine · ImprovementPlanner · ObjectiveManager      │
+├────────────────────────────────────────────────────────────────┤
+│  Phase 11 — Executive Intelligence (core/executive/)           │
+│  ExecutiveController · GoalManager · DecisionEngine            │
+│  ReflectionEngine · ExecutiveMemory                            │
+├────────────────────────────────────────────────────────────────┤
+│  Phase 6 — Discovery + BrainRegistry (core/discovery/, brains/)│
+│  LocalDiscoveryService → EventBus → BrainRegistry              │
+├────────────────────────────────────────────────────────────────┤
+│  Phases 1–5 — Core Platform                                    │
+│  EventBus · Planner · Dispatcher · Supervisor · Health         │
+│  Recovery · Providers · Capability · Memory · Security · MCP   │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Phase 11 — Executive Intelligence
+
+`core/executive/` — long-running executive intelligence that turns
+missions into goals, selects runtimes, and reflects on outcomes.
+
+- `ExecutiveController` — subscribes to 10 EventBus topics, owns the
+  executive subsystem lifecycle.
+- `GoalManager` — 12 operations (activate/cancel/suspend/reprioritize/
+  split/merge/archive), 10 goal states.
+- `DecisionEngine` — 7-factor runtime selection (health, latency,
+  capability match, availability, historical success, load, confidence)
+  with `risk_factors` dict + human-readable `reasoning`.
+- `ReflectionEngine` — 12-field post-mission analysis (success_factors,
+  failures, improvements, routing_issues, capability_gaps, etc.).
+- `ExecutiveMemory` — semantic indexes over the existing MemoryManager.
+
+### Phase 12 — Cognitive Intelligence
+
+`core/cognitive/` — autonomous cognitive feedback loop.
+
+- `CognitiveController` — subscribes to `brain.*` + `mission.*` events.
+  On mission completion, auto-populates KnowledgeGraph and triggers
+  cognitive feedback.
+- `WorldModel` — subscribes to 8 brain.*/mission.* topics, publishes
+  `cognitive.world.updated`.
+- `KnowledgeGraph` — entities + relations, BFS traversal, impact analysis.
+- `StrategicPlanner`, `PredictionEngine`, `ExperienceReplay`,
+  `EvaluationEngine`, `ImprovementPlanner`, `ObjectiveManager`,
+  `CognitiveScheduler` (120s cycle).
+
+### Phase 13 — Executive Orchestration
+
+`core/executive/orchestrator.py` + `phase13_domain.py` — extends the
+executive layer with world state, policies, resource allocation, and
+mission supervision. 9 API endpoints, 12 `executive.*` events.
+
+### Phase 14 — Swarm Execution
+
+`core/orchestration/swarm_coordinator.py` — collaborative agent fabric.
+
+- `SwarmCoordinator` — wraps the existing `SwarmManager` with
+  BrainRegistry-driven team formation, consensus, shared memory, and
+  failure recovery.
+- `ConsensusManager` — majority / weighted / confidence / leader-override.
+- `SharedMissionMemory` — shared context + working + decision memory.
+- `DynamicRoleAssigner` — 8 roles (leader/planner/researcher/coder/
+  reviewer/validator/executor/observer).
+- Failure recovery: `brain.removed` → swarm detects → finds replacement
+  from BrainRegistry → continues execution.
+
+### Phase 15 — Autonomous Ecosystem
+
+`core/ecosystem/` — turns the platform into a continuously
+self-improving operating system.
+
+- `EcosystemManager` — top-level coordinator. Derives all state from
+  `BrainRegistry` + `EventBus`. Owns the sub-components below.
+- `CapabilityGraph` — 5 node types (Brain/Capability/Mission/Goal/
+  Swarm) + 6 edge types (provides/depends_on/learned/shares/
+  collaborates_with/executed). Auto-updates from brain.*/mission.*/swarm.*
+  events.
+- `CollaborationNetwork` — directed trust graph with EMA-weighted
+  confidence (α=0.3). Updates after every mission.
+- `EvolutionEngine` — 4 analyzers: capability gaps, routing
+  optimizations, collaboration opportunities, performance optimizations.
+  Produces `EvolutionRecommendation` objects with priority/confidence/
+  expected_impact.
+- `TaskMarketplace` — global task market with deterministic 6-factor
+  bid selection (capability_match/health/latency/availability/
+  historical_success/trust). 5 strategies: balanced/capability/
+  latency/health/trust.
+- Continuous self-optimization: every completed mission auto-triggers
+  Reflection → Evaluation → Prediction → Learning → Capability update →
+  Evolution recommendation → Executive optimization → Swarm optimization.
+
+### Phase 16 — Distributed Runtime Federation
+
+`core/cluster/` — multi-host cluster coordination.
+
+- `ClusterFederationManager` — remote node discovery, topology,
+  heartbeat loop (30s), stale detection (90s), deterministic leader
+  election (health desc → brain_count desc → node_id asc).
+- `DistributedBrainRegistry` — wraps `BrainRegistry` (canonical for
+  local brains) + adds remote brain tracking with idempotent sync.
+- `GlobalMissionScheduler` — deterministic 9-factor cluster-wide
+  scoring (health + latency + availability + historical_success +
+  cluster_load + memory + provider + confidence + capability_match).
+  Weights sum to 1.0; ties broken by node_id then brain_id.
+- `ClusterConsensusManager` — 5 consensus types: majority, weighted,
+  confidence (≥0.6 threshold), leader-decides, quorum.
+- `FailoverEngine` — 5 triggers (node_offline/runtime_offline/
+  high_latency/mission_failed/network_partition/manual) → 5 actions
+  (quarantine_node/replace_runtime/elect_replacement/reassign_mission/
+  resume_execution). Auto-finds replacement via GlobalMissionScheduler.
+- `ClusterTopology` — live graph of hosts/nodes/connections with
+  leader/quorum tracking.
+- `FederatedKnowledgeGraph` — extends `CapabilityGraph` with cross-host
+  nodes (node_id:brain_id naming), cluster capability index, global
+  impact analysis (which nodes at risk if a capability disappears).
+
+Single-node deployments are fully backward compatible: the local node
+is auto-registered as ACTIVE + LEADER on startup, quorum_size=1, all
+cluster operations work with cluster_size=1.
+
+### Event flow (all layers)
+
+```
+LocalDiscoveryService
+    │ publishes brain.discovered/registered/updated/removed
+    ▼
+EventBus (LocalBus)
+    │ fan-out to all subscribers via asyncio.create_task
+    ▼
+┌─────────────────────────────────────────────────────┐
+│ BrainRegistry     (canonical runtime source)         │
+│ BrainDiscoveryBridge (routes AGENT_REMOVED → unregister)│
+│ ExecutiveController (subscribes 10 topics)           │
+│ CognitiveController (subscribes 6 topics)            │
+│ SwarmCoordinator   (subscribes brain.removed)        │
+│ EcosystemController (subscribes 6 topics)            │
+│ ClusterController  (subscribes 6 topics)             │
+│ DashboardBroadcaster (subscribes 129 topics)         │
+└─────────────────────────────────────────────────────┘
+    │
+    ▼
+DashboardBroadcaster
+    │ fans out to all WebSocket clients
+    ▼
+Mission Control Store (Zustand)
+    │ ingest(event) → switch(topic) → update slice
+    ▼
+React UI (live re-render)
+```

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-os"
-version = "1.0.0-rc2"
+version = "1.0.0-rc9"
 description = "Agentic OS — a local-first, event-bus-driven AI Agent Operating System."
 readme = "README.md"
 requires-python = ">=3.12"

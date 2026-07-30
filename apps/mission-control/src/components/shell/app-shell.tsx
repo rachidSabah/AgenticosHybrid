@@ -164,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <span>© 2026 AgenticOS</span>
               <span>·</span>
-              <span>v1.0.0-rc1</span>
+              <span>v1.0.0-rc9</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1">

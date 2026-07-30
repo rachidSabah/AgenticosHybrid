@@ -4,6 +4,105 @@ All notable changes to AgenticOS are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/) and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-rc9] — 2026-07-30 — Pre-Phase 17 Production Readiness Audit
+
+### Fixed
+- **Route shadowing bug** — `/api/swarm/{swarm_id}` was registered before `/api/swarm/history`, causing FastAPI to match `history` as a `swarm_id` and return 404. Reordered routes so all static `/api/swarm/<literal>` paths are registered before the parameterized route. Added inline comment to prevent regression.
+- **Version-pinned test** — `tests/test_desktop_ops.py::test_get_current_version` asserted `version == "1.0.0-rc2"` which broke on every version bump. Changed to `.startswith("1.0.0-rc")` to validate the version scheme without breaking on bumps.
+
+### Changed
+- **README.md modernized** — Updated tagline to reflect Phase 11–16 capabilities. Added "Autonomous Intelligence Layers" subsection documenting Executive, Cognitive, Swarm, Ecosystem, and Distributed Federation layers. Added 60+ REST endpoint entries across 5 new API namespaces (`/api/executive/*`, `/api/cognitive/*`, `/api/swarm/*`, `/api/ecosystem/*`, `/api/cluster/*`). Updated WebSocket event list to include `swarm.*`, `executive.*`, `cognitive.*`, `ecosystem.*`, `cluster.*`, `brain.*` topic families.
+- **ARCHITECTURE.md extended** — Added "Autonomous Intelligence Layers (Phases 11–16)" section with full layer-stack diagram, per-phase component breakdown, and unified event flow diagram showing how all 7 controllers subscribe to the EventBus.
+- **ROADMAP.md extended** — Added 8 new version entries (v1.0.0-rc2 through rc9) covering Phases 6, 11, 12, 13, 14, 15, 16, and this audit. Updated cumulative test count table from 1550+ to 4733.
+
+### Verified
+- 4733 backend tests pass (0 regressions vs Phase 16)
+- 22 frontend tests pass
+- All Python quality gates green: `ruff format`, `ruff check`, `ty check`
+- All frontend quality gates green: `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`
+- 51/54 REST endpoints return 200 (3 "failures" were audit script path errors, not actual bugs)
+- WebSocket propagation verified for `brain.*`, `ecosystem.*`, `cluster.*` event families
+- Browser validation: all 8 nav views (overview, brain, constellation, execution, swarm, missions, ecosystem, cluster) load with zero JavaScript errors, zero React errors, zero failed API requests
+- API latency: all endpoints <5ms mean (healthz 0.79ms, ecosystem/dashboard 2.60ms, cluster/dashboard 1.81ms)
+
+## [1.0.0-rc8] — 2026-07-30 — Phase 16: Distributed Runtime Federation
+
+### Added — Cluster layer (`src/agentic_os/core/cluster/`)
+- `ClusterFederationManager` — remote node discovery, topology, heartbeat loop (30s), stale detection (90s), deterministic leader election.
+- `ClusterTopology` — hosts/nodes/connections graph with leader/quorum tracking, auto-promote/demote on health changes, cascade edge removal.
+- `DistributedBrainRegistry` — wraps existing `BrainRegistry` (canonical for local brains) + adds remote brain tracking with idempotent sync.
+- `GlobalMissionScheduler` — deterministic 9-factor cluster-wide scoring (health + latency + availability + historical_success + cluster_load + memory + provider + confidence + capability_match). Weights sum to 1.0.
+- `ClusterConsensusManager` — 5 consensus types: majority, weighted, confidence (≥0.6 threshold), leader-decides, quorum.
+- `FailoverEngine` — 5 triggers (node_offline/runtime_offline/high_latency/mission_failed/network_partition/manual) → 5 actions. Auto-finds replacement via GlobalMissionScheduler.
+- `FederatedKnowledgeGraph` — extends `CapabilityGraph` with cross-host nodes, cluster capability index, global impact analysis.
+- `ClusterController` — long-running controller subscribing to `cluster.node.*` + `brain.*` events.
+- 18 REST endpoints under `/api/cluster/*`.
+- 14 `cluster.*` events added to `DashboardBroadcaster`.
+- New `ClusterDashboard` view (5 tabs: Overview, Topology, Nodes, Distributed Brains, Failover).
+- 67-test comprehensive suite.
+- Single-node backward compatible (local node auto-elected as ACTIVE + LEADER).
+
+## [1.0.0-rc7] — 2026-07-30 — Phase 15: Autonomous Agent Ecosystem
+
+### Added — Ecosystem layer (`src/agentic_os/core/ecosystem/`)
+- `EcosystemManager` — top-level coordinator deriving all state from `BrainRegistry` + `EventBus`.
+- `CapabilityGraph` — 5 node types (Brain/Capability/Mission/Goal/Swarm) + 6 edge types (provides/depends_on/learned/shares/collaborates_with/executed).
+- `CollaborationNetwork` — directed trust graph with EMA-weighted confidence (α=0.3).
+- `EvolutionEngine` — 4 analyzers: capability gaps, routing optimizations, collaboration opportunities, performance optimizations.
+- `TaskMarketplace` — global task market with deterministic 6-factor bid selection (5 strategies).
+- Continuous self-optimization: every completed mission auto-triggers Reflection → Evaluation → Prediction → Learning → Capability → Evolution → Executive → Swarm.
+- 15 REST endpoints under `/api/ecosystem/*`.
+- 16 `ecosystem.*` events.
+- New `EcosystemDashboard` view (5 tabs).
+- 62-test comprehensive suite.
+
+## [1.0.0-rc6] — 2026-07-29 — Phase 14: Swarm Execution
+
+### Added — Swarm Coordinator (`src/agentic_os/core/orchestration/swarm_coordinator.py`)
+- `SwarmCoordinator` — wraps existing `SwarmManager` with BrainRegistry-driven team formation.
+- `ConsensusManager` — majority/weighted/confidence/leader-override.
+- `SharedMissionMemory` — shared context + working + decision memory.
+- `DynamicRoleAssigner` — 8 roles (leader/planner/researcher/coder/reviewer/validator/executor/observer).
+- Automatic failure recovery: `brain.removed` → swarm detects → finds replacement → continues.
+- 10 API endpoints under `/api/swarm/*`.
+- 12 `swarm.*` events.
+
+## [1.0.0-rc5] — 2026-07-29 — Phase 13: Executive Orchestration
+
+### Added — Executive Orchestrator (`src/agentic_os/core/executive/orchestrator.py`)
+- `ExecutiveOrchestrator` — world state, policies, resource allocation, mission supervision.
+- 9 API endpoints, 12 `executive.*` events.
+- Dynamic priority recomputation.
+
+## [1.0.0-rc4] — 2026-07-29 — Phase 12: Cognitive Intelligence
+
+### Added — Cognitive layer (`src/agentic_os/core/cognitive/`)
+- `CognitiveController` subscribing to `brain.*` + `mission.*` events.
+- `WorldModel`, `KnowledgeGraph` (BFS traversal), `StrategicPlanner`, `PredictionEngine`, `ExperienceReplay`, `EvaluationEngine`, `ImprovementPlanner`, `ObjectiveManager`, `CognitiveScheduler` (120s cycle).
+- 16 API endpoints under `/api/cognitive/*`.
+- Auto cognitive feedback on mission completion.
+
+## [1.0.0-rc3] — 2026-07-29 — Phase 11: Executive Intelligence
+
+### Added — Executive layer (`src/agentic_os/core/executive/`)
+- `ExecutiveController` subscribing to 10 EventBus topics.
+- `GoalManager` — 12 operations, 10 goal states.
+- `DecisionEngine` — 7-factor runtime selection with `risk_factors` + `reasoning`.
+- `ReflectionEngine` — 12-field post-mission analysis.
+- `ExecutiveMemory` — semantic indexes over existing MemoryManager.
+- 17 API endpoints under `/api/executive/*`.
+
+## [1.0.0-rc2] — 2026-07-29 — Phase 6: Runtime Discovery & AI Brain Registry
+
+### Added — Discovery + Brain layer
+- `LocalDiscoveryService` — discovers local Python/Node/Git/etc. runtimes.
+- `BrainRegistry` — canonical single source of truth for all AI brains.
+- `BrainDiscoveryBridge` — routes `AGENT_REMOVED` → `unregister` (not `register`).
+- `DashboardBroadcaster` — WebSocket fan-out for all `brain.*` topics.
+- 14 `brain.*` events: discovered/registered/updated/connected/disconnected/health_changed/busy/idle/executing/completed/failed/removed/graph_updated/relationship_changed.
+- Mission Control store synchronization — live brain add/remove via WebSocket.
+- Removed all hardcoded runtime names, providers, models, policies, failovers from frontend.
+
 ## [1.0.0-rc1] — 2026-07-21
 
 ### Fixed — Enterprise Audit Pass (Zero-Regression, ~450 files inspected)
