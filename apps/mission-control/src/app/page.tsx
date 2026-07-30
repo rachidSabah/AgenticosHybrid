@@ -133,6 +133,11 @@ const RuntimeDashboard = lazyWithRetry(() =>
   import("@/views/runtime-dashboard").then((m) => ({ default: m.default }))
 );
 
+// Phase 15 — Autonomous Agent Ecosystem
+const EcosystemDashboard = lazyWithRetry(() =>
+  import("@/views/ecosystem-dashboard").then((m) => ({ default: m.EcosystemDashboard }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
   governance: () => (
     <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
@@ -386,6 +391,14 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Runtime Dashboard" fallback={<ViewSkeleton title="Runtime Dashboard" />}>
       <Suspense fallback={<ViewSkeleton title="Runtime Dashboard" />}>
         <RuntimeDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  // Phase 15 — Autonomous Agent Ecosystem
+  "ecosystem": () => (
+    <ErrorBoundary viewName="Ecosystem Dashboard" fallback={<ViewSkeleton title="Ecosystem Dashboard" />}>
+      <Suspense fallback={<ViewSkeleton title="Ecosystem Dashboard" />}>
+        <EcosystemDashboard />
       </Suspense>
     </ErrorBoundary>
   ),

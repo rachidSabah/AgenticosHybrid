@@ -219,6 +219,8 @@ class Platform:
     # Phase 12: Cognitive Intelligence Layer
     cognitive_controller: Any = None  # CognitiveController | None
     swarm_coordinator: Any = None  # SwarmCoordinator | None
+    # Phase 15: Autonomous Agent Ecosystem
+    ecosystem_controller: Any = None  # EcosystemController | None
 
 
 class Kernel:
@@ -698,11 +700,45 @@ class Kernel:
             except Exception as exc:
                 _diag("Swarm", "FAILED", str(exc))
 
+            # ── Phase 15: Autonomous Agent Ecosystem ──
+            _diag("Ecosystem", "STARTING")
+            try:
+                from agentic_os.core.ecosystem import EcosystemController
+
+                self.ecosystem_controller = EcosystemController(
+                    bus=self.bus,
+                    brain_registry=self.brain_registry,
+                    exec_memory=(
+                        self.executive_controller.memory
+                        if self.executive_controller is not None
+                        else None
+                    ),
+                    cognitive_memory=(
+                        self.cognitive_controller.memory
+                        if self.cognitive_controller is not None
+                        else None
+                    ),
+                    swarm_coordinator=self.swarm_coordinator,
+                )
+                await self.ecosystem_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.ecosystem_controller = self.ecosystem_controller
+                _diag("Ecosystem", "STARTED")
+            except Exception as exc:
+                _diag("Ecosystem", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 15: Stop Ecosystem Controller (stops first — depends on others)
+        if self.ecosystem_controller is not None:
+            try:
+                await self.ecosystem_controller.stop()
+            except Exception:
+                log.exception("Failed to stop EcosystemController")
+            self.ecosystem_controller = None
         # Phase 14: Stop Swarm Coordinator
         if self.swarm_coordinator is not None:
             try:

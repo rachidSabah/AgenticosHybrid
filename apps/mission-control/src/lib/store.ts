@@ -55,6 +55,17 @@ interface StoreState {
   performance: DesktopPerformanceMetrics | null;
   missions: Record<string, MissionType>;
   missionUpdates: number; // bump counter to trigger re-renders
+  // Phase 15: Ecosystem snapshot — derived entirely from ecosystem.* events
+  // and the /api/ecosystem/dashboard REST endpoint. No mock data.
+  ecosystem: {
+    stats: Record<string, unknown> | null;
+    health: Record<string, unknown> | null;
+    graphStats: Record<string, unknown> | null;
+    networkStats: Record<string, unknown> | null;
+    marketplaceStats: Record<string, unknown> | null;
+    evolutionStats: Record<string, unknown> | null;
+    lastEventAt: number;
+  } | null;
 
   connect: () => void;
   disconnect: () => void;
@@ -67,6 +78,8 @@ interface StoreState {
   clearNotifications: () => void;
   /** Fetch initial snapshot from REST and seed the store (agents, providers, brains). */
   hydrate: () => Promise<void>;
+  /** Phase 15: Fetch the ecosystem dashboard snapshot from REST. */
+  hydrateEcosystem: () => Promise<void>;
 }
 
 const MAX_EVENTS = 400;
@@ -140,6 +153,9 @@ export const useStore = create<StoreState>((set, get) => ({
   performance: null,
   missions: {},
   missionUpdates: 0,
+  // Phase 15: ecosystem snapshot — null until hydrateEcosystem() or the
+  // first ecosystem.* WebSocket event populates it.
+  ecosystem: null,
   telemetry: {
     tasks: 0,
     agents: 0,
@@ -480,6 +496,57 @@ export const useStore = create<StoreState>((set, get) => ({
           }
           break;
         }
+        // ── Phase 15: Ecosystem events ───────────────────────────────
+        // Every ecosystem.* event updates the local ecosystem snapshot so
+        // the Mission Overview / AI Brain / AI Constellation / Fleet views
+        // can render live state without polling.
+        case "ecosystem.started":
+        case "ecosystem.updated":
+        case "ecosystem.health.updated":
+        case "ecosystem.capability.updated":
+        case "ecosystem.collaboration.updated":
+        case "ecosystem.statistics.updated":
+        case "ecosystem.analysis.completed":
+        case "ecosystem.evolution.generated":
+        case "ecosystem.optimization.started":
+        case "ecosystem.optimization.completed":
+        case "ecosystem.task.published":
+        case "ecosystem.task.bids_collected":
+        case "ecosystem.task.awarded":
+        case "ecosystem.task.completed":
+        case "ecosystem.task.failed":
+        case "ecosystem.task.cancelled": {
+          // Merge the event payload into the ecosystem snapshot. The
+          // payload shape varies by topic — we keep a per-topic reducer
+          // so each event updates exactly the slice it owns.
+          const prevEco = s.ecosystem ?? {
+            stats: null,
+            health: null,
+            graphStats: null,
+            networkStats: null,
+            marketplaceStats: null,
+            evolutionStats: null,
+            lastEventAt: 0,
+          };
+          const next = { ...prevEco, lastEventAt: Date.now() };
+          if (e.topic === "ecosystem.updated" || e.topic === "ecosystem.statistics.updated") {
+            next.stats = p as Record<string, unknown>;
+          } else if (e.topic === "ecosystem.health.updated") {
+            next.health = p as Record<string, unknown>;
+          } else if (e.topic === "ecosystem.capability.updated") {
+            next.graphStats = p as Record<string, unknown>;
+          } else if (e.topic === "ecosystem.collaboration.updated") {
+            next.networkStats = p as Record<string, unknown>;
+          } else if (e.topic === "ecosystem.analysis.completed") {
+            next.evolutionStats = p as Record<string, unknown>;
+          } else if (e.topic === "ecosystem.optimization.completed") {
+            next.evolutionStats = p as Record<string, unknown>;
+          }
+          return {
+            events, notifications, agents, tasks, providers, telemetry,
+            ecosystem: next,
+          };
+        }
       }
 
       // Always clone telemetry to add the pulse
@@ -624,6 +691,31 @@ export const useStore = create<StoreState>((set, get) => ({
       }));
     } catch (e) {
       console.warn("[store] hydrate failed:", e);
+    }
+  },
+  // Phase 15: Pull the live ecosystem snapshot from /api/ecosystem/dashboard.
+  // The backend derives every field from BrainRegistry + EventBus — no mock.
+  hydrateEcosystem: async () => {
+    try {
+      const dash = await api.get<Record<string, unknown>>("/api/ecosystem/dashboard");
+      set({
+        ecosystem: {
+          stats: (dash.stats as Record<string, unknown>) ?? null,
+          health: (dash.health as Record<string, unknown>) ?? null,
+          graphStats: (dash.graph_stats as Record<string, unknown>) ?? null,
+          networkStats: (dash.network_stats as Record<string, unknown>) ?? null,
+          marketplaceStats: (dash.marketplace_stats as Record<string, unknown>) ?? null,
+          evolutionStats: (dash.evolution_stats as Record<string, unknown>) ?? null,
+          lastEventAt: Date.now(),
+        },
+      });
+    } catch (e) {
+      // EcosystemController may not be running yet — that's fine, the UI
+      // will retry on the next hydrate cycle. Don't log warn to avoid
+      // spamming the console when the ecosystem is intentionally disabled.
+      if (get().ecosystem === null) {
+        set({ ecosystem: null });
+      }
     }
   },
 }));

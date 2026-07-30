@@ -23,6 +23,7 @@ import {
   Terminal,
   MessageSquarePlus,
   Zap,
+  Sparkles,
 } from "lucide-react";
 
 export interface NavItem {
@@ -69,6 +70,8 @@ export const NAV: NavItem[] = [
   { id: "disaster-recovery", label: "Backup & Recovery", hint: "K", icon: RefreshCw, group: "desktop" },
   // Phase 6.3 — Universal Runtime Control
   { id: "runtime", label: "Runtime Dashboard", hint: "7", icon: Terminal, group: "desktop" },
+  // Phase 15 — Autonomous Agent Ecosystem
+  { id: "ecosystem", label: "Ecosystem", hint: "E", icon: Sparkles, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

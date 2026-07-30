@@ -6212,6 +6212,119 @@ def create_app(platform: Platform) -> FastAPI:
             },
         )
 
+    # ── Phase 15: Autonomous Agent Ecosystem ───────────────────────────
+    # All endpoints are LIVE — they read directly from EcosystemController
+    # / EcosystemManager, which derives its state from BrainRegistry and
+    # the EventBus. No mock or hardcoded data.
+
+    def _ecosystem_controller():
+        ec = getattr(platform, "ecosystem_controller", None)
+        if ec is None:
+            raise HTTPException(503, detail="EcosystemController not available")
+        return ec
+
+    @app.get("/api/ecosystem/status")
+    async def ecosystem_status() -> dict:
+        ec = getattr(platform, "ecosystem_controller", None)
+        if ec is None:
+            return {"started": False, "events_processed": 0, "optimizations_triggered": 0}
+        return ec.status()
+
+    @app.get("/api/ecosystem/health")
+    async def ecosystem_health() -> dict:
+        ec = _ecosystem_controller()
+        await ec.manager.refresh()
+        return ec.manager.health.to_dict()
+
+    @app.get("/api/ecosystem/capabilities")
+    async def ecosystem_capabilities() -> dict:
+        ec = _ecosystem_controller()
+        return ec.manager.capability_graph.to_dict()
+
+    @app.get("/api/ecosystem/collaborations")
+    async def ecosystem_collaborations() -> dict:
+        ec = _ecosystem_controller()
+        return ec.manager.collaboration_network.to_dict()
+
+    @app.get("/api/ecosystem/evolution")
+    async def ecosystem_evolution(rec_type: str | None = None, limit: int = 50) -> dict:
+        ec = _ecosystem_controller()
+        recs = ec.manager.evolution_engine.list_recommendations(rec_type=rec_type, limit=limit)
+        return {
+            "recommendations": [r.to_dict() for r in recs],
+            "stats": ec.manager.evolution_engine.stats(),
+        }
+
+    @app.get("/api/ecosystem/dashboard")
+    async def ecosystem_dashboard() -> dict:
+        ec = _ecosystem_controller()
+        await ec.manager.refresh()
+        return ec.manager.dashboard()
+
+    @app.get("/api/ecosystem/statistics")
+    async def ecosystem_statistics() -> dict:
+        ec = _ecosystem_controller()
+        await ec.manager.refresh()
+        return ec.manager.stats.to_dict()
+
+    @app.post("/api/ecosystem/analyze")
+    async def ecosystem_analyze() -> dict:
+        ec = _ecosystem_controller()
+        return await ec.manager.analyze()
+
+    @app.post("/api/ecosystem/optimize")
+    async def ecosystem_optimize() -> dict:
+        ec = _ecosystem_controller()
+        return await ec.manager.optimize()
+
+    @app.post("/api/ecosystem/evolve")
+    async def ecosystem_evolve() -> dict:
+        ec = _ecosystem_controller()
+        return await ec.manager.evolve()
+
+    @app.post("/api/ecosystem/rebuild")
+    async def ecosystem_rebuild() -> dict:
+        ec = _ecosystem_controller()
+        return await ec.manager.rebuild()
+
+    # ── Phase 15: Task Marketplace (extension endpoints) ──────────────
+    # The marketplace is a core EcosystemManager component but exposing
+    # these endpoints here lets external callers publish tasks and watch
+    # the bid/award lifecycle over the API.
+
+    @app.post("/api/ecosystem/marketplace/publish")
+    async def marketplace_publish(body: dict) -> dict:
+        ec = _ecosystem_controller()
+        task = await ec.manager.marketplace.publish_task(
+            title=body.get("title", ""),
+            description=body.get("description", ""),
+            required_capabilities=body.get("required_capabilities", []),
+            priority=float(body.get("priority", 0.5)),
+            deadline=body.get("deadline", ""),
+            payload=body.get("payload", {}),
+        )
+        return task.to_dict()
+
+    @app.post("/api/ecosystem/marketplace/select")
+    async def marketplace_select(body: dict) -> dict:
+        ec = _ecosystem_controller()
+        task_id = body.get("task_id", "")
+        strategy = body.get("strategy", "balanced")
+        bid = await ec.manager.marketplace.select_bid(task_id, strategy)
+        if bid is None:
+            raise HTTPException(404, detail="No bids available for task")
+        return bid.to_dict()
+
+    @app.get("/api/ecosystem/marketplace/tasks")
+    async def marketplace_tasks(limit: int = 50) -> list[dict]:
+        ec = _ecosystem_controller()
+        return [t.to_dict() for t in ec.manager.marketplace.list_all_tasks(limit=limit)]
+
+    @app.get("/api/ecosystem/marketplace/stats")
+    async def marketplace_stats() -> dict:
+        ec = _ecosystem_controller()
+        return ec.manager.marketplace.stats()
+
     return app
 
 

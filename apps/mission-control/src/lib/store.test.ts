@@ -137,3 +137,61 @@ describe("event store", () => {
     expect(useStore.getState().providers["Ollama"].status).toBe("unknown");
   });
 });
+
+// ── Phase 15: Ecosystem event ingestion ──────────────────────────────────
+describe("ecosystem events", () => {
+  beforeEach(() => {
+    useStore.setState({ ecosystem: null });
+  });
+
+  it("ingests ecosystem.statistics.updated into the ecosystem snapshot", () => {
+    useStore.getState().ingest(
+      envelope("ecosystem.statistics.updated", {
+        total_runtimes: 5,
+        healthy_runtimes: 4,
+        unique_capabilities: 7,
+      })
+    );
+    const eco = useStore.getState().ecosystem;
+    expect(eco).not.toBeNull();
+    expect(eco!.stats).toEqual({ total_runtimes: 5, healthy_runtimes: 4, unique_capabilities: 7 });
+    expect(eco!.lastEventAt).toBeGreaterThan(0);
+  });
+
+  it("ingests ecosystem.health.updated into the health slice", () => {
+    useStore.getState().ingest(
+      envelope("ecosystem.health.updated", {
+        level: "healthy",
+        health_score: 0.82,
+      })
+    );
+    const eco = useStore.getState().ecosystem;
+    expect(eco).not.toBeNull();
+    expect(eco!.health).toEqual({ level: "healthy", health_score: 0.82 });
+    expect(eco!.stats).toBeNull();
+  });
+
+  it("ingests ecosystem.capability.updated into graphStats", () => {
+    useStore.getState().ingest(
+      envelope("ecosystem.capability.updated", { total_nodes: 12, total_edges: 24 })
+    );
+    expect(useStore.getState().ecosystem?.graphStats).toEqual({ total_nodes: 12, total_edges: 24 });
+  });
+
+  it("ingests ecosystem.collaboration.updated into networkStats", () => {
+    useStore.getState().ingest(
+      envelope("ecosystem.collaboration.updated", { total_links: 3, average_trust: 0.7 })
+    );
+    expect(useStore.getState().ecosystem?.networkStats).toEqual({ total_links: 3, average_trust: 0.7 });
+  });
+
+  it("preserves existing slices across different ecosystem events", () => {
+    useStore.getState().ingest(envelope("ecosystem.statistics.updated", { total_runtimes: 1 }));
+    useStore.getState().ingest(envelope("ecosystem.health.updated", { level: "optimal" }));
+    useStore.getState().ingest(envelope("ecosystem.capability.updated", { total_nodes: 5 }));
+    const eco = useStore.getState().ecosystem;
+    expect(eco!.stats).toEqual({ total_runtimes: 1 });
+    expect(eco!.health).toEqual({ level: "optimal" });
+    expect(eco!.graphStats).toEqual({ total_nodes: 5 });
+  });
+});
