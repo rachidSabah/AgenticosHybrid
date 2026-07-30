@@ -6515,6 +6515,128 @@ def create_app(platform: Platform) -> FastAPI:
             pass
         return result.to_dict()
 
+    # ── Phase 17: Autonomous Agent Evolution ───────────────────────────
+    # All endpoints are LIVE — they read directly from EvolutionController
+    # / EvolutionManager, which derives its state from the existing
+    # Phase 11-16 infrastructure. No mock data.
+
+    def _evolution_controller():
+        ec = getattr(platform, "evolution_controller", None)
+        if ec is None:
+            raise HTTPException(503, detail="EvolutionController not available")
+        return ec
+
+    @app.get("/api/evolution/status")
+    async def evolution_status() -> dict:
+        ec = getattr(platform, "evolution_controller", None)
+        if ec is None:
+            return {"started": False, "events_processed": 0, "analyses_triggered": 0}
+        return ec.status()
+
+    @app.get("/api/evolution/dashboard")
+    async def evolution_dashboard() -> dict:
+        ec = _evolution_controller()
+        return ec.manager.dashboard()
+
+    @app.get("/api/evolution/statistics")
+    async def evolution_statistics() -> dict:
+        ec = _evolution_controller()
+        return ec.manager.statistics.to_dict()
+
+    @app.get("/api/evolution/readiness")
+    async def evolution_readiness() -> dict:
+        ec = _evolution_controller()
+        return await ec.manager.assess_readiness()
+
+    @app.get("/api/evolution/improvements")
+    async def evolution_improvements(status: str | None = None, limit: int = 50) -> dict:
+        ec = _evolution_controller()
+        proposals = ec.manager.improvement_engine.list_proposals(status=status, limit=limit)
+        return {
+            "improvements": [p.to_dict() for p in proposals],
+            "stats": ec.manager.improvement_engine.stats(),
+        }
+
+    @app.get("/api/evolution/improvements/{proposal_id}")
+    async def evolution_improvement_detail(proposal_id: str) -> dict:
+        ec = _evolution_controller()
+        proposal = ec.manager.improvement_engine.get_proposal(proposal_id)
+        if proposal is None:
+            raise HTTPException(404, detail="Improvement not found")
+        return proposal.to_dict()
+
+    @app.get("/api/evolution/safety")
+    async def evolution_safety() -> dict:
+        ec = _evolution_controller()
+        return {
+            "validator": ec.manager.safety_validator.stats(),
+            "regression_guard": ec.manager.regression_guard.stats(),
+            "history": [r.to_dict() for r in ec.manager.safety_validator.list_history(limit=20)],
+        }
+
+    @app.get("/api/evolution/scheduler")
+    async def evolution_scheduler() -> dict:
+        ec = _evolution_controller()
+        sched = ec.manager.scheduler
+        return {
+            "stats": sched.stats(),
+            "queue": [p.to_dict() for p in sched.get_queue()],
+            "scheduled": [p.to_dict() for p in sched.get_scheduled()],
+        }
+
+    @app.get("/api/evolution/plans")
+    async def evolution_plans(target_type: str | None = None) -> dict:
+        ec = _evolution_controller()
+        plans = ec.manager.code_planner.list_plans(target_type=target_type)
+        return {
+            "plans": [p.to_dict() for p in plans],
+            "stats": ec.manager.code_planner.stats(),
+        }
+
+    @app.get("/api/evolution/knowledge")
+    async def evolution_knowledge() -> dict:
+        ec = _evolution_controller()
+        syntheses = ec.manager.knowledge_synthesizer.list_syntheses()
+        return {
+            "syntheses": [s.to_dict() for s in syntheses],
+            "stats": ec.manager.knowledge_synthesizer.stats(),
+        }
+
+    @app.post("/api/evolution/analyze")
+    async def evolution_analyze() -> dict:
+        ec = _evolution_controller()
+        return await ec.manager.analyze()
+
+    @app.post("/api/evolution/schedule")
+    async def evolution_schedule_next() -> dict:
+        ec = _evolution_controller()
+        return await ec.manager.schedule_next()
+
+    @app.post("/api/evolution/improvements/{proposal_id}/apply")
+    async def evolution_apply(proposal_id: str) -> dict:
+        ec = _evolution_controller()
+        return await ec.manager.apply_improvement(proposal_id)
+
+    @app.post("/api/evolution/improvements/{proposal_id}/rollback")
+    async def evolution_rollback(proposal_id: str, body: dict | None = None) -> dict:
+        ec = _evolution_controller()
+        reason = str((body or {}).get("reason", ""))
+        return await ec.manager.rollback_improvement(proposal_id, reason)
+
+    @app.post("/api/evolution/synthesize")
+    async def evolution_synthesize(body: dict) -> dict:
+        ec = _evolution_controller()
+        topic = str(body.get("topic", ""))
+        sources = body.get("sources", [])
+        if not topic:
+            raise HTTPException(400, detail="topic required")
+        return await ec.manager.synthesize_knowledge(topic, sources)
+
+    @app.post("/api/evolution/readiness/assess")
+    async def evolution_assess_readiness() -> dict:
+        ec = _evolution_controller()
+        return await ec.manager.assess_readiness()
+
     return app
 
 

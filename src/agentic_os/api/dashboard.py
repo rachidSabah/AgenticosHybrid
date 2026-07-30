@@ -176,6 +176,17 @@ _DASHBOARD_TOPICS = [
     "cluster.consensus.completed",
     "cluster.topology.updated",
     "cluster.statistics.updated",
+    # Phase 17: Autonomous Agent Evolution — improvement lifecycle, safety
+    # validation, scheduling, generation, knowledge synthesis events.
+    "evolution.started",
+    "evolution.stopped",
+    "evolution.analysis.completed",
+    "evolution.improvement.scheduled",
+    "evolution.improvement.applied",
+    "evolution.improvement.rolled_back",
+    "evolution.knowledge.synthesized",
+    "evolution.readiness.updated",
+    "evolution.statistics.updated",
 ]
 
 # Normalize the topic list to plain strings. The list above mixes

@@ -25,6 +25,7 @@ import {
   Zap,
   Sparkles,
   Cloud,
+  GitPullRequestArrow,
 } from "lucide-react";
 
 export interface NavItem {
@@ -75,6 +76,8 @@ export const NAV: NavItem[] = [
   { id: "ecosystem", label: "Ecosystem", hint: "E", icon: Sparkles, group: "core" },
   // Phase 16 — Distributed Runtime Federation
   { id: "cluster", label: "Cluster Federation", hint: "F", icon: Cloud, group: "core" },
+  // Phase 17 — Autonomous Agent Evolution
+  { id: "evolution", label: "Evolution", hint: "V", icon: GitPullRequestArrow, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

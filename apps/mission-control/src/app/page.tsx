@@ -143,6 +143,11 @@ const ClusterDashboard = lazyWithRetry(() =>
   import("@/views/cluster-dashboard").then((m) => ({ default: m.ClusterDashboard }))
 );
 
+// Phase 17 — Autonomous Agent Evolution
+const EvolutionDashboard = lazyWithRetry(() =>
+  import("@/views/evolution-dashboard").then((m) => ({ default: m.EvolutionDashboard }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
   governance: () => (
     <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
@@ -412,6 +417,14 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Cluster Federation" fallback={<ViewSkeleton title="Cluster Federation" />}>
       <Suspense fallback={<ViewSkeleton title="Cluster Federation" />}>
         <ClusterDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  // Phase 17 — Autonomous Agent Evolution
+  "evolution": () => (
+    <ErrorBoundary viewName="Evolution Dashboard" fallback={<ViewSkeleton title="Evolution Dashboard" />}>
+      <Suspense fallback={<ViewSkeleton title="Evolution Dashboard" />}>
+        <EvolutionDashboard />
       </Suspense>
     </ErrorBoundary>
   ),

@@ -223,6 +223,8 @@ class Platform:
     ecosystem_controller: Any = None  # EcosystemController | None
     # Phase 16: Distributed Runtime Federation
     cluster_controller: Any = None  # ClusterController | None
+    # Phase 17: Autonomous Agent Evolution
+    evolution_controller: Any = None  # EvolutionController | None
 
 
 class Kernel:
@@ -756,11 +758,53 @@ class Kernel:
             except Exception as exc:
                 _diag("Cluster", "FAILED", str(exc))
 
+            # ── Phase 17: Autonomous Agent Evolution ──
+            _diag("Evolution", "STARTING")
+            try:
+                from agentic_os.core.evolution import EvolutionController
+
+                self.evolution_controller = EvolutionController(
+                    bus=self.bus,
+                    evolution_engine=(
+                        self.ecosystem_controller.manager.evolution_engine
+                        if self.ecosystem_controller is not None
+                        else None
+                    ),
+                    improvement_planner=(
+                        self.cognitive_controller.improvement_planner
+                        if self.cognitive_controller is not None
+                        else None
+                    ),
+                    exec_memory=(
+                        self.executive_controller.memory
+                        if self.executive_controller is not None
+                        else None
+                    ),
+                    cognitive_memory=(
+                        self.cognitive_controller.memory
+                        if self.cognitive_controller is not None
+                        else None
+                    ),
+                )
+                await self.evolution_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.evolution_controller = self.evolution_controller
+                _diag("Evolution", "STARTED")
+            except Exception as exc:
+                _diag("Evolution", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 17: Stop Evolution Controller (stops first — depends on others)
+        if self.evolution_controller is not None:
+            try:
+                await self.evolution_controller.stop()
+            except Exception:
+                log.exception("Failed to stop EvolutionController")
+            self.evolution_controller = None
         # Phase 16: Stop Cluster Controller (stops first — depends on others)
         if self.cluster_controller is not None:
             try:

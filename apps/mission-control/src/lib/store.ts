@@ -74,6 +74,13 @@ interface StoreState {
     statistics: Record<string, unknown> | null;
     lastEventAt: number;
   } | null;
+  // Phase 17: Evolution snapshot — derived from evolution.* events
+  // and the /api/evolution/dashboard REST endpoint.
+  evolution: {
+    statistics: Record<string, unknown> | null;
+    readiness: Record<string, unknown> | null;
+    lastEventAt: number;
+  } | null;
 
   connect: () => void;
   disconnect: () => void;
@@ -90,6 +97,8 @@ interface StoreState {
   hydrateEcosystem: () => Promise<void>;
   /** Phase 16: Fetch the cluster dashboard snapshot from REST. */
   hydrateCluster: () => Promise<void>;
+  /** Phase 17: Fetch the evolution dashboard snapshot from REST. */
+  hydrateEvolution: () => Promise<void>;
 }
 
 const MAX_EVENTS = 400;
@@ -169,6 +178,9 @@ export const useStore = create<StoreState>((set, get) => ({
   // Phase 16: cluster snapshot — null until hydrateCluster() or the
   // first cluster.* WebSocket event populates it.
   cluster: null,
+  // Phase 17: evolution snapshot — null until hydrateEvolution() or the
+  // first evolution.* WebSocket event populates it.
+  evolution: null,
   telemetry: {
     tasks: 0,
     agents: 0,
@@ -600,6 +612,34 @@ export const useStore = create<StoreState>((set, get) => ({
             cluster: nextCluster,
           };
         }
+        // ── Phase 17: Evolution events ───────────────────────────────
+        case "evolution.started":
+        case "evolution.stopped":
+        case "evolution.analysis.completed":
+        case "evolution.improvement.scheduled":
+        case "evolution.improvement.applied":
+        case "evolution.improvement.rolled_back":
+        case "evolution.knowledge.synthesized":
+        case "evolution.readiness.updated":
+        case "evolution.statistics.updated": {
+          const prevEvo = s.evolution ?? {
+            statistics: null,
+            readiness: null,
+            lastEventAt: 0,
+          };
+          const nextEvo = { ...prevEvo, lastEventAt: Date.now() };
+          if (e.topic === "evolution.statistics.updated") {
+            nextEvo.statistics = p as Record<string, unknown>;
+          } else if (e.topic === "evolution.readiness.updated") {
+            nextEvo.readiness = p as Record<string, unknown>;
+          } else if (e.topic === "evolution.analysis.completed") {
+            nextEvo.statistics = p as Record<string, unknown>;
+          }
+          return {
+            events, notifications, agents, tasks, providers, telemetry,
+            evolution: nextEvo,
+          };
+        }
       }
 
       // Always clone telemetry to add the pulse
@@ -791,6 +831,27 @@ export const useStore = create<StoreState>((set, get) => ({
       // without federation). Silently leave cluster state as-is.
       if (get().cluster === null) {
         set({ cluster: null });
+      }
+    }
+  },
+  // Phase 17: Pull the live evolution snapshot from /api/evolution/dashboard.
+  hydrateEvolution: async () => {
+    try {
+      const [dash, readiness] = await Promise.all([
+        api.get<Record<string, unknown>>("/api/evolution/dashboard"),
+        api.get<Record<string, unknown>>("/api/evolution/readiness"),
+      ]);
+      set({
+        evolution: {
+          statistics: (dash.statistics as Record<string, unknown>) ?? null,
+          readiness: readiness ?? null,
+          lastEventAt: Date.now(),
+        },
+      });
+    } catch (e) {
+      // EvolutionController may not be running. Silently leave state as-is.
+      if (get().evolution === null) {
+        set({ evolution: null });
       }
     }
   },
