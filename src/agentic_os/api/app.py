@@ -1174,43 +1174,41 @@ def create_app(platform: Platform) -> FastAPI:
                 payload=m.to_dict(),
             )
         )
-        # Dispatch each planned task to the OrchestrationFramework
-        # for capability-driven brain selection + execution.
+        # Route each planned task through the Orchestrator's create_task()
+        # which properly registers the task in the agent registry and
+        # triggers the full pipeline:
+        #   task.created → planner → task.planned → dispatcher →
+        #   task.dispatched → provider.execute → agent.completed
         if m.plan and m.plan.tasks:
             for task in m.plan.tasks:
                 try:
-                    await orch.bus.publish(
-                        EventEnvelope(
-                            type="task.created",
-                            source="mission-execution",
-                            topic=Topic.TASK_CREATED.value,
-                            payload={
-                                "id": task.id,
-                                "mission_id": mission_id,
-                                "title": task.title,
-                                "required_capability": task.required_capability,
-                                "assigned_provider": task.assigned_provider,
-                                "assigned_role": task.assigned_role.value
-                                if task.assigned_role
-                                else None,
-                                "dependencies": task.dependencies,
-                                "status": "pending",
-                            },
-                        )
-                    )
-                    await orch.bus.publish(
-                        EventEnvelope(
-                            type="task.dispatched",
-                            source="mission-execution",
-                            topic=Topic.TASK_DISPATCHED.value,
-                            payload={
-                                "id": task.id,
-                                "mission_id": mission_id,
-                                "assigned_provider": task.assigned_provider,
-                                "required_capability": task.required_capability,
-                                "status": "dispatched",
-                            },
-                        )
+                    # Map the planned task's role to a role the orchestrator knows
+                    role = "coding"
+                    if task.assigned_role:
+                        role_str = task.assigned_role.value.lower()
+                        if "architect" in role_str or "planner" in role_str:
+                            role = "planner"
+                        elif "front" in role_str:
+                            role = "coding"
+                        elif "back" in role_str:
+                            role = "coding"
+                        elif "security" in role_str:
+                            role = "reviewer"
+                        elif "test" in role_str or "valid" in role_str:
+                            role = "reviewer"
+                        elif "doc" in role_str:
+                            role = "research"
+                        elif "audit" in role_str or "repository" in role_str:
+                            role = "research"
+
+                    # create_task registers the task in the orchestrator's
+                    # registry, publishes task.created, which triggers:
+                    # _on_task_created → _on_task_planned → _on_task_dispatched
+                    # → _run_provider → agent completes
+                    await orch.create_task(
+                        title=task.title,
+                        role=role,
+                        description=task.description or m.prompt or "",
                     )
                 except Exception:
                     log.warning(

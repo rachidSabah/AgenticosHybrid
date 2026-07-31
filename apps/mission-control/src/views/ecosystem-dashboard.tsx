@@ -240,21 +240,21 @@ function OverviewTab() {
               <ScoreBar label="Collaboration" value={liveHealth.collaboration_score} />
               <ScoreBar label="Evolution" value={liveHealth.evolution_score} />
             </div>
-            {liveHealth.issues.length > 0 && (
+            {(liveHealth?.issues ?? []).length > 0 && (
               <div>
                 <div className="mb-1 text-xs font-medium text-rose-400">Issues</div>
                 <ul className="space-y-1 text-[11px] text-faint">
-                  {liveHealth.issues.map((issue, i) => (
+                  {(liveHealth?.issues ?? []).map((issue: string, i: number) => (
                     <li key={i}>• {issue}</li>
                   ))}
                 </ul>
               </div>
             )}
-            {liveHealth.recommendations.length > 0 && (
+            {(liveHealth?.recommendations ?? []).length > 0 && (
               <div>
                 <div className="mb-1 text-xs font-medium text-emerald-400">Recommendations</div>
                 <ul className="space-y-1 text-[11px] text-faint">
-                  {liveHealth.recommendations.map((rec, i) => (
+                  {(liveHealth?.recommendations ?? []).map((rec: string, i: number) => (
                     <li key={i}>• {rec}</li>
                   ))}
                 </ul>
