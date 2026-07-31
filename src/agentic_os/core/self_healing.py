@@ -33,6 +33,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Any
 
 from agentic_os.config import Settings
 from agentic_os.core.recovery import RecoveryManagerImpl
@@ -88,6 +89,7 @@ class SelfHealingEngine:
         recovery: RecoveryManagerImpl,
         settings: Settings,
         max_issues: int = 1000,
+        provider_registry: Any = None,
     ) -> None:
         self._bus = bus
         self._recovery = recovery
@@ -98,6 +100,7 @@ class SelfHealingEngine:
         self._actions: list[HealingAction] = []
         self._running = False
         self._issue_counter = 0
+        self._provider_registry = provider_registry  # shared kernel registry
 
         # Register built-in healing actions
         self._register_actions()
@@ -431,15 +434,24 @@ class SelfHealingEngine:
             return False
 
     async def _repair_runtime(self) -> bool:
-        """Restart the runtime discovery subsystem."""
+        """Restart the runtime discovery subsystem.
+
+        Uses the shared kernel ProviderRegistry (if available) so that
+        any newly discovered providers are visible to the orchestrator.
+        Previously this created a throwaway ProviderRegistry() that was
+        immediately discarded — providers were never visible to the
+        scheduler or dispatcher.
+        """
         try:
             from agentic_os.adapters.providers.auto_bind import (
                 auto_discover_and_bind,
             )
-            from agentic_os.core.registry import ProviderRegistry
 
-            auto_discover_and_bind(ProviderRegistry())
-            return True
+            # Use the shared kernel registry if available; otherwise no-op
+            if self._provider_registry is not None:
+                auto_discover_and_bind(self._provider_registry)
+                return True
+            return False
         except Exception:
             return False
 

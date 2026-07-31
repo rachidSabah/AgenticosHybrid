@@ -1005,7 +1005,10 @@ def create_app(platform: Platform) -> FastAPI:
         # Register agent in the runtime so it shows in Agent Constellation
         provider_name = spec.provider or settings.provider_default
         if not provider_name:
-            provider_name = "mock"
+            # Prefer real providers over mock for composed agents
+            all_providers = platform.providers.list_providers()
+            real = [p for p in all_providers if p.name != "mock" and "mock" not in p.kind]
+            provider_name = real[0].name if real else "mock"
         # Ensure the role exists
         if not orch.registry.get_role(spec.name):
             orch.registry.register_role(
