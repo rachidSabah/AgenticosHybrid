@@ -77,7 +77,24 @@ class Orchestrator:
         task = self._canonical_task(event.payload.get("id"))
         if task is None:
             return
-        provider = self.providers.get(self.settings.provider_default) or self.providers.default()
+
+        # Provider selection: prefer real (non-mock) providers.
+        # If the configured default is "mock", check for real providers first.
+        provider = None
+        all_providers = self.providers.list_providers()
+        real_providers = [p for p in all_providers if p.name != "mock" and "mock" not in p.kind]
+
+        if real_providers:
+            # Pick the first healthy real provider (round-robin could be added later)
+            provider_name = real_providers[0].name
+            provider = self.providers.get(provider_name)
+            log.info("dispatcher.real_provider_selected", provider=provider_name, task=task.id)
+        else:
+            # Fall back to configured default or first available
+            provider = (
+                self.providers.get(self.settings.provider_default) or self.providers.default()
+            )
+
         if provider is None:
             log.error("dispatcher.no_provider")
             return
@@ -102,7 +119,15 @@ class Orchestrator:
         The attempt count lives on the Task (the durable unit of work), not on
         the transient Agent, so the recovery cap is enforced correctly.
         """
-        provider = self.providers.get(self.settings.provider_default) or self.providers.default()
+        # Prefer real (non-mock) providers for recovery too
+        all_providers = self.providers.list_providers()
+        real_providers = [p for p in all_providers if p.name != "mock" and "mock" not in p.kind]
+        if real_providers:
+            provider = self.providers.get(real_providers[0].name)
+        else:
+            provider = (
+                self.providers.get(self.settings.provider_default) or self.providers.default()
+            )
         if provider is None:
             return
         task.attempts += 1
