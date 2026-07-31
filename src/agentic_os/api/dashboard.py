@@ -187,6 +187,18 @@ _DASHBOARD_TOPICS = [
     "evolution.knowledge.synthesized",
     "evolution.readiness.updated",
     "evolution.statistics.updated",
+    # Phase 17: Distributed Execution Fabric — node lifecycle, leader
+    # election, task dispatch, heartbeat, replication events.
+    "distributed.started",
+    "distributed.stopped",
+    "distributed.task.dispatched",
+    "distributed.task.completed",
+    "distributed.task.failed",
+    "node.joined",
+    "node.left",
+    "node.leader.elected",
+    "node.heartbeat.received",
+    "node.health.updated",
 ]
 
 # Normalize the topic list to plain strings. The list above mixes

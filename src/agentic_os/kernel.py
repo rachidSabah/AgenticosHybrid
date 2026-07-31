@@ -225,6 +225,8 @@ class Platform:
     cluster_controller: Any = None  # ClusterController | None
     # Phase 17: Autonomous Agent Evolution
     evolution_controller: Any = None  # EvolutionController | None
+    # Phase 17: Distributed Execution Fabric
+    distributed_controller: Any = None  # DistributedController | None
 
 
 class Kernel:
@@ -793,11 +795,42 @@ class Kernel:
             except Exception as exc:
                 _diag("Evolution", "FAILED", str(exc))
 
+            # ── Phase 17: Distributed Execution Fabric ──
+            _diag("Distributed", "STARTING")
+            try:
+                from agentic_os.core.distributed import DistributedController
+
+                dist_host = getattr(settings, "http_host", "localhost")
+                dist_port = int(getattr(settings, "http_port", 8000))
+                self.distributed_controller = DistributedController(
+                    bus=self.bus,
+                    local_node_id=f"node-{dist_host}-{dist_port}",
+                    local_base_url=f"http://{dist_host}:{dist_port}",
+                    federation=(
+                        self.cluster_controller.federation
+                        if self.cluster_controller is not None
+                        else None
+                    ),
+                )
+                await self.distributed_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.distributed_controller = self.distributed_controller
+                _diag("Distributed", "STARTED")
+            except Exception as exc:
+                _diag("Distributed", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 17: Stop Distributed Controller (stops first — depends on others)
+        if self.distributed_controller is not None:
+            try:
+                await self.distributed_controller.stop()
+            except Exception:
+                log.exception("Failed to stop DistributedController")
+            self.distributed_controller = None
         # Phase 17: Stop Evolution Controller (stops first — depends on others)
         if self.evolution_controller is not None:
             try:

@@ -6637,6 +6637,181 @@ def create_app(platform: Platform) -> FastAPI:
         ec = _evolution_controller()
         return await ec.manager.assess_readiness()
 
+    # ── Phase 17: Distributed Execution Fabric ─────────────────────────
+    # All endpoints are LIVE — they read directly from DistributedController
+    # which derives its state from the existing Phase 16 cluster + Phase 17
+    # transport/heartbeat/election/executor components.
+
+    def _distributed_controller():
+        dc = getattr(platform, "distributed_controller", None)
+        if dc is None:
+            raise HTTPException(503, detail="DistributedController not available")
+        return dc
+
+    @app.get("/api/distributed/status")
+    async def distributed_status() -> dict:
+        dc = getattr(platform, "distributed_controller", None)
+        if dc is None:
+            return {"started": False, "local_node_id": "", "leader_id": "", "peer_count": 0}
+        return dc.status()
+
+    @app.get("/api/distributed/dashboard")
+    async def distributed_dashboard() -> dict:
+        dc = _distributed_controller()
+        return dc.dashboard()
+
+    @app.get("/api/distributed/health")
+    async def distributed_health() -> dict:
+        dc = _distributed_controller()
+        return dc.get_cluster_health()
+
+    @app.get("/api/distributed/tasks")
+    async def distributed_tasks(status: str | None = None) -> dict:
+        dc = _distributed_controller()
+        from agentic_os.core.distributed import DistributedTaskStatus
+
+        tasks = dc.executor.list_tasks(status=status)
+        return {
+            "tasks": [t.to_dict() for t in tasks],
+            "stats": dc.executor.stats,
+        }
+
+    @app.post("/api/distributed/tasks/dispatch")
+    async def distributed_dispatch_task(body: dict) -> dict:
+        dc = _distributed_controller()
+        from agentic_os.core.distributed import DistributedTask
+
+        task = DistributedTask(
+            title=str(body.get("title", "")),
+            description=str(body.get("description", "")),
+            required_capabilities=list(body.get("required_capabilities", [])),
+            target_node_id=str(body.get("target_node_id", "")),
+            priority=float(body.get("priority", 0.5)),
+            payload=dict(body.get("payload", {})),
+        )
+        success = await dc.dispatch_task(task)
+        return {"dispatched": success, "task": task.to_dict()}
+
+    @app.post("/api/distributed/tasks/{task_id}/ack")
+    async def distributed_ack_task(task_id: str, body: dict) -> dict:
+        """Receive a task acknowledgement from a remote node."""
+        dc = _distributed_controller()
+        from agentic_os.core.distributed import TaskAcknowledgement
+
+        ack = TaskAcknowledgement(
+            task_id=task_id,
+            node_id=str(body.get("node_id", "")),
+            brain_id=str(body.get("brain_id", "")),
+            accepted=bool(body.get("accepted", True)),
+            reason=str(body.get("reason", "")),
+        )
+        accepted = dc.executor.receive_acknowledgement(ack)
+        return {"accepted": accepted}
+
+    @app.post("/api/distributed/tasks/{task_id}/complete")
+    async def distributed_complete_task(task_id: str, body: dict) -> dict:
+        """Receive a task completion from a remote node."""
+        dc = _distributed_controller()
+        result = dict(body.get("result", {}))
+        success = bool(body.get("success", True))
+        completed = dc.executor.receive_completion(task_id, result, success)
+        return {"completed": completed}
+
+    @app.get("/api/distributed/events")
+    async def distributed_events() -> dict:
+        dc = _distributed_controller()
+        return {"stats": dc.event_bus.stats}
+
+    @app.post("/api/distributed/events")
+    async def distributed_receive_event(body: dict) -> dict:
+        """Receive a propagated event from a peer node."""
+        dc = _distributed_controller()
+        accepted = dc.event_bus.receive_inbound(body)
+        return {"accepted": accepted}
+
+    @app.post("/api/distributed/heartbeat")
+    async def distributed_receive_heartbeat(body: dict) -> dict:
+        """Receive a heartbeat from a peer node."""
+        dc = _distributed_controller()
+        from agentic_os.core.distributed import HeartbeatPacket
+
+        packet = HeartbeatPacket(
+            node_id=str(body.get("node_id", "")),
+            sequence=int(body.get("sequence", 0)),
+            status=str(body.get("status", "active")),
+            brain_count=int(body.get("brain_count", 0)),
+            active_tasks=int(body.get("active_tasks", 0)),
+            cpu_usage=float(body.get("cpu_usage", 0)),
+            memory_usage=float(body.get("memory_usage", 0)),
+            health_score=float(body.get("health_score", 100)),
+            leader_id=str(body.get("leader_id", "")),
+        )
+        accepted = dc.heartbeat.receive_heartbeat(packet)
+        return {"accepted": accepted}
+
+    @app.post("/api/distributed/replicate")
+    async def distributed_receive_replication(body: dict) -> dict:
+        """Receive a replicated state entry from a peer."""
+        dc = _distributed_controller()
+        accepted = dc.replication.receive_replication(body)
+        return {"accepted": accepted}
+
+    @app.post("/api/distributed/vote")
+    async def distributed_receive_vote(body: dict) -> dict:
+        """Receive a leader election vote from a peer."""
+        dc = _distributed_controller()
+        from agentic_os.core.distributed import LeaderVote
+
+        vote = LeaderVote(
+            voter_id=str(body.get("voter_id", "")),
+            candidate_id=str(body.get("candidate_id", "")),
+            term=int(body.get("term", 0)),
+        )
+        accepted = dc.leader_election.receive_vote(vote)
+        return {"accepted": accepted}
+
+    @app.post("/api/distributed/join")
+    async def distributed_join(body: dict) -> dict:
+        """Join a cluster by connecting to a peer node."""
+        dc = _distributed_controller()
+        peer_url = str(body.get("peer_url", ""))
+        peer_node_id = str(body.get("peer_node_id", ""))
+        if not peer_url:
+            raise HTTPException(400, detail="peer_url required")
+        return await dc.join_cluster(peer_url, peer_node_id)
+
+    @app.post("/api/distributed/leave")
+    async def distributed_leave(body: dict) -> dict:
+        """Leave the cluster or remove a node."""
+        dc = _distributed_controller()
+        node_id = str(body.get("node_id", ""))
+        reason = str(body.get("reason", ""))
+        if not node_id:
+            raise HTTPException(400, detail="node_id required")
+        return await dc.leave_cluster(node_id, reason)
+
+    @app.post("/api/distributed/leader")
+    async def distributed_elect_leader() -> dict:
+        """Run leader election."""
+        dc = _distributed_controller()
+        return await dc.elect_leader()
+
+    @app.get("/api/distributed/topology")
+    async def distributed_topology() -> dict:
+        dc = _distributed_controller()
+        return {
+            "local_node_id": dc._local_node_id,
+            "leader_id": dc.leader_election.current_leader,
+            "leader_term": dc.leader_election.current_term,
+            "nodes": dc.node_registry.list_nodes(),
+            "peers": dc.transport.list_peers(),
+        }
+
+    @app.get("/api/distributed/scheduler")
+    async def distributed_scheduler() -> dict:
+        dc = _distributed_controller()
+        return dc.scheduler.stats
+
     return app
 
 
