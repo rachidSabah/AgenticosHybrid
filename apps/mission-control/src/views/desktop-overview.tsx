@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import type { DesktopRuntimeState } from "@/lib/desktop-types";
@@ -104,9 +105,9 @@ export default function DesktopOverview() {
             <ProgressBar value={state.performance.disk_usage_percent} label="Disk" tone={state.performance.disk_usage_percent > 90 ? "danger" : state.performance.disk_usage_percent > 75 ? "warn" : "accent"} />
             {state.performance.process_count > 0 && (
               <div className="pt-2 text-xs text-faint">
-                {state.performance.process_count} processes &middot; {state.performance.memory_total_mb > 0 && `${(state.performance.memory_used_mb).toFixed(0)} / ${(state.performance.memory_total_mb).toFixed(0)} MB`}
+                {state.performance.process_count} processes &middot; {state.performance.memory_total_mb > 0 && `${safeFixed(state?.performance?.memory_used_mb, 0)} / ${safeFixed(state?.performance?.memory_total_mb, 0)} MB`}
                 {state.performance.disk_total_gb > 0 && state.performance.memory_total_mb > 0 && " &middot; "}
-                {state.performance.disk_total_gb > 0 && `${state.performance.disk_free_gb.toFixed(1)} GB free`}
+                {state.performance.disk_total_gb > 0 && `${safeFixed(state?.performance?.disk_free_gb, 1)} GB free`}
               </div>
             )}
           </div>

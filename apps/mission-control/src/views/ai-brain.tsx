@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { 
   RefreshCw, ZoomIn, ZoomOut
 } from "lucide-react";
@@ -488,7 +489,7 @@ export function AIBrain() {
               { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
               { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },
               { label: "GPU", val: performance?.gpu_usage_percent ?? "—", color: "text-indigo-400" },
-              { label: "NET", val: performance?.network_throughput_bytes_per_sec ? `${(performance.network_throughput_bytes_per_sec / 1024).toFixed(0)}KB/s` : "—", color: "text-pink-400" },
+              { label: "NET", val: performance?.network_throughput_bytes_per_sec ? `${safeFixed((safeNum(performance?.network_throughput_bytes_per_sec) / 1024), 0)}KB/s` : "—", color: "text-pink-400" },
             ].map((m) => (
               <div key={m.label} className="bg-slate-900/60 rounded-lg p-1 border border-slate-800">
                 <div className="text-[8px] text-slate-500">{m.label}</div>

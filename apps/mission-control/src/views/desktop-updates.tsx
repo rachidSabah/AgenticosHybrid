@@ -146,7 +146,7 @@ export default function DesktopUpdates() {
           <div className="flex items-center gap-4">
             <div className="flex-1 space-y-1">
               <div className="text-xs text-muted">
-                Size: {(pending.size_bytes / 1024 / 1024).toFixed(1)} MB &middot; Released: {pending.release_date}
+                Size: {safeFixed((safeNum(pending?.size_bytes) / 1024 / 1024), 1)} MB &middot; Released: {pending.release_date}
                 {pending.mandatory && <span className="ml-2"><Badge tone="danger">Mandatory</Badge></span>}
               </div>
               {pending.changelog?.length > 0 && (

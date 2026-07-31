@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { Panel, Stat, Badge, StatusDot, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import type { RuntimeInfo, RuntimeDiscoveryResult } from "@/lib/desktop-types";
@@ -101,7 +102,7 @@ export default function DesktopRuntimes() {
         <Stat label="Verified" value={verifiedCount} tone="ok" />
         <Stat label="Unverified" value={runtimes.length - verifiedCount} tone={runtimes.length - verifiedCount > 0 ? "warn" : "ok"} />
         {discoveryResult && (
-          <Stat label="Last Discovery" value={`${(discoveryResult.duration_seconds ?? 0).toFixed(1)}s`} />
+          <Stat label="Last Discovery" value={`${safeFixed(discoveryResult?.duration_seconds, 1)}s`} />
         )}
         <button
           onClick={handleDiscover}

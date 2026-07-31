@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { Panel, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
@@ -72,7 +73,7 @@ export function ProviderControlCenter() {
                 pulse={!!providersLive[p.provider] && p.status === "healthy"}
               />
               <span className="flex-1 text-sm">{p.provider}</span>
-              <span className="text-xs text-faint">{p.latency_ms.toFixed(0)}ms</span>
+              <span className="text-xs text-faint">{safeFixed(p?.latency_ms, 0)}ms</span>
               {p.error && <Badge tone="danger">err</Badge>}
               {providersLive[p.provider] && (
                 <span className="text-[9px] text-ok" title="Live via EventBus">●</span>

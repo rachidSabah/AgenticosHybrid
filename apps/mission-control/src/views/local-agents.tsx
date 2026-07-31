@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Cpu,
@@ -151,7 +152,7 @@ function AgentCard({
               <span>RAM</span>
               <span className="tabular-nums">
                 {agent.memory_mb > 1024
-                  ? `${(agent.memory_mb / 1024).toFixed(1)} GB`
+                  ? `${safeFixed((safeNum(agent?.memory_mb) / 1024), 1)} GB`
                   : `${Math.round(agent.memory_mb)} MB`}
               </span>
             </div>
@@ -172,7 +173,7 @@ function AgentCard({
           <Activity size={11} />
           {agent.latency_ms < 1000
             ? `${agent.latency_ms}ms`
-            : `${(agent.latency_ms / 1000).toFixed(1)}s`}
+            : `${safeFixed((safeNum(agent?.latency_ms) / 1000), 1)}s`}
         </span>
         {agent.uptime_seconds > 0 && (
           <span className="inline-flex items-center gap-1">
@@ -337,8 +338,8 @@ function AgentCard({
               <DetailRow label="Discovered" value={timeAgo(agent.discovered_at)} />
               <DetailRow label="Last Seen" value={timeAgo(agent.last_seen)} />
               <DetailRow label="Latency" value={`${agent.latency_ms}ms`} />
-              <DetailRow label="CPU" value={`${agent.cpu_percent.toFixed(1)}%`} />
-              <DetailRow label="Memory" value={`${agent.memory_mb.toFixed(0)} MB`} />
+              <DetailRow label="CPU" value={`${safeFixed(agent?.cpu_percent, 1)}%`} />
+              <DetailRow label="Memory" value={`${safeFixed(agent?.memory_mb, 0)} MB`} />
               <DetailRow label="Threads" value={String(agent.threads)} />
               <DetailRow label="Uptime" value={formatUptime(agent.uptime_seconds)} />
               <DetailRow label="Restarts" value={String(agent.restart_count)} />

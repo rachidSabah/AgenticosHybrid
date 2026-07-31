@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { List, type RowComponentProps } from "react-window";
 import { AutoSizer } from "react-virtualized-auto-sizer";
@@ -944,7 +945,7 @@ function McpTelemetryTab() {
         <Stat label="Total Requests" value={summary?.total_requests ?? 0} />
         <Stat label="Successful" value={summary?.successful_requests ?? 0} tone="ok" />
         <Stat label="Failed" value={summary?.failed_requests ?? 0} tone={summary?.failed_requests ? "danger" : "default"} />
-        <Stat label="Error Rate" value={summary ? `${(summary.error_rate * 100).toFixed(1)}%` : "N/A"} tone={summary && summary.error_rate > 0.1 ? "warn" : "default"} />
+        <Stat label="Error Rate" value={summary ? `${safeFixed((safeNum(summary?.error_rate) * 100), 1)}%` : "N/A"} tone={summary && summary.error_rate > 0.1 ? "warn" : "default"} />
         <div className="ml-auto">
           <button
             onClick={() => load()}

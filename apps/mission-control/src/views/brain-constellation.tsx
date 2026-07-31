@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ZoomIn, ZoomOut, Maximize2, RefreshCw,
@@ -324,7 +325,7 @@ export function BrainConstellation({
                     fontSize="8"
                     fontFamily="monospace"
                   >
-                    {rel.relationship_type} ({(rel.weight * 100).toFixed(0)}%)
+                    {rel.relationship_type} ({safeFixed((safeNum(rel?.weight) * 100), 0)}%)
                   </text>
                 )}
               </g>
@@ -459,8 +460,8 @@ export function BrainConstellation({
                   style={{ backgroundColor: brainStatusToColor(hoveredNodeData.brain.status) }}
                 />
                 <span>{hoveredNodeData.brain.status}</span>
-                <span>CPU: {hoveredNodeData.brain.cpu_usage.toFixed(0)}%</span>
-                <span>RAM: {(hoveredNodeData.brain.memory_usage / 1024).toFixed(1)}GB</span>
+                <span>CPU: {safeFixed(hoveredNodeData?.brain?.cpu_usage, 0)}%</span>
+                <span>RAM: {safeFixed((safeNum(hoveredNodeData?.brain?.memory_usage) / 1024), 1)}GB</span>
               </div>
             </div>
           </motion.div>

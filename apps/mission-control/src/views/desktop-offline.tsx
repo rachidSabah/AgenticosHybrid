@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { Panel, Stat, Badge, StatusDot, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import type { OfflineEvent, BackupResult } from "@/lib/desktop-types";
@@ -169,7 +170,7 @@ export default function DesktopOffline() {
                   <StatusDot status={bk.success ? "healthy" : "failed"} />
                   <span className="flex-1 truncate text-muted">{bk.backup_path}</span>
                   <span className="w-20 font-mono text-faint">
-                    {(bk.size_bytes / 1024 / 1024).toFixed(1)} MB
+                    {safeFixed((safeNum(bk?.size_bytes) / 1024 / 1024), 1)} MB
                   </span>
                   <span className="w-20 text-right text-faint">{bk.scope}</span>
                 </div>

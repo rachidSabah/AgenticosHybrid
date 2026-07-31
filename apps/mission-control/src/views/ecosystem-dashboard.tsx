@@ -311,10 +311,10 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
     <div>
       <div className="flex items-center justify-between">
         <span className="text-faint">{label}</span>
-        <span className="text-text">{(value * 100).toFixed(0)}%</span>
+        <span className="text-text">{safeFixed((safeNum(value) * 100), 0)}%</span>
       </div>
       <div className="mt-1 h-1.5 w-full rounded-full bg-surface/40">
-        <div className="h-1.5 rounded-full bg-indigo-400" style={{ width: `${(value * 100).toFixed(0)}%` }} />
+        <div className="h-1.5 rounded-full bg-indigo-400" style={{ width: `${safeFixed((safeNum(value) * 100), 0)}%` }} />
       </div>
     </div>
   );
@@ -456,7 +456,7 @@ function CapabilitiesTab() {
           <Empty title="No edges" hint="No capability relationships recorded." />
         ) : (
           <div className="space-y-2">
-            {Object.entries(stats.edges_by_type).map(([type, count]) => (
+            {Object.entries(stats?.edges_by_type ?? {}).map(([type, count]) => (
               <div key={type} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
                 <span className="text-xs text-faint">{type}</span>
                 <span className="text-sm font-medium">{count}</span>
@@ -547,7 +547,7 @@ function CollaborationsTab() {
           <Empty title="No runtimes" hint="Collaborations will populate trust scores." />
         ) : (
           <div className="space-y-2 max-h-96 overflow-auto">
-            {Object.entries(data.runtime_stats)
+            {Object.entries(data?.runtime_stats ?? {})
               .map(([rid, stats]) => ({
                 rid,
                 avg_trust: ((stats as Record<string, unknown>).average_trust as number) ?? 0,

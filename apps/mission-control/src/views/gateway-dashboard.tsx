@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
 import { motion } from "framer-motion";
 import { Panel, Stat } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
@@ -129,7 +130,7 @@ function AgentCard({ agent }: { agent: AgentRouteProfile }) {
                 className="rounded bg-black/20 px-1.5 py-0.5 text-[10px]"
                 style={{ color: (score as number) > 0.7 ? "#22c55e" : (score as number) > 0.4 ? "#f59e0b" : "#ef4444" }}
               >
-                {cap}: {((score as number) * 100).toFixed(0)}%
+                {cap}: {safeFixed((safeNum(score) * 100), 0)}%
               </span>
             ))}
           </div>
@@ -270,7 +271,7 @@ export function GatewayDashboard() {
         <Stat label="Routed Agents" value={stats.agents} delta={`${stats.freeAgents} free`} />
         <Stat
           label="Avg Reliability"
-          value={`${(stats.avgReliability * 100).toFixed(0)}%`}
+          value={`${safeFixed((safeNum(stats?.avgReliability) * 100), 0)}%`}
           tone={stats.avgReliability > 0.9 ? "ok" : stats.avgReliability > 0.7 ? "warn" : "danger"}
         />
         <Stat
@@ -289,19 +290,19 @@ export function GatewayDashboard() {
             <div className="grid grid-cols-4 gap-3">
               <div className="glass rounded-lg px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-faint">Cost Weight</div>
-                <div className="mt-0.5 text-lg font-semibold">{(config.cost_weight * 100).toFixed(0)}%</div>
+                <div className="mt-0.5 text-lg font-semibold">{safeFixed((safeNum(config?.cost_weight) * 100), 0)}%</div>
               </div>
               <div className="glass rounded-lg px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-faint">Speed Weight</div>
-                <div className="mt-0.5 text-lg font-semibold">{(config.speed_weight * 100).toFixed(0)}%</div>
+                <div className="mt-0.5 text-lg font-semibold">{safeFixed((safeNum(config?.speed_weight) * 100), 0)}%</div>
               </div>
               <div className="glass rounded-lg px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-faint">Capability Weight</div>
-                <div className="mt-0.5 text-lg font-semibold">{(config.capability_weight * 100).toFixed(0)}%</div>
+                <div className="mt-0.5 text-lg font-semibold">{safeFixed((safeNum(config?.capability_weight) * 100), 0)}%</div>
               </div>
               <div className="glass rounded-lg px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-faint">Reliability Weight</div>
-                <div className="mt-0.5 text-lg font-semibold">{(config.reliability_weight * 100).toFixed(0)}%</div>
+                <div className="mt-0.5 text-lg font-semibold">{safeFixed((safeNum(config?.reliability_weight) * 100), 0)}%</div>
               </div>
             </div>
           )}

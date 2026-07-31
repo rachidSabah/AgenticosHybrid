@@ -6668,7 +6668,6 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/distributed/tasks")
     async def distributed_tasks(status: str | None = None) -> dict:
         dc = _distributed_controller()
-        from agentic_os.core.distributed import DistributedTaskStatus
 
         tasks = dc.executor.list_tasks(status=status)
         return {

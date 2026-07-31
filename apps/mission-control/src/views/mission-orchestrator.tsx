@@ -616,7 +616,7 @@ function MissionForm({
               <div key={i} className="flex items-center gap-2 rounded-lg bg-surface/40 px-2 py-1 text-[11px]">
                 <FileText size={10} className="text-accent shrink-0" />
                 <span className="flex-1 truncate">{f.name}</span>
-                <span className="text-faint shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                <span className="text-faint shrink-0">{safeFixed((safeNum(f?.size) / 1024), 0)} KB</span>
                 <button className="text-faint hover:text-danger" onClick={() => removeAttachment(i)}><X size={10} /></button>
               </div>
             ))}
@@ -754,7 +754,7 @@ function MissionDetail({ mission, onRefresh }: { mission: MissionType; onRefresh
             <div key={a.id} className="text-xs text-muted flex items-center gap-2 rounded-lg bg-surface/30 px-2 py-1.5">
               <FileText size={12} className="text-accent shrink-0" />
               <span className="flex-1 truncate">{a.filename}</span>
-              <span className="text-[10px] text-faint shrink-0">({(a.size_bytes / 1024).toFixed(0)} KB)</span>
+              <span className="text-[10px] text-faint shrink-0">({safeFixed((safeNum(a?.size_bytes) / 1024), 0)} KB)</span>
               <span className="text-[10px] text-faint italic truncate">{a.description || a.mime_type}</span>
             </div>
           ))}
