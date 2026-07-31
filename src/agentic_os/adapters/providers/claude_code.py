@@ -34,7 +34,7 @@ class ClaudeCodeProvider:
         env = dict(__import__("os").environ)
         if self._api_key:
             env["ANTHROPIC_API_KEY"] = self._api_key
-        log.info("claude_code.execute", agent=agent.id, task=task.id)
+        log.info("claude_code.execute", agent=agent.id, task=task.id, prompt_len=len(prompt))
         proc = await asyncio.create_subprocess_exec(
             self._bin,
             "-p",
@@ -45,7 +45,12 @@ class ClaudeCodeProvider:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120.0)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError("claude timed out after 120s") from None
         if proc.returncode != 0:
             raise RuntimeError(f"claude exited {proc.returncode}: {stderr.decode().strip()}")
         return stdout.decode().strip() or f"[claude_code] completed '{task.title}'"
