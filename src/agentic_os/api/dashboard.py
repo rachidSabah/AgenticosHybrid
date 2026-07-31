@@ -199,6 +199,18 @@ _DASHBOARD_TOPICS = [
     "node.leader.elected",
     "node.heartbeat.received",
     "node.health.updated",
+    # Phase 18: Persistent Runtime — snapshot, recovery, job, queue, health events.
+    "runtime.started",
+    "runtime.stopped",
+    "runtime.snapshot.created",
+    "runtime.snapshot.restored",
+    "runtime.recovered",
+    "runtime.recovery.failed",
+    "runtime.job.started",
+    "runtime.job.completed",
+    "runtime.job.failed",
+    "runtime.queue.updated",
+    "runtime.health.updated",
 ]
 
 # Normalize the topic list to plain strings. The list above mixes

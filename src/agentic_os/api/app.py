@@ -6811,6 +6811,155 @@ def create_app(platform: Platform) -> FastAPI:
         dc = _distributed_controller()
         return dc.scheduler.stats
 
+    # ── Phase 18: Persistent Runtime ───────────────────────────────────
+
+    def _persistent_controller():
+        pc = getattr(platform, "persistent_controller", None)
+        if pc is None:
+            raise HTTPException(503, detail="PersistentController not available")
+        return pc
+
+    @app.get("/api/runtime/state")
+    async def runtime_state() -> dict:
+        pc = getattr(platform, "persistent_controller", None)
+        if pc is None:
+            return {"started": False, "data_dir": ""}
+        return pc.status()
+
+    @app.get("/api/runtime/dashboard")
+    async def runtime_dashboard() -> dict:
+        pc = _persistent_controller()
+        return pc.dashboard()
+
+    @app.post("/api/runtime/snapshot")
+    async def runtime_create_snapshot() -> dict:
+        pc = _persistent_controller()
+        return await pc.create_snapshot()
+
+    @app.get("/api/runtime/snapshot")
+    async def runtime_list_snapshots(limit: int = 50) -> list[dict]:
+        pc = _persistent_controller()
+        return await pc.snapshot_engine.list_snapshots(limit=limit)
+
+    @app.post("/api/runtime/restore")
+    async def runtime_restore(body: dict) -> dict:
+        pc = _persistent_controller()
+        snapshot_id = str(body.get("snapshot_id", ""))
+        if not snapshot_id:
+            raise HTTPException(400, detail="snapshot_id required")
+        return await pc.restore_snapshot(snapshot_id)
+
+    @app.get("/api/runtime/jobs")
+    async def runtime_jobs(status: str | None = None) -> dict:
+        pc = _persistent_controller()
+
+        jobs = pc.scheduler.list_jobs(status=status)
+        return {"jobs": [j.to_dict() for j in jobs], "stats": pc.scheduler.stats}
+
+    @app.post("/api/runtime/jobs")
+    async def runtime_schedule_job(body: dict) -> dict:
+        pc = _persistent_controller()
+        name = str(body.get("name", ""))
+        handler = str(body.get("handler", ""))
+        if not name or not handler:
+            raise HTTPException(400, detail="name and handler required")
+        return await pc.schedule_job(
+            name=name,
+            handler=handler,
+            schedule=str(body.get("schedule", "60")),
+            priority=int(body.get("priority", 5)),
+            args=body.get("args", {}),
+        )
+
+    @app.post("/api/runtime/jobs/{job_id}/cancel")
+    async def runtime_cancel_job(job_id: str) -> dict:
+        pc = _persistent_controller()
+        cancelled = await pc.scheduler.cancel(job_id)
+        return {"cancelled": cancelled}
+
+    @app.post("/api/runtime/jobs/{job_id}/pause")
+    async def runtime_pause_job(job_id: str) -> dict:
+        pc = _persistent_controller()
+        paused = await pc.scheduler.pause(job_id)
+        return {"paused": paused}
+
+    @app.post("/api/runtime/jobs/{job_id}/resume")
+    async def runtime_resume_job(job_id: str) -> dict:
+        pc = _persistent_controller()
+        resumed = await pc.scheduler.resume(job_id)
+        return {"resumed": resumed}
+
+    @app.get("/api/runtime/queue")
+    async def runtime_queue(queue: str = "default", limit: int = 50) -> dict:
+        pc = _persistent_controller()
+        tasks = pc.queue.list_tasks(queue=queue, limit=limit)
+        dead = pc.queue.list_dead_letter(limit=limit)
+        return {
+            "tasks": [t.to_dict() for t in tasks],
+            "dead_letter": [t.to_dict() for t in dead],
+            "stats": pc.queue.stats,
+        }
+
+    @app.post("/api/runtime/queue")
+    async def runtime_enqueue(body: dict) -> dict:
+        pc = _persistent_controller()
+        return await pc.enqueue_task(
+            payload=dict(body.get("payload", {})),
+            queue=str(body.get("queue", "default")),
+            priority=int(body.get("priority", 5)),
+        )
+
+    @app.get("/api/runtime/history")
+    async def runtime_history(limit: int = 100, topic: str | None = None) -> dict:
+        pc = _persistent_controller()
+        events = await pc.journal.replay(limit=limit, topic=topic)
+        return {"events": events, "stats": pc.journal.stats}
+
+    @app.get("/api/runtime/recovery")
+    async def runtime_recovery() -> dict:
+        pc = _persistent_controller()
+        return {
+            "stats": pc.recovery_engine.stats,
+            "history": [p.to_dict() for p in pc.recovery_engine.list_history()],
+        }
+
+    @app.get("/api/runtime/scheduler")
+    async def runtime_scheduler() -> dict:
+        pc = _persistent_controller()
+        return pc.scheduler.stats
+
+    @app.get("/api/runtime/events")
+    async def runtime_events(limit: int = 100, topic: str | None = None) -> dict:
+        pc = _persistent_controller()
+        events = await pc.journal.replay(limit=limit, topic=topic)
+        return {"events": events, "stats": pc.journal.stats}
+
+    @app.get("/api/runtime/audit")
+    async def runtime_audit(limit: int = 100) -> dict:
+        pc = _persistent_controller()
+        records = await pc.audit.read(limit=limit)
+        return {"records": records, "stats": pc.audit.stats}
+
+    @app.get("/api/runtime/health/supervisor")
+    async def runtime_health_supervisor() -> dict:
+        pc = _persistent_controller()
+        checks = pc.health.list_checks()
+        return {
+            "checks": [c.to_dict() for c in checks],
+            "stats": pc.health.stats,
+        }
+
+    @app.post("/api/runtime/backup")
+    async def runtime_create_backup() -> dict:
+        pc = _persistent_controller()
+        manifest = await pc.backup.create_backup()
+        return manifest.to_dict() if manifest else {}
+
+    @app.get("/api/runtime/backup")
+    async def runtime_list_backups() -> list[dict]:
+        pc = _persistent_controller()
+        return await pc.backup.list_backups()
+
     return app
 
 

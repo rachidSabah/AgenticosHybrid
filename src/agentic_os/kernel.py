@@ -7,6 +7,7 @@ here behind their ports. The :class:`Platform` bundle is the single object the
 API layer receives.
 """
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -227,6 +228,8 @@ class Platform:
     evolution_controller: Any = None  # EvolutionController | None
     # Phase 17: Distributed Execution Fabric
     distributed_controller: Any = None  # DistributedController | None
+    # Phase 18: Persistent Runtime
+    persistent_controller: Any = None  # PersistentController | None
 
 
 class Kernel:
@@ -819,11 +822,35 @@ class Kernel:
             except Exception as exc:
                 _diag("Distributed", "FAILED", str(exc))
 
+            # ── Phase 18: Persistent Runtime ──
+            _diag("Persistent", "STARTING")
+            try:
+                from agentic_os.core.persistent import PersistentController
+
+                persistent_data_dir = os.path.expanduser("~/.agentic_os/persistent")
+                self.persistent_controller = PersistentController(
+                    bus=self.bus,
+                    data_dir=persistent_data_dir,
+                )
+                await self.persistent_controller.start()
+                if self._platform_instance is not None:
+                    self._platform_instance.persistent_controller = self.persistent_controller
+                _diag("Persistent", "STARTED")
+            except Exception as exc:
+                _diag("Persistent", "FAILED", str(exc))
+
         except Exception as exc:
             _diag("Brains", "FAILED", str(exc))
         log.info("kernel.started", bus=settings.bus_type, plugins=len(self._plugins))
 
     async def stop(self) -> None:
+        # Phase 18: Stop Persistent Controller (stops first — creates pre-shutdown snapshot)
+        if self.persistent_controller is not None:
+            try:
+                await self.persistent_controller.stop()
+            except Exception:
+                log.exception("Failed to stop PersistentController")
+            self.persistent_controller = None
         # Phase 17: Stop Distributed Controller (stops first — depends on others)
         if self.distributed_controller is not None:
             try:
