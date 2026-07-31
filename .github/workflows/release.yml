@@ -409,6 +409,8 @@ jobs:
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
           name: "AgenticOS ${{ github.ref_name }}"
@@ -417,5 +419,3 @@ jobs:
             final-assets/*
           prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
           generate_release_notes: false
-          env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
