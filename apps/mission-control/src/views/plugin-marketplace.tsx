@@ -48,7 +48,20 @@ export function PluginMarketplace() {
 
   useEffect(() => {
     api.providers()
-      .then(setProviders)
+      .then((list) => {
+        // Dedupe by normalized name: the backend registry can emit the same
+        // runtime under multiple aliases ("Claude Code" / "claude_code"),
+        // which would collide as React keys in the map below.
+        const seen = new Set<string>();
+        const unique: ProviderInfo[] = [];
+        for (const p of list) {
+          const slug = (p.name ?? "").toLowerCase().replace(/\s+/g, "-");
+          if (!slug || seen.has(slug)) continue;
+          seen.add(slug);
+          unique.push(p);
+        }
+        setProviders(unique);
+      })
       .catch((err) => { console.error("providers API error:", err); setError(String(err)); });
     api.capabilities()
       .then(setCaps)

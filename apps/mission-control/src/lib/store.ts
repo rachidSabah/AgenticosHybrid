@@ -691,7 +691,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       // ── Providers (from health endpoint — has .provider field) ────────────
-      const providersMap: Record<string, ProviderHealthRecord> = {};
+      let providersMap: Record<string, ProviderHealthRecord> = {};
       if (rawProviders.status === "fulfilled" && Array.isArray(rawProviders.value)) {
         for (const p of rawProviders.value) {
           const name = String(p.provider ?? "");
@@ -768,6 +768,23 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       // ── Commit snapshot + update telemetry counters ───────────────────────
+      // Dedupe providers by normalized id: /api/providers/health may return
+      // "hermes" while /api/brains uses display_name "Hermes" — both slugify
+      // to the same key, and views use that slug as a React key (duplicate
+      // key error). Keep the healthiest entry per slug.
+      const providersBySlug: Record<string, ProviderHealthRecord> = {};
+      for (const p of Object.values(providersMap)) {
+        const slug = (p.provider ?? "").toLowerCase().replace(/\s+/g, "-");
+        if (!slug) continue;
+        const prev = providersBySlug[slug];
+        const rank = (s?: string) =>
+          s === "healthy" ? 3 : s === "degraded" ? 2 : s === "unknown" ? 1 : 0;
+        if (!prev || rank(p.status) > rank(prev.status)) {
+          providersBySlug[slug] = p;
+        }
+      }
+      providersMap = providersBySlug;
+
       // Replace (not merge) agents/providers so that runtimes which disappeared
       // from the backend are also removed from the store. The previous merge
       // logic (`{ ...s.agents, ...agentsMap }`) kept stale entries forever.

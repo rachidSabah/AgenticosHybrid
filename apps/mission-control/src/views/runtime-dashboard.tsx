@@ -166,15 +166,16 @@ const LOG_LEVEL_BG: Record<string, string> = {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function formatUptime(seconds: number): string {
-  if (seconds < 0) return "—";
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60);
-    const s = Math.round(seconds % 60);
-    return `${m}m ${s}s`;
+  const s = safeNum(seconds);
+  if (s < 0) return "—";
+  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 3600) {
+    const m = Math.floor(s / 60);
+    const sec = Math.round(s % 60);
+    return `${m}m ${sec}s`;
   }
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   return `${h}h ${m}m`;
 }
 
@@ -250,8 +251,9 @@ function CapabilityBadge({ name }: { name: string }) {
 
 // ── Health Bar ─────────────────────────────────────────────────────────────
 
-function HealthBar({ value, max = 100, color }: { value: number; max?: number; color?: string }) {
-  const pct = Math.min(Math.max((value / max) * 100, 0), 100);
+function HealthBar({ value, max = 100, color }: { value?: number; max?: number; color?: string }) {
+  const v = safeNum(value);
+  const pct = Math.min(Math.max((v / max) * 100, 0), 100);
   const barColor =
     color ??
     (pct > 80 ? "bg-green-500" : pct > 50 ? "bg-yellow-500" : pct > 20 ? "bg-orange-500" : "bg-red-500");
@@ -260,14 +262,15 @@ function HealthBar({ value, max = 100, color }: { value: number; max?: number; c
       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-700">
         <div className={clsx("h-full rounded-full transition-all duration-500", barColor)} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[11px] tabular-nums text-gray-400">{value.toFixed(1)}%</span>
+      <span className="text-[11px] tabular-nums text-gray-400">{v.toFixed(1)}%</span>
     </div>
   );
 }
 
-function MemoryBar({ usedMb }: { usedMb: number }) {
-  const maxDisplay = Math.max(usedMb, 100);
-  const pct = Math.min((usedMb / 4096) * 100, 100);
+function MemoryBar({ usedMb }: { usedMb?: number }) {
+  const mb = safeNum(usedMb);
+  const maxDisplay = Math.max(mb, 100);
+  const pct = Math.min((mb / 4096) * 100, 100);
   const barColor = pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-500" : "bg-blue-500";
   return (
     <div className="flex items-center gap-2">
@@ -275,7 +278,7 @@ function MemoryBar({ usedMb }: { usedMb: number }) {
         <div className={clsx("h-full rounded-full transition-all duration-500", barColor)} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-[11px] tabular-nums text-gray-400">
-        {usedMb < 1 ? "<1" : usedMb.toFixed(0)} MB
+        {mb < 1 ? "<1" : mb.toFixed(0)} MB
       </span>
     </div>
   );
@@ -291,12 +294,13 @@ function MetricGauge({
   color,
 }: {
   label: string;
-  value: number;
+  value?: number;
   suffix?: string;
   max?: number;
   color?: string;
 }) {
-  const pct = Math.min(Math.max((value / max) * 100, 0), 100);
+  const v = safeNum(value);
+  const pct = Math.min(Math.max((v / max) * 100, 0), 100);
   const barColor =
     color ??
     (pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-500" : "bg-green-500");
@@ -304,7 +308,7 @@ function MetricGauge({
     <div className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-3">
       <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
       <div className="mt-1 text-lg font-semibold tabular-nums text-gray-100">
-        {value.toFixed(1)}
+        {v.toFixed(1)}
         <span className="ml-0.5 text-xs text-gray-500">{suffix}</span>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-700">
@@ -771,28 +775,31 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: "p50", value: metrics.latency_ms, max: 1000 },
-            { label: "p95", value: metrics.latency_ms * 1.5, max: 5000 },
-            { label: "p99", value: metrics.latency_ms * 2, max: 10000 },
-          ].map(({ label, value, max }) => (
-            <div
-              key={label}
-              className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center"
-            >
-              <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
-              <div className="text-base font-semibold tabular-nums text-gray-100">
-                {value.toFixed(0)}
-              </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-700">
-                <div
-                  className={clsx(
-                    "h-full rounded-full transition-all duration-500",
-                    value > 1000 ? "bg-red-500" : value > 500 ? "bg-yellow-500" : "bg-green-500",
-                  )}
-                  style={{ width: `${Math.min((value / max) * 100, 100)}%` }}
-                />
-              </div>
+            { label: "p95", value: safeNum(metrics.latency_ms) * 1.5, max: 5000 },
+            { label: "p99", value: safeNum(metrics.latency_ms) * 2, max: 10000 },
+          ].map(({ label, value, max }) => {
+            const v = safeNum(value);
+            return (
+              <div
+                key={label}
+                className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center"
+              >
+                <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
+                <div className="text-base font-semibold tabular-nums text-gray-100">
+                  {v.toFixed(0)}
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-700">
+                  <div
+                    className={clsx(
+                      "h-full rounded-full transition-all duration-500",
+                      v > 1000 ? "bg-red-500" : v > 500 ? "bg-yellow-500" : "bg-green-500",
+                    )}
+                    style={{ width: `${Math.min((v / max) * 100, 100)}%` }}
+                  />
+                </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
