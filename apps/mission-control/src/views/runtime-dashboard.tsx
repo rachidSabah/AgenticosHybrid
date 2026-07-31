@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { safeFixed, safeNum } from "@/lib/safe";
+import { safeFixed, safeNum, safeStr } from "@/lib/safe";
 import { clsx } from "clsx";
 import {
   Play,
@@ -908,7 +908,7 @@ function RuntimeDetailPanel({
             <span
               className={clsx(
                 "inline-block h-2 w-2 rounded-full",
-                HEALTH_COLORS[runtime.health?.toLowerCase()] ?? "bg-gray-500",
+                HEALTH_COLORS[safeStr(runtime?.health).toLowerCase()] ?? "bg-gray-500",
               )}
             />
             {runtime.health}
@@ -1193,7 +1193,7 @@ export default function RuntimeDashboard() {
             {/* Table rows */}
             {runtimes.map((rt) => {
               const isExpanded = expandedId === rt.id;
-              const hlColor = HEALTH_COLORS[rt.health?.toLowerCase()] ?? "bg-gray-500";
+              const hlColor = HEALTH_COLORS[safeStr(rt?.health).toLowerCase()] ?? "bg-gray-500";
               const isActionLoading = actionLoading && actionLoading.endsWith(rt.id);
 
               return (

@@ -5536,10 +5536,12 @@ def create_app(platform: Platform) -> FastAPI:
             )
 
             pre_count = len(platform.providers.list_providers())
+            # Run off the event loop to prevent blocking — the deep scan
+            # does subprocess probes that can take 30s+ on Windows
             if mode == "deep":
-                bound = auto_discover_and_bind(platform.providers, probe_unknown=True)
+                bound = await asyncio.to_thread(auto_discover_and_bind, platform.providers, True)
             else:
-                bound = auto_discover_and_bind(platform.providers, probe_unknown=False)
+                bound = await asyncio.to_thread(auto_discover_and_bind, platform.providers, False)
             _binding_log.append(
                 {
                     "timestamp": datetime.now(UTC).isoformat(),
@@ -5577,7 +5579,8 @@ def create_app(platform: Platform) -> FastAPI:
             )
 
             pre_count = len(platform.providers.list_providers())
-            bound = auto_discover_and_bind(platform.providers, probe_unknown=True)
+            # Run off the event loop — deep scan does subprocess probes
+            bound = await asyncio.to_thread(auto_discover_and_bind, platform.providers, True)
             discoverers = getattr(platform, "discovery_framework", None)
             sources_scanned = 0
             if discoverers and hasattr(discoverers, "registry"):
@@ -5646,7 +5649,7 @@ def create_app(platform: Platform) -> FastAPI:
             from agentic_os.adapters.providers.auto_bind import auto_discover_and_bind
 
             pre = len(platform.providers.list_providers())
-            auto_discover_and_bind(platform.providers, probe_unknown=False)
+            await asyncio.to_thread(auto_discover_and_bind, platform.providers, False)
             post = len(platform.providers.list_providers())
             return {
                 "provider_id": provider_id,

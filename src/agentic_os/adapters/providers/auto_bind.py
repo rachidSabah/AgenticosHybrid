@@ -143,16 +143,57 @@ def _common_install_dirs() -> list[Path]:
 
     Combines PATH entries with common platform-specific locations so we
     catch agents that were installed but aren't on the current user's PATH.
+
+    Windows system directories (system32, SysWOW64, WindowsApps, etc.) are
+    explicitly EXCLUDED to prevent the event-loop wedge caused by probing
+    thousands of OS binaries with subprocess --version calls.
     """
     dirs: list[Path] = []
 
-    # ── PATH entries ──
+    # Directories that must NEVER be scanned — they contain thousands of
+    # OS binaries that would each get a 5s subprocess probe, blocking the
+    # event loop for hours. This is the root cause of "Backend Offline".
+    _EXCLUDED_DIRS = {
+        "system32",
+        "syswow64",
+        "systemapps",
+        "windowsapps",
+        "driverstore",
+        "servicing",
+        "winsxs",
+        "assembly",
+        "microsoft.net",
+        "windowspowershell",
+        "powershell",
+        "windows defender",
+        "windowssystem",
+    }
+
+    def _is_excluded(p: Path) -> bool:
+        """Check if a path should be excluded from scanning."""
+        name = p.name.lower()
+        if name in _EXCLUDED_DIRS:
+            return True
+        # Exclude any path containing \Windows\ (but NOT \Program Files\nodejs etc.)
+        str_path = str(p).lower()
+        if "\\windows\\" in str_path or "/windows/" in str_path:
+            if "nodejs" not in str_path and "git" not in str_path:
+                return True
+        # Exclude Git usr/bin (thousands of POSIX utilities)
+        if "usr\\bin" in str_path or "usr/bin" in str_path:
+            if "git" not in name and "hermes" not in str_path:
+                return True
+        return False
+
+    # ── PATH entries (filtered) ──
     path_env = os.environ.get("PATH", "")
     sep = ";" if _platform.system() == "Windows" else ":"
     for p in path_env.split(sep):
         p_stripped = p.strip()
         if p_stripped:
-            dirs.append(Path(p_stripped))
+            path_obj = Path(p_stripped)
+            if not _is_excluded(path_obj):
+                dirs.append(path_obj)
 
     # ── Common install roots (platform-aware) ──
     home = Path.home()
@@ -222,11 +263,13 @@ def _probe_binary(bin_path: Path) -> dict | None:
     """
     try:
         # Try --version first (most common)
+        # 3s timeout (reduced from 5s to prevent event-loop blocking on
+        # interactive CLIs like gemini-cli that hang waiting for input)
         result = subprocess.run(
             [str(bin_path), "--version"],
             capture_output=True,
             text=False,
-            timeout=5,
+            timeout=3,
         )
         stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
         stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
@@ -244,21 +287,47 @@ def _probe_binary(bin_path: Path) -> dict | None:
 def _detect_unknown_agents(
     install_dirs: list[Path],
     existing_names: set[str],
+    max_probes: int = 200,
+    deadline_s: float = 30.0,
 ) -> list[dict]:
     """Scan install directories for CLI binaries that look like AI agents but
     aren't in KNOWN_AGENTS or already registered.
 
     This provides future-proofing: when a new AI CLI agent is released,
     AgenticOS will detect and bind it automatically even without a code update.
+
+    Safety constraints (prevent event-loop wedge):
+      - max_probes: hard cap on number of subprocess probes (default 200)
+      - deadline_s: overall time budget in seconds (default 30s)
+      - Each probe has a 3s timeout (reduced from 5s)
+      - Progress is logged every 25 probes
     """
+    import time
+
     found: list[dict] = []
     scanned: set[str] = set()
+    probes_done = 0
+    start_time = time.monotonic()
 
     for d in install_dirs:
         if not d.is_dir():
             continue
+        # Check deadline
+        if time.monotonic() - start_time > deadline_s:
+            log.info("auto_bind.unknown_scan_deadline_reached", probes=probes_done)
+            break
+        # Check probe cap
+        if probes_done >= max_probes:
+            log.info("auto_bind.unknown_scan_cap_reached", cap=max_probes)
+            break
+
         try:
             for entry in d.iterdir():
+                if probes_done >= max_probes:
+                    break
+                if time.monotonic() - start_time > deadline_s:
+                    break
+
                 if not entry.is_file() and not entry.is_symlink():
                     continue
                 name = entry.name.lower()
@@ -275,6 +344,20 @@ def _detect_unknown_agents(
                         ".toml",
                         ".cfg",
                         ".conf",
+                        ".dll",
+                        ".so",
+                        ".dylib",
+                        ".a",
+                        ".lib",
+                        ".pdb",
+                        ".dat",
+                        ".bin",
+                        ".cat",
+                        ".inf",
+                        ".cpl",
+                        ".msc",
+                        ".msi",
+                        ".msp",
                     )
                 ):
                     continue
@@ -334,7 +417,11 @@ def _detect_unknown_agents(
                 if stem in known_names or stem in existing_names:
                     continue
 
-                # Probe the binary
+                # Probe the binary (with 3s timeout, not 5s)
+                probes_done += 1
+                if probes_done % 25 == 0:
+                    log.info("auto_bind.unknown_scan_progress", probes=probes_done)
+
                 probe = _probe_binary(entry)
                 if probe:
                     scanned.add(stem)
