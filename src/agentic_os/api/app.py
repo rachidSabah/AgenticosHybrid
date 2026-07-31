@@ -3238,7 +3238,12 @@ def create_app(platform: Platform) -> FastAPI:
             tags=body.get("tags", []),
             created_by=body.get("created_by", "system"),
         )
-        detail = await mcp.registry.register_server(data)
+        from fastapi import HTTPException
+
+        try:
+            detail = await mcp.registry.register_server(data)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
         return detail.to_dict()
 
     @app.put("/api/mcp/servers/{server_id}")
@@ -5382,7 +5387,11 @@ def create_app(platform: Platform) -> FastAPI:
         try:
             async with recv:
                 async for snapshot in recv:
-                    await websocket.send_json(snapshot)
+                    try:
+                        await websocket.send_json(snapshot)
+                    except RuntimeError:
+                        # Client already closed; the recv loop will end next.
+                        break
         except WebSocketDisconnect:
             pass
         finally:
@@ -5420,7 +5429,11 @@ def create_app(platform: Platform) -> FastAPI:
         try:
             async with recv:
                 async for snapshot in recv:
-                    await websocket.send_json(snapshot)
+                    try:
+                        await websocket.send_json(snapshot)
+                    except RuntimeError:
+                        # Client already closed; the recv loop will end next.
+                        break
         except WebSocketDisconnect:
             pass
         finally:

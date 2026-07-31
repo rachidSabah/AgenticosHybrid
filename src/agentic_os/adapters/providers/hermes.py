@@ -26,9 +26,16 @@ class HermesProvider:
     gracefully when the binary is missing (healthcheck returns False).
     """
 
-    def __init__(self, bin_path: str = "hermes", api_key: str = "", name: str = "hermes") -> None:
+    def __init__(
+        self,
+        bin_path: str = "hermes",
+        api_key: str = "",
+        name: str = "hermes",
+        timeout: float = 300.0,
+    ) -> None:
         self._bin = bin_path
         self._api_key = api_key
+        self._timeout = timeout
         self.info = ProviderInfo(
             name=name,
             kind="hermes",
@@ -56,7 +63,12 @@ class HermesProvider:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise TimeoutError(f"{self._bin} timed out after {self._timeout}s") from None
         if proc.returncode != 0:
             raise RuntimeError(f"hermes exited {proc.returncode}: {stderr.decode().strip()}")
         return stdout.decode().strip() or f"[hermes] completed '{task.title}'"

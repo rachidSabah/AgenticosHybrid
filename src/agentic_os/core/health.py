@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from agentic_os.config import Settings
 from agentic_os.core.scheduler import Scheduler
-from agentic_os.domain.agent import Agent, AgentStatus
+from agentic_os.domain.agent import Agent, AgentStatus, TaskStatus
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
@@ -55,12 +55,22 @@ class HealthMonitorImpl:
                 )
             )
             if not healthy and agent.status == AgentStatus.RUNNING:
+                # Do not false-degrade an agent whose task is actively executing:
+                # long-running real-provider tasks outlive the heartbeat window,
+                # and recovery would re-dispatch a healthy execution.
+                task = (
+                    self._registry.get_task(agent.current_task_id)
+                    if agent.current_task_id
+                    else None
+                )
+                if task is not None and task.status == TaskStatus.IN_PROGRESS:
+                    continue
                 log.warning("health.degraded", agent=agent.id)
                 await self._bus.publish(
                     EventEnvelope(
                         type="health.degraded",
                         source="health-monitor",
                         topic=Topic.HEALTH_DEGRADED.value,
-                        payload={"agent_id": agent.id},
+                        payload={"agent_id": agent.id, "task_id": agent.current_task_id},
                     )
                 )

@@ -73,6 +73,10 @@ class RecoveryManagerImpl:
                     type="agent.failed",
                     source="recovery",
                     topic=Topic.AGENT_FAILED.value,
-                    payload={"agent_id": agent.id, "reason": "health degraded"},
+                    payload={
+                        "agent_id": agent.id,
+                        "task_id": agent.current_task_id,
+                        "reason": "health degraded",
+                    },
                 )
             )

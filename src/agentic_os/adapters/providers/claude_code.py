@@ -19,10 +19,15 @@ log = get_logger("provider.claude_code")
 
 class ClaudeCodeProvider:
     def __init__(
-        self, bin_path: str = "claude", api_key: str = "", name: str = "claude_code"
+        self,
+        bin_path: str = "claude",
+        api_key: str = "",
+        name: str = "claude_code",
+        timeout: float = 300.0,
     ) -> None:
         self._bin = bin_path
         self._api_key = api_key
+        self._timeout = timeout
         self.info = ProviderInfo(
             name=name, kind="claude_code", supports_streaming=True, supports_tools=True
         )
@@ -45,7 +50,12 @@ class ClaudeCodeProvider:
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise TimeoutError(f"{self._bin} timed out after {self._timeout}s") from None
         if proc.returncode != 0:
             raise RuntimeError(f"claude exited {proc.returncode}: {stderr.decode().strip()}")
         return stdout.decode().strip() or f"[claude_code] completed '{task.title}'"
