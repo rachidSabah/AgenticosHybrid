@@ -4843,6 +4843,212 @@ def create_app(platform: Platform) -> FastAPI:
             result = await desktop.update.install_update(manifest)
             return result.to_dict()
 
+        # ── Dev-Mode Git Updates (works on localhost:3000 + any checkout) ──
+        # These endpoints detect whether the local git checkout is behind
+        # origin/main and let the user pull the latest commits + restart.
+        # They work regardless of whether the Tauri desktop runtime is
+        # present, so they're useful when running `npm run dev` on
+        # localhost:3000 + `uvicorn` on localhost:8000.
+
+        @app.get("/api/dev/updates/status")
+        async def dev_update_status() -> dict:
+            """Return the current local git commit + branch + whether behind remote."""
+            import asyncio
+            import os as _os
+
+            async def _run(args: list[str], cwd: str | None = None) -> str:
+                proc = await asyncio.create_subprocess_exec(
+                    *args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+                return stdout.decode("utf-8", errors="replace").strip()
+
+            try:
+                repo_root = _os.path.dirname(
+                    _os.path.dirname(_os.path.dirname(__file__))
+                )
+                # Get current commit
+                head = await _run(["git", "rev-parse", "HEAD"], cwd=repo_root)
+                short_head = await _run(
+                    ["git", "rev-parse", "--short", "HEAD"], cwd=repo_root
+                )
+                branch = await _run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root
+                )
+                # Fetch remote (non-blocking, silent on failure)
+                try:
+                    await _run(["git", "fetch", "origin"], cwd=repo_root)
+                except Exception:
+                    pass  # offline — that's OK, we just report local state
+                # Get remote head
+                try:
+                    remote_head = await _run(
+                        ["git", "rev-parse", "origin/main"], cwd=repo_root
+                    )
+                    remote_short = await _run(
+                        ["git", "rev-parse", "--short", "origin/main"],
+                        cwd=repo_root,
+                    )
+                except Exception:
+                    remote_head = ""
+                    remote_short = ""
+                behind = 0
+                if remote_head and remote_head != head:
+                    try:
+                        count_out = await _run(
+                            ["git", "rev-list", "--count", "HEAD..origin/main"],
+                            cwd=repo_root,
+                        )
+                        behind = int(count_out) if count_out.isdigit() else 0
+                    except Exception:
+                        behind = 0
+                return {
+                    "local_commit": head,
+                    "local_short": short_head,
+                    "branch": branch,
+                    "remote_commit": remote_head,
+                    "remote_short": remote_short,
+                    "behind": behind,
+                    "up_to_date": behind == 0,
+                    "has_remote": bool(remote_head),
+                }
+            except Exception as exc:
+                return {
+                    "local_commit": "",
+                    "local_short": "",
+                    "branch": "",
+                    "remote_commit": "",
+                    "remote_short": "",
+                    "behind": 0,
+                    "up_to_date": True,
+                    "has_remote": False,
+                    "error": str(exc),
+                }
+
+        @app.get("/api/dev/updates/commits")
+        async def dev_update_commits(limit: int = 50) -> list[dict]:
+            """Return the list of commits on origin/main NOT in local HEAD."""
+            import asyncio
+            import os as _os
+
+            repo_root = _os.path.dirname(
+                _os.path.dirname(_os.path.dirname(__file__))
+            )
+
+            async def _run(args: list[str]) -> str:
+                proc = await asyncio.create_subprocess_exec(
+                    *args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=repo_root,
+                )
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+                return stdout.decode("utf-8", errors="replace").strip()
+
+            try:
+                try:
+                    await _run(["git", "fetch", "origin"])
+                except Exception:
+                    pass
+                raw = await _run([
+                    "git", "log", "HEAD..origin/main",
+                    f"--max-count={max(1, min(limit, 200))}",
+                    "--pretty=format:%H\t%an\t%ai\t%s",
+                ])
+                if not raw:
+                    return []
+                commits = []
+                for line in raw.split("\n"):
+                    parts = line.split("\t", 3)
+                    if len(parts) == 4:
+                        h, author, date, subject = parts
+                        commits.append({
+                            "hash": h,
+                            "short_hash": h[:8],
+                            "author": author,
+                            "date": date,
+                            "subject": subject,
+                        })
+                return commits
+            except Exception:
+                return []
+
+        @app.post("/api/dev/updates/pull")
+        async def dev_update_pull() -> dict:
+            """Pull the latest commits from origin/main."""
+            import asyncio
+            import os as _os
+
+            repo_root = _os.path.dirname(
+                _os.path.dirname(_os.path.dirname(__file__))
+            )
+
+            async def _run(args: list[str]) -> tuple[str, str, int]:
+                proc = await asyncio.create_subprocess_exec(
+                    *args,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=repo_root,
+                )
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=60
+                )
+                return (
+                    stdout.decode("utf-8", errors="replace").strip(),
+                    stderr.decode("utf-8", errors="replace").strip(),
+                    proc.returncode or 0,
+                )
+
+            try:
+                fetch_out, fetch_err, fetch_rc = await _run(
+                    ["git", "fetch", "origin"]
+                )
+                if fetch_rc != 0:
+                    return {
+                        "success": False,
+                        "error": f"git fetch failed: {fetch_err}",
+                        "stdout": fetch_out,
+                    }
+                merge_out, merge_err, merge_rc = await _run(
+                    ["git", "merge", "origin/main"]
+                )
+                new_head, _, _ = await _run(
+                    ["git", "rev-parse", "--short", "HEAD"]
+                )
+                return {
+                    "success": merge_rc == 0,
+                    "stdout": merge_out,
+                    "stderr": merge_err,
+                    "new_head": new_head,
+                    "returncode": merge_rc,
+                }
+            except Exception as exc:
+                return {"success": False, "error": str(exc)}
+
+        @app.post("/api/dev/updates/restart")
+        async def dev_update_restart() -> dict:
+            """Schedule a server restart in 1 second (after the response is sent).
+
+            This is a fire-and-forget — the backend process will exit and
+            must be restarted by a process manager (systemd, supervisor,
+            npm, uv, etc.). In dev mode, `npm run dev` / `uvicorn --reload`
+            will auto-restart.
+            """
+            import asyncio
+            import os
+            import signal
+
+            async def _delayed_exit() -> None:
+                await asyncio.sleep(1.0)
+                # Send SIGTERM to ourselves — the process manager restarts us
+                os.kill(os.getpid(), signal.SIGTERM)
+
+            asyncio.create_task(_delayed_exit())
+            return {"scheduled": True, "message": "Restart scheduled in 1s"}
+
         # -- Update Channels --
 
         @app.get("/api/desktop/channels")

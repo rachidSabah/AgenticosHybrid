@@ -6,6 +6,26 @@ import { api } from "@/lib/api";
 import { safeFixed, safeNum, safeStr, safeArr, safeLen } from "@/lib/safe";
 import type { ReleaseInfo, UpdateManifest, UpdateHistoryRecord } from "@/lib/desktop-types";
 
+interface DevCommit {
+  hash: string;
+  short_hash: string;
+  author: string;
+  date: string;
+  subject: string;
+}
+
+interface DevUpdateStatus {
+  local_commit: string;
+  local_short: string;
+  branch: string;
+  remote_commit: string;
+  remote_short: string;
+  behind: number;
+  up_to_date: boolean;
+  has_remote: boolean;
+  error?: string;
+}
+
 export default function DesktopUpdates() {
   const [version, setVersion] = useState("");
   const [updateStatus, setUpdateStatus] = useState("");
@@ -20,6 +40,29 @@ export default function DesktopUpdates() {
   const [installing, setInstalling] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Dev-mode git update state
+  const [devStatus, setDevStatus] = useState<DevUpdateStatus | null>(null);
+  const [devCommits, setDevCommits] = useState<DevCommit[]>([]);
+  const [devChecking, setDevChecking] = useState(false);
+  const [devPulling, setDevPulling] = useState(false);
+  const [devRestarting, setDevRestarting] = useState(false);
+  const [devMessage, setDevMessage] = useState<string | null>(null);
+
+  const loadDevStatus = useCallback(async () => {
+    try {
+      const s = await api.devUpdateStatus();
+      setDevStatus(s);
+      if (s && !s.up_to_date && s.has_remote) {
+        const commits = await api.devUpdateCommits(50);
+        setDevCommits(commits ?? []);
+      } else {
+        setDevCommits([]);
+      }
+    } catch {
+      // Backend may not have the endpoint yet — silently ignore
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -47,9 +90,56 @@ export default function DesktopUpdates() {
       const rvs = await api.rollbackAvailable();
       setRollbackVersions(rvs ?? []);
     } catch { /* ignore */ }
-  }, []);
+    // Also load dev-mode git status
+    void loadDevStatus();
+  }, [loadDevStatus]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleDevCheck = async () => {
+    setDevChecking(true);
+    setDevMessage(null);
+    try {
+      await loadDevStatus();
+      if (devStatus && devStatus.up_to_date) {
+        setDevMessage("Already up to date — local checkout matches origin/main.");
+      }
+    } finally {
+      setDevChecking(false);
+    }
+  };
+
+  const handleDevPull = async () => {
+    setDevPulling(true);
+    setDevMessage(null);
+    try {
+      const result = await api.devUpdatePull();
+      if (result.success) {
+        setDevMessage(`✓ Pulled latest. New HEAD: ${result.new_head || "?"}. Click "Restart Server" to apply.`);
+        await loadDevStatus();
+      } else {
+        setDevMessage(`✗ Pull failed: ${result.error || result.stderr || "unknown error"}`);
+      }
+    } catch (err) {
+      setDevMessage(`✗ Pull failed: ${String(err)}`);
+    } finally {
+      setDevPulling(false);
+    }
+  };
+
+  const handleDevRestart = async () => {
+    setDevRestarting(true);
+    try {
+      const result = await api.devUpdateRestart();
+      if (result.scheduled) {
+        setDevMessage("Restart scheduled — server will exit in 1s. Your process manager (npm/uvicorn) will auto-restart it. Refresh this page in ~5s.");
+      }
+    } catch (err) {
+      setDevMessage(`✗ Restart failed: ${String(err)}`);
+    } finally {
+      setDevRestarting(false);
+    }
+  };
 
   const handleCheck = async () => {
     setChecking(true);
@@ -113,6 +203,106 @@ export default function DesktopUpdates() {
     <div className="flex h-full flex-col gap-4 overflow-auto p-4" role="region" aria-label="Desktop Updates">
       {error && (
         <div role="alert" className="rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
+      )}
+
+      {/* ── Development Updates (git pull from origin/main) ── */}
+      {/* This panel works on localhost:3000 + any git checkout, even when
+          the Tauri desktop update manager isn't available. It detects
+          whether the local code is behind origin/main and offers to
+          pull + restart. */}
+      {devStatus && devStatus.has_remote && (
+        <Panel
+          title="Development Updates"
+          subtitle={
+            devStatus.up_to_date
+              ? `Up to date on ${devStatus.branch}`
+              : `${devStatus.behind} commit(s) behind origin/main`
+          }
+          className="col-span-12"
+        >
+          <div className="space-y-3">
+            {/* Status row */}
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <span className="text-faint">Local:</span>
+              <code className="rounded bg-surface/40 px-1.5 py-0.5 font-mono text-[11px] text-text">
+                {devStatus.local_short || "unknown"}
+              </code>
+              <span className="text-faint">on</span>
+              <code className="rounded bg-surface/40 px-1.5 py-0.5 font-mono text-[11px] text-text">
+                {devStatus.branch || "unknown"}
+              </code>
+              <span className="text-faint">→</span>
+              <span className="text-faint">Remote:</span>
+              <code className="rounded bg-surface/40 px-1.5 py-0.5 font-mono text-[11px] text-text">
+                {devStatus.remote_short || "unknown"}
+              </code>
+              {devStatus.up_to_date ? (
+                <Badge tone="ok">Up to date</Badge>
+              ) : (
+                <Badge tone="warn">{devStatus.behind} behind</Badge>
+              )}
+              <button
+                onClick={handleDevCheck}
+                disabled={devChecking}
+                aria-label="Check for new commits"
+                className="ml-auto rounded-lg border border-border/60 px-3 py-1.5 text-xs font-medium transition hover:bg-surface/20 disabled:opacity-50"
+              >
+                {devChecking ? "Checking…" : "Check for Updates"}
+              </button>
+            </div>
+
+            {/* Message line */}
+            {devMessage && (
+              <div className="rounded-lg border border-border/40 bg-surface/20 px-3 py-2 text-xs text-text">
+                {devMessage}
+              </div>
+            )}
+
+            {/* New commits list */}
+            {devCommits.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">
+                  New commits available ({devCommits.length})
+                </div>
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border/40">
+                  {devCommits.map((c) => (
+                    <div key={c.hash} className="flex items-start gap-2 px-3 py-1.5 text-xs hover:bg-surface/20">
+                      <code className="font-mono text-[10px] text-accent shrink-0">{c.short_hash}</code>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-text">{c.subject}</div>
+                        <div className="text-[10px] text-faint">
+                          {c.author} · {new Date(c.date).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            {!devStatus.up_to_date && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleDevPull}
+                  disabled={devPulling}
+                  aria-label="Pull latest commits"
+                  className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
+                >
+                  {devPulling ? "Pulling…" : `Pull ${devStatus.behind} commit(s)`}
+                </button>
+                <button
+                  onClick={handleDevRestart}
+                  disabled={devRestarting}
+                  aria-label="Restart server to apply"
+                  className="rounded-lg border border-border/60 px-4 py-2 text-xs font-medium transition hover:bg-surface/20 disabled:opacity-50"
+                >
+                  {devRestarting ? "Restarting…" : "Restart Server"}
+                </button>
+              </div>
+            )}
+          </div>
+        </Panel>
       )}
 
       <div className="flex flex-wrap items-center gap-3" aria-live="polite">

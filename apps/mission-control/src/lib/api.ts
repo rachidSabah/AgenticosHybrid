@@ -463,6 +463,44 @@ export const api = {
     get<string[]>("/api/desktop/rollback/available"),
   rollback: () => post<import("./desktop-types").UpdateResult>("/api/desktop/rollback"),
 
+  // ── Dev-Mode Git Updates (works on localhost:3000 + any checkout) ──
+  // These endpoints check whether the local git checkout is behind
+  // origin/main and let the user pull + restart. Useful when running
+  // `npm run dev` on localhost:3000 + uvicorn on localhost:8000.
+  devUpdateStatus: () =>
+    get<{
+      local_commit: string;
+      local_short: string;
+      branch: string;
+      remote_commit: string;
+      remote_short: string;
+      behind: number;
+      up_to_date: boolean;
+      has_remote: boolean;
+      error?: string;
+    }>("/api/dev/updates/status"),
+  devUpdateCommits: (limit = 50) =>
+    get<
+      Array<{
+        hash: string;
+        short_hash: string;
+        author: string;
+        date: string;
+        subject: string;
+      }>
+    >(`/api/dev/updates/commits?limit=${limit}`),
+  devUpdatePull: () =>
+    post<{
+      success: boolean;
+      stdout?: string;
+      stderr?: string;
+      new_head?: string;
+      error?: string;
+      returncode?: number;
+    }>("/api/dev/updates/pull"),
+  devUpdateRestart: () =>
+    post<{ scheduled: boolean; message: string }>("/api/dev/updates/restart"),
+
   // ── Mission Orchestrator API ──
   missions: () => get<MissionType[]>("/api/missions"),
   createMission: (body: Record<string, unknown>) =>
