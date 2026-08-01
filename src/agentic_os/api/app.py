@@ -5377,26 +5377,48 @@ def create_app(platform: Platform) -> FastAPI:
 
             @app.post("/api/runtimes/{runtime_id}/start")
             async def start_runtime(runtime_id: str) -> dict:
-                rt = await runtime_mgr.launch(runtime_id)
-                if rt is None:
-                    raise HTTPException(404, f"Runtime not found: {runtime_id}")
-                return rt.to_dict()
+                try:
+                    rt = await runtime_mgr.launch(runtime_id)
+                    if rt is None:
+                        raise HTTPException(404, f"Runtime not found: {runtime_id}")
+                    return rt.to_dict()
+                except ValueError as exc:
+                    raise HTTPException(404, str(exc)) from exc
+                except RuntimeError as exc:
+                    raise HTTPException(409, str(exc)) from exc
+                except Exception as exc:
+                    raise HTTPException(500, f"Failed to start runtime: {exc}") from exc
 
             @app.post("/api/runtimes/{runtime_id}/stop")
             async def stop_runtime(runtime_id: str, body: dict | None = None) -> dict:
-                force = body.get("force", False) if body else False
-                rt = await runtime_mgr.stop_runtime(runtime_id, force=force)
-                return rt.to_dict() if rt else {"status": "stopped"}
+                try:
+                    force = body.get("force", False) if body else False
+                    rt = await runtime_mgr.stop_runtime(runtime_id, force=force)
+                    return rt.to_dict() if rt else {"status": "stopped"}
+                except ValueError as exc:
+                    raise HTTPException(404, str(exc)) from exc
+                except Exception as exc:
+                    raise HTTPException(500, f"Failed to stop runtime: {exc}") from exc
 
             @app.post("/api/runtimes/{runtime_id}/restart")
             async def restart_runtime(runtime_id: str) -> dict:
-                rt = await runtime_mgr.restart_runtime(runtime_id)
-                return rt.to_dict() if rt else {"status": "restarted"}
+                try:
+                    rt = await runtime_mgr.restart_runtime(runtime_id)
+                    return rt.to_dict() if rt else {"status": "restarted"}
+                except ValueError as exc:
+                    raise HTTPException(404, str(exc)) from exc
+                except Exception as exc:
+                    raise HTTPException(500, f"Failed to restart runtime: {exc}") from exc
 
             @app.post("/api/runtimes/{runtime_id}/kill")
             async def kill_runtime(runtime_id: str) -> dict:
-                rt = await runtime_mgr.kill(runtime_id)
-                return rt.to_dict() if rt else {"status": "killed"}
+                try:
+                    rt = await runtime_mgr.kill(runtime_id)
+                    return rt.to_dict() if rt else {"status": "killed"}
+                except ValueError as exc:
+                    raise HTTPException(404, str(exc)) from exc
+                except Exception as exc:
+                    raise HTTPException(500, f"Failed to kill runtime: {exc}") from exc
 
             @app.get("/api/runtimes/{runtime_id}/logs")
             async def get_runtime_logs(
@@ -5406,14 +5428,27 @@ def create_app(platform: Platform) -> FastAPI:
                 level: str | None = None,
                 search: str | None = None,
             ) -> list[dict]:
-                logs = await runtime_mgr.get_logs(
-                    runtime_id,
-                    limit=limit,
-                    stream=stream,
-                    level=level,
-                    search=search,
-                )
-                return logs
+                try:
+                    logs = await runtime_mgr.get_logs(
+                        runtime_id,
+                        limit=limit,
+                        stream=stream,
+                        level=level,
+                        search=search,
+                    )
+                    return logs
+                except ValueError as exc:
+                    raise HTTPException(404, str(exc)) from exc
+                except Exception as exc:
+                    # Log retrieval failures should not crash the dashboard.
+                    # Return an empty list so the UI shows "no logs" instead
+                    # of a 500 error.
+                    log.warning(
+                        "Failed to get runtime logs",
+                        runtime_id=runtime_id,
+                        error=str(exc),
+                    )
+                    return []
 
             @app.get("/api/runtimes/{runtime_id}/metrics")
             async def get_runtime_metrics(runtime_id: str) -> dict:

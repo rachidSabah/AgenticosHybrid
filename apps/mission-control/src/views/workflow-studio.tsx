@@ -450,7 +450,7 @@ export function WorkflowStudio() {
             </div>
           ) : (
             <>
-              <div ref={containerRef} className="flex-1 min-h-0" role="application" aria-label="Workflow graph editor" tabIndex={0}>
+              <div ref={containerRef} className="flex-1 min-h-0 w-full" style={{ width: "100%", height: "100%", minHeight: "400px" }} role="application" aria-label="Workflow graph editor" tabIndex={0}>
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}
