@@ -24,6 +24,23 @@ log = get_logger("api.dashboard")
 # visualizes the real EventBus. Broadening this set is additive — existing
 # subscribers still receive their events; no public interface changes.
 _DASHBOARD_TOPICS = [
+    # Mission lifecycle (was missing — caused mission.* events to never
+    # reach WebSocket / Mission Control)
+    Topic.MISSION_CREATED,
+    Topic.MISSION_UPDATED,
+    Topic.MISSION_DELETED,
+    Topic.MISSION_PLANNING,
+    Topic.MISSION_PLANNED,
+    Topic.MISSION_STARTED,
+    Topic.MISSION_PAUSED,
+    Topic.MISSION_RESUMED,
+    Topic.MISSION_COMPLETED,
+    Topic.MISSION_FAILED,
+    Topic.MISSION_CANCELLED,
+    Topic.MISSION_TASK_STARTED,
+    Topic.MISSION_TASK_ASSIGNED,
+    Topic.MISSION_TASK_COMPLETED,
+    Topic.MISSION_TASK_FAILED,
     # Task / agent lifecycle
     Topic.TASK_CREATED,
     Topic.TASK_PLANNED,
@@ -194,6 +211,10 @@ _DASHBOARD_TOPICS = [
     "distributed.task.dispatched",
     "distributed.task.completed",
     "distributed.task.failed",
+    # Task lifecycle events from the orchestrator (execution pipeline)
+    "task.started",
+    "task.completed",
+    "task.failed",
     "node.joined",
     "node.left",
     "node.leader.elected",

@@ -277,8 +277,17 @@ class MissionPlannerImpl:
         return tasks
 
     def _assign_roles(self, tasks: list[MissionTask]) -> None:
-        """Assign providers to each task based on the role mapping."""
+        """Assign providers to each task based on the role mapping.
+
+        The assigned_provider field is informational — the actual provider
+        selection happens in the Orchestrator's _on_task_planned which
+        prefers real providers over mock. Setting it to the role-mapped
+        provider name (e.g. 'claude_code', 'hermes') helps the planner
+        produce a meaningful plan, but the dispatcher may override it.
+        """
         for task in tasks:
             if task.assigned_role:
-                task.assigned_provider = self._role_map.get(task.assigned_role, "mock")
+                # Use the role map value (e.g. 'claude_code') or empty string
+                # — never 'mock' (the dispatcher handles fallback)
+                task.assigned_provider = self._role_map.get(task.assigned_role, "")
             task.status = TaskStatus.PLANNED

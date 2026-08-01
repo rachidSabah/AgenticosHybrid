@@ -33,6 +33,7 @@ class Orchestrator:
         self.registry = registry
         self.providers = providers
         self.settings = settings
+        self._provider_rr_idx = 0  # round-robin index for real providers
 
     async def start(self) -> None:
         # Seed a default set of roles (declarative; one Agent runtime).
@@ -78,17 +79,24 @@ class Orchestrator:
         if task is None:
             return
 
-        # Provider selection: prefer real (non-mock) providers.
-        # If the configured default is "mock", check for real providers first.
+        # Provider selection: prefer real (non-mock) providers with round-robin.
         provider = None
         all_providers = self.providers.list_providers()
         real_providers = [p for p in all_providers if p.name != "mock" and "mock" not in p.kind]
 
         if real_providers:
-            # Pick the first healthy real provider (round-robin could be added later)
-            provider_name = real_providers[0].name
+            # Round-robin across real providers for load distribution
+            idx = self._provider_rr_idx % len(real_providers)
+            self._provider_rr_idx += 1
+            provider_name = real_providers[idx].name
             provider = self.providers.get(provider_name)
-            log.info("dispatcher.real_provider_selected", provider=provider_name, task=task.id)
+            log.info(
+                "dispatcher.real_provider_selected",
+                provider=provider_name,
+                task=task.id,
+                rr_index=idx,
+                real_count=len(real_providers),
+            )
         else:
             # Fall back to configured default or first available
             provider = (
@@ -151,35 +159,123 @@ class Orchestrator:
     async def _run_provider(self, agent: Agent, task: Task) -> None:
         provider = self.providers.get(agent.provider)
         if provider is None:
+            log.error("provider.not_found", provider=agent.provider, agent=agent.id)
             return
+
         task.status = TaskStatus.IN_PROGRESS
+        task.assigned_agent_id = agent.id
         task.touch()
+
+        # Publish task.started so Mission Control knows execution began
+        await self.bus.publish(
+            EventEnvelope(
+                type="task.started",
+                source="orchestrator",
+                topic="task.started",
+                payload={
+                    "task_id": task.id,
+                    "agent_id": agent.id,
+                    "provider": agent.provider,
+                    "title": task.title,
+                },
+            )
+        )
+
+        import time
+
+        start_time = time.monotonic()
+        log.info(
+            "execution.started",
+            task=task.id,
+            agent=agent.id,
+            provider=agent.provider,
+            title=task.title,
+        )
+
         try:
             result = await provider.execute(agent, task)
+            elapsed = time.monotonic() - start_time
+
             agent.mark_completed()
             task.status = TaskStatus.COMPLETED
             task.result = result
             task.touch()
+
+            log.info(
+                "execution.completed",
+                task=task.id,
+                agent=agent.id,
+                elapsed_s=round(elapsed, 3),
+                result_len=len(result) if result else 0,
+            )
+
+            await self.bus.publish(
+                EventEnvelope(
+                    type="task.completed",
+                    source="orchestrator",
+                    topic="task.completed",
+                    payload={
+                        "task_id": task.id,
+                        "agent_id": agent.id,
+                        "provider": agent.provider,
+                        "result": result[:500] if result else "",
+                        "elapsed_s": round(elapsed, 3),
+                    },
+                )
+            )
             await self.bus.publish(
                 EventEnvelope(
                     type="agent.completed",
                     source="supervisor",
                     topic=Topic.AGENT_COMPLETED.value,
-                    payload={"agent_id": agent.id, "task_id": task.id, "result": result},
+                    payload={
+                        "agent_id": agent.id,
+                        "task_id": task.id,
+                        "result": result[:500] if result else "",
+                        "elapsed_s": round(elapsed, 3),
+                    },
                 )
             )
         except Exception as exc:  # noqa: BLE001
+            elapsed = time.monotonic() - start_time
             agent.mark_failed()
             task.status = TaskStatus.FAILED
             task.error = str(exc)
             task.touch()
-            log.warning("supervisor.failure", agent=agent.id, error=str(exc))
+
+            log.warning(
+                "execution.failed",
+                agent=agent.id,
+                task=task.id,
+                error=str(exc),
+                elapsed_s=round(elapsed, 3),
+            )
+
+            await self.bus.publish(
+                EventEnvelope(
+                    type="task.failed",
+                    source="orchestrator",
+                    topic="task.failed",
+                    payload={
+                        "task_id": task.id,
+                        "agent_id": agent.id,
+                        "provider": agent.provider,
+                        "error": str(exc),
+                        "elapsed_s": round(elapsed, 3),
+                    },
+                )
+            )
             await self.bus.publish(
                 EventEnvelope(
                     type="agent.failed",
                     source="supervisor",
                     topic=Topic.AGENT_FAILED.value,
-                    payload={"agent_id": agent.id, "task_id": task.id, "reason": str(exc)},
+                    payload={
+                        "agent_id": agent.id,
+                        "task_id": task.id,
+                        "reason": str(exc),
+                        "elapsed_s": round(elapsed, 3),
+                    },
                 )
             )
 

@@ -133,16 +133,36 @@ export function MissionOrchestrator() {
 
   useEffect(() => { loadMissions(); }, [loadMissions]);
 
-  // Merge live store updates — guard against reference changes that cause infinite loops
+  // Merge live store updates — guard against reference changes that cause infinite loops.
+  // This now ALSO picks up new missions that appeared in the store (e.g. just
+  // created from Prompt Center), so the Mission Orchestrator list updates live
+  // without needing a manual refresh.
   const prevStoreKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (missionUpdates && Object.keys(missionStore).length > 0) {
       const storeKey = JSON.stringify(missionStore);
       if (prevStoreKeyRef.current === storeKey) return;
       prevStoreKeyRef.current = storeKey;
-      setMissions((prev) =>
-        prev.map((m) => missionStore[m.id] ? { ...m, ...missionStore[m.id] } : m),
-      );
+      setMissions((prev) => {
+        // Start with the current local list, updating any missions that exist in the store.
+        const updated = prev.map((m) =>
+          missionStore[m.id] ? { ...m, ...missionStore[m.id] } : m,
+        );
+        // Then add any store missions that aren't yet in the local list (new missions).
+        const prevIds = new Set(prev.map((m) => m.id));
+        for (const [id, m] of Object.entries(missionStore)) {
+          if (!prevIds.has(id)) {
+            updated.push(m);
+          }
+        }
+        // Sort newest-first by created_at (fallback to updated_at)
+        updated.sort(
+          (a, b) =>
+            new Date(b.created_at ?? b.updated_at ?? 0).getTime() -
+            new Date(a.created_at ?? a.updated_at ?? 0).getTime(),
+        );
+        return updated;
+      });
       if (selectedMission && missionStore[selectedMission.id]) {
         setSelectedMission((prev) =>
           prev ? { ...prev, ...missionStore[prev.id] } : prev,

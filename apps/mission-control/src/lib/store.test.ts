@@ -23,6 +23,8 @@ describe("event store", () => {
       memory: [],
       audit: [],
       notifications: [],
+      missions: {},
+      missionUpdates: 0,
       telemetry: {
         tasks: 0,
         agents: 0,
@@ -135,6 +137,60 @@ describe("event store", () => {
     );
     // health < 50 → status "unknown"
     expect(useStore.getState().providers["Ollama"].status).toBe("unknown");
+  });
+
+  it("inserts a NEW mission on mission.created (Prompt Center → Mission Orchestrator connection)", () => {
+    // Simulate what happens when Prompt Center submits a mission:
+    // the backend publishes mission.created with the full mission payload.
+    useStore.getState().ingest(
+      envelope("mission.created", {
+        id: "m-new-1",
+        title: "Build FastAPI auth",
+        description: "Build a production FastAPI authentication service.",
+        prompt: "Build a production FastAPI authentication service.",
+        status: "created",
+        priority: "high",
+        execution_mode: "hybrid",
+        created_at: new Date().toISOString(),
+      })
+    );
+    const missions = useStore.getState().missions;
+    // The new mission must be in the store — previously this was dropped
+    // because the handler only updated EXISTING missions.
+    expect(missions["m-new-1"]).toBeDefined();
+    expect(missions["m-new-1"].title).toBe("Build FastAPI auth");
+    expect(missions["m-new-1"].status).toBe("created");
+    // missionUpdates must bump so subscribers (Mission Orchestrator) re-render
+    expect(useStore.getState().missionUpdates).toBeGreaterThan(0);
+  });
+
+  it("updates an EXISTING mission's status on mission.started", () => {
+    // First create the mission
+    useStore.getState().ingest(
+      envelope("mission.created", { id: "m-2", title: "Test", status: "created", created_at: new Date().toISOString() })
+    );
+    // Then start it
+    useStore.getState().ingest(
+      envelope("mission.started", { id: "m-2", title: "Test", status: "executing", created_at: new Date().toISOString() })
+    );
+    expect(useStore.getState().missions["m-2"].status).toBe("executing");
+  });
+
+  it("preserves mission fields across multiple lifecycle events", () => {
+    useStore.getState().ingest(
+      envelope("mission.created", {
+        id: "m-3", title: "Original", description: "Original desc",
+        status: "created", priority: "high", created_at: new Date().toISOString(),
+      })
+    );
+    // mission.planned event may not include all fields — must not lose them
+    useStore.getState().ingest(
+      envelope("mission.planned", { id: "m-3", status: "planned" })
+    );
+    const m = useStore.getState().missions["m-3"];
+    expect(m.title).toBe("Original");       // preserved
+    expect(m.description).toBe("Original desc");  // preserved
+    expect(m.status).toBe("planned");        // updated
   });
 });
 
