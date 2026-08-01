@@ -505,19 +505,21 @@ export const useStore = create<StoreState>((set, get) => ({
         case "mission.cancelled": {
           const m = p as unknown as MissionType;
           if (m?.id) {
-            // Don't mutate — rely on the caller to do a full re-fetch
-            // but update the status in-place so the UI stays live
+            // Upsert: if the mission is new (e.g. just created from Prompt Center),
+            // insert it into the store. If it already exists, update its status
+            // in-place. Either way, bump missionUpdates so subscribers re-render.
             const existing = s.missions[m.id];
-            if (existing) {
-              return {
-                events, notifications, agents, tasks, providers, telemetry,
-                missions: {
-                  ...s.missions,
-                  [m.id]: { ...existing, status: m.status ?? existing.status, updated_at: new Date().toISOString() },
-                },
-                missionUpdates: Date.now(),
-              };
-            }
+            const merged = existing
+              ? { ...existing, ...m, status: m.status ?? existing.status, updated_at: new Date().toISOString() }
+              : { ...m, updated_at: new Date().toISOString() };
+            return {
+              events, notifications, agents, tasks, providers, telemetry,
+              missions: {
+                ...s.missions,
+                [m.id]: merged,
+              },
+              missionUpdates: Date.now(),
+            };
           }
           break;
         }
