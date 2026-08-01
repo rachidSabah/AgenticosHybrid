@@ -194,6 +194,10 @@ _DASHBOARD_TOPICS = [
     "distributed.task.dispatched",
     "distributed.task.completed",
     "distributed.task.failed",
+    # Task lifecycle events from the orchestrator (execution pipeline)
+    "task.started",
+    "task.completed",
+    "task.failed",
     "node.joined",
     "node.left",
     "node.leader.elected",

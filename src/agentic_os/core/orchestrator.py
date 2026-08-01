@@ -159,35 +159,123 @@ class Orchestrator:
     async def _run_provider(self, agent: Agent, task: Task) -> None:
         provider = self.providers.get(agent.provider)
         if provider is None:
+            log.error("provider.not_found", provider=agent.provider, agent=agent.id)
             return
+
         task.status = TaskStatus.IN_PROGRESS
+        task.assigned_agent_id = agent.id
         task.touch()
+
+        # Publish task.started so Mission Control knows execution began
+        await self.bus.publish(
+            EventEnvelope(
+                type="task.started",
+                source="orchestrator",
+                topic="task.started",
+                payload={
+                    "task_id": task.id,
+                    "agent_id": agent.id,
+                    "provider": agent.provider,
+                    "title": task.title,
+                },
+            )
+        )
+
+        import time
+
+        start_time = time.monotonic()
+        log.info(
+            "execution.started",
+            task=task.id,
+            agent=agent.id,
+            provider=agent.provider,
+            title=task.title,
+        )
+
         try:
             result = await provider.execute(agent, task)
+            elapsed = time.monotonic() - start_time
+
             agent.mark_completed()
             task.status = TaskStatus.COMPLETED
             task.result = result
             task.touch()
+
+            log.info(
+                "execution.completed",
+                task=task.id,
+                agent=agent.id,
+                elapsed_s=round(elapsed, 3),
+                result_len=len(result) if result else 0,
+            )
+
+            await self.bus.publish(
+                EventEnvelope(
+                    type="task.completed",
+                    source="orchestrator",
+                    topic="task.completed",
+                    payload={
+                        "task_id": task.id,
+                        "agent_id": agent.id,
+                        "provider": agent.provider,
+                        "result": result[:500] if result else "",
+                        "elapsed_s": round(elapsed, 3),
+                    },
+                )
+            )
             await self.bus.publish(
                 EventEnvelope(
                     type="agent.completed",
                     source="supervisor",
                     topic=Topic.AGENT_COMPLETED.value,
-                    payload={"agent_id": agent.id, "task_id": task.id, "result": result},
+                    payload={
+                        "agent_id": agent.id,
+                        "task_id": task.id,
+                        "result": result[:500] if result else "",
+                        "elapsed_s": round(elapsed, 3),
+                    },
                 )
             )
         except Exception as exc:  # noqa: BLE001
+            elapsed = time.monotonic() - start_time
             agent.mark_failed()
             task.status = TaskStatus.FAILED
             task.error = str(exc)
             task.touch()
-            log.warning("supervisor.failure", agent=agent.id, error=str(exc))
+
+            log.warning(
+                "execution.failed",
+                agent=agent.id,
+                task=task.id,
+                error=str(exc),
+                elapsed_s=round(elapsed, 3),
+            )
+
+            await self.bus.publish(
+                EventEnvelope(
+                    type="task.failed",
+                    source="orchestrator",
+                    topic="task.failed",
+                    payload={
+                        "task_id": task.id,
+                        "agent_id": agent.id,
+                        "provider": agent.provider,
+                        "error": str(exc),
+                        "elapsed_s": round(elapsed, 3),
+                    },
+                )
+            )
             await self.bus.publish(
                 EventEnvelope(
                     type="agent.failed",
                     source="supervisor",
                     topic=Topic.AGENT_FAILED.value,
-                    payload={"agent_id": agent.id, "task_id": task.id, "reason": str(exc)},
+                    payload={
+                        "agent_id": agent.id,
+                        "task_id": task.id,
+                        "reason": str(exc),
+                        "elapsed_s": round(elapsed, 3),
+                    },
                 )
             )
 
