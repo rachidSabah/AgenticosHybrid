@@ -166,7 +166,7 @@ export function OmniRouteDashboard() {
 
         {/* Tab 1: Live Routing Graph */}
         {activeTab === "routing" && (
-          <div className="grid grid-cols-12 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             {/* Real Interactive Graph Panel */}
             <Panel title="Live AI Routing Pipeline Graph" subtitle="User Prompt → Compression → OmniRoute Engine → Target Model" className="col-span-12 lg:col-span-8">
               <div className="flex flex-col items-center justify-center p-6 space-y-6">
@@ -193,7 +193,7 @@ export function OmniRouteDashboard() {
                 <div className="h-6 w-0.5 bg-accent/40" />
 
                 {/* Target Provider Nodes — derived from live store providers */}
-                <div className="grid grid-cols-3 gap-3 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full">
                   {Object.values(providers)
                     .filter((p) => p.provider && p.provider.toLowerCase() !== "mock")
                     .slice(0, 6)
@@ -273,7 +273,7 @@ export function OmniRouteDashboard() {
 
         {/* Tab 3: Token Compression */}
         {activeTab === "compression" && (
-          <div className="grid grid-cols-12 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <Panel title="Token Compression Engine" subtitle="Live prompt optimization and token saving" className="col-span-12 lg:col-span-8">
               <div className="space-y-3 text-xs">
                 <textarea
@@ -313,7 +313,7 @@ export function OmniRouteDashboard() {
 
         {/* Tab 4: Budget & Failover */}
         {activeTab === "budget" && (
-          <div className="grid grid-cols-12 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
             <Panel title="Failover Event Monitor" subtitle="Automatic model retry & provider switching events" className="col-span-12 lg:col-span-7">
               <div className="space-y-2 text-xs">
                 {failovers.map((ev) => (

@@ -50,7 +50,7 @@ export function ProviderControlCenter() {
   }, [providersLive, restHealth]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <Panel
         title="Providers"
         subtitle={`${rows.length} registered${connected ? " · live" : ""}`}
@@ -97,7 +97,7 @@ export function ProviderControlCenter() {
             </div>
             <div>
               <div className="mb-2 text-[11px] uppercase tracking-wide text-faint">Models</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {(models[selected] ?? []).map((m) => (
                   <div key={m.id} className="rounded-xl border border-border/60 px-3 py-2">
                     <div className="text-sm">{m.id}</div>

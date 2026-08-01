@@ -252,7 +252,7 @@ export function SelfHealingPanel() {
   const low = unresolved.filter((i) => i.severity === "low").length;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       {/* Header stats */}
       <div className="col-span-12 flex flex-wrap gap-3">
         <Stat label="Unresolved" value={unresolved.length} tone={unresolved.length > 0 ? "warn" : "ok"} />

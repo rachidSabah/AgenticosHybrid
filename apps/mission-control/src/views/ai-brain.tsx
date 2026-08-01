@@ -154,7 +154,7 @@ export function AIBrain() {
     <div className="h-full w-full bg-[#03040c] text-slate-100 font-sans select-none overflow-hidden text-xs flex flex-col justify-between p-3 gap-3">
       
       {/* ── TOP SECTION: CONSTELLATION STAGE (CENTER & RIGHT PANELS) ── */}
-      <div className="flex-1 grid grid-cols-12 gap-3 min-h-0 relative">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 min-h-0 relative">
         
         {/* CENTER STAGE: AI BRAIN CONSTELLATION (8 COLS) */}
         <div className="col-span-8 relative flex flex-col justify-between p-3 overflow-hidden rounded-xl border border-cyan-900/30 bg-radial-gradient">
@@ -358,7 +358,7 @@ export function AIBrain() {
 
                     {/* Agent Hardware Telemetry */}
                     {node.cpu !== undefined && (
-                      <div className="mt-1 pt-1 border-t border-slate-800/80 grid grid-cols-3 gap-0.5 text-[8px] text-slate-400">
+                      <div className="mt-1 pt-1 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-3 gap-0.5 text-[8px] text-slate-400">
                         <div>CPU <span className="text-white block">{node.cpu}%</span></div>
                         <div>RAM <span className="text-white block">{node.ram}%</span></div>
                         <div>Tasks <span className="text-white block">{node.tasks}</span></div>
@@ -479,12 +479,12 @@ export function AIBrain() {
       </div>
 
       {/* ── BOTTOM SECTION: SYSTEM TELEMETRY, EVENT BUS, TASK DISTRIBUTION, TOKEN USAGE, CONNECTIONS (FULL WIDTH) ── */}
-      <div className="grid grid-cols-12 gap-3 shrink-0 h-32 font-mono text-[10px]">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 shrink-0 h-32 font-mono text-[10px]">
         
         {/* System Telemetry Gauges */}
         <div className="col-span-3 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
           <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">System Telemetry</div>
-          <div className="grid grid-cols-4 gap-1.5 text-center">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-1.5 text-center">
             {[
               { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
               { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },

@@ -120,7 +120,7 @@ export function AIBrains() {
   };
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       {/* Left: Filters */}
       <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
         <Panel title="Filters" className="flex-shrink-0">
@@ -140,7 +140,7 @@ export function AIBrains() {
             </div>
             <div>
               <label className="text-[10px] font-medium text-faint">Status</label>
-              <div className="mt-1 grid grid-cols-2 gap-1.5">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1.5">
                 {[
                   { id: "thinking", label: "Thinking", icon: <Brain size={12} /> },
                   { id: "coding", label: "Coding", icon: <GitBranch size={12} /> },
@@ -164,7 +164,7 @@ export function AIBrains() {
             </div>
             <div>
               <label className="text-[10px] font-medium text-faint">Sort</label>
-              <div className="mt-1 grid grid-cols-2 gap-1.5">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1.5">
                 {[
                   { id: "energy", label: "Energy" },
                   { id: "neurons", label: "Neurons" },
@@ -284,7 +284,7 @@ export function AIBrains() {
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-faint">
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] text-faint">
                         <div className="flex items-center gap-1.5">
                           <Zap size={12} />
                           <span>{safeFixed(brain?.energy, 0)}%</span>
@@ -320,7 +320,7 @@ export function AIBrains() {
                           exit={{ height: 0, opacity: 0 }}
                           className="mt-3 border-t border-border/30 pt-3"
                         >
-                          <div className="grid grid-cols-2 gap-2 text-[9px] text-faint">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[9px] text-faint">
                             <div>
                               <div className="font-medium">Neurons</div>
                               <div>{brain.neurons.toLocaleString()}</div>
@@ -367,7 +367,7 @@ function BrainDetails({ brain }: { brain?: BrainNode }) {
 
   return (
     <div className="space-y-3 text-[10px] text-faint">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <div>
           <div className="font-medium">Agent ID</div>
           <div>{brain.agentId}</div>

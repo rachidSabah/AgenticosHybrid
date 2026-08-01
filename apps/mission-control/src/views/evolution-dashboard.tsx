@@ -158,7 +158,7 @@ function OverviewTab() {
     : "danger";
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Proposals" value={liveStats?.total_proposals ?? 0} />
         <Stat label="Pending" value={liveStats?.pending ?? 0} />
@@ -187,7 +187,7 @@ function OverviewTab() {
                 <div className="mt-1 text-[11px] text-faint">{safeFixed((safeNum(liveReadiness?.readiness_score) * 100), 1)}%</div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
               <Metric label="Active" value={String(liveReadiness.active_improvements)} />
               <Metric label="Pending" value={String(liveReadiness.pending_validations)} />
               <Metric label="Regression Risk" value={`${safeFixed((safeNum(liveReadiness?.regression_risk) * 100), 0)}%`} />
@@ -206,7 +206,7 @@ function OverviewTab() {
       </Panel>
 
       <Panel title="Evolution Actions" subtitle="Self-improvement controls" className="col-span-6">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <ActionButton label="Analyze" description="Generate + validate proposals" endpoint="/api/evolution/analyze" />
           <ActionButton label="Schedule Next" description="Pick next improvement" endpoint="/api/evolution/schedule" />
           <ActionButton label="Assess Readiness" description="Recompute readiness" endpoint="/api/evolution/readiness/assess" />
@@ -268,7 +268,7 @@ function ImprovementsTab() {
   const filtered = filter === "all" ? improvements : improvements.filter((i) => i.status === filter);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Total" value={improvements.length} />
         <Stat label="Pending" value={improvements.filter((i) => i.status === "proposed").length} />
@@ -299,7 +299,7 @@ function ImprovementsTab() {
                   </div>
                   <Badge tone={imp.status === "applied" ? "ok" : imp.status === "rejected" ? "danger" : imp.status === "validated" || imp.status === "approved" ? "warn" : "default"}>{imp.status}</Badge>
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
                   <Metric label="Impact" value={`${safeFixed((safeNum(imp?.expected_impact) * 100), 0)}%`} />
                   <Metric label="Confidence" value={`${safeFixed((safeNum(imp?.confidence) * 100), 0)}%`} />
                   <Metric label="Risk" value={`${safeFixed((safeNum(imp?.risk_score) * 100), 0)}%`} />
@@ -332,7 +332,7 @@ function SafetyTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Validations" value={String(data?.validator?.total_validations ?? 0)} />
         <Stat label="Approved" value={String(data?.validator?.approved ?? 0)} tone="ok" />
@@ -387,7 +387,7 @@ function SchedulerTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Queue" value={String(data?.stats?.queue_size ?? 0)} />
         <Stat label="Active" value={String(data?.stats?.active ?? 0)} tone="ok" />
@@ -453,7 +453,7 @@ function PlansTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Plans" value={plans.length} />
         <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
@@ -502,7 +502,7 @@ function KnowledgeTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Syntheses" value={syntheses.length} />
         <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>

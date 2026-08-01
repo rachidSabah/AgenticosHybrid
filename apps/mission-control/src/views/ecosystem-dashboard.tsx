@@ -192,7 +192,7 @@ function OverviewTab() {
           : "default";
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Runtimes" value={liveStats?.total_runtimes ?? 0} />
         <Stat label="Healthy" value={liveStats?.healthy_runtimes ?? 0} tone="ok" />
@@ -234,7 +234,7 @@ function OverviewTab() {
                 <div className="mt-1 text-[11px] text-faint">{safeFixed((safeNum(liveHealth?.health_score) * 100), 1)}%</div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
               <ScoreBar label="Availability" value={liveHealth.availability_score} />
               <ScoreBar label="Performance" value={liveHealth.performance_score} />
               <ScoreBar label="Collaboration" value={liveHealth.collaboration_score} />
@@ -272,7 +272,7 @@ function OverviewTab() {
             <RuntimeBar label="Healthy" count={liveStats.healthy_runtimes} total={liveStats.total_runtimes} tone="ok" />
             <RuntimeBar label="Degraded" count={liveStats.degraded_runtimes} total={liveStats.total_runtimes} tone="warn" />
             <RuntimeBar label="Unhealthy" count={liveStats.unhealthy_runtimes} total={liveStats.total_runtimes} tone="danger" />
-            <div className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-lg border border-border/60 p-2">
                 <div className="text-faint">Avg Health</div>
                 <div className="mt-0.5 text-sm font-medium">{safeFixed(liveStats?.average_health, 1)}</div>
@@ -295,7 +295,7 @@ function OverviewTab() {
       </Panel>
 
       <Panel title="Ecosystem Actions" subtitle="Self-optimization controls" className="col-span-12">
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <ActionButton label="Analyze" description="Run evolution analyzers" endpoint="/api/ecosystem/analyze" />
           <ActionButton label="Optimize" description="Continuous self-optimization" endpoint="/api/ecosystem/optimize" />
           <ActionButton label="Evolve" description="Force evolution cycle" endpoint="/api/ecosystem/evolve" />
@@ -404,7 +404,7 @@ function CapabilitiesTab() {
   const edges = (graph?.edges ?? []) as Array<{ source: string; target: string; type: string; weight: number }>;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Nodes" value={stats?.total_nodes ?? 0} />
         <Stat label="Edges" value={stats?.total_edges ?? 0} />
@@ -503,7 +503,7 @@ function CollaborationsTab() {
   }>;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Links" value={stats?.total_links ?? 0} />
         <Stat label="Runtimes" value={stats?.unique_runtimes ?? 0} />
@@ -598,7 +598,7 @@ function EvolutionTab() {
   const typeOptions = ["all", "recommended_capability", "recommended_routing", "recommended_collaboration", "recommended_optimization"];
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Recommendations" value={recs.length} />
         <div className="ml-auto flex items-center gap-1">
@@ -696,7 +696,7 @@ function MarketplaceTab() {
   }, [publishTitle, publishCap, load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Published" value={stats?.published ?? 0} />
         <Stat label="Awarded" value={stats?.awarded ?? 0} tone="ok" />

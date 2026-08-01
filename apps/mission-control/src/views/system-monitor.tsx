@@ -139,7 +139,7 @@ export function SystemMonitor() {
   }, [events]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       {/* Top stats bar */}
       <div className="col-span-12 flex flex-wrap gap-3">
         <Stat
@@ -206,7 +206,7 @@ export function SystemMonitor() {
                 unit=" GB"
                 tone="accent"
               />
-              <div className="mt-1 grid grid-cols-2 gap-2 text-[11px] text-faint tabular-nums">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-faint tabular-nums">
                 <span>Windows: {perf.window_count}</span>
               </div>
             </>
@@ -274,7 +274,7 @@ export function SystemMonitor() {
         className="col-span-12 lg:col-span-4"
       >
         {perf ? (
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
             <MetricTile label="Processes" value={perf.process_count} />
             <MetricTile label="Windows" value={perf.window_count} />
             <MetricTile

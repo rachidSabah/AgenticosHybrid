@@ -139,7 +139,7 @@ function TimelineRow({ index, style, filteredEvents, expanded, onToggle }: {
               exit={{ height: 0, opacity: 0 }}
               className="mt-2 border-t border-border/30 pt-2 text-[10px] text-faint"
             >
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div>
                   <div className="font-medium">Task ID</div>
                   <div>{event.taskId}</div>
@@ -395,7 +395,7 @@ export function TaskTimeline() {
   }, [filters]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       {/* Left: Filters */}
       <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
         <Panel title="Filters" className="flex-shrink-0">
@@ -415,7 +415,7 @@ export function TaskTimeline() {
             </div>
             <div>
               <label className="text-[10px] font-medium text-faint">Status</label>
-              <div className="mt-1 grid grid-cols-2 gap-1.5">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1.5">
                 {[
                   { id: "running", label: "Running", icon: <Play size={12} /> },
                   { id: "completed", label: "Completed", icon: <CheckCircle2 size={12} /> },
@@ -440,7 +440,7 @@ export function TaskTimeline() {
             </div>
             <div>
               <label className="text-[10px] font-medium text-faint">Type</label>
-              <div className="mt-1 grid grid-cols-2 gap-1.5">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1.5">
                 {[
                   { id: "task", label: "Task", icon: <GitBranch size={12} /> },
                   { id: "agent", label: "Agent", icon: <Bot size={12} /> },
@@ -463,7 +463,7 @@ export function TaskTimeline() {
             </div>
             <div>
               <label className="text-[10px] font-medium text-faint">Sort</label>
-              <div className="mt-1 grid grid-cols-2 gap-1.5">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1.5">
                 {[
                   { id: "newest", label: "Newest" },
                   { id: "oldest", label: "Oldest" },

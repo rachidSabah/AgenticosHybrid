@@ -58,7 +58,7 @@ function SwarmDashboardTab() {
   const agentsOnlineCount = Object.keys(storeProviders).length || 6;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Total Swarms" value={metrics?.total_swarms ?? (swarms.length || 1)} />
         <Stat label="Active" value={metrics?.active_swarms ?? (activeMissionsCount || 1)} tone="ok" />
@@ -126,7 +126,7 @@ function SwarmListTab() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
       </div>
@@ -142,7 +142,7 @@ function SwarmListTab() {
                   <span className="text-sm font-medium">{s.name}</span>
                   <Badge tone={s.status === "active" ? "ok" : "warn"}>{s.status}</Badge>
                 </div>
-                <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-faint">
+                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-faint">
                   <span>Topology: {s.topology}</span>
                   <span>Agents: {s.agent_count}</span>
                   <span>Created: {s.created_at ? new Date(s.created_at).toLocaleDateString() : "—"}</span>
@@ -161,7 +161,7 @@ function SwarmListTab() {
             {profiles.map((p) => (
               <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5">
                 <div className="text-xs font-medium">{p.name}</div>
-                <div className="mt-1 grid grid-cols-3 gap-1 text-[11px] text-faint">
+                <div className="mt-1 grid grid-cols-1 md:grid-cols-3 gap-1 text-[11px] text-faint">
                   <span>{p.topology}</span>
                   <span>Max: {p.max_agents}</span>
                   <span>Timeout: {p.timeout_seconds}s</span>
@@ -188,7 +188,7 @@ function SwarmAgentsTab() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
       </div>
@@ -235,7 +235,7 @@ function SwarmTasksTab() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
       </div>
@@ -274,7 +274,7 @@ function SwarmExecutionTab() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
       </div>

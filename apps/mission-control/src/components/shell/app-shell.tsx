@@ -23,6 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [connectingDismissed, setConnectingDismissed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -75,8 +76,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   if (!mounted) return (
-    <div className="grid h-screen w-screen grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
-      <aside className="w-14" aria-label="sidebar-skeleton" />
+    <div className="grid h-screen w-screen grid-cols-1 md:grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
+      <aside className="hidden md:block w-14" aria-label="sidebar-skeleton" />
       <main className="flex items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </main>
@@ -85,10 +86,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <ActiveViewCtx.Provider value={{ active, setActive: open }}>
-      <div className="grid h-screen w-screen grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
-        {/* Sidebar */}
+      <div className="grid h-screen w-screen grid-cols-1 md:grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
+        {/* Sidebar — hidden on mobile, visible on md+ */}
         <div
-          className={`relative z-20 flex h-screen flex-col border-r border-border/30 bg-surface/50 backdrop-blur-lg transition-all duration-300 ease-in-out
+          className={`relative z-20 hidden md:flex h-screen flex-col border-r border-border/30 bg-surface/50 backdrop-blur-lg transition-all duration-300 ease-in-out
             ${isCollapsed ? "w-16" : "w-64"}
           `}
         >
@@ -130,8 +131,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           <BackendStatus />
           {/* Navbar */}
           <div className="flex h-14 items-center justify-between border-b border-border/30 px-4">
-            <div className="flex items-center gap-2">
-              <Breadcrumb />
+            <div className="flex min-w-0 items-center gap-2">
+              {/* Mobile menu button — only visible on screens < md */}
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                className="md:hidden rounded-lg p-2 hover:bg-surface/30 transition"
+                aria-label="Open navigation menu"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+              <div className="min-w-0">
+                <Breadcrumb />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <SystemStats />
@@ -178,6 +193,47 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+
+      {/* Mobile navigation drawer — slide-out sidebar for screens < md */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="absolute left-0 top-0 h-full w-72 max-w-[85vw] border-r border-border/30 bg-surface shadow-2xl">
+            <div className="flex h-14 items-center justify-between border-b border-border/30 px-4">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-accent/20 flex items-center justify-center">
+                  <Bot size={16} className="text-accent" />
+                </div>
+                <span className="font-semibold text-sm">Mission Control</span>
+              </div>
+              <button
+                onClick={() => setMobileNavOpen(false)}
+                className="rounded-lg p-1.5 hover:bg-surface/30 transition"
+                aria-label="Close navigation"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto" style={{ height: "calc(100% - 56px)" }}>
+              <Sidebar
+                active={active}
+                onSelect={(id) => {
+                  open(id);
+                  setMobileNavOpen(false);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <CommandPalette
         open={paletteOpen}

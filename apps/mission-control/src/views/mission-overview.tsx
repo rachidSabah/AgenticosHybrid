@@ -167,7 +167,7 @@ export function MissionOverview() {
   }, [agents]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       {/* ── COMMAND CENTER TOP BAR ── */}
       <div className="col-span-12 flex flex-wrap items-center gap-4 rounded-2xl border border-border/50 bg-surface/30 px-5 py-3">
         <div className="flex items-center gap-3">
@@ -197,7 +197,7 @@ export function MissionOverview() {
         }
       >
         <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-          <div className="mb-2 grid grid-cols-5 gap-1 text-[8px] uppercase tracking-wider text-faint/50">
+          <div className="mb-2 grid grid-cols-1 md:grid-cols-5 gap-1 text-[8px] uppercase tracking-wider text-faint/50">
             <span className="col-span-2">AGENT</span>
             <span>STATUS</span>
             <span>TASKS</span>

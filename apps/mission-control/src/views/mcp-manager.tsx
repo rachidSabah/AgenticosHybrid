@@ -22,7 +22,7 @@ export function McpManager() {
   const [tab, setTab] = useState<McpTab>("servers");
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       <div className="col-span-12 flex items-center gap-1 border-b border-border/60 px-0 pt-0">
         {(["servers", "tools", "permissions", "health", "sessions", "resources", "prompts", "telemetry", "versions"] as const).map((t) => (
           <button
@@ -134,7 +134,7 @@ function McpServersTab() {
   const failed = servers.filter((s) => s.status === "failed").length;
 
   return (
-    <div className="col-span-12 grid h-full grid-cols-12 gap-4">
+    <div className="col-span-1 md:col-span-12 grid h-full grid-cols-1 md:grid-cols-12 gap-4">
       <div className="col-span-12 flex flex-wrap gap-3">
         <Stat label="Total Servers" value={servers.length} />
         <Stat label="Running" value={running} tone={running ? "ok" : "default"} />
@@ -388,7 +388,7 @@ function McpToolsTab() {
   };
 
   return (
-    <div className="col-span-12 grid h-full grid-cols-12 gap-4">
+    <div className="col-span-1 md:col-span-12 grid h-full grid-cols-1 md:grid-cols-12 gap-4">
       <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
@@ -543,7 +543,7 @@ function McpPermissionsTab() {
   };
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
@@ -658,7 +658,7 @@ function McpHealthTab() {
   const unknownCount = servers.filter((s) => s.health === "unknown").length;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex flex-wrap gap-3">
         <Stat label="Total" value={servers.length} />
         <Stat label="Healthy" value={healthyCount} tone="ok" />
@@ -742,7 +742,7 @@ function McpSessionsTab() {
   const entries = sessions ? Object.entries(sessions.sessions) : [];
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Active Sessions" value={sessions?.total ?? 0} tone={sessions?.total ? "accent" : "default"} />
         <div className="ml-auto flex items-start gap-2">
@@ -801,7 +801,7 @@ function McpResourcesTab() {
   useEffect(() => { loadResources(); }, [loadResources]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
@@ -867,7 +867,7 @@ function McpPromptsTab() {
   useEffect(() => { loadPrompts(); }, [loadPrompts]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <select
           value={selectedServer}
@@ -940,7 +940,7 @@ function McpTelemetryTab() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Total Requests" value={summary?.total_requests ?? 0} />
         <Stat label="Successful" value={summary?.successful_requests ?? 0} tone="ok" />
@@ -1026,7 +1026,7 @@ function McpVersionsTab() {
   }
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <button
           onClick={() => load()}
@@ -1072,7 +1072,7 @@ function McpVersionsTab() {
                     {matrix?.servers[sid]?.compatible ? "Compatible" : "Incompatible"}
                   </Badge>
                 </div>
-                <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-faint">
+                <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1 text-[11px] text-faint">
                   <span>Protocol: {info.protocol_version || "—"}</span>
                   <span>Server: {info.server_version || "—"}</span>
                 </div>

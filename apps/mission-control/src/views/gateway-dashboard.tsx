@@ -266,7 +266,7 @@ export function GatewayDashboard() {
       )}
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Stat label="Available Models" value={stats.models} />
         <Stat label="Routed Agents" value={stats.agents} delta={`${stats.freeAgents} free`} />
         <Stat
@@ -287,7 +287,7 @@ export function GatewayDashboard() {
         <div className="space-y-4">
           <StrategySelector active={activeStrategy} onChange={setActiveStrategy} />
           {config && (
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div className="glass rounded-lg px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-faint">Cost Weight</div>
                 <div className="mt-0.5 text-lg font-semibold">{safeFixed((safeNum(config?.cost_weight) * 100), 0)}%</div>
@@ -319,7 +319,7 @@ export function GatewayDashboard() {
             <span className="text-[13px]">No models discovered. Start the backend to see available models.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {models.map((m) => (
               <ModelBadge key={m.id} model={m} />
             ))}
@@ -335,7 +335,7 @@ export function GatewayDashboard() {
             <span className="text-[13px]">No agents registered for routing.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {agents.map((a, idx) => (
               <AgentCard key={a.agent_id || `agent-${idx}`} agent={a} />
             ))}

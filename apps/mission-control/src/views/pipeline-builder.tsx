@@ -453,7 +453,7 @@ export function PipelineBuilder() {
                 </ReactFlow>
               </div>
               {showValidation && validationIssues.length > 0 && (
-                <div className="fixed bottom-4 right-4 z-40 w-[360px] max-w-[90vw] glass-strong rounded-2xl shadow-depth p-4 animate-in slide-in-from-bottom-4 duration-300">
+                <div className="fixed bottom-4 right-4 z-40 w-full md:w-[360px] max-w-[90vw] glass-strong rounded-2xl shadow-depth p-4 animate-in slide-in-from-bottom-4 duration-300">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold flex items-center gap-2">
                       {hasErrors ? (

@@ -91,7 +91,7 @@ export function Brains() {
     (filter.search ? 1 : 0);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       {/* ── Left sidebar ── */}
       <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
         {/* Stats */}
@@ -118,7 +118,7 @@ export function Brains() {
         {/* View mode & Actions */}
         <Panel title="View" className="flex-shrink-0">
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
               {([
                 { id: "card" as const, icon: <LayoutGrid size={14} />, label: "Cards" },
                 { id: "table" as const, icon: <Table size={14} />, label: "Table" },
@@ -192,7 +192,7 @@ export function Brains() {
             {/* Sort */}
             <div>
               <label className="text-[10px] font-medium text-faint">Sort By</label>
-              <div className="mt-1 grid grid-cols-2 gap-1">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1">
                 {([
                   { id: "display_name", label: "Name" },
                   { id: "status", label: "Status" },
@@ -241,7 +241,7 @@ export function Brains() {
             {/* Group By */}
             <div>
               <label className="text-[10px] font-medium text-faint">Group By</label>
-              <div className="mt-1 grid grid-cols-2 gap-1">
+              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1">
                 {([
                   { id: "none", label: "None" },
                   { id: "type", label: "Type" },
@@ -387,7 +387,7 @@ export function Brains() {
               <Empty title="No brains match filters" hint="Try adjusting your filters or search query" />
             ) : (
               <div className="overflow-auto h-full">
-                <table className="w-full text-xs">
+                <table className="w-full text-xs block overflow-x-auto">
                   <thead>
                     <tr className="border-b border-border/30 text-[10px] text-faint uppercase tracking-wider">
                       <th className="text-left py-2 px-2 font-medium">Name</th>

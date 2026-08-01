@@ -166,7 +166,7 @@ function OverviewTab() {
   const liveStats = (clusterLive?.statistics as ClusterStats | null) ?? stats;
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Nodes" value={liveStats?.total_nodes ?? 0} />
         <Stat label="Active" value={liveStats?.active_nodes ?? 0} tone="ok" />
@@ -206,7 +206,7 @@ function OverviewTab() {
               </div>
               <div className="mt-1 text-[11px] text-faint">{safeFixed(liveStats?.average_node_health, 1)}%</div>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
               <Metric label="Avg Latency" value={`${safeFixed(liveStats?.average_network_latency, 0)}ms`} />
               <Metric label="Utilization" value={`${safeFixed((safeNum(liveStats?.cluster_utilization) * 100), 0)}%`} />
               <Metric label="Active Missions" value={String(liveStats.active_missions)} />
@@ -217,7 +217,7 @@ function OverviewTab() {
       </Panel>
 
       <Panel title="Cluster Actions" subtitle="Federation controls" className="col-span-6">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <ActionButton label="Discover" description="Re-discover nodes" endpoint="/api/cluster/discover" />
           <ActionButton label="Rebalance" description="Rebalance workload" endpoint="/api/cluster/rebalance" />
           <ActionButton label="Sync" description="Sync remote brains" endpoint="/api/cluster/synchronize" />
@@ -290,7 +290,7 @@ function TopologyTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Nodes" value={topo?.nodes.length ?? 0} />
         <Stat label="Connections" value={topo?.connections.length ?? 0} />
@@ -333,7 +333,7 @@ function TopologyTab() {
             {topo.connections.length > 0 && (
               <div>
                 <div className="mb-1 text-xs font-medium text-faint">Connections ({topo.connections.length})</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   {topo.connections.slice(0, 30).map((c, i) => (
                     <div key={i} className="rounded-lg border border-border/60 px-2 py-1 text-[11px]">
                       <span className="text-faint">{c.source}</span>
@@ -373,7 +373,7 @@ function NodesTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Total Nodes" value={nodes.length} />
         <Stat label="Active" value={nodes.filter((n) => n.status === "active").length} tone="ok" />
@@ -401,7 +401,7 @@ function NodesTab() {
                   </div>
                   <div className="text-[11px] text-faint">{n.host}:{n.port} · v{n.version}</div>
                 </div>
-                <div className="mt-2 grid grid-cols-6 gap-2 text-[11px]">
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-6 gap-2 text-[11px]">
                   <Metric label="Brains" value={String(n.brain_count)} />
                   <Metric label="Caps" value={String(n.capability_count)} />
                   <Metric label="Missions" value={String(n.active_missions)} />
@@ -442,7 +442,7 @@ function BrainsTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Local Brains" value={String(data?.stats?.local_brains ?? 0)} />
         <Stat label="Remote Brains" value={String(data?.stats?.remote_brains ?? 0)} />
@@ -521,7 +521,7 @@ function FailoverTab() {
   }, [brainId, nodeId, load]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
       <div className="col-span-12 flex items-center gap-3">
         <Stat label="Triggers" value={String(data?.stats?.triggers_detected ?? 0)} />
         <Stat label="Started" value={String(data?.stats?.actions_started ?? 0)} />

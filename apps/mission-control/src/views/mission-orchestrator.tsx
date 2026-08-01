@@ -172,7 +172,7 @@ export function MissionOrchestrator() {
   }, [missionUpdates, missionStore, selectedMission]);
 
   return (
-    <div className="grid h-full grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
       {/* Left column */}
       <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
         <AgentStatusList />
@@ -595,7 +595,7 @@ function MissionForm({
       <textarea className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-sm outline-none focus:border-accent/60 resize-none font-mono text-[11px]"
         placeholder="Prompt (full instruction for AI agents)" rows={3} value={form.prompt}
         onChange={(e) => update("prompt", e.target.value)} />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <select className="rounded-lg border border-border/60 bg-surface/50 px-2 py-1.5 text-xs outline-none"
           value={form.priority} onChange={(e) => update("priority", e.target.value)}>
           {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -609,7 +609,7 @@ function MissionForm({
         placeholder="e.g. Implement update mechanism" icon={<Target size={12} />} />
       <ArrayInput label="Deliverables" values={form.deliverables} onChange={(v) => update("deliverables", v)}
         placeholder="e.g. Design document" icon={<ListTodo size={12} />} />
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <input className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-xs outline-none focus:border-accent/60"
           placeholder="Tags (comma-separated)" value={form.tags.join(", ")}
           onChange={(e) => update("tags", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
@@ -730,7 +730,7 @@ function MissionDetail({ mission, onRefresh }: { mission: MissionType; onRefresh
           <span className="capitalize">· {mission.plan.risk_level} risk</span>
         </div>
       )}
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
         {cols.map((c) => (
           <div key={c.label} className="glass rounded-xl px-3 py-2">
             <div className="text-[10px] uppercase tracking-wider text-faint">{c.label}</div>
@@ -1039,7 +1039,7 @@ function MergePipelinePanel() {
       subtitle="Results collected, merged, and validated"
       className="h-full"
     >
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
         {MERGE_STAGES.map((stage) => {
           const state = stageStates[stage.id] ?? "pending";
           return (
@@ -1309,7 +1309,7 @@ function RoutingPlanner({ mission }: { mission: MissionType }) {
       className="h-full"
     >
       {/* Strategy selector grid */}
-      <div className="mb-4 grid grid-cols-3 gap-1.5">
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-1.5">
         {ROUTING_STRATEGIES.map((s) => (
           <button
             key={s.id}
@@ -1330,7 +1330,7 @@ function RoutingPlanner({ mission }: { mission: MissionType }) {
       {routePlan ? (
         <div className="space-y-3">
           {/* Summary stats */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
             {[
               { label: "Est. Cost", value: `$${routePlan.total_estimated_cost.toFixed(2)}` },
               { label: "Duration", value: `${(routePlan.total_estimated_duration_ms / 1000).toFixed(1)}s` },

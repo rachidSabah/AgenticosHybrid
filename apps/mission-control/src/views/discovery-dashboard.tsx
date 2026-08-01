@@ -249,7 +249,7 @@ function DiscoveryHistoryTab() {
         <Empty title="No scans yet" hint="Run a discovery scan to populate history." />
       ) : (
         <div className="table-container">
-          <div className="divide-y divide-border/40 min-w-[600px]">
+          <div className="divide-y divide-border/40 min-w-0 md:min-w-[600px]">
             <div className="flex items-center gap-3 px-2 py-2 text-[11px] font-semibold uppercase text-faint">
               <span className="w-8">#</span>
               <span className="w-32">Profile</span>

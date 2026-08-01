@@ -772,7 +772,7 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
         <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
           Latency (ms)
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
             { label: "p50", value: metrics.latency_ms, max: 1000 },
             { label: "p95", value: safeNum(metrics.latency_ms) * 1.5, max: 5000 },
@@ -826,7 +826,7 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
       </div>
 
       {/* Threads, Tasks, Queue */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center">
           <div className="text-[10px] uppercase tracking-wide text-gray-500">Threads</div>
           <div className="text-base font-semibold tabular-nums text-gray-100">{metrics.threads}</div>
@@ -842,7 +842,7 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
       </div>
 
       {/* Restart / Crash counts */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="flex items-center gap-2 rounded-lg border border-gray-700/50 bg-gray-800/40 px-3 py-2">
           <RotateCw className="h-3.5 w-3.5 text-yellow-400" />
           <span className="text-xs text-gray-400">

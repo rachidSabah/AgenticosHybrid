@@ -175,7 +175,7 @@ export default function DesktopSettings() {
             <Toggle value={hardening.enable_thread_monitoring} onChange={(v) => updateHardening({ enable_thread_monitoring: v })} label="Thread Monitoring" />
             <Toggle value={hardening.enable_auto_repair} onChange={(v) => updateHardening({ enable_auto_repair: v })} label="Auto-Repair" />
             <Toggle value={hardening.enable_recovery_mode} onChange={(v) => updateHardening({ enable_recovery_mode: v })} label="Recovery Mode" />
-            <div className="grid grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
               <div>
                 <label className="mb-1 block text-[11px] text-faint">Integrity Check Interval (s)</label>
                 <input

@@ -162,7 +162,7 @@ export function AgentConstellation() {
     <div className="h-full w-full bg-[#03040c] text-slate-100 font-sans select-none overflow-hidden text-xs flex flex-col justify-between p-3 gap-3">
       
       {/* ── TOP SECTION: CONSTELLATION STAGE (CENTER & RIGHT PANELS) ── */}
-      <div className="flex-1 grid grid-cols-12 gap-3 min-h-0 relative">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 min-h-0 relative">
         
         {/* CENTER STAGE: AGENT CONSTELLATION CANVAS (8 COLS) */}
         <div className="col-span-8 relative flex flex-col justify-between p-3 overflow-hidden rounded-xl border border-cyan-900/30 bg-radial-gradient">
@@ -398,12 +398,12 @@ export function AgentConstellation() {
       </div>
 
       {/* ── BOTTOM SECTION: SYSTEM TELEMETRY, EVENT BUS, TASK DISTRIBUTION, TOKEN FLOW, CONNECTION MAP ── */}
-      <div className="grid grid-cols-12 gap-3 shrink-0 h-32 font-mono text-[10px]">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 shrink-0 h-32 font-mono text-[10px]">
         
         {/* System Telemetry Gauges */}
         <div className="col-span-3 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
           <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">System Telemetry <span className="text-[7px] font-normal text-slate-500">Live Metrics</span></div>
-          <div className="grid grid-cols-4 gap-1.5 text-center">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-1.5 text-center">
             {[
               { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
               { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },

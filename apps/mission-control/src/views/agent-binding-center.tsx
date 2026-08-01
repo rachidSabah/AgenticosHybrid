@@ -315,7 +315,7 @@ export function AgentBindingCenter() {
       </div>
 
       {/* ── Main Layout: 3 Columns ── */}
-      <div className="grid flex-1 grid-cols-12 gap-3 overflow-hidden p-3 min-h-0">
+      <div className="grid flex-1 grid-cols-1 md:grid-cols-12 gap-3 overflow-hidden p-3 min-h-0">
         {/* Left Column: Discovered & Bound Agents (4 Cols) */}
         <div className="col-span-12 lg:col-span-4 flex flex-col gap-3 h-full min-h-0">
           <Panel
@@ -487,7 +487,7 @@ export function AgentBindingCenter() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <h3 className="font-semibold text-text mb-1">Environment Variables</h3>
                         <div className="rounded-lg bg-surface/40 p-2.5 font-mono text-[11px] space-y-1">
@@ -619,7 +619,7 @@ export function AgentBindingCenter() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
                     <label className="text-faint block mb-1">Agent Name</label>
                     <input

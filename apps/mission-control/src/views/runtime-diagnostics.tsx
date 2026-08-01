@@ -306,7 +306,7 @@ function TabRuntimeDiscovery({ autoRefresh, search }: { autoRefresh: boolean; se
   return (
     <Panel title="Discovered Runtimes & Tools">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Tool Name</th>
@@ -365,7 +365,7 @@ function TabBrainRegistry({ autoRefresh, search }: { autoRefresh: boolean; searc
               <Badge tone={brain.health === "healthy" ? "ok" : "warn"}>{brain.health}</Badge>
             </div>
             
-            <div className="grid grid-cols-2 gap-y-2 text-sm mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 text-sm mb-4">
               <div className="text-muted">Runtime</div>
               <div className="font-medium text-right">{brain.runtime}</div>
               <div className="text-muted">Memory Usage</div>
@@ -405,7 +405,7 @@ function TabAgentRegistry({ autoRefresh, search }: { autoRefresh: boolean; searc
   return (
     <Panel title="Agent Registry">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Agent ID</th>
@@ -451,7 +451,7 @@ function TabCapabilityRegistry({ autoRefresh, search }: { autoRefresh: boolean; 
   return (
     <Panel title="Capability Registry">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Capability</th>
@@ -535,7 +535,7 @@ function TabEventBusInspector({ autoRefresh, search }: { autoRefresh: boolean; s
   return (
     <Panel title="EventBus Topics">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Topic Name</th>
@@ -568,11 +568,11 @@ function TabSSEInspector({ autoRefresh, search }: { autoRefresh: boolean; search
 
   return (
     <Panel title="SSE Connected Clients">
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Stat label="Total Clients" value={data?.clients.length || 0} />
       </div>
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Client ID</th>
@@ -606,7 +606,7 @@ function TabAPIMonitor({ autoRefresh, search }: { autoRefresh: boolean; search: 
   return (
     <Panel title="API Monitor (Control Plane)">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Method</th>
@@ -673,7 +673,7 @@ function TabMCPMonitor({ autoRefresh, search }: { autoRefresh: boolean; search: 
   return (
     <Panel title="Model Context Protocol (MCP) Servers">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Server Name</th>
@@ -746,7 +746,7 @@ function TabThreadMonitor({ autoRefresh, search }: { autoRefresh: boolean; searc
   return (
     <Panel title="Asyncio Task Monitor">
       <div className="border border-border/60 rounded-xl overflow-hidden">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Task ID</th>
@@ -856,7 +856,7 @@ function TabLogs({ autoRefresh, search }: { autoRefresh: boolean; search: string
       }
     >
       <div className="border border-border/60 rounded-xl overflow-hidden font-mono text-xs">
-        <table className="w-full text-left">
+        <table className="w-full text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase">
             <tr>
               <th className="px-3 py-2 w-48">Timestamp</th>
@@ -910,7 +910,7 @@ function TabHealthDashboard({ autoRefresh }: { autoRefresh: boolean }) {
               <h3 className="font-semibold text-sm capitalize">{name}</h3>
               <StatusDot status={stat.status} />
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
               <div className="text-muted">Latency</div>
               <div className="text-right font-mono">{stat.latency}ms</div>
               <div className="text-muted">Errors</div>
@@ -1054,7 +1054,7 @@ function TabSelfTest() {
 
       {!running && results && (
         <div className="border border-border/60 rounded-xl overflow-hidden">
-          <table className="w-full text-sm text-left">
+          <table className="w-full text-sm text-left block overflow-x-auto">
             <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
               <tr>
                 <th className="px-4 py-3 w-12">Result</th>
