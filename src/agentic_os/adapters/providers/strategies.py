@@ -134,7 +134,10 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
         return [bin_path, "-p", self.build_prompt(task), "--output-format", "text"]
 
     def health_command(self, bin_path: str) -> list[str] | None:
-        return [bin_path, "--version"]
+        # Use --help instead of --version: hermes --version performs a network
+        # update check that can take 2-75s depending on connectivity, causing
+        # healthcheck timeouts. --help exits immediately with no network I/O.
+        return [bin_path, "--help"]
 
     def _api_key_env_name(self) -> str:
         return "HERMES_CONFIG"
@@ -201,8 +204,9 @@ class GeminiExecutionStrategy(ProviderExecutionStrategy):
         return [bin_path, "-p", self.build_prompt(task)]
 
     def health_command(self, bin_path: str) -> list[str] | None:
-        # Use --help instead of --version (Gemini CLI --version can hang)
-        return [bin_path, "--help"]
+        # Use --version (exits in ~6s on Windows). --help triggers interactive
+        # auth/OAuth flow on first run and can hang indefinitely in a subprocess.
+        return [bin_path, "--version"]
 
 
 class AGYExecutionStrategy(ProviderExecutionStrategy):
