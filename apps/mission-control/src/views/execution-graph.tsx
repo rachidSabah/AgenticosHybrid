@@ -642,7 +642,7 @@ export function ExecutionGraph() {
           contentClassName="p-0"
         >
           {filters.dimension === "2d" ? (
-            <div className="h-full w-full">
+            <div className="h-full w-full min-h-[400px]">
               <ReactFlow
                 nodes={filteredNodes}
                 edges={filteredEdges}

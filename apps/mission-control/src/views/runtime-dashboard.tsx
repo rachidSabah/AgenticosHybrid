@@ -962,8 +962,8 @@ function RuntimeDetailPanel({
       {/* Capabilities */}
       {runtime.capabilities && runtime.capabilities.length > 0 && (
         <div className="flex flex-wrap gap-1 border-b border-gray-700/30 px-4 py-2">
-          {runtime.capabilities.map((cap) => (
-            <CapabilityBadge key={cap.name} name={cap.name} />
+          {runtime.capabilities.map((cap, idx) => (
+            <CapabilityBadge key={`${cap.name}-${idx}`} name={cap.name} />
           ))}
         </div>
       )}
