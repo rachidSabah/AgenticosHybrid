@@ -33,6 +33,7 @@ class Orchestrator:
         self.registry = registry
         self.providers = providers
         self.settings = settings
+        self._provider_rr_idx = 0  # round-robin index for real providers
 
     async def start(self) -> None:
         # Seed a default set of roles (declarative; one Agent runtime).
@@ -78,17 +79,24 @@ class Orchestrator:
         if task is None:
             return
 
-        # Provider selection: prefer real (non-mock) providers.
-        # If the configured default is "mock", check for real providers first.
+        # Provider selection: prefer real (non-mock) providers with round-robin.
         provider = None
         all_providers = self.providers.list_providers()
         real_providers = [p for p in all_providers if p.name != "mock" and "mock" not in p.kind]
 
         if real_providers:
-            # Pick the first healthy real provider (round-robin could be added later)
-            provider_name = real_providers[0].name
+            # Round-robin across real providers for load distribution
+            idx = self._provider_rr_idx % len(real_providers)
+            self._provider_rr_idx += 1
+            provider_name = real_providers[idx].name
             provider = self.providers.get(provider_name)
-            log.info("dispatcher.real_provider_selected", provider=provider_name, task=task.id)
+            log.info(
+                "dispatcher.real_provider_selected",
+                provider=provider_name,
+                task=task.id,
+                rr_index=idx,
+                real_count=len(real_providers),
+            )
         else:
             # Fall back to configured default or first available
             provider = (
