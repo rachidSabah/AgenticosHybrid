@@ -153,11 +153,15 @@ class TestHealthCommands:
         cmd = ClaudeExecutionStrategy().health_command("claude")
         assert cmd == ["claude", "--version"]
 
-    def test_gemini_health_uses_help_not_version(self):
-        """Gemini CLI --version can hang — must use --help instead."""
+    def test_hermes_health_uses_help(self):
+        """Hermes CLI --version performs a network update check — must use --help."""
+        cmd = HermesExecutionStrategy().health_command("hermes")
+        assert cmd == ["hermes", "--help"]
+
+    def test_gemini_health_uses_version(self):
+        """Gemini CLI --help can trigger interactive auth flow — must use --version."""
         cmd = GeminiExecutionStrategy().health_command("gemini")
-        assert cmd == ["gemini", "--help"]
-        assert "--version" not in cmd
+        assert cmd == ["gemini", "--version"]
 
     def test_ollama_health_uses_list(self):
         cmd = OllamaExecutionStrategy().health_command("ollama")
