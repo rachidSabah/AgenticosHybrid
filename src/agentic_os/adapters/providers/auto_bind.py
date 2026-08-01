@@ -19,9 +19,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from agentic_os.adapters.providers.claude_code import ClaudeCodeProvider
-from agentic_os.adapters.providers.generic_cli import GenericCLIProvider
-from agentic_os.adapters.providers.hermes import HermesProvider
+from agentic_os.adapters.providers.strategies import ProviderFactory
 from agentic_os.core.registry import ProviderRegistry
 from agentic_os.domain.agent import ProviderInfo
 from agentic_os.infrastructure.logging import get_logger
@@ -537,23 +535,17 @@ def auto_discover_and_bind(
 
         try:
             name = f"auto:{binary}"
-            adapter: object
-            if kind == "claude_code":
-                adapter = ClaudeCodeProvider(bin_path=binary, api_key="", name=name)
-            elif kind == "hermes":
-                adapter = HermesProvider(bin_path=binary, api_key="", name=name)
-            else:
-                # Generic CLI adapter for all other agent types (opencode,
-                # codex, aider, gemini, agy, etc.) — uses stdin piping
-                # which works across different CLI argument formats.
-                adapter = GenericCLIProvider(
-                    bin_path=binary,
-                    name=name,
-                    kind=kind,
-                    display_name=entry.get("display_name", binary),
-                    capabilities=entry.get("capabilities", ["coding", "reasoning"]),
-                    stdin_mode=True,
-                )
+            # Use the ProviderFactory to create the correct adapter
+            # with the correct execution strategy for this CLI.
+            # No more manual if/elif/else — the factory handles it.
+            adapter = ProviderFactory.create(
+                kind=kind,
+                bin_path=binary,
+                name=name,
+                display_name=entry.get("display_name", binary),
+                capabilities=entry.get("capabilities", ["coding", "reasoning"]),
+                api_key="",
+            )
 
             provider_registry.register(adapter)  # type: ignore[arg-type]
 
@@ -585,13 +577,13 @@ def auto_discover_and_bind(
         bin_path = agent.get("path", binary)
         try:
             name = f"auto:{binary}"
-            adapter = GenericCLIProvider(
+            # Use factory for unknown agents too — they get GenericExecutionStrategy
+            adapter = ProviderFactory.create(
+                kind=agent.get("kind", "generic"),
                 bin_path=binary,
                 name=name,
-                kind=agent.get("kind", "auto_detected"),
                 display_name=agent.get("display_name", binary),
                 capabilities=agent.get("capabilities", ["coding", "reasoning"]),
-                stdin_mode=True,
             )
             provider_registry.register(adapter)  # type: ignore[arg-type]
 

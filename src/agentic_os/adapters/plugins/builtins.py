@@ -15,9 +15,8 @@ from __future__ import annotations
 import shutil
 
 from agentic_os.adapters.providers.auto_bind import auto_discover_and_bind
-from agentic_os.adapters.providers.claude_code import ClaudeCodeProvider
-from agentic_os.adapters.providers.hermes import HermesProvider
 from agentic_os.adapters.providers.mock import MockProvider
+from agentic_os.adapters.providers.strategies import ProviderFactory
 from agentic_os.config import settings
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.plugin import Plugin, PluginContext
@@ -41,9 +40,8 @@ class MockProviderPlugin:
 class ClaudeCodeProviderPlugin:
     """Auto-detect Claude Code CLI on PATH and register if found.
 
-    Works in degraded mode when ANTHROPIC_API_KEY is unset (healthcheck OK but
-    execution raises a clear error). Users set the key later via the API key
-    management UI.
+    Uses ProviderFactory to create the adapter with the correct
+    ClaudeExecutionStrategy (claude -p "{prompt}" --output-format text).
     """
 
     name = "claude-code-provider"
@@ -55,9 +53,16 @@ class ClaudeCodeProviderPlugin:
             return
 
         api_key = settings.anthropic_api_key or ""
-        has_key = bool(api_key)
-        ctx.providers.register(ClaudeCodeProvider(bin_path=bin_path, api_key=api_key))
-        if has_key:
+        adapter = ProviderFactory.create(
+            kind="claude_code",
+            bin_path=bin_path,
+            name="claude_code",
+            display_name="Claude Code",
+            capabilities=["coding", "reasoning", "terminal"],
+            api_key=api_key,
+        )
+        ctx.providers.register(adapter)
+        if api_key:
             log.info("plugin.loaded", name=self.name, bin_path=bin_path)
         else:
             log.warning("plugin.loaded.degraded", name=self.name, bin_path=bin_path)
@@ -67,7 +72,11 @@ class ClaudeCodeProviderPlugin:
 
 
 class HermesProviderPlugin:
-    """Auto-detect Hermes CLI on PATH and register if found."""
+    """Auto-detect Hermes CLI on PATH and register if found.
+
+    Uses ProviderFactory to create the adapter with the correct
+    HermesExecutionStrategy (hermes -p "{prompt}" --output-format text).
+    """
 
     name = "hermes-provider"
 
@@ -78,9 +87,16 @@ class HermesProviderPlugin:
             return
 
         api_key = settings.hermes_config or ""
-        has_key = bool(api_key)
-        ctx.providers.register(HermesProvider(bin_path=bin_path, api_key=api_key))
-        if has_key:
+        adapter = ProviderFactory.create(
+            kind="hermes",
+            bin_path=bin_path,
+            name="hermes",
+            display_name="Hermes Agent",
+            capabilities=["coding", "reasoning", "research", "planning"],
+            api_key=api_key,
+        )
+        ctx.providers.register(adapter)
+        if api_key:
             log.info("plugin.loaded", name=self.name, bin_path=bin_path)
         else:
             log.warning("plugin.loaded.degraded", name=self.name, bin_path=bin_path)
