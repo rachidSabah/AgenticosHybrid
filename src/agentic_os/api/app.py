@@ -4867,17 +4867,11 @@ def create_app(platform: Platform) -> FastAPI:
                 return stdout.decode("utf-8", errors="replace").strip()
 
             try:
-                repo_root = _os.path.dirname(
-                    _os.path.dirname(_os.path.dirname(__file__))
-                )
+                repo_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__)))
                 # Get current commit
                 head = await _run(["git", "rev-parse", "HEAD"], cwd=repo_root)
-                short_head = await _run(
-                    ["git", "rev-parse", "--short", "HEAD"], cwd=repo_root
-                )
-                branch = await _run(
-                    ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root
-                )
+                short_head = await _run(["git", "rev-parse", "--short", "HEAD"], cwd=repo_root)
+                branch = await _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root)
                 # Fetch remote (non-blocking, silent on failure)
                 try:
                     await _run(["git", "fetch", "origin"], cwd=repo_root)
@@ -4885,9 +4879,7 @@ def create_app(platform: Platform) -> FastAPI:
                     pass  # offline — that's OK, we just report local state
                 # Get remote head
                 try:
-                    remote_head = await _run(
-                        ["git", "rev-parse", "origin/main"], cwd=repo_root
-                    )
+                    remote_head = await _run(["git", "rev-parse", "origin/main"], cwd=repo_root)
                     remote_short = await _run(
                         ["git", "rev-parse", "--short", "origin/main"],
                         cwd=repo_root,
@@ -4934,9 +4926,7 @@ def create_app(platform: Platform) -> FastAPI:
             import asyncio
             import os as _os
 
-            repo_root = _os.path.dirname(
-                _os.path.dirname(_os.path.dirname(__file__))
-            )
+            repo_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__)))
 
             async def _run(args: list[str]) -> str:
                 proc = await asyncio.create_subprocess_exec(
@@ -4953,11 +4943,15 @@ def create_app(platform: Platform) -> FastAPI:
                     await _run(["git", "fetch", "origin"])
                 except Exception:
                     pass
-                raw = await _run([
-                    "git", "log", "HEAD..origin/main",
-                    f"--max-count={max(1, min(limit, 200))}",
-                    "--pretty=format:%H\t%an\t%ai\t%s",
-                ])
+                raw = await _run(
+                    [
+                        "git",
+                        "log",
+                        "HEAD..origin/main",
+                        f"--max-count={max(1, min(limit, 200))}",
+                        "--pretty=format:%H\t%an\t%ai\t%s",
+                    ]
+                )
                 if not raw:
                     return []
                 commits = []
@@ -4965,13 +4959,15 @@ def create_app(platform: Platform) -> FastAPI:
                     parts = line.split("\t", 3)
                     if len(parts) == 4:
                         h, author, date, subject = parts
-                        commits.append({
-                            "hash": h,
-                            "short_hash": h[:8],
-                            "author": author,
-                            "date": date,
-                            "subject": subject,
-                        })
+                        commits.append(
+                            {
+                                "hash": h,
+                                "short_hash": h[:8],
+                                "author": author,
+                                "date": date,
+                                "subject": subject,
+                            }
+                        )
                 return commits
             except Exception:
                 return []
@@ -4982,9 +4978,7 @@ def create_app(platform: Platform) -> FastAPI:
             import asyncio
             import os as _os
 
-            repo_root = _os.path.dirname(
-                _os.path.dirname(_os.path.dirname(__file__))
-            )
+            repo_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(__file__)))
 
             async def _run(args: list[str]) -> tuple[str, str, int]:
                 proc = await asyncio.create_subprocess_exec(
@@ -4993,9 +4987,7 @@ def create_app(platform: Platform) -> FastAPI:
                     stderr=asyncio.subprocess.PIPE,
                     cwd=repo_root,
                 )
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=60
-                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
                 return (
                     stdout.decode("utf-8", errors="replace").strip(),
                     stderr.decode("utf-8", errors="replace").strip(),
@@ -5003,21 +4995,15 @@ def create_app(platform: Platform) -> FastAPI:
                 )
 
             try:
-                fetch_out, fetch_err, fetch_rc = await _run(
-                    ["git", "fetch", "origin"]
-                )
+                fetch_out, fetch_err, fetch_rc = await _run(["git", "fetch", "origin"])
                 if fetch_rc != 0:
                     return {
                         "success": False,
                         "error": f"git fetch failed: {fetch_err}",
                         "stdout": fetch_out,
                     }
-                merge_out, merge_err, merge_rc = await _run(
-                    ["git", "merge", "origin/main"]
-                )
-                new_head, _, _ = await _run(
-                    ["git", "rev-parse", "--short", "HEAD"]
-                )
+                merge_out, merge_err, merge_rc = await _run(["git", "merge", "origin/main"])
+                new_head, _, _ = await _run(["git", "rev-parse", "--short", "HEAD"])
                 return {
                     "success": merge_rc == 0,
                     "stdout": merge_out,

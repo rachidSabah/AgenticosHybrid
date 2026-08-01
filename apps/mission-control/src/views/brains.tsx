@@ -19,8 +19,6 @@ import type { BrainRecord } from "@/lib/use-brains";
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function Brains() {
-  const store = useBrainsStore();
-
   const brains = useBrainsStore((s) => s.brains);
   const relationships = useBrainsStore((s) => s.relationships);
   const filter = useBrainsStore((s) => s.filter);

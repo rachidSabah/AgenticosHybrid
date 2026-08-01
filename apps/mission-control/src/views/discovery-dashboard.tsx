@@ -65,8 +65,6 @@ function DiscoveryDashboardTab() {
     api.hotReloadStatus().then((res) => setHotReload(res && typeof res === "object" && "running" in res ? res : null)).catch((err) => { console.error("API error:", err); setError(String(err)); });
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
   // EventBus live subscription — reload on discovery/scan events
   const events = useStore((s) => s.events);
   const connected = useStore((s) => s.connected);
@@ -77,7 +75,7 @@ function DiscoveryDashboardTab() {
   );
 
   useEffect(() => {
-    if (discoveryEventCount > 0) load();
+    load();
   }, [discoveryEventCount, load]);
 
   const handleScan = async () => {
