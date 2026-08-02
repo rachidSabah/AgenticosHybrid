@@ -58,6 +58,9 @@ const WorkspaceExplorer = lazyWithRetry(() =>
 const TaskTimeline = lazyWithRetry(() =>
   import("@/views/task-timeline").then((m) => ({ default: m.TaskTimeline }))
 );
+const ExecutionTimeline = lazyWithRetry(() =>
+  import("@/views/execution-timeline").then((m) => ({ default: m.ExecutionTimeline }))
+);
 const SystemMonitor = lazyWithRetry(() =>
   import("@/views/system-monitor").then((m) => ({ default: m.SystemMonitor }))
 );
@@ -287,6 +290,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Task Timeline" fallback={<ViewSkeleton title="Task Timeline" />}>
       <Suspense fallback={<ViewSkeleton title="Task Timeline" />}>
         <TaskTimeline />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  executions: () => (
+    <ErrorBoundary viewName="Execution Timeline" fallback={<ViewSkeleton title="Execution Timeline" />}>
+      <Suspense fallback={<ViewSkeleton title="Execution Timeline" />}>
+        <ExecutionTimeline />
       </Suspense>
     </ErrorBoundary>
   ),

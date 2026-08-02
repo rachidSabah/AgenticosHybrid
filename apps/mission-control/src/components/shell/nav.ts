@@ -51,6 +51,7 @@ export const NAV: NavItem[] = [
   { id: "mcp", label: "MCP Manager", hint: "N", icon: Plug, group: "observe" },
   { id: "workspace", label: "Workspace Explorer", hint: "S", icon: FolderTree, group: "observe" },
   { id: "timeline", label: "Task Timeline", hint: "T", icon: History, group: "observe" },
+  { id: "executions", label: "Execution Timeline", hint: "X", icon: Terminal, group: "observe" },
   { id: "monitor", label: "System Monitor", hint: "Y", icon: Gauge, group: "observe" },
   { id: "runtime-diagnostics", label: "Diagnostics", hint: "X", icon: Activity, group: "observe" },
   { id: "discovery", label: "Discovery", hint: "D", icon: Search, group: "observe" },

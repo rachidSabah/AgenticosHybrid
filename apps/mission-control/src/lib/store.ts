@@ -10,6 +10,7 @@ import type {
   AgentNode,
   AuditEntry,
   EventEnvelope,
+  ExecutionRecord,
   MemoryItem,
   ProviderHealthRecord,
   ProviderHealthStatus,
@@ -55,6 +56,9 @@ interface StoreState {
   performance: DesktopPerformanceMetrics | null;
   missions: Record<string, MissionType>;
   missionUpdates: number; // bump counter to trigger re-renders
+  executions: Record<string, ExecutionRecord>;
+  executionOrder: string[];
+  executionUpdates: number;
   // Phase 15: Ecosystem snapshot — derived entirely from ecosystem.* events
   // and the /api/ecosystem/dashboard REST endpoint. No mock data.
   ecosystem: {
@@ -99,6 +103,7 @@ interface StoreState {
   hydrateCluster: () => Promise<void>;
   /** Phase 17: Fetch the evolution dashboard snapshot from REST. */
   hydrateEvolution: () => Promise<void>;
+  hydrateExecutions: () => Promise<void>;
 }
 
 const MAX_EVENTS = 400;
@@ -172,6 +177,9 @@ export const useStore = create<StoreState>((set, get) => ({
   performance: null,
   missions: {},
   missionUpdates: 0,
+  executions: {},
+  executionOrder: [],
+  executionUpdates: 0,
   // Phase 15: ecosystem snapshot — null until hydrateEcosystem() or the
   // first ecosystem.* WebSocket event populates it.
   ecosystem: null,
@@ -241,6 +249,7 @@ export const useStore = create<StoreState>((set, get) => ({
       ws.onopen = () => {
         retryCount = 0;
         set({ connected: true });
+        void get().hydrateExecutions();
       };
 
       ws.onclose = () => {
@@ -431,6 +440,43 @@ export const useStore = create<StoreState>((set, get) => ({
             const prevLines = sAny[outputKey] as string[] | undefined;
             const newLine = `[${p.timestamp ?? ""}] ${p.stream === "stderr" ? "✗" : "›"} ${p.line ?? ""}`;
             sAny[outputKey] = [...(prevLines ?? []), newLine].slice(-500);
+          }
+          break;
+        }
+        case "execution.started":
+        case "execution.completed":
+        case "execution.failed": {
+          const execId = String(p.execution_id ?? "");
+          if (execId) {
+            const execRec: ExecutionRecord = {
+              execution_id: execId,
+              mission_id: String(p.mission_id ?? ""),
+              task_id: String(p.task_id ?? p.taskId ?? ""),
+              agent_id: String(p.agent_id ?? ""),
+              provider: String(p.provider ?? ""),
+              runtime: String(p.runtime ?? ""),
+              strategy: String(p.strategy ?? ""),
+              status: (p.status as ExecutionRecord["status"]) ?? "running",
+              started_at: p.started_at ?? null,
+              finished_at: p.finished_at ?? null,
+              duration_ms: Number(p.duration_ms ?? 0),
+              stdout: String(p.stdout ?? ""),
+              stderr: String(p.stderr ?? ""),
+              exit_code: p.exit_code ?? null,
+              retry_count: Number(p.retry_count ?? 0),
+              error: String(p.error ?? ""),
+              command: String(p.command ?? ""),
+              prompt_preview: String(p.prompt_preview ?? ""),
+            };
+            const nextExecutions = { ...s.executions, [execId]: execRec };
+            const prevOrder = s.executionOrder.filter((id) => id !== execId);
+            const nextOrder = [execId, ...prevOrder].slice(0, 500);
+            return {
+              events, notifications, agents, tasks, providers, telemetry,
+              executions: nextExecutions,
+              executionOrder: nextOrder,
+              executionUpdates: Date.now(),
+            };
           }
           break;
         }
@@ -898,6 +944,24 @@ export const useStore = create<StoreState>((set, get) => ({
       if (get().evolution === null) {
         set({ evolution: null });
       }
+    }
+  },
+
+  hydrateExecutions: async () => {
+    try {
+      const records = await api.executions({ limit: 200 });
+      const safeRecords = Array.isArray(records) ? records : [];
+      const map: Record<string, ExecutionRecord> = {};
+      const order: string[] = [];
+      for (const r of safeRecords) {
+        if (r && r.execution_id) {
+          map[r.execution_id] = r;
+          order.push(r.execution_id);
+        }
+      }
+      set({ executions: map, executionOrder: order, executionUpdates: Date.now() });
+    } catch {
+      // Backend may be offline
     }
   },
 }));

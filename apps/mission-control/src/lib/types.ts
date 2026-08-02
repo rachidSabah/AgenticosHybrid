@@ -679,3 +679,35 @@ export interface WorkspaceEntry {
   size: number;
   children?: WorkspaceEntry[];
 }
+
+// ── Execution Log ──
+export interface ExecutionRecord {
+  execution_id: string;
+  mission_id: string;
+  task_id: string;
+  agent_id: string;
+  provider: string;
+  runtime: string;
+  strategy: string;
+  status: "running" | "completed" | "failed" | "retried" | "abandoned";
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number;
+  stdout: string;
+  stderr: string;
+  exit_code: number | null;
+  retry_count: number;
+  error: string;
+  command: string;
+  prompt_preview: string;
+}
+
+export interface ExecutionStats {
+  total: number;
+  completed?: number;
+  failed?: number;
+  running?: number;
+  retried?: number;
+  abandoned?: number;
+  [key: string]: number | undefined;
+}

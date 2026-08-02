@@ -524,6 +524,27 @@ export const api = {
 
   // ── Mission Orchestrator API ──
   missions: () => get<MissionType[]>("/api/missions"),
+
+  // ── Execution Log ──
+  executions: (params?: {
+    mission_id?: string;
+    task_id?: string;
+    provider?: string;
+    status?: string;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.mission_id) qs.set("mission_id", params.mission_id);
+    if (params?.task_id) qs.set("task_id", params.task_id);
+    if (params?.provider) qs.set("provider", params.provider);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const q = qs.toString();
+    return get<import("./types").ExecutionRecord[]>(`/api/executions${q ? `?${q}` : ""}`);
+  },
+  execution: (executionId: string) =>
+    get<import("./types").ExecutionRecord>(`/api/executions/${encodeURIComponent(executionId)}`),
+  executionStats: () => get<import("./types").ExecutionStats>("/api/executions/stats"),
   createMission: (body: Record<string, unknown>) =>
     post<MissionType>("/api/missions", body),
   getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),
