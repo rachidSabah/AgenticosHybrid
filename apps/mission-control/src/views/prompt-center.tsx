@@ -29,6 +29,7 @@ import {
   History,
   Bookmark,
   ChevronDown,
+  Folder,
   Bot,
   Brain,
   Cpu,
@@ -117,6 +118,22 @@ export function PromptCenter() {
 
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<AvailableModel | null>(null);
+  const [workspacePath, setWorkspacePath] = useState<string>("");
+  const [showWorkspacePicker, setShowWorkspacePicker] = useState(false);
+
+  // Fetch current workspace on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.workspaceCurrent();
+        if (!cancelled && res?.path) setWorkspacePath(res.path);
+      } catch {
+        // Backend may not support workspace yet
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch live models from the API Gateway
   useEffect(() => {
@@ -310,6 +327,79 @@ export function PromptCenter() {
                     </button>
                   ))
                 )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Workspace Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowWorkspacePicker(!showWorkspacePicker)}
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white backdrop-blur-lg hover:bg-white/10 transition shadow-sm"
+            title="Select workspace directory"
+          >
+            <Folder size={15} className="text-emerald-400" />
+            <span className="max-w-[120px] truncate">
+              {workspacePath ? workspacePath.split("/").pop() || workspacePath : "No workspace"}
+            </span>
+            {workspacePath && (
+              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] text-emerald-300 font-mono">
+                active
+              </span>
+            )}
+            <ChevronDown size={14} className="text-white/50" />
+          </button>
+
+          <AnimatePresence>
+            {showWorkspacePicker && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className="absolute left-0 top-11 z-50 w-80 rounded-2xl border border-white/10 bg-[#161822]/95 p-3 shadow-2xl backdrop-blur-xl"
+              >
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                  Workspace Path
+                </div>
+                <input
+                  type="text"
+                  value={workspacePath}
+                  onChange={(e) => setWorkspacePath(e.target.value)}
+                  placeholder="/path/to/your/project"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-emerald-500/40"
+                />
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.workspaceSelect(workspacePath);
+                        setShowWorkspacePicker(false);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="flex-1 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/30 transition"
+                  >
+                    Set Workspace
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await api.workspaceCurrent();
+                        if (res?.path) setWorkspacePath(res.path);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/10 transition"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="mt-2 text-[9px] text-white/30">
+                  The workspace path is injected into task prompts so AI agents can see your project files.
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

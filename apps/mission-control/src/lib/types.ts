@@ -670,3 +670,12 @@ export interface GatewayHealth {
   active_models: number;
   last_request_at: string | null;
 }
+
+// ── Workspace ──
+export interface WorkspaceEntry {
+  name: string;
+  path: string;
+  type: "directory" | "file";
+  size: number;
+  children?: WorkspaceEntry[];
+}

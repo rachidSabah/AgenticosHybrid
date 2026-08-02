@@ -505,6 +505,23 @@ export const api = {
   devUpdateRestart: () =>
     post<{ scheduled: boolean; message: string }>("/api/dev/updates/restart"),
 
+  // ── Workspace + File Context ──
+  workspaceList: (path?: string, depth?: number) =>
+    get<{ root: string; file_count: number; children: WorkspaceEntry[] }>(
+      `/api/workspace/list${path ? `?path=${encodeURIComponent(path)}` : ""}${depth ? `${path ? "&" : "?"}depth=${depth}` : ""}`,
+    ),
+  workspaceFiles: (path: string) =>
+    get<{ path: string; content: string; size: number; truncated: boolean; lines: number }>(
+      `/api/workspace/files?path=${encodeURIComponent(path)}`,
+    ),
+  workspaceSelect: (path: string) =>
+    post<{ path: string }>("/api/workspace/select", { path }),
+  workspaceCurrent: () => get<{ path: string }>("/api/workspace/current"),
+  workspaceContext: () =>
+    get<{ root: string; files: Record<string, string>; file_tree: string; total_chars: number }>(
+      "/api/workspace/context",
+    ),
+
   // ── Mission Orchestrator API ──
   missions: () => get<MissionType[]>("/api/missions"),
   createMission: (body: Record<string, unknown>) =>
