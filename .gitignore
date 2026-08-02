@@ -89,3 +89,4 @@ _cache/
 # ── Temp scripts (not part of source) ──
 _fix_*.py
 _tmp/
+.aider*

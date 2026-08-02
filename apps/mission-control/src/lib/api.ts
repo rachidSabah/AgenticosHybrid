@@ -42,8 +42,9 @@ async function get<T>(path: string, fallback?: T): Promise<T> {
       return [] as unknown as T;
     }
     return (await res.json()) as T;
-  } catch {
-    // Network error / JSON parse error — return safe default, never throw
+  } catch (err) {
+    // Network error / JSON parse error — log + return safe default, never throw
+    if (process.env.NODE_ENV !== "production") console.error(`[api.get] ${path}:`, err);
     if (fallback !== undefined) return fallback;
     if (path.includes("health") || path.includes("status")) {
       return { status: "offline", healthy: false, state: "offline", bus: "offline" } as unknown as T;
@@ -65,8 +66,9 @@ async function post<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
       return { success: false, status: "error", error: `HTTP ${res.status}` } as unknown as T;
     }
     return (await res.json()) as T;
-  } catch {
-    // Network error — return safe default, never throw
+  } catch (err) {
+    // Network error — log + return safe default, never throw
+    if (process.env.NODE_ENV !== "production") console.error(`[api.post] ${path}:`, err);
     if (fallback !== undefined) return fallback;
     return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
   }
@@ -84,7 +86,8 @@ async function put<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
       return { success: false, status: "error", error: `HTTP ${res.status}` } as unknown as T;
     }
     return (await res.json()) as T;
-  } catch {
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") console.error(`[api.put] ${path}:`, err);
     if (fallback !== undefined) return fallback;
     return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
   }
@@ -98,7 +101,8 @@ async function del<T>(path: string, fallback?: T): Promise<T> {
       return { deleted: false, success: false } as unknown as T;
     }
     return (await res.json()) as T;
-  } catch {
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") console.error(`[api.del] ${path}:`, err);
     if (fallback !== undefined) return fallback;
     return { deleted: false, success: false } as unknown as T;
   }
