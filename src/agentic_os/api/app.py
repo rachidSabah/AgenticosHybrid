@@ -341,6 +341,54 @@ def create_app(platform: Platform) -> FastAPI:
     async def list_tasks() -> list[dict]:
         return [t.model_dump(mode="json") for t in orch.registry.tasks()]
 
+    # ── Execution Log ──
+    @app.get("/api/executions")
+    async def list_cli_executions(
+        mission_id: str | None = None,
+        task_id: str | None = None,
+        provider: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        exec_log = platform.execution_log
+        if exec_log is None:
+            return []
+        limit = max(1, min(limit, 1000))
+        if mission_id:
+            records = exec_log.for_mission(mission_id)
+        elif task_id:
+            records = exec_log.for_task(task_id)
+        elif provider:
+            records = exec_log.for_provider(provider, limit=limit)
+        elif status:
+            records = exec_log.by_status(status, limit=limit)
+        else:
+            records = exec_log.list_all(limit=limit)
+        if mission_id and task_id:
+            records = [r for r in records if r.task_id == task_id]
+        if provider:
+            records = [r for r in records if r.provider == provider]
+        if status:
+            records = [r for r in records if r.status == status]
+        return [r.to_dict() for r in records[:limit]]
+
+    @app.get("/api/executions/stats")
+    async def cli_execution_stats() -> dict:
+        exec_log = platform.execution_log
+        if exec_log is None:
+            return {"total": 0}
+        return exec_log.stats()
+
+    @app.get("/api/executions/{execution_id}")
+    async def get_cli_execution(execution_id: str) -> dict:
+        exec_log = platform.execution_log
+        if exec_log is None:
+            raise HTTPException(503, "ExecutionLog not available")
+        rec = exec_log.get(execution_id)
+        if rec is None:
+            raise HTTPException(404, f"Execution {execution_id} not found")
+        return rec.to_dict()
+
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
         """List all registered agents (Orchestrator agents + discovered brains)."""
@@ -1199,7 +1247,9 @@ def create_app(platform: Platform) -> FastAPI:
                     await orch.create_task(
                         title=task.title,
                         role=role,
-                        description=task.description or m.prompt or "",
+                        description=task.description,
+                        user_prompt=task.user_prompt or m.prompt or m.description or "",
+                        mission_id=m.id,
                     )
                 except Exception:
                     log.warning(

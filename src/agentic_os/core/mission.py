@@ -156,10 +156,13 @@ class MissionPlannerImpl:
         """
         tasks: list[MissionTask] = []
 
+        user_prompt = mission.prompt or mission.description or ""
+
         # Task 1: Repository Analysis
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Analyze repository & environment",
                 description="Scan the repository structure, technology stack, dependencies, "
                 "and environment to understand the codebase context for the mission.",
@@ -173,6 +176,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Review architecture & design",
                 description="Analyze existing architecture, design patterns, and identify "
                 "impact areas for the mission objectives.",
@@ -186,6 +190,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Design implementation workflow",
                 description="Design the detailed implementation plan, including component "
                 "breakdown, API contracts, and integration points.",
@@ -198,6 +203,7 @@ class MissionPlannerImpl:
         # Task 4: Backend (depends on 2, 3)
         backend_task = MissionTask(
             mission_id=mission.id,
+            user_prompt=user_prompt,
             title="Backend implementation",
             description=(
                 "Implement backend components using the designed architecture and API contracts."
@@ -212,6 +218,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Frontend implementation",
                 description=(
                     "Implement frontend components matching the designed workflow and backend APIs."
@@ -226,6 +233,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Security audit & review",
                 description="Review the implementation for security vulnerabilities, "
                 "apply secure coding patterns, and verify access controls.",
@@ -239,6 +247,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Testing & regression validation",
                 description="Write and run unit tests, integration tests, and regression "
                 "tests to validate the implementation.",
@@ -252,6 +261,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Documentation & usage guides",
                 description="Write documentation, API references, usage guides, "
                 "and changelog entries for the completed work.",
@@ -265,6 +275,7 @@ class MissionPlannerImpl:
         tasks.append(
             MissionTask(
                 mission_id=mission.id,
+                user_prompt=user_prompt,
                 title="Final validation & quality gates",
                 description="Run final validation: verify all tasks complete, tests pass, "
                 "no regressions, docs up to date, security checks ok.",

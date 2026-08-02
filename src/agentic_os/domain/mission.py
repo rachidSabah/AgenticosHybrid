@@ -110,12 +110,17 @@ class Attachment:
 
 @dataclass
 class MissionTask:
-    """A single decomposed task within a mission."""
+    """A single decomposed task within a mission.
+
+    Carries BOTH the original user_prompt (preserved verbatim so it reaches
+    the CLI) AND the planner_description (the planner's generated narrative).
+    """
 
     id: str = field(default_factory=_new_id)
     mission_id: str = ""
     title: str = ""
     description: str = ""
+    user_prompt: str = ""
     status: TaskStatus = TaskStatus.PENDING
     assigned_role: AgentRole | None = None
     assigned_provider: str = ""
@@ -134,6 +139,7 @@ class MissionTask:
             "mission_id": self.mission_id,
             "title": self.title,
             "description": self.description,
+            "user_prompt": self.user_prompt,
             "status": self.status.value,
             "assigned_role": self.assigned_role.value if self.assigned_role else None,
             "assigned_provider": self.assigned_provider,

@@ -215,6 +215,10 @@ _DASHBOARD_TOPICS = [
     "task.started",
     "task.completed",
     "task.failed",
+    # Execution records — emitted by ExecutionLog for every CLI attempt
+    "execution.started",
+    "execution.completed",
+    "execution.failed",
     "node.joined",
     "node.left",
     "node.leader.elected",

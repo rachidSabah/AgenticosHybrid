@@ -88,8 +88,33 @@ class ProviderExecutionStrategy(ABC):
         return None
 
     def build_prompt(self, task: Task) -> str:
-        """Extract the prompt text from a task."""
-        return f"{task.title}\n\n{task.description}".strip()
+        """Compose the final CLI prompt from the task.
+
+        Preserves BOTH the original user request (task.user_prompt) AND
+        the planner-generated task description (task.description).
+        """
+        user_prompt = (task.user_prompt or "").strip()
+        description = (task.description or "").strip()
+        title = (task.title or "").strip()
+
+        if not user_prompt:
+            return f"{title}\n\n{description}".strip()
+
+        sections = [
+            "=" * 50,
+            "Mission Request",
+            user_prompt,
+            "",
+            "=" * 50,
+            "Assigned Task",
+            description,
+            "",
+            "=" * 50,
+            "Task Title",
+            title,
+            "=" * 50,
+        ]
+        return "\n".join(sections)
 
     def build_env(self, api_key: str = "") -> dict[str, str]:
         """Build the environment for the subprocess."""
@@ -341,6 +366,7 @@ class StrategyBasedProvider:
             kind=config.kind,
             supports_streaming=self._strategy.supports_streaming,
             supports_tools=True,
+            capabilities=config.capabilities,
         )
 
     @property

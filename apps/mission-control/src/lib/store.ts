@@ -395,17 +395,32 @@ export const useStore = create<StoreState>((set, get) => ({
         case "task.created":
         case "task.planned":
         case "task.dispatched":
-        case "task.assigned": {
-          const id = String(p.id ?? "task");
+        case "task.assigned":
+        case "task.started":
+        case "task.completed":
+        case "task.failed": {
+          const id = String(p.task_id ?? p.taskId ?? p.id ?? "task");
           tasks = { ...s.tasks };
-          tasks[id] = {
+          const prev = tasks[id] ?? {
             id,
             title: String(p.title ?? ""),
             role: String(p.role ?? ""),
-            status: e.topic.replace("task.", "") as TaskNode["status"],
+            status: "pending" as TaskNode["status"],
+          };
+          tasks[id] = {
+            id,
+            title: String(p.title ?? prev.title ?? ""),
+            role: String(p.role ?? prev.role ?? ""),
+            status: (
+              e.topic === "task.started" ? "in_progress" :
+              e.topic === "task.completed" ? "completed" :
+              e.topic === "task.failed" ? "failed" :
+              e.topic.replace("task.", "")
+            ) as TaskNode["status"],
           };
           telemetry = { ...s.telemetry };
           telemetry.tasks = Object.keys(tasks).length;
+          if (e.topic === "task.failed") telemetry.errors += 1;
           break;
         }
         case "provider.health":

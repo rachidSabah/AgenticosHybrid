@@ -84,12 +84,17 @@ class TaskStatus(StrEnum):
 
 
 class Task(BaseModel):
-    """A unit of work routed through the orchestrator."""
+    """A unit of work routed through the orchestrator.
+
+    Carries the original user_prompt (preserved verbatim end-to-end so it
+    reaches the CLI) alongside the planner-generated description.
+    """
 
     id: str = Field(default_factory=lambda: uuid4().hex)
     title: str
     role: str
     description: str = ""
+    user_prompt: str = ""
     status: TaskStatus = TaskStatus.PENDING
     assigned_agent_id: str | None = None
     attempts: int = 0
@@ -97,6 +102,7 @@ class Task(BaseModel):
     updated_at: datetime = Field(default_factory=_utcnow)
     result: str | None = None
     error: str | None = None
+    mission_id: str = ""
 
     def touch(self) -> None:
         self.updated_at = _utcnow()
@@ -109,3 +115,4 @@ class ProviderInfo(BaseModel):
     kind: str  # e.g. "claude_code", "openai", "mock"
     supports_streaming: bool = False
     supports_tools: bool = False
+    capabilities: list[str] = Field(default_factory=list)

@@ -73,6 +73,9 @@ from agentic_os.core.discovery.validation import (
     PermissionValidator,
     VersionDetectValidator,
 )
+
+# Mission Orchestrator
+from agentic_os.core.execution_log import ExecutionLog
 from agentic_os.core.health import HealthMonitorImpl
 
 # Phase 5: Learning & Optimization Engine
@@ -83,8 +86,6 @@ from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.mcp.registry import MCPRegistryImpl
 from agentic_os.core.mcp.security import MCPSecurity
 from agentic_os.core.memory.manager import MemoryManagerImpl
-
-# Mission Orchestrator
 from agentic_os.core.mission import MissionPlannerImpl
 from agentic_os.core.orchestration.config import OrchestrationConfiguration
 
@@ -230,6 +231,7 @@ class Platform:
     distributed_controller: Any = None  # DistributedController | None
     # Phase 18: Persistent Runtime
     persistent_controller: Any = None  # PersistentController | None
+    execution_log: Any = None  # ExecutionLog | None
 
 
 class Kernel:
@@ -283,7 +285,14 @@ class Kernel:
         self.pipeline = PipelineEngineImpl(self.bus, self.router, self.registry)
 
         # Orchestrator + supervision
-        self.orchestrator = Orchestrator(self.bus, self.registry, self.providers, settings)
+        self.execution_log = ExecutionLog(self.bus)
+        self.orchestrator = Orchestrator(
+            self.bus,
+            self.registry,
+            self.providers,
+            settings,
+            execution_log=self.execution_log,
+        )
         self.health = HealthMonitorImpl(self.bus, self.registry, self.scheduler, settings)
         self.recovery = RecoveryManagerImpl(self.bus, self.orchestrator, settings)
         self.dashboard = DashboardBroadcaster(self.bus)
@@ -1151,6 +1160,7 @@ class Kernel:
             executive_controller=self.executive_controller,
             cognitive_controller=self.cognitive_controller,
             swarm_coordinator=self.swarm_coordinator,
+            execution_log=self.execution_log,
         )
         return self._platform_instance
 
