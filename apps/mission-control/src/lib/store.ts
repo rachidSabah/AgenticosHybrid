@@ -423,6 +423,17 @@ export const useStore = create<StoreState>((set, get) => ({
           if (e.topic === "task.failed") telemetry.errors += 1;
           break;
         }
+        case "task.output": {
+          const tid = String(p.task_id ?? p.taskId ?? p.id ?? "");
+          if (tid) {
+            const outputKey = `__output__${tid}`;
+            const sAny = s as unknown as Record<string, unknown>;
+            const prevLines = sAny[outputKey] as string[] | undefined;
+            const newLine = `[${p.timestamp ?? ""}] ${p.stream === "stderr" ? "✗" : "›"} ${p.line ?? ""}`;
+            sAny[outputKey] = [...(prevLines ?? []), newLine].slice(-500);
+          }
+          break;
+        }
         case "provider.health":
         case "provider.registered":
         case "provider.failover": {

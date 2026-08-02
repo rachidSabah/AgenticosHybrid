@@ -377,8 +377,14 @@ class StrategyBasedProvider:
     def bin_path(self) -> str:
         return self._config.bin_path
 
-    async def execute(self, agent: Agent, task: Task) -> str:
-        """Execute a task using the strategy's CLI invocation."""
+    async def execute(self, agent: Agent, task: Task, on_output=None) -> str:
+        """Execute a task using the strategy's CLI invocation.
+
+        If ``on_output`` is provided, it's called for each line of
+        stdout/stderr as it arrives (real-time streaming). The callback
+        receives (line: str, stream: str) where stream is "stdout" or
+        "stderr".
+        """
         import asyncio
 
         resolved_bin = shutil.which(self._config.bin_path) or self._config.bin_path
@@ -411,9 +417,61 @@ class StrategyBasedProvider:
             env=env,
         )
 
+        # If no streaming callback, use the original communicate() path
+        if on_output is None:
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(input=stdin_data),
+                    timeout=timeout,
+                )
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                raise RuntimeError(
+                    f"{self._config.bin_path} ({self._config.kind}) timed out after {timeout}s"
+                ) from None
+
+            if proc.returncode != 0:
+                stderr_text = stderr.decode("utf-8", errors="replace").strip()[:200]
+                raise RuntimeError(
+                    f"{self._config.bin_path} ({self._config.kind}) "
+                    f"exited {proc.returncode}: {stderr_text}"
+                )
+
+            result = self._strategy.parse_output(stdout, stderr, task)
+            return result or f"[{self._config.kind}] completed '{task.title}'"
+
+        # Streaming path: read stdout/stderr line-by-line
+        stdout_lines: list[str] = []
+        stderr_lines: list[str] = []
+
+        async def _read_stream(stream, stream_name: str, store: list[str]):
+            while True:
+                line = await stream.readline()
+                if not line:
+                    break
+                decoded = line.decode("utf-8", errors="replace").rstrip("\n\r")
+                store.append(decoded)
+                try:
+                    on_output(decoded, stream_name)
+                except Exception:
+                    pass  # don't let callback errors crash execution
+
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(input=stdin_data),
+            # Write stdin if needed, then read streams concurrently
+            async def _feed_stdin():
+                if stdin_data is not None and proc.stdin:
+                    proc.stdin.write(stdin_data)
+                    await proc.stdin.drain()
+                    proc.stdin.close()
+
+            await asyncio.wait_for(
+                asyncio.gather(
+                    _feed_stdin(),
+                    _read_stream(proc.stdout, "stdout", stdout_lines),
+                    _read_stream(proc.stderr, "stderr", stderr_lines),
+                    proc.wait(),
+                ),
                 timeout=timeout,
             )
         except TimeoutError:
@@ -423,14 +481,17 @@ class StrategyBasedProvider:
                 f"{self._config.bin_path} ({self._config.kind}) timed out after {timeout}s"
             ) from None
 
+        stdout_bytes = "\n".join(stdout_lines).encode()
+        stderr_bytes = "\n".join(stderr_lines).encode()
+
         if proc.returncode != 0:
-            stderr_text = stderr.decode("utf-8", errors="replace").strip()[:200]
+            stderr_text = "\n".join(stderr_lines).strip()[:200]
             raise RuntimeError(
                 f"{self._config.bin_path} ({self._config.kind}) "
                 f"exited {proc.returncode}: {stderr_text}"
             )
 
-        result = self._strategy.parse_output(stdout, stderr, task)
+        result = self._strategy.parse_output(stdout_bytes, stderr_bytes, task)
         return result or f"[{self._config.kind}] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:

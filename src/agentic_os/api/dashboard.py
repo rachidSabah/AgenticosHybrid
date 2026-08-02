@@ -219,6 +219,8 @@ _DASHBOARD_TOPICS = [
     "execution.started",
     "execution.completed",
     "execution.failed",
+    # Streaming output — emitted per line during CLI execution
+    "task.output",
     "node.joined",
     "node.left",
     "node.leader.elected",

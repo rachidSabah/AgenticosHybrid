@@ -507,7 +507,7 @@ export const api = {
 
   // ── Workspace + File Context ──
   workspaceList: (path?: string, depth?: number) =>
-    get<{ root: string; file_count: number; children: WorkspaceEntry[] }>(
+    get<{ root: string; file_count: number; children: import("./types").WorkspaceEntry[] }>(
       `/api/workspace/list${path ? `?path=${encodeURIComponent(path)}` : ""}${depth ? `${path ? "&" : "?"}depth=${depth}` : ""}`,
     ),
   workspaceFiles: (path: string) =>

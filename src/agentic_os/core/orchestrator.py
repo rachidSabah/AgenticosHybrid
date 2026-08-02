@@ -190,6 +190,26 @@ class Orchestrator:
             cooldown_s=_PROVIDER_COOLDOWN_S,
         )
 
+    def _make_output_callback(self, task: Task):
+        """Create a streaming callback that publishes task.output events."""
+
+        async def _on_output(line: str, stream: str):
+            await self.bus.publish(
+                EventEnvelope(
+                    type="task.output",
+                    source="orchestrator",
+                    topic="task.output",
+                    payload={
+                        "task_id": task.id,
+                        "line": line,
+                        "stream": stream,
+                        "timestamp": _time.strftime("%H:%M:%S"),
+                    },
+                )
+            )
+
+        return _on_output
+
     async def dispatch_task(self, task: Task) -> None:
         provider = self._select_provider(task.role)
         if provider is None:
@@ -251,7 +271,7 @@ class Orchestrator:
         # Attempt 1
         exec_rec = self._start_execution(agent, task, provider, retry_count=0)
         try:
-            result = await provider.execute(agent, task)
+            result = await provider.execute(agent, task, on_output=self._make_output_callback(task))
             elapsed = _time.monotonic() - start_time
             agent.mark_completed()
             task.status = TaskStatus.COMPLETED
@@ -294,7 +314,9 @@ class Orchestrator:
             )
             exec_rec2 = self._start_execution(agent, task, provider, retry_count=1)
             try:
-                result = await provider.execute(agent, task)
+                result = await provider.execute(
+                    agent, task, on_output=self._make_output_callback(task)
+                )
                 elapsed = _time.monotonic() - start_time
                 agent.mark_completed()
                 task.status = TaskStatus.COMPLETED
@@ -349,7 +371,9 @@ class Orchestrator:
                 fallback_agent, task, fallback_provider, retry_count=2
             )
             try:
-                result = await fallback_provider.execute(fallback_agent, task)
+                result = await fallback_provider.execute(
+                    fallback_agent, task, on_output=self._make_output_callback(task)
+                )
                 elapsed = _time.monotonic() - start_time
                 fallback_agent.mark_completed()
                 task.status = TaskStatus.COMPLETED
