@@ -286,12 +286,16 @@ class Kernel:
 
         # Orchestrator + supervision
         self.execution_log = ExecutionLog(self.bus)
+        from agentic_os.core.worktree_manager import WorktreeManager
+
+        self.worktree_manager = WorktreeManager()
         self.orchestrator = Orchestrator(
             self.bus,
             self.registry,
             self.providers,
             settings,
             execution_log=self.execution_log,
+            worktree_manager=self.worktree_manager,
         )
         self.health = HealthMonitorImpl(self.bus, self.registry, self.scheduler, settings)
         self.recovery = RecoveryManagerImpl(self.bus, self.orchestrator, settings)

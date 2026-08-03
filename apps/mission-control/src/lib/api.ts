@@ -545,6 +545,25 @@ export const api = {
   execution: (executionId: string) =>
     get<import("./types").ExecutionRecord>(`/api/executions/${encodeURIComponent(executionId)}`),
   executionStats: () => get<import("./types").ExecutionStats>("/api/executions/stats"),
+
+  // ── Worktree Management ──
+  worktreeCreate: (body: { branch_name?: string; base_branch?: string; agent_id?: string; task_id?: string }) =>
+    post<import("./types").WorktreeEntry>("/api/worktrees/create", body),
+  worktreeList: () => get<import("./types").WorktreeEntry[]>("/api/worktrees/list"),
+  worktreeRemove: (branchName: string) =>
+    del<{ removed: string }>(`/api/worktrees/${encodeURIComponent(branchName)}`),
+  worktreeForAgent: (agentId: string) =>
+    get<{ agent_id: string; path: string }>(`/api/worktrees/for-agent/${encodeURIComponent(agentId)}`),
+  worktreeDiff: (branchName: string) =>
+    get<import("./types").WorktreeDiffFile[]>(`/api/worktrees/${encodeURIComponent(branchName)}/diff`),
+  worktreeFile: (branchName: string, path: string) =>
+    get<{ path: string; content: string; truncated: boolean }>(
+      `/api/worktrees/${encodeURIComponent(branchName)}/file?path=${encodeURIComponent(path)}`,
+    ),
+  worktreeMerge: (branchName: string) =>
+    post<{ merged: boolean; branch: string; base: string; message?: string; error?: string; conflicts?: boolean }>(
+      `/api/worktrees/${encodeURIComponent(branchName)}/merge`,
+    ),
   createMission: (body: Record<string, unknown>) =>
     post<MissionType>("/api/missions", body),
   getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),

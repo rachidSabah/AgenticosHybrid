@@ -711,3 +711,22 @@ export interface ExecutionStats {
   abandoned?: number;
   [key: string]: number | undefined;
 }
+
+// ── Worktree ──
+export interface WorktreeEntry {
+  branch: string;
+  path: string;
+  agent_id: string;
+  task_id: string;
+  status: "active" | "dirty" | "merged" | "removed";
+  base_branch: string;
+  created_at: string | null;
+}
+
+export interface WorktreeDiffFile {
+  file: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  additions: number;
+  deletions: number;
+  diff: string;
+}

@@ -33,6 +33,7 @@ from agentic_os.ports.event_bus import EventBus
 
 if TYPE_CHECKING:
     from agentic_os.core.execution_log import ExecutionLog
+    from agentic_os.core.worktree_manager import WorktreeManager
 
 log = get_logger("core.orchestrator")
 
@@ -58,12 +59,14 @@ class Orchestrator:
         providers: ProviderRegistry,
         settings: Settings,
         execution_log: "ExecutionLog | None" = None,
+        worktree_manager: "WorktreeManager | None" = None,
     ) -> None:
         self.bus = bus
         self.registry = registry
         self.providers = providers
         self.settings = settings
         self.execution_log = execution_log
+        self.worktree_manager = worktree_manager
         self._provider_rr_idx = 0
         self._failed_providers: dict[str, float] = {}
 
@@ -191,7 +194,7 @@ class Orchestrator:
         )
 
     def _make_output_callback(self, task: Task):
-        """Create a streaming callback that publishes task.output events."""
+        """Create a streaming callback that publishes task.output + agent_status events."""
 
         async def _on_output(line: str, stream: str):
             await self.bus.publish(
@@ -207,8 +210,60 @@ class Orchestrator:
                     },
                 )
             )
+            # Feature 4: detect agent reasoning lines
+            lower = line.lstrip().lower()
+            if any(
+                lower.startswith(p)
+                for p in (
+                    "i'm ",
+                    "i am ",
+                    "let me",
+                    "checking",
+                    "now ",
+                    "working on",
+                    "done with",
+                    "analyzing",
+                    "reading",
+                    "writing",
+                    "updating",
+                    "creating",
+                    "fixing",
+                    "implementing",
+                    "running",
+                    "building",
+                )
+            ):
+                await self.bus.publish(
+                    EventEnvelope(
+                        type="task.agent_status",
+                        source="orchestrator",
+                        topic="task.agent_status",
+                        payload={
+                            "task_id": task.id,
+                            "status_text": line.strip(),
+                            "timestamp": _time.strftime("%H:%M:%S"),
+                        },
+                    )
+                )
 
         return _on_output
+
+    async def _create_worktree_for_agent(self, agent: Agent, task: Task) -> str | None:
+        """Create a git worktree for isolated agent execution."""
+        if self.worktree_manager is None:
+            return None
+        try:
+            branch = self.worktree_manager.auto_branch_name(agent.id, task.id)
+            wt = await self.worktree_manager.create_worktree(
+                branch_name=branch,
+                agent_id=agent.id,
+                task_id=task.id,
+            )
+            log.info("worktree.assigned", branch=branch, agent=agent.id, path=wt.path)
+            return wt.path
+        except Exception as exc:
+            log.warning("worktree.create_failed", agent=agent.id, error=str(exc))
+            return None
 
     async def dispatch_task(self, task: Task) -> None:
         provider = self._select_provider(task.role)
@@ -270,8 +325,14 @@ class Orchestrator:
 
         # Attempt 1
         exec_rec = self._start_execution(agent, task, provider, retry_count=0)
+        wt_path = await self._create_worktree_for_agent(agent, task)
         try:
-            result = await provider.execute(agent, task, on_output=self._make_output_callback(task))
+            result = await provider.execute(
+                agent,
+                task,
+                on_output=self._make_output_callback(task),
+                cwd=wt_path,
+            )
             elapsed = _time.monotonic() - start_time
             agent.mark_completed()
             task.status = TaskStatus.COMPLETED
@@ -315,7 +376,10 @@ class Orchestrator:
             exec_rec2 = self._start_execution(agent, task, provider, retry_count=1)
             try:
                 result = await provider.execute(
-                    agent, task, on_output=self._make_output_callback(task)
+                    agent,
+                    task,
+                    on_output=self._make_output_callback(task),
+                    cwd=wt_path,
                 )
                 elapsed = _time.monotonic() - start_time
                 agent.mark_completed()
@@ -370,9 +434,13 @@ class Orchestrator:
             exec_rec3 = self._start_execution(
                 fallback_agent, task, fallback_provider, retry_count=2
             )
+            fallback_wt_path = await self._create_worktree_for_agent(fallback_agent, task)
             try:
                 result = await fallback_provider.execute(
-                    fallback_agent, task, on_output=self._make_output_callback(task)
+                    fallback_agent,
+                    task,
+                    on_output=self._make_output_callback(task),
+                    cwd=fallback_wt_path,
                 )
                 elapsed = _time.monotonic() - start_time
                 fallback_agent.mark_completed()

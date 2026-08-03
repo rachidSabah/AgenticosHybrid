@@ -377,13 +377,18 @@ class StrategyBasedProvider:
     def bin_path(self) -> str:
         return self._config.bin_path
 
-    async def execute(self, agent: Agent, task: Task, on_output=None) -> str:
+    async def execute(
+        self, agent: Agent, task: Task, on_output=None, cwd: str | None = None
+    ) -> str:
         """Execute a task using the strategy's CLI invocation.
 
         If ``on_output`` is provided, it's called for each line of
         stdout/stderr as it arrives (real-time streaming). The callback
         receives (line: str, stream: str) where stream is "stdout" or
         "stderr".
+
+        If ``cwd`` is provided, the CLI subprocess runs in that directory
+        (used for git worktree isolation).
         """
         import asyncio
 
@@ -415,6 +420,7 @@ class StrategyBasedProvider:
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE if stdin_data is not None else asyncio.subprocess.DEVNULL,
             env=env,
+            cwd=cwd,
         )
 
         # If no streaming callback, use the original communicate() path

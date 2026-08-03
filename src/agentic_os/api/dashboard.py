@@ -221,6 +221,8 @@ _DASHBOARD_TOPICS = [
     "execution.failed",
     # Streaming output — emitted per line during CLI execution
     "task.output",
+    # Agent reasoning — detected status lines showing what the agent is doing
+    "task.agent_status",
     "node.joined",
     "node.left",
     "node.leader.elected",

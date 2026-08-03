@@ -658,6 +658,180 @@ def create_app(platform: Platform) -> FastAPI:
             "total_chars": total_chars,
         }
 
+    # ── Git Worktree Management ──
+    from agentic_os.core.worktree_manager import WorktreeManager
+
+    _worktree_mgr = WorktreeManager(_get_workspace_root())
+
+    @app.post("/api/worktrees/create")
+    async def create_worktree(body: dict) -> dict:
+        """Create a git worktree for isolated agent execution."""
+        try:
+            _worktree_mgr.set_workspace_root(_get_workspace_root())
+            branch = body.get("branch_name", "")
+            base = body.get("base_branch", "main")
+            agent_id = body.get("agent_id", "")
+            task_id = body.get("task_id", "")
+            if not branch:
+                branch = _worktree_mgr.auto_branch_name(agent_id, task_id)
+            wt = await _worktree_mgr.create_worktree(branch, base, agent_id, task_id)
+            return {
+                "branch": wt.branch,
+                "path": wt.path,
+                "agent_id": wt.agent_id,
+                "task_id": wt.task_id,
+                "status": wt.status,
+                "base_branch": wt.base_branch,
+            }
+        except Exception as exc:
+            raise HTTPException(500, f"Failed to create worktree: {exc}") from exc
+
+    @app.get("/api/worktrees/list")
+    async def list_worktrees() -> list[dict]:
+        """List all active worktrees."""
+        _worktree_mgr.set_workspace_root(_get_workspace_root())
+        return await _worktree_mgr.list_worktrees()
+
+    @app.delete("/api/worktrees/{branch_name}")
+    async def delete_worktree(branch_name: str) -> dict:
+        """Remove a worktree and its branch."""
+        _worktree_mgr.set_workspace_root(_get_workspace_root())
+        removed = await _worktree_mgr.remove_worktree(branch_name)
+        if not removed:
+            raise HTTPException(404, f"Worktree {branch_name} not found")
+        return {"removed": branch_name}
+
+    @app.get("/api/worktrees/for-agent/{agent_id}")
+    async def get_worktree_for_agent(agent_id: str) -> dict:
+        """Get the worktree path for a given agent."""
+        path = _worktree_mgr.get_worktree_path(agent_id)
+        if path is None:
+            raise HTTPException(404, f"No worktree for agent {agent_id}")
+        return {"agent_id": agent_id, "path": path}
+
+    @app.get("/api/worktrees/{branch_name}/diff")
+    async def get_worktree_diff(branch_name: str) -> list[dict]:
+        """Get diff between worktree branch and base branch."""
+
+        root = _get_workspace_root()
+        wt = _worktree_mgr.get_worktree_by_branch(branch_name)
+        base = wt.base_branch if wt else "main"
+
+        async def _git(args: list[str]) -> str:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=root,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            return stdout.decode("utf-8", errors="replace")
+
+        try:
+            # Get list of changed files
+            name_status = await _git(["diff", "--name-status", f"{base}...{branch_name}"])
+            files: list[dict] = []
+            for line in name_status.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = line.split("\t")
+                status_code = parts[0][0]  # A, M, D, R
+                filepath = parts[-1]
+                status_map = {"A": "added", "M": "modified", "D": "deleted", "R": "renamed"}
+                status = status_map.get(status_code, "modified")
+
+                # Get diff hunks for this file
+                file_diff = await _git(["diff", f"{base}...{branch_name}", "--", filepath])
+                additions = sum(
+                    1
+                    for ln in file_diff.split("\n")
+                    if ln.startswith("+") and not ln.startswith("+++")
+                )
+                deletions = sum(
+                    1
+                    for ln in file_diff.split("\n")
+                    if ln.startswith("-") and not ln.startswith("---")
+                )
+
+                files.append(
+                    {
+                        "file": filepath,
+                        "status": status,
+                        "additions": additions,
+                        "deletions": deletions,
+                        "diff": file_diff[:5000],  # Cap at 5KB per file
+                    }
+                )
+            return files
+        except Exception as exc:
+            raise HTTPException(500, f"Failed to get diff: {exc}") from exc
+
+    @app.get("/api/worktrees/{branch_name}/file")
+    async def get_worktree_file(branch_name: str, path: str = "") -> dict:
+        """Get file content from a worktree branch."""
+        _worktree_mgr.set_workspace_root(_get_workspace_root())
+        wt = _worktree_mgr.get_worktree_by_branch(branch_name)
+        if wt is None:
+            raise HTTPException(404, f"Worktree {branch_name} not found")
+        full = _os_mod.path.join(wt.path, path)
+        if not _is_safe_path(wt.path, path):
+            raise HTTPException(403, "Path traversal detected")
+        if not _os_mod.path.isfile(full):
+            raise HTTPException(404, f"File not found: {path}")
+        try:
+            p = _Path(full)
+            content = p.read_text(encoding="utf-8", errors="replace")
+            return {"path": path, "content": content[:50000], "truncated": len(content) > 50000}
+        except Exception as exc:
+            raise HTTPException(500, f"Failed to read file: {exc}") from exc
+
+    @app.post("/api/worktrees/{branch_name}/merge")
+    async def merge_worktree(branch_name: str) -> dict:
+        """Merge a worktree branch back to base branch."""
+        _worktree_mgr.set_workspace_root(_get_workspace_root())
+        wt = _worktree_mgr.get_worktree_by_branch(branch_name)
+        base = wt.base_branch if wt else "main"
+
+        async def _git(args: list[str]) -> tuple[str, str, int]:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=_get_workspace_root(),
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            return (
+                stdout.decode("utf-8", errors="replace").strip(),
+                stderr.decode("utf-8", errors="replace").strip(),
+                proc.returncode or 0,
+            )
+
+        try:
+            # Check for conflicts with --no-commit --no-ff
+            _, merge_err, merge_rc = await _git(["merge", "--no-commit", "--no-ff", branch_name])
+            if merge_rc != 0:
+                # Abort the merge
+                await _git(["merge", "--abort"])
+                return {
+                    "merged": False,
+                    "branch": branch_name,
+                    "base": base,
+                    "error": "Merge conflicts detected. Resolve manually.",
+                    "conflicts": True,
+                }
+            # Complete the merge
+            await _git(["commit", "--no-edit"])
+            return {
+                "merged": True,
+                "branch": branch_name,
+                "base": base,
+                "message": f"Merged {branch_name} into {base}",
+            }
+        except Exception as exc:
+            raise HTTPException(500, f"Merge failed: {exc}") from exc
+
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
         """List all registered agents (Orchestrator agents + discovered brains)."""

@@ -443,6 +443,17 @@ export const useStore = create<StoreState>((set, get) => ({
           }
           break;
         }
+        case "task.agent_status": {
+          // Agent reasoning — update task with live status text
+          const tid = String(p.task_id ?? p.taskId ?? p.id ?? "");
+          if (tid && s.tasks[tid]) {
+            tasks = { ...s.tasks };
+            const sAny = tasks[tid] as unknown as Record<string, unknown>;
+            sAny["__agent_status__"] = String(p.status_text ?? "");
+            sAny["__agent_status_at__"] = String(p.timestamp ?? "");
+          }
+          break;
+        }
         case "execution.started":
         case "execution.completed":
         case "execution.failed": {
