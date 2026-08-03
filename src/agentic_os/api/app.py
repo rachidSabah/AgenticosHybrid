@@ -6061,6 +6061,91 @@ def create_app(platform: Platform) -> FastAPI:
     async def providers_page() -> str:
         return _PROVIDER_PAGE
 
+    @app.websocket("/ws/terminal")
+    async def terminal_ws(websocket: WebSocket) -> None:
+        """Spawn a PTY in the given worktree path and stream I/O."""
+        import asyncio
+        import os as _os_mod
+        import sys as _sys_mod
+
+        await websocket.accept()
+        worktree_path = websocket.query_params.get("path", "")
+        if not worktree_path or not _os_mod.path.isdir(worktree_path):
+            await websocket.send_text(f"\r\n\x1b[31m✗ Invalid path: {worktree_path}\x1b[0m\r\n")
+            await websocket.close()
+            return
+
+        # Determine shell
+        if _sys_mod.platform == "win32":
+            shell = _os_mod.environ.get("COMSPEC", "cmd.exe")
+        else:
+            shell = _os_mod.environ.get("SHELL", "/bin/bash")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                shell,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=worktree_path,
+                env={**_os_mod.environ, "TERM": "xterm-256color"},
+            )
+        except Exception as exc:
+            await websocket.send_text(f"\r\n\x1b[31m✗ Failed to spawn shell: {exc}\x1b[0m\r\n")
+            await websocket.close()
+            return
+
+        async def _read_stdout():
+            while True:
+                data = await proc.stdout.read(1024)
+                if not data:
+                    break
+                try:
+                    await websocket.send_text(data.decode("utf-8", errors="replace"))
+                except Exception:
+                    break
+
+        async def _read_stderr():
+            while True:
+                data = await proc.stderr.read(1024)
+                if not data:
+                    break
+                try:
+                    await websocket.send_text(
+                        f"\x1b[31m{data.decode('utf-8', errors='replace')}\x1b[0m"
+                    )
+                except Exception:
+                    break
+
+        async def _read_input():
+            while True:
+                try:
+                    msg = await websocket.receive_text()
+                except Exception:
+                    break
+                if proc.stdin:
+                    proc.stdin.write(msg.encode())
+                    await proc.stdin.drain()
+
+        tasks = [
+            asyncio.create_task(_read_stdout()),
+            asyncio.create_task(_read_stderr()),
+            asyncio.create_task(_read_input()),
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        except Exception:
+            pass
+        finally:
+            for t in tasks:
+                t.cancel()
+            proc.kill()
+            await proc.wait()
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+
     @app.websocket("/ws/dashboard")
     async def dashboard_ws(websocket: WebSocket) -> None:
         dashboard = platform.dashboard
