@@ -16,8 +16,11 @@ import {
   ChevronDown, ChevronUp, RefreshCw, RotateCcw, UserPlus, AlertCircle,
   Upload, Paperclip, Download, GripVertical, BrainCircuit, MessageCircle,
   GitMerge, Kanban, CheckCircle2, XCircle, Loader2, Layers, Workflow,
-  Activity, Server, Route,
+  Activity, Server, Route, Terminal as TerminalIcon, GitBranch, FileDiff,
+  FolderTree,
 } from "lucide-react";
+import { TerminalPanel } from "@/components/shell/terminal-panel";
+import { DiffViewer } from "@/components/diff-viewer";
 
 const PRIORITIES = ["low", "medium", "high", "critical"];
 const MODES = ["sequential", "parallel", "hybrid"];
@@ -85,6 +88,11 @@ export function MissionOrchestrator() {
   const [selectedMission, setSelectedMission] = useState<MissionType | null>(null);
   const [planning, setPlanning] = useState<string | null>(null);
   const [rightTab, setRightTab] = useState<string>("detail");
+  const [showWorktreePanel, setShowWorktreePanel] = useState(false);
+  const [worktrees, setWorktrees] = useState<import("@/lib/types").WorktreeEntry[]>([]);
+  const [selectedWorktreeBranch, setSelectedWorktreeBranch] = useState<string>("");
+  const [selectedWorktreePath, setSelectedWorktreePath] = useState<string>("");
+  const [worktreeLoading, setWorktreeLoading] = useState(false);
 
   // Live mission updates from EventBus
   const missionStore = useStore((s) => s.missions);
@@ -132,6 +140,32 @@ export function MissionOrchestrator() {
   }, []);
 
   useEffect(() => { loadMissions(); }, [loadMissions]);
+
+  // Load worktrees
+  const loadWorktrees = useCallback(async () => {
+    setWorktreeLoading(true);
+    try {
+      const wts = await api.worktreeList();
+      setWorktrees(Array.isArray(wts) ? wts : []);
+    } catch {
+      setWorktrees([]);
+    } finally {
+      setWorktreeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWorktrees();
+    const t = setInterval(loadWorktrees, 15000);
+    return () => clearInterval(t);
+  }, [loadWorktrees]);
+
+  // Open worktree in terminal or diff viewer
+  const openWorktree = (wt: import("@/lib/types").WorktreeEntry, tab: string) => {
+    setSelectedWorktreeBranch(wt.branch);
+    setSelectedWorktreePath(wt.path);
+    setRightTab(tab);
+  };
 
   // Merge live store updates — guard against reference changes that cause infinite loops.
   // This now ALSO picks up new missions that appeared in the store (e.g. just
@@ -315,6 +349,8 @@ export function MissionOrchestrator() {
                 { id: "comms", label: "Agent Comms", icon: MessageCircle },
                 { id: "merge", label: "Merge & Validate", icon: GitMerge },
                 { id: "validation", label: "Final Validation", icon: CheckCircle2 },
+                { id: "terminal", label: "Terminal", icon: TerminalIcon },
+                { id: "review", label: "Review Changes", icon: FileDiff },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -354,6 +390,30 @@ export function MissionOrchestrator() {
                 {rightTab === "comms" && <AgentCommsLog missionId={selectedMission.id} />}
                 {rightTab === "merge" && <MergePipelinePanel />}
                 {rightTab === "validation" && <FinalValidationPanel mission={selectedMission} />}
+                {rightTab === "terminal" && (
+                  selectedWorktreePath ? (
+                    <TerminalPanel
+                      worktreePath={selectedWorktreePath}
+                      onClose={() => setRightTab("detail")}
+                    />
+                  ) : (
+                    <Panel title="Terminal" subtitle="Select a worktree" className="h-full">
+                      <Empty title="No worktree selected" hint="Open a worktree from the Worktrees panel below." />
+                    </Panel>
+                  )
+                )}
+                {rightTab === "review" && (
+                  selectedWorktreeBranch ? (
+                    <DiffViewer
+                      branchName={selectedWorktreeBranch}
+                      onClose={() => setRightTab("detail")}
+                    />
+                  ) : (
+                    <Panel title="Review Changes" subtitle="Select a worktree" className="h-full">
+                      <Empty title="No worktree selected" hint="Open a worktree from the Worktrees panel below." />
+                    </Panel>
+                  )
+                )}
               </motion.div>
             </AnimatePresence>
           </>
@@ -362,6 +422,101 @@ export function MissionOrchestrator() {
             <Empty title="No mission selected" hint="Select a mission from the left panel." />
           </Panel>
         )}
+
+        {/* Worktree Panel — collapsible, below the tab content */}
+        <div className="shrink-0">
+          <button
+            onClick={() => setShowWorktreePanel(!showWorktreePanel)}
+            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-surface/20 px-3 py-2 text-xs font-medium text-faint hover:bg-surface/30 transition"
+          >
+            <GitBranch size={13} className="text-emerald-400" />
+            <span>Worktrees</span>
+            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-mono text-white/60">
+              {worktrees.length}
+            </span>
+            {worktreeLoading && <Loader2 size={11} className="animate-spin text-white/30" />}
+            <span className="ml-auto">
+              {showWorktreePanel ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+            </span>
+          </button>
+          {showWorktreePanel && (
+            <div className="mt-1.5 max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-surface/10">
+              {worktrees.length === 0 ? (
+                <div className="px-3 py-4 text-center text-[10px] text-white/30">
+                  No worktrees active. Submit a task to create one.
+                </div>
+              ) : (
+                worktrees.map((wt) => (
+                  <div
+                    key={wt.branch}
+                    className="flex items-center gap-2 border-b border-white/5 px-3 py-2 text-xs last:border-0 hover:bg-white/[0.02]"
+                  >
+                    <GitBranch size={11} className={
+                      wt.status === "active" ? "text-emerald-400" :
+                      wt.status === "dirty" ? "text-amber-400" :
+                      wt.status === "merged" ? "text-sky-400" :
+                      "text-red-400"
+                    } />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-[10px] text-white/70 truncate">{wt.branch}</div>
+                      <div className="text-[9px] text-white/30">
+                        {wt.task_id ? `task: ${wt.task_id.slice(0, 8)}` : "unassigned"}
+                        {wt.agent_id && ` · agent: ${wt.agent_id.slice(0, 8)}`}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        onClick={() => openWorktree(wt, "terminal")}
+                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-emerald-400"
+                        title="Open terminal"
+                      >
+                        <TerminalIcon size={11} />
+                      </button>
+                      <button
+                        onClick={() => openWorktree(wt, "review")}
+                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-amber-400"
+                        title="Review changes"
+                      >
+                        <FileDiff size={11} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const result = await api.worktreeMerge(wt.branch);
+                            if (!result.merged) {
+                              setError(result.error || "Merge conflicts detected");
+                            }
+                            void loadWorktrees();
+                          } catch (err) {
+                            setError(String(err));
+                          }
+                        }}
+                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-sky-400"
+                        title="Merge to main"
+                      >
+                        <GitMerge size={11} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.worktreeRemove(wt.branch);
+                            void loadWorktrees();
+                          } catch (err) {
+                            setError(String(err));
+                          }
+                        }}
+                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-red-400"
+                        title="Remove worktree"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

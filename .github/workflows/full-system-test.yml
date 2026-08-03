@@ -1,0 +1,167 @@
+name: Full System Test (Windows + WSL)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  UV_SYSTEM_PYTHON: 1
+
+jobs:
+  # ── Windows full system test ──
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install backend deps
+        run: uv sync --dev
+
+      - name: Ruff lint
+        run: uv run ruff check src/
+
+      - name: Ruff format check
+        run: uv run ruff format --check src/
+
+      - name: Type check
+        run: uv run ty check src/
+
+      - name: Backend tests
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mission-control/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: apps/mission-control
+        run: npm ci --legacy-peer-deps
+
+      - name: TypeScript check
+        working-directory: apps/mission-control
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: apps/mission-control
+        run: npx next lint
+
+      - name: Unit tests
+        working-directory: apps/mission-control
+        run: npx vitest run
+
+      - name: Build
+        working-directory: apps/mission-control
+        run: npx next build
+
+      - name: Backend boots
+        run: |
+          Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow
+          Start-Sleep -Seconds 15
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/healthz" -UseBasicParsing
+          if ($resp.StatusCode -ne 200) { throw "Backend health check failed" }
+          Write-Host "Backend: OK"
+
+      - name: API endpoints respond
+        run: |
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing
+          Write-Host "Tasks endpoint: OK"
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/providers" -UseBasicParsing
+          Write-Host "Providers endpoint: OK"
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/workspace/current" -UseBasicParsing
+          Write-Host "Workspace endpoint: OK"
+
+  # ── WSL (Linux) full system test ──
+  test-wsl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install backend deps
+        run: uv sync --dev
+
+      - name: Ruff lint
+        run: uv run ruff check src/
+
+      - name: Ruff format check
+        run: uv run ruff format --check src/
+
+      - name: Type check
+        run: uv run ty check src/
+
+      - name: Backend tests
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mission-control/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: apps/mission-control
+        run: npm ci --legacy-peer-deps
+
+      - name: TypeScript check
+        working-directory: apps/mission-control
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: apps/mission-control
+        run: npx next lint
+
+      - name: Unit tests
+        working-directory: apps/mission-control
+        run: npx vitest run
+
+      - name: Build
+        working-directory: apps/mission-control
+        run: npx next build
+
+      - name: Backend boots (Linux)
+        run: |
+          uv run python -m agentic_os serve --host 127.0.0.1 --port 8000 &
+          sleep 15
+          curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/healthz
+          echo " <- healthz"
+
+      - name: API endpoints respond (Linux)
+        run: |
+          echo "Tasks: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/tasks)"
+          echo "Providers: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/providers)"
+          echo "Workspace: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/workspace/current)"
+          echo "Worktrees: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/worktrees/list)"
+          echo "Executions: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/executions)"
+
+      - name: Create mission + verify task pipeline
+        run: |
+          MISSION=$(curl -s -X POST http://127.0.0.1:8000/api/missions \
+            -H "Content-Type: application/json" \
+            -d '{"title":"CI Test","prompt":"Test prompt","description":"Test","priority":"high","execution_mode":"hybrid"}')
+          MID=$(echo "$MISSION" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Mission created: $MID"
+          curl -s -X POST "http://127.0.0.1:8000/api/missions/$MID/plan" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Plan: {len(d.get(\"tasks\",[]))} tasks')"
+          curl -s -X POST "http://127.0.0.1:8000/api/missions/$MID/start" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Status: {d.get(\"status\")}')"
+          sleep 5
+          TASKS=$(curl -s http://127.0.0.1:8000/api/tasks)
+          echo "$TASKS" | python3 -c "import sys,json; tasks=json.load(sys.stdin); print(f'Tasks: {len(tasks)}'); [print(f'  {t[\"id\"][:8]} status={t[\"status\"]}') for t in tasks[:3]]"

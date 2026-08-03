@@ -141,6 +141,13 @@ KNOWN_AGENTS: list[dict] = [
         "capabilities": ["coding", "reasoning", "terminal"],
         "description": "Google Gemini CLI — autonomous coding agent",
     },
+    {
+        "binary": "nvidia-nim",
+        "kind": "nvidia_nim",
+        "display_name": "NVIDIA NIM",
+        "capabilities": ["coding", "reasoning", "research"],
+        "description": "NVIDIA NIM API — free tier LLM agent via OpenAI-compatible API",
+    },
 ]
 
 

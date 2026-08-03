@@ -309,6 +309,7 @@ _STRATEGY_REGISTRY: dict[str, type[ProviderExecutionStrategy]] = {
     "gemini_cli": GeminiExecutionStrategy,
     "antigravity": AGYExecutionStrategy,
     "ollama": OllamaExecutionStrategy,
+    "nvidia_nim": GenericExecutionStrategy,
 }
 
 
