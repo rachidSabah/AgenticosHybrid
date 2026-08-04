@@ -6098,6 +6098,8 @@ def create_app(platform: Platform) -> FastAPI:
 
         async def _read_stdout():
             while True:
+                if proc.stdout is None:
+                    break
                 data = await proc.stdout.read(1024)
                 if not data:
                     break
@@ -6108,6 +6110,8 @@ def create_app(platform: Platform) -> FastAPI:
 
         async def _read_stderr():
             while True:
+                if proc.stderr is None:
+                    break
                 data = await proc.stderr.read(1024)
                 if not data:
                     break
