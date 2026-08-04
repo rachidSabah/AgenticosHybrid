@@ -6,6 +6,102 @@ A **local-first, event-bus-driven AI Agent Operating System** that orchestrates 
 
 ---
 
+## Download & Install
+
+Pre-built installers are available on the [GitHub Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases):
+
+| Platform | Installer | Type |
+|----------|-----------|------|
+| **Windows 10+** | `AgenticOS-Setup-x64.exe` | NSIS installer (recommended) |
+| **Windows 10+** | `AgenticOS-Portable-x64.zip` | Portable (no install needed) |
+| **Linux** | `AgenticOS-x86_64.AppImage` | AppImage (chmod +x and run) |
+| **Linux** | `AgenticOS-x86_64.deb` | Debian/Ubuntu package |
+| **Linux** | `AgenticOS-x86_64.rpm` | Fedora/RHEL package |
+| **macOS 12+** | `AgenticOS-x86_64.dmg` | Apple Disk Image |
+
+> **Note:** MSI installer was removed in rc10 because WiX requires numeric-only
+> pre-release identifiers. The NSIS `.exe` installer works on all Windows versions.
+
+### Quick Start
+
+```bash
+# Clone and run from source (development)
+git clone https://github.com/rachidSabah/AgenticosHybrid.git
+cd AgenticosHybrid
+uv sync --dev
+uv run python -m agentic_os serve --host 127.0.0.1 --port 8000
+```
+
+Then open `http://127.0.0.1:8000` in your browser, or launch the desktop app:
+
+```bash
+cd apps/mission-control
+npm ci --legacy-peer-deps
+npm run tauri dev
+```
+
+---
+
+## Screenshots
+
+### Mission Control Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/overview-light.png" alt="Mission Control — Light theme" width="45%">
+  &nbsp;
+  <img src="docs/screenshots/overview-dark.png" alt="Mission Control — Dark theme" width="45%">
+</p>
+<p align="center"><em>Mission Control dashboard — light & dark themes</em></p>
+
+### Desktop Runtime
+
+<p align="center">
+  <img src="docs/screenshots/desktop-overview.png" alt="Desktop Overview" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-runtimes.png" alt="Runtime Discovery" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-diagnostics.png" alt="Diagnostics" width="30%">
+</p>
+<p align="center"><em>Desktop runtime: overview, runtime discovery, diagnostics</em></p>
+
+### Core Subsystems
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/brain.png" alt="Brain Registry" width="200px"><br><sub>Brain Registry</sub></td>
+<td align="center"><img src="docs/screenshots/providers.png" alt="Providers" width="200px"><br><sub>Provider Management</sub></td>
+<td align="center"><img src="docs/screenshots/swarm.png" alt="Swarm" width="200px"><br><sub>Swarm Orchestration</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/discovery.png" alt="Discovery" width="200px"><br><sub>Runtime Discovery</sub></td>
+<td align="center"><img src="docs/screenshots/memory.png" alt="Memory" width="200px"><br><sub>Memory System</sub></td>
+<td align="center"><img src="docs/screenshots/mcp.png" alt="MCP" width="200px"><br><sub>MCP Framework</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/workflow.png" alt="Workflow" width="200px"><br><sub>Workflow Engine</sub></td>
+<td align="center"><img src="docs/screenshots/pipeline.png" alt="Pipeline" width="200px"><br><sub>Pipeline Engine</sub></td>
+<td align="center"><img src="docs/screenshots/constellation.png" alt="Constellation" width="200px"><br><sub>Brain Constellation</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/execution.png" alt="Execution" width="200px"><br><sub>Execution Log</sub></td>
+<td align="center"><img src="docs/screenshots/timeline.png" alt="Timeline" width="200px"><br><sub>Event Timeline</sub></td>
+<td align="center"><img src="docs/screenshots/monitor.png" alt="Monitor" width="200px"><br><sub>System Monitor</sub></td>
+</tr>
+</table>
+
+### Desktop Settings & Updates
+
+<p align="center">
+  <img src="docs/screenshots/desktop-settings.png" alt="Settings" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-updates.png" alt="Updates" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-offline.png" alt="Offline Mode" width="30%">
+</p>
+<p align="center"><em>Settings, auto-updates, and offline mode</em></p>
+
+---
+
 ## Overview
 
 AgenticOS is a complete desktop environment purpose-built for running AI agents locally. It replaces the need for command-line tooling, manual Python environment setup, and complex configuration with a polished native application that works out of the box.
