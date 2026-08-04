@@ -91,9 +91,18 @@ jobs:
         shell: pwsh
         run: |
           Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow -RedirectStandardOutput "backend.log" -RedirectStandardError "backend_err.log"
-          Start-Sleep -Seconds 25
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/healthz" -UseBasicParsing -ErrorAction SilentlyContinue
-          if ($resp.StatusCode -ne 200) {
+          # Poll /healthz with retries — Windows backend startup takes ~40s
+          # (runtime discovery + SQLite init + lifecycle phases), much slower
+          # than Linux. A single Start-Sleep 25 was too short.
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 3
+            try {
+              $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/healthz" -UseBasicParsing -ErrorAction Stop
+              if ($resp.StatusCode -eq 200) { $ok = $true; break }
+            } catch { Write-Host "  attempt $($i+1)/30: backend not ready yet" }
+          }
+          if (-not $ok) {
             Write-Host "Backend failed to start. Logs:"
             Get-Content backend.log -ErrorAction SilentlyContinue
             Get-Content backend_err.log -ErrorAction SilentlyContinue
