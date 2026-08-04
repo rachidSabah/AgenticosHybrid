@@ -289,8 +289,7 @@ jobs:
           Write-Host "Worktrees: $($wts.Count)"
 
       - name: Collect diagnostics (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        if: always()
+        if: always() && matrix.os == 'ubuntu-latest'
         run: |
           echo "=== Backend Log (last 30 lines) ==="
           tail -30 /tmp/backend.log 2>/dev/null || echo "(no log)"
@@ -316,8 +315,7 @@ jobs:
           " || true
 
       - name: Collect diagnostics (Windows)
-        if: matrix.os == 'windows-latest'
-        if: always()
+        if: always() && matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           Write-Host "=== Backend Log (last 30 lines) ==="
