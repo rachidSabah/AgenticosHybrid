@@ -70,7 +70,11 @@ class RuntimeSnapshotManager:
             return None
 
         expires_at, snapshot = entry
-        if time.monotonic() > expires_at:
+        # Use >= (not >) so a snapshot taken with ttl=0 is considered expired
+        # at the moment it is taken. On Windows, time.sleep(0.01) can return
+        # immediately (default timer resolution ~15.6ms), so without >= the
+        # monotonic read at get() may equal the one at take().
+        if time.monotonic() >= expires_at:
             self._remove(snapshot_id)
             return None
 
