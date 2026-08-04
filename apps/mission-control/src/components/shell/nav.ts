@@ -22,6 +22,7 @@ import {
   Shield,
   Terminal,
   MessageSquarePlus,
+  MessageCircle,
   Zap,
   Sparkles,
   Cloud,

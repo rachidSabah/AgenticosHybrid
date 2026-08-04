@@ -52,9 +52,10 @@ class TelegramGateway:
         self._bot: Any = None
         self._app: Any = None
         self._running = False
+        self._bot_username: str = ""
         self._recent_messages: list[dict] = []
-        self._chat_missions: dict[int, list[str]] = {}  # chat_id → [mission_ids]
-        self._mission_chats: dict[str, int] = {}  # mission_id → chat_id
+        self._chat_missions: dict[int, list[str]] = {}
+        self._mission_chats: dict[str, int] = {}
 
     @property
     def is_running(self) -> bool:
@@ -62,9 +63,7 @@ class TelegramGateway:
 
     @property
     def bot_username(self) -> str:
-        if self._bot and hasattr(self._bot, "username"):
-            return f"@{self._bot.username}"
-        return ""
+        return f"@{self._bot_username}" if self._bot_username else ""
 
     async def start(self) -> None:
         """Start the Telegram bot."""
@@ -90,8 +89,8 @@ class TelegramGateway:
         # Get bot info
         try:
             me = await self._bot.get_me()
-            self._bot.username = me.username
-            log.info("telegram.connected", username=me.username)
+            self._bot_username = me.username or ""
+            log.info("telegram.connected", username=self._bot_username)
         except Exception as exc:
             log.error("telegram.connect_failed", error=str(exc))
             return
@@ -114,7 +113,7 @@ class TelegramGateway:
                 type="gateway.telegram.connected",
                 source="telegram_gateway",
                 topic="gateway.telegram.connected",
-                payload={"username": self._bot.username},
+                payload={"username": self._bot_username},
             )
         )
 
@@ -123,7 +122,8 @@ class TelegramGateway:
         # Start polling in background
         await self._app.initialize()
         await self._app.start()
-        await self._app.updater.start_polling(drop_pending_updates=True)
+        if self._app.updater:
+            await self._app.updater.start_polling(drop_pending_updates=True)
         log.info("telegram.polling_started")
 
     async def stop(self) -> None:
