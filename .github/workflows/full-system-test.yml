@@ -7,6 +7,8 @@ on:
 
 env:
   UV_SYSTEM_PYTHON: 1
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
 
 jobs:
   test-windows:
