@@ -143,7 +143,10 @@ class RuntimeSnapshotManager:
             Number of snapshots removed.
         """
         now = time.monotonic()
-        expired_ids = [sid for sid, (expires_at, _) in self._snapshots.items() if now > expires_at]
+        # Match the >= semantics used by get() — a snapshot taken with
+        # ttl=0 is expired at the moment it was taken, even if no wall-clock
+        # time has elapsed (Windows sleep/coarse-timer edge case).
+        expired_ids = [sid for sid, (expires_at, _) in self._snapshots.items() if now >= expires_at]
         for sid in expired_ids:
             self._remove(sid)
 
