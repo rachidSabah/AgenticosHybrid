@@ -36,7 +36,13 @@ def main(argv: list[str] | None = None) -> int:
         if sys.platform == "win32":
             import asyncio
 
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            # set_event_loop_policy is deprecated in Python 3.14+ but still
+            # works. It's the only way to force SelectorEventLoop on Windows
+            # before the event loop is created. Suppress the deprecation
+            # diagnostic — when this is removed in Python 3.16, we'll need a
+            # different approach, but for now (Python 3.12/3.13) it's the
+            # correct fix.
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # noqa: TD006
 
         import anyio
 
