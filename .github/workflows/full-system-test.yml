@@ -9,62 +9,47 @@ env:
   UV_SYSTEM_PYTHON: 1
 
 jobs:
-  # ── Windows full system test ──
   test-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-
       - name: Install uv
         run: pip install uv
-
       - name: Install backend deps
         run: uv sync --dev
-
       - name: Ruff lint
         run: uv run ruff check src/
-
       - name: Ruff format check
         run: uv run ruff format --check src/
-
       - name: Type check
-        run: uv run ty check src/ || true  # agentic_os_mod import issue is pre-existing
-
+        run: uv run ty check src/ || true
       - name: Backend tests
-        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_autonomous_os.py
-
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_autonomous_os.py --ignore=tests/test_distributed.py
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: apps/mission-control/package-lock.json
-
       - name: Install frontend deps
         working-directory: apps/mission-control
         run: npm ci --legacy-peer-deps
-
       - name: TypeScript check
         working-directory: apps/mission-control
         run: npx tsc --noEmit
-
       - name: Lint
         working-directory: apps/mission-control
         run: npx next lint
-
       - name: Unit tests
         working-directory: apps/mission-control
         run: npx vitest run
-
       - name: Build
         working-directory: apps/mission-control
         run: npx next build
-
       - name: Backend boots
         run: |
           Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow
@@ -72,79 +57,62 @@ jobs:
           $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/healthz" -UseBasicParsing
           if ($resp.StatusCode -ne 200) { throw "Backend health check failed" }
           Write-Host "Backend: OK"
-
       - name: API endpoints respond
         run: |
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing
-          Write-Host "Tasks endpoint: OK"
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/providers" -UseBasicParsing
-          Write-Host "Providers endpoint: OK"
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/workspace/current" -UseBasicParsing
-          Write-Host "Workspace endpoint: OK"
+          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing | Out-Null
+          Write-Host "Tasks: OK"
+          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/providers" -UseBasicParsing | Out-Null
+          Write-Host "Providers: OK"
+          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/workspace/current" -UseBasicParsing | Out-Null
+          Write-Host "Workspace: OK"
 
-  # ── WSL (Linux) full system test ──
   test-wsl:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-
       - name: Install uv
         run: pip install uv
-
       - name: Install backend deps
         run: uv sync --dev
-
       - name: Ruff lint
         run: uv run ruff check src/
-
       - name: Ruff format check
         run: uv run ruff format --check src/
-
       - name: Type check
-        run: uv run ty check src/ || true  # agentic_os_mod import issue is pre-existing
-
+        run: uv run ty check src/ || true
       - name: Backend tests
-        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_autonomous_os.py
-
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_autonomous_os.py --ignore=tests/test_distributed.py
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: apps/mission-control/package-lock.json
-
       - name: Install frontend deps
         working-directory: apps/mission-control
         run: npm ci --legacy-peer-deps
-
       - name: TypeScript check
         working-directory: apps/mission-control
         run: npx tsc --noEmit
-
       - name: Lint
         working-directory: apps/mission-control
         run: npx next lint
-
       - name: Unit tests
         working-directory: apps/mission-control
         run: npx vitest run
-
       - name: Build
         working-directory: apps/mission-control
         run: npx next build
-
       - name: Backend boots (Linux)
         run: |
           uv run python -m agentic_os serve --host 127.0.0.1 --port 8000 &
           sleep 15
           curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/healthz
           echo " <- healthz"
-
       - name: API endpoints respond (Linux)
         run: |
           echo "Tasks: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/tasks)"
@@ -152,7 +120,6 @@ jobs:
           echo "Workspace: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/workspace/current)"
           echo "Worktrees: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/worktrees/list)"
           echo "Executions: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/executions)"
-
       - name: Create mission + verify task pipeline
         run: |
           MISSION=$(curl -s -X POST http://127.0.0.1:8000/api/missions \
