@@ -385,8 +385,25 @@ class Kernel:
         async def _bg_start() -> None:
             try:
                 await self._start_subsystems()
-            except Exception as exc:
-                _diag("BackgroundInit", "FATAL", str(exc))
+            except BaseException as exc:
+                # Catch BaseException (not just Exception) so that
+                # SystemExit / KeyboardInterrupt / asyncio.CancelledError
+                # are logged instead of silently killing the bg task.
+                # On Windows CI we've seen the backend die silently
+                # partway through subsystem init; this is a diagnostic
+                # net to surface the cause.
+                import traceback as _tb
+
+                _diag(
+                    "BackgroundInit",
+                    "FATAL",
+                    f"{type(exc).__name__}: {exc}",
+                )
+                print(
+                    f"{_STARTUP_LOG_PREFIX} BackgroundInit traceback:\n{_tb.format_exc()}",
+                    file=__import__("sys").stderr,
+                    flush=True,
+                )
 
         asyncio.create_task(_bg_start())
         _diag("Kernel", "CRITICAL_READY", "API server will start immediately")
