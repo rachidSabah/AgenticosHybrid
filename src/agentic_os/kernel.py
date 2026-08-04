@@ -674,19 +674,31 @@ class Kernel:
             # converts them into BrainRecord registrations, so this is the
             # event-driven path that keeps BrainRegistry in sync with the
             # installed tools at runtime (not just at startup auto-detect).
-            _diag("LocalDiscovery", "STARTING")
-            try:
-                self.local_discovery = LocalDiscoveryService()
-                await self.local_discovery.start(event_bus=self.bus)
-                if self._platform_instance is not None:
-                    self._platform_instance.local_discovery = self.local_discovery
+            #
+            # Same env var as Brains auto-detect: LocalDiscovery also spawns
+            # subprocesses (tasklist, reg query, ps) on Windows via the
+            # asyncio ProactorEventLoop, and has been observed to crash
+            # the backend silently. Skip when the env var is set.
+            if _skip_brain_autodetect:
                 _diag(
                     "LocalDiscovery",
-                    "STARTED",
-                    f"{len(await self.local_discovery.get_agents())} agents found",
+                    "SKIPPED",
+                    "AGENTICOS_SKIP_BRAIN_AUTODETECT set",
                 )
-            except Exception as exc:
-                _diag("LocalDiscovery", "FAILED", str(exc))
+            else:
+                _diag("LocalDiscovery", "STARTING")
+                try:
+                    self.local_discovery = LocalDiscoveryService()
+                    await self.local_discovery.start(event_bus=self.bus)
+                    if self._platform_instance is not None:
+                        self._platform_instance.local_discovery = self.local_discovery
+                    _diag(
+                        "LocalDiscovery",
+                        "STARTED",
+                        f"{len(await self.local_discovery.get_agents())} agents found",
+                    )
+                except Exception as exc:
+                    _diag("LocalDiscovery", "FAILED", str(exc))
 
             # ── Phase 11: Executive Intelligence Layer ──
             _diag("Executive", "STARTING")
