@@ -14,6 +14,26 @@ Whether you want to run local LLMs via Ollama, connect to cloud providers like A
 
 Built on a hexagonal (clean) architecture with an event bus at its core, AgenticOS is modular, observable, and secure by construction. It runs on Windows, Linux, and macOS, and is fully containerizable for server deployments.
 
+## Screenshots
+
+### Mission Control — Mission Overview
+![Mission Overview](docs/screenshots/mission-overview-full.png)
+*Real-time agent status, running tasks, uptime metrics and activity graphs on a single dark dashboard.*
+
+### Agent Constellation — Live Topology
+![Agent Constellation](docs/screenshots/agent-constellation-full.png)
+*Interactive network graph showing all registered agents, their roles, connections, and live task flow.*
+
+### Provider Control Center
+![Provider Control Center](docs/screenshots/provider-control-full.png)
+*Manage every AI provider — OpenAI, Anthropic, Ollama, NVIDIA NIM, LM Studio — with health monitoring, cost tracking, and routing weight controls.*
+
+### Swarm Orchestration
+![Swarm Orchestration](docs/screenshots/swarm-orchestration-full.png)
+*Multi-agent swarm executing a mission in hierarchical pattern with role assignments, consensus votes, and a live event stream.*
+
+---
+
 ## Features
 
 - **Desktop Runtime** — A native Tauri v2 application with native windows, menus, system tray, notifications, keyboard shortcuts, clipboard integration, drag-and-drop, and file associations.
@@ -100,20 +120,45 @@ That's it. No terminal, no package managers, no configuration files.
 
 ## Windows Installation
 
+> **Download the latest release:** [AgenticOS-Setup-x64.exe](https://github.com/rachidSabah/AgenticosHybrid/releases/latest) · [AgenticOS-Portable-x64.zip](https://github.com/rachidSabah/AgenticosHybrid/releases/latest)
+
+![Windows Installer](docs/screenshots/windows-installer.png)
+*The AgenticOS NSIS installer guides you through installation in under 60 seconds.*
+
 ### Requirements
 
 - Windows 10 22H2 or later (Windows 11 recommended)
-- 8 GB RAM (16 GB recommended)
-- WebView2 Runtime (installed automatically with the app on Windows 11; available via Windows Update on Windows 10)
+- 8 GB RAM (16 GB recommended for large models)
+- WebView2 Runtime (pre-installed on Windows 11; available via Windows Update on Windows 10)
 - 1 GB free disk space
 
-### Steps
+### Option A — NSIS Installer (recommended)
 
-1. Download the latest `AgenticOS-Setup-x64.exe` or `AgenticOS-Setup-x64.msi` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
-2. Double-click the installer and follow the on-screen instructions.
+1. Download `AgenticOS-Setup-x64.exe` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
+2. Run the installer — it installs Python runtime, backend, frontend, and registers file associations.
 3. AgenticOS launches automatically after installation.
 
-A portable ZIP version (`AgenticOS-Portable-x64.zip`) is also available — extract and run `AgenticOS.exe` with no installation required.
+### Option B — Portable ZIP (no installation)
+
+1. Download `AgenticOS-Portable-x64.zip` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
+2. Extract to any folder (e.g. a USB drive).
+3. Run `start.bat` or `start.ps1` to launch AgenticOS — no admin rights required.
+
+### Build from Source (Windows)
+
+```powershell
+# Prerequisites: Node.js 20+, Rust stable, Python 3.12+
+git clone https://github.com/rachidSabah/AgenticosHybrid
+cd AgenticosHybrid
+pip install uv
+uv sync
+cd apps/mission-control
+npm ci --legacy-peer-deps
+npx tauri build --bundles nsis   # produces AgenticOS-Setup-x64.exe
+```
+
+The built installer is placed in `apps/mission-control/src-tauri/target/release/bundle/nsis/`.
+
 
 ## Linux Installation
 

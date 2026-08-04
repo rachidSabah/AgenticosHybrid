@@ -17,10 +17,10 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -40,7 +40,7 @@ jobs:
         run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_discovery_telemetry.py --ignore=tests/test_omniroute
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -88,29 +88,46 @@ jobs:
         if: matrix.os == 'windows-latest'
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          # Skip Brains auto-detection — the Windows process scan
-          # (detect_all_with_windows) spawns multiple PowerShell + where.exe
-          # subprocesses and has been observed to silently crash the backend
-          # partway through. The REST-API is fully usable without it.
-          AGENTICOS_SKIP_BRAIN_AUTODETECT: "1"
         shell: pwsh
         run: |
-          Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow -RedirectStandardOutput "backend.log" -RedirectStandardError "backend_err.log"
-          # Poll /healthz with retries — Windows backend startup takes ~40s
-          # (runtime discovery + SQLite init + lifecycle phases), much slower
-          # than Linux. A single Start-Sleep 25 was too short.
+          # Set env vars directly in the PowerShell session so they are
+          # inherited by the child process spawned via Start-Process.
+          # GitHub Actions 'env:' block sets workflow env but Start-Process
+          # child processes need $env: assignments in the same session.
+          $env:AGENTICOS_SKIP_BRAIN_AUTODETECT = "1"
+          $env:PYTHONUTF8 = "1"
+          $env:PYTHONIOENCODING = "utf-8"
+          if ($env:NVIDIA_API_KEY) { $env:NVIDIA_API_KEY = $env:NVIDIA_API_KEY }
+
+          # Start backend with PassThru so we can detect early crashes
+          $proc = Start-Process `
+            -FilePath "uv" `
+            -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" `
+            -NoNewWindow `
+            -RedirectStandardOutput "backend.log" `
+            -RedirectStandardError "backend_err.log" `
+            -PassThru
+          Write-Host "Backend PID: $($proc.Id)"
+
+          # Poll /healthz — Windows startup takes up to 120s on cold runners
           $ok = $false
-          for ($i = 0; $i -lt 30; $i++) {
+          for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep -Seconds 3
+            if ($proc.HasExited) {
+              Write-Host "Backend process exited early (code $($proc.ExitCode)). Logs:"
+              Get-Content backend.log -Tail 50 -ErrorAction SilentlyContinue
+              Get-Content backend_err.log -Tail 50 -ErrorAction SilentlyContinue
+              exit 1
+            }
             try {
               $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/healthz" -UseBasicParsing -ErrorAction Stop
               if ($resp.StatusCode -eq 200) { $ok = $true; break }
-            } catch { Write-Host "  attempt $($i+1)/30: backend not ready yet" }
+            } catch { Write-Host "  attempt $($i+1)/40: backend not ready yet" }
           }
           if (-not $ok) {
-            Write-Host "Backend failed to start. Logs:"
-            Get-Content backend.log -ErrorAction SilentlyContinue
-            Get-Content backend_err.log -ErrorAction SilentlyContinue
+            Write-Host "Backend failed to start after 120s. Logs:"
+            Get-Content backend.log -Tail 50 -ErrorAction SilentlyContinue
+            Get-Content backend_err.log -Tail 50 -ErrorAction SilentlyContinue
             exit 1
           }
           Write-Host "✓ Backend booted successfully"
