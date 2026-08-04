@@ -11,9 +11,6 @@ on:
         required: true
         type: string
 
-# Prevent running on branch pushes — only on tag pushes
-if: startsWith(github.ref, 'refs/tags/v')
-
 env:
   CARGO_TERM_COLOR: always
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -21,6 +18,7 @@ env:
 jobs:
   # ── Linux Build ──────────────────────────────────────────
   build-linux:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Linux (AppImage / DEB / RPM)"
     runs-on: ubuntu-latest
     defaults:
@@ -115,6 +113,7 @@ jobs:
 
   # ── Windows Build ───────────────────────────────────────
   build-windows:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Windows (EXE / MSI / ZIP)"
     runs-on: windows-latest
     defaults:
@@ -233,6 +232,7 @@ jobs:
 
   # ── macOS Build ─────────────────────────────────────────
   build-macos:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "macOS (DMG)"
     runs-on: macos-latest
     defaults:
@@ -309,6 +309,7 @@ jobs:
 
   # ── Aggregate & Release ─────────────────────────────────
   release:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Publish Release"
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
