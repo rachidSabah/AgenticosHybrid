@@ -1,6 +1,6 @@
 [package]
 name = "agentic-os"
-version = "1.0.0-rc9"
+version = "1.0.0-rc10"
 description = "Agentic OS Desktop Runtime"
 authors = ["Agentic OS Contributors"]
 edition = "2021"

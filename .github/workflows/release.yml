@@ -11,6 +11,9 @@ on:
         required: true
         type: string
 
+# Prevent running on branch pushes — only on tag pushes
+if: startsWith(github.ref, 'refs/tags/v')
+
 env:
   CARGO_TERM_COLOR: always
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
