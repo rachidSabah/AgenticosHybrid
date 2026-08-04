@@ -34,7 +34,6 @@ jobs:
           sudo apt-get install -y -qq \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             libssl-dev \
@@ -115,7 +114,7 @@ jobs:
   # ── Windows Build ───────────────────────────────────────
   build-windows:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    name: "Windows (EXE / MSI / ZIP)"
+    name: "Windows (EXE / ZIP)"
     runs-on: windows-latest
     defaults:
       run:
@@ -164,7 +163,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx tauri build --bundles nsis,msi
+        run: npx tauri build --bundles nsis
 
       - name: Create portable ZIP
         shell: pwsh
@@ -208,12 +207,6 @@ jobs:
           $nsisFiles = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue
           foreach ($f in $nsisFiles) {
             Copy-Item $f.FullName "$ArtifactsDir/${Product}-Setup-x64.exe" -Force
-          }
-
-          # Copy MSI installer
-          $msiFiles = Get-ChildItem "src-tauri/target/release/bundle/msi" -Filter "*.msi" -ErrorAction SilentlyContinue
-          foreach ($f in $msiFiles) {
-            Copy-Item $f.FullName "$ArtifactsDir/${Product}-Setup-x64.msi" -Force
           }
 
           # Generate SHA256 checksums
@@ -363,7 +356,7 @@ jobs:
             "windows": {
               "os": "Windows 10+",
               "arch": "x86_64",
-              "installers": ["AgenticOS-Setup-x64.exe", "AgenticOS-Setup-x64.msi", "AgenticOS-Portable-x64.zip"]
+              "installers": ["AgenticOS-Setup-x64.exe", "AgenticOS-Portable-x64.zip"]
             },
             "linux": {
               "os": "Linux (glibc >= 2.28)",
@@ -393,7 +386,6 @@ jobs:
 
           **Windows:**
           - \`AgenticOS-Setup-x64.exe\` — NSIS installer
-          - \`AgenticOS-Setup-x64.msi\` — MSI installer
           - \`AgenticOS-Portable-x64.zip\` — Portable (no install required)
 
           **Linux:**
