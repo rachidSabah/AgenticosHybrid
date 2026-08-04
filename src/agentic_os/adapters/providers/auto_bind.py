@@ -291,7 +291,7 @@ def _probe_binary(bin_path: Path) -> dict | None:
         ai_keywords = ["ai", "agent", "code", "assistant", "copilot", "llm", "gpt", "claude"]
         if any(kw in output for kw in ai_keywords):
             return {"version": stdout.strip()[:100], "type": "unknown"}
-    except (subprocess.TimeoutExpired, OSError):
+    except (subprocess.TimeoutExpired, OSError, NotImplementedError):
         pass
 
     return None

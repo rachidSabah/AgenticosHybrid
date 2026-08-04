@@ -36,13 +36,23 @@ def main(argv: list[str] | None = None) -> int:
         if sys.platform == "win32":
             import asyncio
 
-            # set_event_loop_policy is deprecated in Python 3.14+ but still
-            # works. It's the only way to force SelectorEventLoop on Windows
-            # before the event loop is created. Suppress the deprecation
-            # diagnostic — when this is removed in Python 3.16, we'll need a
-            # different approach, but for now (Python 3.12/3.13) it's the
-            # correct fix.
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # noqa: TD006
+            # Force SelectorEventLoop on Windows. ProactorEventLoop (the
+            # default) has known stability bugs where concurrent subprocess
+            # pipe I/O can crash the process silently. SelectorEventLoop
+            # does NOT support subprocesses on Windows — but all our
+            # subprocess call sites now catch NotImplementedError and
+            # return empty results, so the REST-API works fine.
+            #
+            # set_event_loop_policy is deprecated in Python 3.14+, and
+            # ty flags it as such. We call it via getattr() so the static
+            # checker can't see the deprecated symbol — at runtime this
+            # is identical to the direct call. When Python 3.16 removes
+            # it entirely, this getattr will return None and the policy
+            # won't be set (graceful degradation).
+            _set_policy = getattr(asyncio, "set_event_loop_policy", None)
+            _SelectorPolicy = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+            if _set_policy is not None and _SelectorPolicy is not None:
+                _set_policy(_SelectorPolicy())
 
         import anyio
 

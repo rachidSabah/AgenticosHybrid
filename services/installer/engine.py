@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from agentic_os.infrastructure.logging import get_logger
 from services.installer.healer import HealReport, SelfHealingEngine
@@ -262,7 +263,7 @@ class InstallerIntelligence:
                             if os.path.isfile(full):
                                 found.append(full)
                                 break
-            except (subprocess.TimeoutExpired, OSError):
+            except (subprocess.TimeoutExpired, OSError, NotImplementedError):
                 pass
 
     async def _validate_providers(self) -> None:

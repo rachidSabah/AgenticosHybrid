@@ -103,7 +103,7 @@ class EnvironmentDetector:
             if proc.returncode == 0:
                 ver = stdout.decode("utf-8", errors="replace").strip()
                 return ver.lstrip("v") if ver else ""
-        except (TimeoutError, FileNotFoundError, OSError):
+        except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
             pass
         return ""
 
@@ -118,5 +118,5 @@ class EnvironmentDetector:
             )
             await asyncio.wait_for(proc.communicate(), timeout=5.0)
             return proc.returncode == 0
-        except (TimeoutError, FileNotFoundError, OSError):
+        except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
             return False
