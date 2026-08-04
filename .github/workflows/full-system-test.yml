@@ -54,7 +54,7 @@ jobs:
         run: npx next build
       - name: Backend boots
         run: |
-          Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow
+          Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow -RedirectStandardOutput "backend.log" -RedirectStandardError "backend_err.log"
           # Poll /healthz with retries — Windows backend startup takes ~40s
           # (runtime discovery + SQLite init + lifecycle phases), much slower
           # than Linux (~5s). A single Start-Sleep 15 was too short.
@@ -70,12 +70,28 @@ jobs:
           Write-Host "Backend: OK"
       - name: API endpoints respond
         run: |
-          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing | Out-Null
-          Write-Host "Tasks: OK"
+          # Small warm-up — give the desktop runtime (DesktopRuntime.start())
+          # a moment to finish initializing after REST-API came up.
+          Start-Sleep -Seconds 3
+          try {
+            Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing -ErrorAction Stop | Out-Null
+            Write-Host "Tasks: OK"
+          } catch {
+            Write-Host "Tasks endpoint failed — backend may have crashed. Backend log:"
+            Get-Content backend.log -Tail 30 -ErrorAction SilentlyContinue
+            Get-Content backend_err.log -Tail 30 -ErrorAction SilentlyContinue
+            throw
+          }
           Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/providers" -UseBasicParsing | Out-Null
           Write-Host "Providers: OK"
           Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/workspace/current" -UseBasicParsing | Out-Null
           Write-Host "Workspace: OK"
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          Write-Host "=== Backend Log (last 50 lines) ==="
+          Get-Content backend.log -Tail 50 -ErrorAction SilentlyContinue
+          Get-Content backend_err.log -Tail 50 -ErrorAction SilentlyContinue
 
   test-wsl:
     runs-on: ubuntu-latest
