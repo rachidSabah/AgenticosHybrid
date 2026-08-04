@@ -90,3 +90,4 @@ _cache/
 _fix_*.py
 _tmp/
 .aider*
+.worktrees/

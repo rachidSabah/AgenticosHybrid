@@ -17,56 +17,60 @@ import time
 from collections import deque
 from datetime import UTC, datetime
 
-from agentic_os_mod.api.runtime_diagnostics import (
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
+
+from agentic_os.api.runtime_diagnostics import (
     bindings as rt_bindings,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     brains as rt_brains,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     diagnostics as rt_diagnostics,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     discovery as rt_discovery,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     errors as rt_errors,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     eventbus as rt_eventbus,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     graph as rt_graph,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     health as rt_health,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     pipeline as rt_pipeline,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     providers as rt_providers,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     registries as rt_registries,
 )
-from agentic_os_mod.api.runtime_diagnostics import (
+from agentic_os.api.runtime_diagnostics import (
     status as rt_status,
 )
-from agentic_os_mod.config import settings
-from agentic_os_mod.core.mcp.manager import MCPManager
-from agentic_os_mod.domain.agent import Role, Task
-from agentic_os_mod.domain.events import EventEnvelope, Topic
-from agentic_os_mod.domain.execution import EngineCapability, EngineType
-from agentic_os_mod.domain.mcp import MCPServerStatus
-from agentic_os_mod.domain.mission import (
+from agentic_os.config import settings
+from agentic_os.core.mcp.manager import MCPManager
+from agentic_os.domain.agent import Role, Task
+from agentic_os.domain.events import EventEnvelope, Topic
+from agentic_os.domain.execution import EngineCapability, EngineType
+from agentic_os.domain.mcp import MCPServerStatus
+from agentic_os.domain.mission import (
     Attachment,
     ExecutionMode,
     Mission,
     MissionPriority,
     MissionStatus,
 )
-from agentic_os_mod.domain.orchestration import (
+from agentic_os.domain.orchestration import (
     AgentDescriptor,
     AgentTask,
     AgentTaskStatus,
@@ -81,26 +85,23 @@ from agentic_os_mod.domain.orchestration import (
     OrchestrationPlan,
     RetryPolicy,
 )
-from agentic_os_mod.domain.pipeline import (
+from agentic_os.domain.pipeline import (
     PipelineEdge,
     PipelineExecutionStatus,
     PipelineStage,
     PipelineStatus,
 )
-from agentic_os_mod.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
-from agentic_os_mod.domain.workflow import (
+from agentic_os.domain.provider_mgmt import ProviderConfig, ProviderHealthStatus
+from agentic_os.domain.workflow import (
     WorkflowEdge,
     WorkflowExecutionStatus,
     WorkflowNode,
     WorkflowStatus,
 )
-from agentic_os_mod.infrastructure.logging import get_logger
-from agentic_os_mod.infrastructure.metrics import metrics_payload, observe
-from agentic_os_mod.kernel import Platform
-from agentic_os_mod.ports.execution import EngineRegistration, ExecutionRequest
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from agentic_os.infrastructure.logging import get_logger
+from agentic_os.infrastructure.metrics import metrics_payload, observe
+from agentic_os.kernel import Platform
+from agentic_os.ports.execution import EngineRegistration, ExecutionRequest
 
 log = get_logger("api")
 
@@ -236,7 +237,7 @@ class _UnavailableSentinel:
 
 
 def create_app(platform: Platform) -> FastAPI:
-    from agentic_os_mod.api.diagnostics_service import RuntimeDiagnosticsService
+    from agentic_os.api.diagnostics_service import RuntimeDiagnosticsService
 
     _diag_svc = RuntimeDiagnosticsService()
 
@@ -392,7 +393,7 @@ def create_app(platform: Platform) -> FastAPI:
     import os as _os_mod
     from pathlib import Path as _Path
 
-    _WORKSPACE_KEY = "agentic_os_mod.workspace"
+    _WORKSPACE_KEY = "agentic_os.workspace"
     _workspace_state: dict[str, str] = {"path": ""}
 
     def _get_workspace_root() -> str:
@@ -1313,7 +1314,7 @@ def create_app(platform: Platform) -> FastAPI:
         pm.set_config(config)
         # Instantiate a working adapter and register it in the manager + registry
         # so it becomes selectable by the router immediately.
-        from agentic_os_mod.adapters.providers.factory import build_adapter
+        from agentic_os.adapters.providers.factory import build_adapter
 
         adapter = await build_adapter(config, vault.get_key)
         pm.register(adapter)
@@ -1363,7 +1364,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/models")
     async def register_model(model: dict) -> dict:
-        from agentic_os_mod.ports.provider_management import ModelInfo
+        from agentic_os.ports.provider_management import ModelInfo
 
         info = ModelInfo.model_validate(model)
         pm.register_model(info)
@@ -1436,7 +1437,7 @@ def create_app(platform: Platform) -> FastAPI:
         except Exception:
             brains = []
 
-        from agentic_os_mod.core.brains.capabilities import BrainCapabilityAnalyzer
+        from agentic_os.core.brains.capabilities import BrainCapabilityAnalyzer
 
         analyzer = BrainCapabilityAnalyzer()  # noqa: F841 — reserved for future capability analysis
         nodes: list[dict] = []
@@ -1844,7 +1845,7 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "goal required")
 
         # Create a temporary mission for the planner
-        from agentic_os_mod.domain.mission import Mission
+        from agentic_os.domain.mission import Mission
 
         temp = Mission(title=goal[:80], description=goal)
         _missions[temp.id] = temp
@@ -2022,7 +2023,7 @@ def create_app(platform: Platform) -> FastAPI:
         """
         if not q:
             return []
-        from agentic_os_mod.domain.memory import MemoryScope
+        from agentic_os.domain.memory import MemoryScope
 
         results: list[dict] = []
         scopes = [MemoryScope(scope)] if scope else list(MemoryScope)
@@ -2051,7 +2052,7 @@ def create_app(platform: Platform) -> FastAPI:
         Looks up all scopes for the given key and returns every
         version found (ordered by creation time).
         """
-        from agentic_os_mod.domain.memory import MemoryScope
+        from agentic_os.domain.memory import MemoryScope
 
         results: list[dict] = []
         for sc in MemoryScope:
@@ -2339,7 +2340,7 @@ def create_app(platform: Platform) -> FastAPI:
         if exec_ctrl is None:
             return []
         if status:
-            from agentic_os_mod.core.executive.domain import GoalStatus
+            from agentic_os.core.executive.domain import GoalStatus
 
             try:
                 st = GoalStatus(status)
@@ -2356,7 +2357,7 @@ def create_app(platform: Platform) -> FastAPI:
         exec_ctrl = getattr(platform, "executive_controller", None)
         if exec_ctrl is None:
             raise HTTPException(503, detail="ExecutiveController not available")
-        from agentic_os_mod.core.executive.domain import GoalPriority
+        from agentic_os.core.executive.domain import GoalPriority
 
         title = body.get("title", "")
         if not title:
@@ -2421,7 +2422,7 @@ def create_app(platform: Platform) -> FastAPI:
         exec_ctrl = getattr(platform, "executive_controller", None)
         if exec_ctrl is None:
             raise HTTPException(503, detail="ExecutiveController not available")
-        from agentic_os_mod.core.executive.domain import GoalPriority
+        from agentic_os.core.executive.domain import GoalPriority
 
         priority = GoalPriority(body.get("priority", "normal"))
         goal = await exec_ctrl.goal_manager.reprioritize(goal_id, priority)
@@ -2583,7 +2584,7 @@ def create_app(platform: Platform) -> FastAPI:
         ctrl = getattr(platform, "cognitive_controller", None)
         if ctrl is None:
             raise HTTPException(503, detail="CognitiveController not available")
-        from agentic_os_mod.core.cognitive.domain import ObjectivePriority
+        from agentic_os.core.cognitive.domain import ObjectivePriority
 
         title = body.get("title", "")
         if not title:
@@ -2805,7 +2806,7 @@ def create_app(platform: Platform) -> FastAPI:
         proposal = body.get("proposal", "")
         votes = body.get("votes", {})
         consensus_type = body.get("consensus_type", "majority")
-        from agentic_os_mod.core.orchestration.swarm_coordinator import ConsensusType
+        from agentic_os.core.orchestration.swarm_coordinator import ConsensusType
 
         try:
             ct = ConsensusType(consensus_type)
@@ -2848,7 +2849,7 @@ def create_app(platform: Platform) -> FastAPI:
         exec_ctrl = getattr(platform, "executive_controller", None)
         if exec_ctrl is None or exec_ctrl.orchestrator is None:
             raise HTTPException(503, detail="ExecutiveController not available")
-        from agentic_os_mod.core.executive.phase13_domain import ExecutivePolicyType
+        from agentic_os.core.executive.phase13_domain import ExecutivePolicyType
 
         policy_type_str = body.get("type", "balanced")
         try:
@@ -2917,7 +2918,7 @@ def create_app(platform: Platform) -> FastAPI:
     # ── Memory System API (Phase 2, Subsystem 2) ──
     @app.post("/api/memory")
     async def write_memory(body: dict) -> dict:
-        from agentic_os_mod.domain.memory import MemoryItem, MemoryScope
+        from agentic_os.domain.memory import MemoryItem, MemoryScope
 
         item = MemoryItem(
             scope=MemoryScope(body.get("scope", "working")),
@@ -2932,7 +2933,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/memory/{scope}")
     async def read_memory_scope(scope: str, agent_id: str = "") -> list[dict]:
-        from agentic_os_mod.domain.memory import MemoryScope
+        from agentic_os.domain.memory import MemoryScope
 
         return [
             i.model_dump(mode="json")
@@ -2943,7 +2944,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def recall_memory(
         scope: str, query: str = "", limit: int = 10, agent_id: str = ""
     ) -> list[dict]:
-        from agentic_os_mod.domain.memory import MemoryScope
+        from agentic_os.domain.memory import MemoryScope
 
         return [
             i.model_dump(mode="json")
@@ -2963,7 +2964,7 @@ def create_app(platform: Platform) -> FastAPI:
     # ── Security Framework API (Phase 2, Subsystem 4) ──
     @app.post("/api/security/assign")
     async def assign_role(body: dict) -> dict:
-        from agentic_os_mod.domain.security import Principal, Role
+        from agentic_os.domain.security import Principal, Role
 
         principal = Principal(id=body["principal"], roles=[Role(r) for r in body.get("roles", [])])
         security.ac.assign(principal, Role(body["role"]))
@@ -2971,7 +2972,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/security/authorize")
     async def authorize(body: dict) -> dict:
-        from agentic_os_mod.domain.security import Principal, ToolRequest
+        from agentic_os.domain.security import Principal, ToolRequest
 
         principal = Principal(id=body["principal"], roles=body.get("roles", []))
         request = ToolRequest(
@@ -3029,7 +3030,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/workflows")
     async def create_workflow(body: dict) -> dict:
-        from agentic_os_mod.ports.workflow import WorkflowCreate
+        from agentic_os.ports.workflow import WorkflowCreate
 
         data = WorkflowCreate(
             name=body["name"],
@@ -3044,7 +3045,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.put("/api/workflows/{workflow_id}")
     async def update_workflow(workflow_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.workflow import WorkflowUpdate
+        from agentic_os.ports.workflow import WorkflowUpdate
 
         data = WorkflowUpdate(
             name=body.get("name"),
@@ -3078,7 +3079,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/workflows/{workflow_id}/execute")
     async def execute_workflow(workflow_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.workflow import WorkflowExecute
+        from agentic_os.ports.workflow import WorkflowExecute
 
         data = WorkflowExecute(inputs=body.get("inputs", {}), version=body.get("version"))
         execution = await workflow_engine.execute_workflow(workflow_id, data)
@@ -3086,7 +3087,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/workflows/{workflow_id}/replay")
     async def replay_workflow(workflow_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.workflow import WorkflowReplay
+        from agentic_os.ports.workflow import WorkflowReplay
 
         data = WorkflowReplay(
             inputs=body.get("inputs", {}),
@@ -3099,7 +3100,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/workflows/{workflow_id}/approve")
     async def approve_workflow(workflow_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.workflow import WorkflowApproval
+        from agentic_os.ports.workflow import WorkflowApproval
 
         data = WorkflowApproval(
             node_id=body["node_id"],
@@ -3169,7 +3170,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/pipelines")
     async def create_pipeline(body: dict) -> dict:
-        from agentic_os_mod.ports.pipeline import PipelineCreate
+        from agentic_os.ports.pipeline import PipelineCreate
 
         data = PipelineCreate(
             name=body["name"],
@@ -3185,7 +3186,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.put("/api/pipelines/{pipeline_id}")
     async def update_pipeline(pipeline_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.pipeline import PipelineUpdate
+        from agentic_os.ports.pipeline import PipelineUpdate
 
         data = PipelineUpdate(
             name=body.get("name"),
@@ -3222,7 +3223,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/pipelines/{pipeline_id}/execute")
     async def execute_pipeline(pipeline_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.pipeline import PipelineExecute
+        from agentic_os.ports.pipeline import PipelineExecute
 
         data = PipelineExecute(inputs=body.get("inputs", {}))
         execution = await pipeline_engine.execute_pipeline(pipeline_id, data)
@@ -3230,7 +3231,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/pipelines/{pipeline_id}/schedule")
     async def schedule_pipeline(pipeline_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.pipeline import PipelineScheduleRequest
+        from agentic_os.ports.pipeline import PipelineScheduleRequest
 
         data = PipelineScheduleRequest(cron=body["cron"], timezone=body.get("timezone", "UTC"))
         schedule = await pipeline_engine.schedule_pipeline(pipeline_id, data)
@@ -3250,7 +3251,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/pipelines/{pipeline_id}/rollback")
     async def rollback_pipeline(pipeline_id: str, body: dict) -> dict:
-        from agentic_os_mod.ports.pipeline import PipelineRollback
+        from agentic_os.ports.pipeline import PipelineRollback
 
         data = PipelineRollback(to_execution_id=body["to_execution_id"])
         execution = await pipeline_engine.rollback_pipeline(pipeline_id, data)
@@ -3575,7 +3576,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Create a new discovery profile."""
         if discovery_framework is None:
             raise HTTPException(status_code=503, detail="Discovery framework not available")
-        from agentic_os_mod.domain.discovery import DiscoveryProfile
+        from agentic_os.domain.discovery import DiscoveryProfile
 
         profile = DiscoveryProfile(
             name=body["name"],
@@ -3726,7 +3727,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/mcp/servers")
     async def register_mcp_server(body: dict) -> dict:
         mcp = _require_mcp()
-        from agentic_os_mod.ports.mcp import MCPServerCreate
+        from agentic_os.ports.mcp import MCPServerCreate
 
         data = MCPServerCreate(
             name=body["name"],
@@ -3761,7 +3762,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.put("/api/mcp/servers/{server_id}")
     async def update_mcp_server(server_id: str, body: dict) -> dict:
         mcp = _require_mcp()
-        from agentic_os_mod.ports.mcp import MCPServerUpdate
+        from agentic_os.ports.mcp import MCPServerUpdate
 
         data = MCPServerUpdate(
             name=body.get("name"),
@@ -3975,7 +3976,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/mcp/servers/{server_id}/permissions")
     async def set_mcp_permissions(server_id: str, body: dict) -> dict:
         mcp = _require_mcp()
-        from agentic_os_mod.domain.mcp import MCPPermissionMapping
+        from agentic_os.domain.mcp import MCPPermissionMapping
 
         mappings = [
             MCPPermissionMapping(
@@ -4018,7 +4019,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/swarm/profiles")
     async def create_swarm_profile(body: dict) -> dict:
         """Create a new swarm profile."""
-        from agentic_os_mod.domain.orchestration import OrchestrationProfile
+        from agentic_os.domain.orchestration import OrchestrationProfile
 
         profile = OrchestrationProfile(
             name=body["name"],
@@ -4518,7 +4519,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/learning/profiles")
     async def create_learning_profile(body: dict) -> dict:
-        from agentic_os_mod.domain.learning import (
+        from agentic_os.domain.learning import (
             LearningMetric,
             LearningProfile,
             OptimizationTarget,
@@ -4561,7 +4562,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/learning/executions")
     async def record_execution(body: dict) -> dict:
-        from agentic_os_mod.domain.learning import ExecutionHistory
+        from agentic_os.domain.learning import ExecutionHistory
 
         history = ExecutionHistory(
             execution_id=body.get("execution_id", f"exec-{int(time.time())}"),
@@ -4616,7 +4617,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/learning/recommendations")
     async def list_recommendations(status: str | None = None, limit: int = 50) -> list[dict]:
-        from agentic_os_mod.domain.learning import RecommendationStatus
+        from agentic_os.domain.learning import RecommendationStatus
 
         rec_status = RecommendationStatus(status) if status else None
         recs = await learning.list_recommendations(rec_status, limit)
@@ -4641,7 +4642,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/learning/optimization")
     async def optimize(body: dict) -> dict:
-        from agentic_os_mod.domain.learning import OptimizationTarget
+        from agentic_os.domain.learning import OptimizationTarget
 
         target = OptimizationTarget(body["target"])
         result = await learning.optimize(target, body.get("config", {}))
@@ -4677,7 +4678,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/learning/benchmarks")
     async def create_benchmark(body: dict) -> dict:
-        from agentic_os_mod.domain.learning import Benchmark, LearningMetric
+        from agentic_os.domain.learning import Benchmark, LearningMetric
 
         metrics = tuple(LearningMetric(m) for m in body.get("metrics", []) if m)
         benchmark = Benchmark(
@@ -4716,7 +4717,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/learning/experiments")
     async def create_experiment(body: dict) -> dict:
-        from agentic_os_mod.domain.learning import Experiment, ExperimentType
+        from agentic_os.domain.learning import Experiment, ExperimentType
 
         exp_type = ExperimentType(body.get("experiment_type", "a_b_test"))
         experiment = Experiment(
@@ -4817,7 +4818,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/learning/policies")
     async def create_policy(body: dict) -> dict:
-        from agentic_os_mod.domain.learning import (
+        from agentic_os.domain.learning import (
             OptimizationPolicy,
             OptimizationTarget,
             PolicyEffect,
@@ -4842,7 +4843,7 @@ def create_app(platform: Platform) -> FastAPI:
         existing = await learning._policy.get_policy(policy_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Policy not found")
-        from agentic_os_mod.domain.learning import (
+        from agentic_os.domain.learning import (
             OptimizationPolicy,
             OptimizationTarget,
             PolicyEffect,
@@ -4911,7 +4912,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/windows")
         async def create_window(config: dict) -> dict:
-            from agentic_os_mod.domain.desktop import WindowConfig
+            from agentic_os.domain.desktop import WindowConfig
 
             wc = WindowConfig(
                 **{k: v for k, v in config.items() if k in WindowConfig.__dataclass_fields__}
@@ -5005,7 +5006,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.put("/api/desktop/workspaces/{workspace_id}/layout")
         async def update_workspace_layout(workspace_id: str, body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import WorkspaceLayout
+            from agentic_os.domain.desktop import WorkspaceLayout
 
             layout = WorkspaceLayout(
                 **{k: v for k, v in body.items() if k in WorkspaceLayout.__dataclass_fields__}
@@ -5018,7 +5019,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/workspaces/{workspace_id}/tabs")
         async def add_tab(workspace_id: str, body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import TabInfo
+            from agentic_os.domain.desktop import TabInfo
 
             tab = TabInfo(**{k: v for k, v in body.items() if k in TabInfo.__dataclass_fields__})
             added = await desktop.workspace.add_tab(workspace_id, tab)
@@ -5038,7 +5039,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/workspaces/{workspace_id}/panels")
         async def add_panel(workspace_id: str, body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import PanelConfig
+            from agentic_os.domain.desktop import PanelConfig
 
             panel = PanelConfig(
                 **{k: v for k, v in body.items() if k in PanelConfig.__dataclass_fields__}
@@ -5060,7 +5061,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/notifications")
         async def send_notification(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import DesktopNotification
+            from agentic_os.domain.desktop import DesktopNotification
 
             notif = DesktopNotification(
                 **{k: v for k, v in body.items() if k in DesktopNotification.__dataclass_fields__}
@@ -5110,7 +5111,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.put("/api/desktop/config/theme")
         async def set_theme(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import ThemeMode
+            from agentic_os.domain.desktop import ThemeMode
 
             theme = ThemeMode(body.get("theme", "system"))
             await desktop.configuration.set_theme(theme)
@@ -5158,7 +5159,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/menus")
         async def create_menu(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import MenuConfig
+            from agentic_os.domain.desktop import MenuConfig
 
             menu = MenuConfig(
                 **{k: v for k, v in body.items() if k in MenuConfig.__dataclass_fields__}
@@ -5174,7 +5175,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/file/open")
         async def open_file_dialog(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import DialogConfig
+            from agentic_os.domain.desktop import DialogConfig
 
             config = DialogConfig(
                 **{k: v for k, v in body.items() if k in DialogConfig.__dataclass_fields__}
@@ -5184,7 +5185,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/file/save")
         async def save_file_dialog(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import DialogConfig
+            from agentic_os.domain.desktop import DialogConfig
 
             config = DialogConfig(
                 **{k: v for k, v in body.items() if k in DialogConfig.__dataclass_fields__}
@@ -5201,7 +5202,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.put("/api/desktop/clipboard")
         async def set_clipboard(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import ClipboardContent
+            from agentic_os.domain.desktop import ClipboardContent
 
             content = ClipboardContent(
                 **{k: v for k, v in body.items() if k in ClipboardContent.__dataclass_fields__}
@@ -5217,7 +5218,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/terminals")
         async def open_terminal(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import TerminalConfig
+            from agentic_os.domain.desktop import TerminalConfig
 
             config = TerminalConfig(
                 **{k: v for k, v in body.items() if k in TerminalConfig.__dataclass_fields__}
@@ -5276,7 +5277,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def get_runtime(runtime_type: str) -> dict:
             if desktop.runtime_discovery is None:
                 raise HTTPException(404, "Runtime discovery not available")
-            from agentic_os_mod.domain.desktop import RuntimeType
+            from agentic_os.domain.desktop import RuntimeType
 
             try:
                 rt = RuntimeType(runtime_type)
@@ -5291,7 +5292,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def verify_runtime(runtime_type: str) -> dict:
             if desktop.runtime_discovery is None:
                 return {"verified": False}
-            from agentic_os_mod.domain.desktop import RuntimeType
+            from agentic_os.domain.desktop import RuntimeType
 
             rt = RuntimeType(runtime_type)
             return {"verified": await desktop.runtime_discovery.verify_runtime(rt)}
@@ -5302,7 +5303,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def check_updates(channel: str = "stable") -> list[dict]:
             if desktop.update is None:
                 return []
-            from agentic_os_mod.domain.desktop import UpdateChannel
+            from agentic_os.domain.desktop import UpdateChannel
 
             ch = UpdateChannel(channel)
             releases = await desktop.update.check_for_updates(ch)
@@ -5340,7 +5341,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def download_update(body: dict) -> dict:
             if desktop.update is None:
                 raise HTTPException(503, "Update manager not available")
-            from agentic_os_mod.domain.desktop import UpdateManifest
+            from agentic_os.domain.desktop import UpdateManifest
 
             manifest = UpdateManifest(
                 **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
@@ -5352,7 +5353,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def install_update(body: dict) -> dict:
             if desktop.update is None:
                 raise HTTPException(503, "Update manager not available")
-            from agentic_os_mod.domain.desktop import UpdateManifest
+            from agentic_os.domain.desktop import UpdateManifest
 
             manifest = UpdateManifest(
                 **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
@@ -5569,7 +5570,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def set_channel(body: dict) -> dict:
             if desktop.channel is None:
                 raise HTTPException(503, "Channel manager not available")
-            from agentic_os_mod.domain.desktop import UpdateChannel
+            from agentic_os.domain.desktop import UpdateChannel
 
             ch = UpdateChannel(body.get("channel", "stable"))
             await desktop.channel.set_channel(ch)
@@ -5597,7 +5598,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def generate_installer(body: dict) -> dict:
             if desktop.installer is None:
                 raise HTTPException(503, "Installer manager not available")
-            from agentic_os_mod.domain.desktop import InstallerConfig
+            from agentic_os.domain.desktop import InstallerConfig
 
             config = InstallerConfig(
                 **{k: v for k, v in body.items() if k in InstallerConfig.__dataclass_fields__}
@@ -5609,7 +5610,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def generate_all_installers(body: dict) -> list[dict]:
             if desktop.installer is None:
                 raise HTTPException(503, "Installer manager not available")
-            from agentic_os_mod.domain.desktop import InstallerConfig
+            from agentic_os.domain.desktop import InstallerConfig
 
             config = InstallerConfig(
                 **{k: v for k, v in body.items() if k in InstallerConfig.__dataclass_fields__}
@@ -5691,7 +5692,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def create_backup(body: dict) -> dict:
             if desktop.backup is None:
                 raise HTTPException(503, "Backup manager not available")
-            from agentic_os_mod.domain.desktop import BackupConfig
+            from agentic_os.domain.desktop import BackupConfig
 
             config = BackupConfig(
                 **{k: v for k, v in body.items() if k in BackupConfig.__dataclass_fields__}
@@ -5709,7 +5710,7 @@ def create_app(platform: Platform) -> FastAPI:
         async def restore_backup(body: dict) -> dict:
             if desktop.backup is None:
                 raise HTTPException(503, "Backup manager not available")
-            from agentic_os_mod.domain.desktop import RestoreConfig
+            from agentic_os.domain.desktop import RestoreConfig
 
             config = RestoreConfig(
                 **{k: v for k, v in body.items() if k in RestoreConfig.__dataclass_fields__}
@@ -5731,7 +5732,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.put("/api/desktop/hardening/config")
         async def update_hardening_config(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import HardeningConfig
+            from agentic_os.domain.desktop import HardeningConfig
 
             config = HardeningConfig(
                 **{k: v for k, v in body.items() if k in HardeningConfig.__dataclass_fields__}
@@ -5809,7 +5810,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/dragdrop")
         async def handle_drop(body: dict) -> dict:
-            from agentic_os_mod.domain.desktop import DragDropPayload
+            from agentic_os.domain.desktop import DragDropPayload
 
             payload = DragDropPayload(
                 **{k: v for k, v in body.items() if k in DragDropPayload.__dataclass_fields__}
@@ -6233,7 +6234,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.websocket("/ws/mcp")
     async def mcp_ws(websocket: WebSocket) -> None:
-        from agentic_os_mod.api.mcp_ws import MCPBroadcaster
+        from agentic_os.api.mcp_ws import MCPBroadcaster
 
         mcp_bc: MCPBroadcaster | None = platform.mcp_ws
         if mcp_bc is None:
@@ -6277,7 +6278,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/system")
     async def get_system_overview() -> dict:
         try:
-            from agentic_os_mod.adapters.providers.auto_bind import KNOWN_AGENTS
+            from agentic_os.adapters.providers.auto_bind import KNOWN_AGENTS
         except ImportError:
             KNOWN_AGENTS = []
         provider_count = len(platform.providers.list_providers())
@@ -6300,7 +6301,7 @@ def create_app(platform: Platform) -> FastAPI:
     # ── Plugin management ─────────────────────────────────────────────────
     @app.get("/api/plugins")
     async def list_plugins() -> list[dict]:
-        from agentic_os_mod.adapters.plugins.builtins import PLUGINS
+        from agentic_os.adapters.plugins.builtins import PLUGINS
 
         return [
             {
@@ -6373,7 +6374,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def binding_discover(body: dict | None = None) -> dict:
         mode = (body or {}).get("mode", "surface")
         try:
-            from agentic_os_mod.adapters.providers.auto_bind import (
+            from agentic_os.adapters.providers.auto_bind import (
                 auto_discover_and_bind,
             )
 
@@ -6416,7 +6417,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/binding/deep-scan")
     async def binding_deep_scan() -> dict:
         try:
-            from agentic_os_mod.adapters.providers.auto_bind import (
+            from agentic_os.adapters.providers.auto_bind import (
                 auto_discover_and_bind,
             )
 
@@ -6454,7 +6455,7 @@ def create_app(platform: Platform) -> FastAPI:
         if not provider_name or not executable:
             raise HTTPException(400, "provider and executable are required")
         try:
-            from agentic_os_mod.adapters.providers.claude_code import ClaudeCodeProvider
+            from agentic_os.adapters.providers.claude_code import ClaudeCodeProvider
 
             adapter = ClaudeCodeProvider(bin_path=executable, api_key="", name=provider_name)
             platform.providers.register(adapter)
@@ -6488,7 +6489,7 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "provider_id is required")
         # Attempt to re-register the provider by re-running discovery for it
         try:
-            from agentic_os_mod.adapters.providers.auto_bind import auto_discover_and_bind
+            from agentic_os.adapters.providers.auto_bind import auto_discover_and_bind
 
             pre = len(platform.providers.list_providers())
             await asyncio.to_thread(auto_discover_and_bind, platform.providers, False)
@@ -6509,7 +6510,7 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "provider_id and executable_path are required")
         # Remove old, register new
         try:
-            from agentic_os_mod.adapters.providers.claude_code import ClaudeCodeProvider
+            from agentic_os.adapters.providers.claude_code import ClaudeCodeProvider
 
             platform.providers.unregister(provider_id)
             adapter = ClaudeCodeProvider(bin_path=new_path, api_key="", name=provider_id)
@@ -6858,7 +6859,7 @@ def create_app(platform: Platform) -> FastAPI:
     # ── OpenAI-compatible /v1 API Gateway ─────────────────────────────────
     if hasattr(platform, "provider_mgr"):
         try:
-            from agentic_os_mod.api.gateway import create_gateway_router
+            from agentic_os.api.gateway import create_gateway_router
 
             gw_router = create_gateway_router(
                 platform.provider_mgr,
@@ -7323,7 +7324,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def cluster_consensus(body: dict) -> dict:
         """Run a consensus round. Body should contain proposal, votes, type."""
         cc = _cluster_controller()
-        from agentic_os_mod.core.cluster.domain import ConsensusVote
+        from agentic_os.core.cluster.domain import ConsensusVote
 
         proposal = str(body.get("proposal", ""))
         consensus_type = body.get("consensus_type", "majority")
@@ -7346,7 +7347,7 @@ def create_app(platform: Platform) -> FastAPI:
         )
         # Publish event
         try:
-            from agentic_os_mod.domain.events import EventEnvelope
+            from agentic_os.domain.events import EventEnvelope
 
             await platform.bus.publish(
                 EventEnvelope(
@@ -7523,7 +7524,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/distributed/tasks/dispatch")
     async def distributed_dispatch_task(body: dict) -> dict:
         dc = _distributed_controller()
-        from agentic_os_mod.core.distributed import DistributedTask
+        from agentic_os.core.distributed import DistributedTask
 
         task = DistributedTask(
             title=str(body.get("title", "")),
@@ -7540,7 +7541,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def distributed_ack_task(task_id: str, body: dict) -> dict:
         """Receive a task acknowledgement from a remote node."""
         dc = _distributed_controller()
-        from agentic_os_mod.core.distributed import TaskAcknowledgement
+        from agentic_os.core.distributed import TaskAcknowledgement
 
         ack = TaskAcknowledgement(
             task_id=task_id,
@@ -7577,7 +7578,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def distributed_receive_heartbeat(body: dict) -> dict:
         """Receive a heartbeat from a peer node."""
         dc = _distributed_controller()
-        from agentic_os_mod.core.distributed import HeartbeatPacket
+        from agentic_os.core.distributed import HeartbeatPacket
 
         packet = HeartbeatPacket(
             node_id=str(body.get("node_id", "")),
@@ -7604,7 +7605,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def distributed_receive_vote(body: dict) -> dict:
         """Receive a leader election vote from a peer."""
         dc = _distributed_controller()
-        from agentic_os_mod.core.distributed import LeaderVote
+        from agentic_os.core.distributed import LeaderVote
 
         vote = LeaderVote(
             voter_id=str(body.get("voter_id", "")),
