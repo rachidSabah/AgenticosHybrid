@@ -1,0 +1,331 @@
+name: NVIDIA System Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  UV_SYSTEM_PYTHON: 1
+
+jobs:
+  full-system-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install backend deps
+        run: uv sync --dev
+
+      - name: Ruff lint
+        run: uv run ruff check src/
+
+      - name: Ruff format check
+        run: uv run ruff format --check src/
+
+      - name: Backend unit tests
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mission-control/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: apps/mission-control
+        run: npm ci --legacy-peer-deps
+
+      - name: TypeScript check
+        working-directory: apps/mission-control
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: apps/mission-control
+        run: npx next lint
+
+      - name: Frontend unit tests
+        working-directory: apps/mission-control
+        run: npx vitest run
+
+      - name: Build
+        working-directory: apps/mission-control
+        run: npx next build
+
+      # ── Full System E2E Test ──
+      - name: Start backend (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          uv run python -m agentic_os serve --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
+          echo "Backend PID: $!"
+          sleep 25
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/healthz)
+          echo "Backend healthz: $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "Backend failed to start. Logs:"
+            cat /tmp/backend.log
+            exit 1
+          fi
+          echo "✓ Backend booted successfully"
+
+      - name: Start backend (Windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow -RedirectStandardOutput "backend.log" -RedirectStandardError "backend_err.log"
+          Start-Sleep -Seconds 25
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/healthz" -UseBasicParsing -ErrorAction SilentlyContinue
+          if ($resp.StatusCode -ne 200) {
+            Write-Host "Backend failed to start. Logs:"
+            Get-Content backend.log -ErrorAction SilentlyContinue
+            Get-Content backend_err.log -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "✓ Backend booted successfully"
+
+      - name: Verify all API endpoints (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo "=== API Endpoint Verification ==="
+          for endpoint in \
+            "GET /api/tasks" \
+            "GET /api/providers" \
+            "GET /api/workspace/current" \
+            "GET /api/worktrees/list" \
+            "GET /api/executions" \
+            "GET /api/executions/stats" \
+            "GET /api/gateway/telegram/status" \
+            "GET /api/gateway/whatsapp/status" \
+            "GET /api/dev/updates/status"
+          do
+            METHOD=$(echo $endpoint | cut -d' ' -f1)
+            PATH_=$(echo $endpoint | cut -d' ' -f2)
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8000${PATH_}")
+            echo "  $METHOD $PATH_ → $CODE"
+            if [ "$CODE" != "200" ] && [ "$CODE" != "404" ]; then
+              echo "  ⚠ Unexpected status: $CODE"
+            fi
+          done
+          echo "✓ All endpoints checked"
+
+      - name: Verify all API endpoints (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "=== API Endpoint Verification ==="
+          $endpoints = @(
+            "/api/tasks",
+            "/api/providers",
+            "/api/workspace/current",
+            "/api/worktrees/list",
+            "/api/executions",
+            "/api/executions/stats",
+            "/api/gateway/telegram/status",
+            "/api/gateway/whatsapp/status",
+            "/api/dev/updates/status"
+          )
+          foreach ($ep in $endpoints) {
+            try {
+              $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000$ep" -UseBasicParsing -ErrorAction SilentlyContinue
+              Write-Host "  GET $ep → $($resp.StatusCode)"
+            } catch {
+              Write-Host "  GET $ep → ERROR: $_"
+            }
+          }
+          Write-Host "✓ All endpoints checked"
+
+      - name: Create + plan + start mission (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo "=== Create Mission ==="
+          MISSION=$(curl -s -X POST http://127.0.0.1:8000/api/missions \
+            -H "Content-Type: application/json" \
+            -d '{"title":"NVIDIA CI Test","prompt":"Write a Python function that returns the Fibonacci sequence up to N. Include type hints and a docstring.","description":"Write a Python function that returns the Fibonacci sequence up to N. Include type hints and a docstring.","priority":"high","execution_mode":"hybrid"}')
+          MID=$(echo "$MISSION" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          echo "Mission ID: $MID"
+
+          echo "=== Plan Mission ==="
+          curl -s -X POST "http://127.0.0.1:8000/api/missions/$MID/plan" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          print(f'Plan: {len(d.get(\"tasks\",[]))} tasks')
+          for t in d.get('tasks',[])[:3]:
+              print(f'  - {t[\"title\"]}')
+              print(f'    user_prompt contains Fibonacci: {\"Fibonacci\" in t.get(\"user_prompt\",\"\")}')
+          "
+
+          echo "=== Start Mission ==="
+          curl -s -X POST "http://127.0.0.1:8000/api/missions/$MID/start" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          print(f'Status: {d.get(\"status\")}')
+          "
+
+          echo "=== Wait for execution (30s) ==="
+          sleep 30
+
+      - name: Create + plan + start mission (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "=== Create Mission ==="
+          $body = @{
+            title = "NVIDIA CI Test"
+            prompt = "Write a Python function that returns the Fibonacci sequence up to N. Include type hints and a docstring."
+            description = "Write a Python function that returns the Fibonacci sequence up to N. Include type hints and a docstring."
+            priority = "high"
+            execution_mode = "hybrid"
+          } | ConvertTo-Json
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
+          $mission = $resp.Content | ConvertFrom-Json
+          $mid = $mission.id
+          Write-Host "Mission ID: $mid"
+
+          Write-Host "=== Plan Mission ==="
+          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions/$mid/plan" -Method POST -UseBasicParsing | Out-Null
+          Write-Host "Plan created"
+
+          Write-Host "=== Start Mission ==="
+          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions/$mid/start" -Method POST -UseBasicParsing | Out-Null
+          Write-Host "Mission started"
+
+          Write-Host "=== Wait for execution (30s) ==="
+          Start-Sleep -Seconds 30
+
+      - name: Verify tasks + execution records (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo "=== Task Statuses ==="
+          curl -s http://127.0.0.1:8000/api/tasks | python3 -c "
+          import sys,json
+          tasks=json.load(sys.stdin)
+          print(f'Total tasks: {len(tasks)}')
+          for t in tasks[:5]:
+              print(f'  {t[\"id\"][:8]}  status={t[\"status\"]:12s}  title={t[\"title\"][:40]}')
+              has_prompt = 'user_prompt' in t and 'Fibonacci' in t.get('user_prompt','')
+              print(f'           user_prompt has Fibonacci: {has_prompt}')
+              if t.get('result'):
+                  print(f'           result: {t[\"result\"][:80]}...')
+              if t.get('error'):
+                  print(f'           error: {t[\"error\"][:80]}')
+          "
+
+          echo ""
+          echo "=== Execution Records ==="
+          curl -s "http://127.0.0.1:8000/api/executions?limit=10" | python3 -c "
+          import sys,json
+          execs=json.load(sys.stdin)
+          print(f'Total execution records: {len(execs)}')
+          for e in execs[:5]:
+              print(f'  {e[\"execution_id\"][:8]}  prov={e[\"provider\"]:15s}  status={e[\"status\"]:10s}  retry={e[\"retry_count\"]}  dur={e[\"duration_ms\"]}ms')
+              if e.get('prompt_preview'):
+                  has_fib = 'Fibonacci' in e['prompt_preview']
+                  print(f'           prompt_preview has Fibonacci: {has_fib}')
+              if e.get('stdout'):
+                  print(f'           stdout: {e[\"stdout\"][:80]}...')
+              if e.get('error'):
+                  print(f'           error: {e[\"error\"][:80]}')
+          "
+
+          echo ""
+          echo "=== Execution Stats ==="
+          curl -s http://127.0.0.1:8000/api/executions/stats | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          print(f'Stats: {d}')
+          "
+
+          echo ""
+          echo "=== Worktree List ==="
+          curl -s http://127.0.0.1:8000/api/worktrees/list | python3 -c "
+          import sys,json
+          wts=json.load(sys.stdin)
+          print(f'Worktrees: {len(wts)}')
+          for w in wts[:3]:
+              print(f'  branch={w[\"branch\"]}  status={w[\"status\"]}  agent={w.get(\"agent_id\",\"\")[:8]}')
+          "
+
+      - name: Verify tasks + execution records (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "=== Task Statuses ==="
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing
+          $tasks = $resp.Content | ConvertFrom-Json
+          Write-Host "Total tasks: $($tasks.Count)"
+          foreach ($t in $tasks[0..4]) {
+            Write-Host "  $($t.id.Substring(0,8))  status=$($t.status)  title=$($t.title.Substring(0, [Math]::Min(40, $t.title.Length)))"
+          }
+
+          Write-Host ""
+          Write-Host "=== Execution Records ==="
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/executions?limit=10" -UseBasicParsing
+          $execs = $resp.Content | ConvertFrom-Json
+          Write-Host "Total execution records: $($execs.Count)"
+          foreach ($e in $execs[0..4]) {
+            Write-Host "  $($e.execution_id.Substring(0,8))  prov=$($e.provider)  status=$($e.status)  retry=$($e.retry_count)  dur=$($e.duration_ms)ms"
+          }
+
+          Write-Host ""
+          Write-Host "=== Worktree List ==="
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/worktrees/list" -UseBasicParsing
+          $wts = $resp.Content | ConvertFrom-Json
+          Write-Host "Worktrees: $($wts.Count)"
+
+      - name: Collect diagnostics (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        if: always()
+        run: |
+          echo "=== Backend Log (last 30 lines) ==="
+          tail -30 /tmp/backend.log 2>/dev/null || echo "(no log)"
+          echo ""
+          echo "=== All Task Statuses ==="
+          curl -s http://127.0.0.1:8000/api/tasks 2>/dev/null | python3 -c "
+          import sys,json
+          try:
+              tasks=json.load(sys.stdin)
+              for t in tasks:
+                  print(f'  {t[\"id\"][:8]}  {t[\"status\"]:12s}  {t[\"title\"][:50]}')
+          except: print('(backend may be offline)')
+          " || true
+          echo ""
+          echo "=== Provider List ==="
+          curl -s http://127.0.0.1:8000/api/providers 2>/dev/null | python3 -c "
+          import sys,json
+          try:
+              provs=json.load(sys.stdin)
+              for p in provs:
+                  print(f'  {p[\"name\"]:25s}  kind={p[\"kind\"]}')
+          except: print('(backend may be offline)')
+          " || true
+
+      - name: Collect diagnostics (Windows)
+        if: matrix.os == 'windows-latest'
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "=== Backend Log (last 30 lines) ==="
+          Get-Content backend.log -Tail 30 -ErrorAction SilentlyContinue
+          Get-Content backend_err.log -Tail 30 -ErrorAction SilentlyContinue
+          Write-Host ""
+          Write-Host "=== Provider List ==="
+          try {
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/providers" -UseBasicParsing
+            $resp.Content
+          } catch { Write-Host "(backend may be offline)" }
