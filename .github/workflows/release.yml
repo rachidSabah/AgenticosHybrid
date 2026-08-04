@@ -66,6 +66,7 @@ jobs:
 
       - name: Bundle backend source
         shell: bash
+        working-directory: .
         run: |
           mkdir -p apps/mission-control/src-tauri/resources/backend/src
           cp -r src/agentic_os apps/mission-control/src-tauri/resources/backend/src/
@@ -147,6 +148,7 @@ jobs:
 
       - name: Bundle backend source
         shell: pwsh
+        working-directory: .
         run: |
           $resourcesDir = "apps/mission-control/src-tauri/resources/backend"
           New-Item -ItemType Directory -Force -Path "$resourcesDir/src" | Out-Null
@@ -266,6 +268,7 @@ jobs:
 
       - name: Bundle backend source
         shell: bash
+        working-directory: .
         run: |
           mkdir -p apps/mission-control/src-tauri/resources/backend/src
           cp -r src/agentic_os apps/mission-control/src-tauri/resources/backend/src/
