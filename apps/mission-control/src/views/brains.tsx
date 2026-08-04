@@ -91,9 +91,11 @@ export function Brains() {
     (filter.search ? 1 : 0);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full gap-4 p-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
+    >
       {/* ── Left sidebar ── */}
-      <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+      <div className="min-w-[280px] flex flex-col gap-4">
         {/* Stats */}
         <Panel title="Brain Registry" className="flex-shrink-0">
           <div className="space-y-2">
@@ -370,7 +372,7 @@ export function Brains() {
       </div>
 
       {/* ── Main content ── */}
-      <div className="col-span-12 lg:col-span-9 flex flex-col gap-4 h-full min-h-0">
+      <div className="min-w-[400px] flex flex-col gap-4 h-full min-h-0">
         {/* Connection status bar */}
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-medium ${
           connected ? "bg-ok/10 text-ok" : "bg-danger/10 text-danger"

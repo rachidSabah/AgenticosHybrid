@@ -522,9 +522,11 @@ export function ExecutionGraph() {
   };
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full gap-4 p-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
+    >
       {/* Left: Filters */}
-      <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+      <div className="min-w-[280px] flex flex-col gap-4">
         <Panel title="Filters" className="flex-shrink-0">
           <div className="space-y-3">
             <div>
@@ -634,7 +636,7 @@ export function ExecutionGraph() {
       </div>
 
       {/* Right: Graph */}
-      <div className="col-span-12 lg:col-span-9 flex flex-col gap-4 h-full min-h-0">
+      <div className="min-w-[400px] flex flex-col gap-4 h-full min-h-0">
         <Panel
           title="Execution Graph"
           subtitle="Live execution DAG"
