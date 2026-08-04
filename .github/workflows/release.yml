@@ -80,7 +80,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          run: npx tauri build --bundles appimage,deb,rpm
+        run: npx tauri build --bundles appimage,deb,rpm
 
       - name: Collect artifacts
         shell: bash
@@ -162,7 +162,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          run: npx tauri build --bundles nsis,msi
+        run: npx tauri build --bundles nsis,msi
 
       - name: Create portable ZIP
         shell: pwsh
@@ -280,7 +280,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-          run: npx tauri build --bundles dmg
+        run: npx tauri build --bundles dmg
 
       - name: Collect artifacts
         shell: bash
