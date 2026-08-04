@@ -1,4 +1,4 @@
-# AgenticOS v1.0.0-rc9
+# AgenticOS v1.0.0-rc10
 
 A **local-first, event-bus-driven AI Agent Operating System** that orchestrates autonomous agents, swarms, and distributed runtimes across a single node or an entire cluster — with a polished desktop runtime, an immersive Mission Control dashboard, and a fully autonomous self-improving ecosystem.
 

@@ -1,6 +1,6 @@
 {
   "name": "mission-control",
-  "version": "1.0.0-rc9",
+  "version": "1.0.0-rc10",
   "private": true,
   "description": "Mission Control — the immersive operating-system interface for AgenticOS.",
   "scripts": {
