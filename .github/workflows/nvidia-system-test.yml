@@ -88,6 +88,11 @@ jobs:
         if: matrix.os == 'windows-latest'
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          # Skip Brains auto-detection — the Windows process scan
+          # (detect_all_with_windows) spawns multiple PowerShell + where.exe
+          # subprocesses and has been observed to silently crash the backend
+          # partway through. The REST-API is fully usable without it.
+          AGENTICOS_SKIP_BRAIN_AUTODETECT: "1"
         shell: pwsh
         run: |
           Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow -RedirectStandardOutput "backend.log" -RedirectStandardError "backend_err.log"

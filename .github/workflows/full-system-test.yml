@@ -53,6 +53,12 @@ jobs:
         working-directory: apps/mission-control
         run: npx next build
       - name: Backend boots
+        env:
+          # Skip Brains auto-detection — the Windows process scan
+          # (detect_all_with_windows) spawns multiple PowerShell + where.exe
+          # subprocesses and has been observed to silently crash the backend
+          # partway through. The REST-API is fully usable without it.
+          AGENTICOS_SKIP_BRAIN_AUTODETECT: "1"
         run: |
           Start-Process -FilePath "uv" -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" -NoNewWindow -RedirectStandardOutput "backend.log" -RedirectStandardError "backend_err.log"
           # Poll /healthz with retries — Windows backend startup takes ~40s

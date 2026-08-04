@@ -563,65 +563,75 @@ class Kernel:
             self.brain_runtime_bridge = RuntimeBridge()
 
             # ── Auto-detect locally installed brains ──
-            _diag("Brains", "AUTO_DETECTING")
-            try:
-                detected = await self.brain_runtime_bridge.detect_all_with_windows()
-                registered = 0
-                # Central hub ID for the constellation graph
-                _HUB_ID = "agenticos-hub"
-                for record in detected:
-                    # Only register brains that are actually installed
-                    if record.health < 50:
-                        continue
-                    await self.brain_registry.register(record)
-                    registered += 1
+            # Allow skipping via env var (AGENTICOS_SKIP_BRAIN_AUTODETECT=1)
+            # — useful in CI where the Windows process scan has been
+            # observed to crash the backend silently.
+            import os as _os
+            _skip_brain_autodetect = _os.environ.get("AGENTICOS_SKIP_BRAIN_AUTODETECT", "").lower() in (
+                "1", "true", "yes", "on",
+            )
+            if _skip_brain_autodetect:
+                _diag("Brains", "AUTO_DETECT_SKIPPED", "AGENTICOS_SKIP_BRAIN_AUTODETECT set")
+            else:
+                _diag("Brains", "AUTO_DETECTING")
+                try:
+                    detected = await self.brain_runtime_bridge.detect_all_with_windows()
+                    registered = 0
+                    # Central hub ID for the constellation graph
+                    _HUB_ID = "agenticos-hub"
+                    for record in detected:
+                        # Only register brains that are actually installed
+                        if record.health < 50:
+                            continue
+                        await self.brain_registry.register(record)
+                        registered += 1
 
-                    # Add a constellation graph edge: hub → brain
-                    if self.brain_graph is not None:
-                        await self.brain_graph.add_edge(
-                            source_id=_HUB_ID,
-                            target_id=record.id,
-                            rel_type=RelationshipType.PARENT,
-                            metadata={"label": f"{record.display_name} managed by AgenticOS"},
-                            weight=max(1.0, record.health / 100.0),
-                        )
-                    # Publish events the frontend main store understands
-                    if self.bus:
-                        await self.bus.publish(
-                            EventEnvelope(
-                                type="provider.registered",
-                                source="kernel",
-                                topic="provider.registered",
-                                payload={
-                                    "name": record.display_name,
-                                    "provider": record.display_name,
-                                    "vendor": record.vendor,
-                                    "status": "healthy" if record.health >= 80 else "degraded",
-                                    "latency_ms": record.latency,
-                                },
+                        # Add a constellation graph edge: hub → brain
+                        if self.brain_graph is not None:
+                            await self.brain_graph.add_edge(
+                                source_id=_HUB_ID,
+                                target_id=record.id,
+                                rel_type=RelationshipType.PARENT,
+                                metadata={"label": f"{record.display_name} managed by AgenticOS"},
+                                weight=max(1.0, record.health / 100.0),
                             )
-                        )
-                        if record.health >= 50:
+                        # Publish events the frontend main store understands
+                        if self.bus:
                             await self.bus.publish(
                                 EventEnvelope(
-                                    type="agent.started",
+                                    type="provider.registered",
                                     source="kernel",
-                                    topic="agent.started",
+                                    topic="provider.registered",
                                     payload={
-                                        "id": record.id,
                                         "name": record.display_name,
                                         "provider": record.display_name,
-                                        "role": "assistant",
-                                        "status": "running"
-                                        if record.status in ("connected", "busy", "executing")
-                                        else "idle",
-                                        "capabilities": list(record.capabilities),
+                                        "vendor": record.vendor,
+                                        "status": "healthy" if record.health >= 80 else "degraded",
+                                        "latency_ms": record.latency,
                                     },
                                 )
                             )
-                _diag("Brains", "AUTO_DETECTED", f"{registered} runtimes found")
-            except Exception as exc:
-                _diag("Brains", "AUTO_DETECT_FAILED", str(exc))
+                            if record.health >= 50:
+                                await self.bus.publish(
+                                    EventEnvelope(
+                                        type="agent.started",
+                                        source="kernel",
+                                        topic="agent.started",
+                                        payload={
+                                            "id": record.id,
+                                            "name": record.display_name,
+                                            "provider": record.display_name,
+                                            "role": "assistant",
+                                            "status": "running"
+                                            if record.status in ("connected", "busy", "executing")
+                                            else "idle",
+                                            "capabilities": list(record.capabilities),
+                                        },
+                                    )
+                                )
+                    _diag("Brains", "AUTO_DETECTED", f"{registered} runtimes found")
+                except Exception as exc:
+                    _diag("Brains", "AUTO_DETECT_FAILED", str(exc))
 
             _diag(
                 "Brains",
