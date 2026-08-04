@@ -21,6 +21,7 @@ Mission Control can render the full execution history per task/mission.
 
 from __future__ import annotations
 
+import os as _os
 import time as _time
 from typing import TYPE_CHECKING
 
@@ -265,6 +266,20 @@ class Orchestrator:
             log.warning("worktree.create_failed", agent=agent.id, error=str(exc))
             return None
 
+    def _resolve_execution_cwd(self, wt_path: str | None) -> str | None:
+        """Return worktree path if valid, or fallback to selected workspace root."""
+        if wt_path and _os.path.isdir(wt_path):
+            return wt_path
+        try:
+            from agentic_os.api.app import _get_workspace_root
+
+            ws = _get_workspace_root()
+            if ws and _os.path.isdir(ws):
+                return ws
+        except Exception:
+            pass
+        return wt_path
+
     async def dispatch_task(self, task: Task) -> None:
         provider = self._select_provider(task.role)
         if provider is None:
@@ -326,12 +341,13 @@ class Orchestrator:
         # Attempt 1
         exec_rec = self._start_execution(agent, task, provider, retry_count=0)
         wt_path = await self._create_worktree_for_agent(agent, task)
+        exec_cwd = self._resolve_execution_cwd(wt_path)
         try:
             result = await provider.execute(
                 agent,
                 task,
                 on_output=self._make_output_callback(task),
-                cwd=wt_path,
+                cwd=exec_cwd,
             )
             elapsed = _time.monotonic() - start_time
             agent.mark_completed()
@@ -379,7 +395,7 @@ class Orchestrator:
                     agent,
                     task,
                     on_output=self._make_output_callback(task),
-                    cwd=wt_path,
+                    cwd=exec_cwd,
                 )
                 elapsed = _time.monotonic() - start_time
                 agent.mark_completed()
@@ -435,12 +451,13 @@ class Orchestrator:
                 fallback_agent, task, fallback_provider, retry_count=2
             )
             fallback_wt_path = await self._create_worktree_for_agent(fallback_agent, task)
+            fallback_exec_cwd = self._resolve_execution_cwd(fallback_wt_path)
             try:
                 result = await fallback_provider.execute(
                     fallback_agent,
                     task,
                     on_output=self._make_output_callback(task),
-                    cwd=fallback_wt_path,
+                    cwd=fallback_exec_cwd,
                 )
                 elapsed = _time.monotonic() - start_time
                 fallback_agent.mark_completed()
