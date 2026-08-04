@@ -271,9 +271,9 @@ class Orchestrator:
         if wt_path and _os.path.isdir(wt_path):
             return wt_path
         try:
-            from agentic_os.api.app import _get_workspace_root
+            from agentic_os.domain.workspace import get_workspace_root
 
-            ws = _get_workspace_root()
+            ws = get_workspace_root()
             if ws and _os.path.isdir(ws):
                 return ws
         except Exception:
