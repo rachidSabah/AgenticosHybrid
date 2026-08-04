@@ -387,7 +387,7 @@ function NodesTab() {
         {nodes.length === 0 ? (
           <Empty title="No nodes" hint="Cluster controller not running." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {nodes.map((n) => (
               <div key={n.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
@@ -457,7 +457,7 @@ function BrainsTab() {
         {!data || data.remote_brains.length === 0 ? (
           <Empty title="No remote brains" hint="Add remote nodes to discover their brains." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {data.remote_brains.map((b) => (
               <div key={`${b.node_id}:${b.brain_id}`} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
@@ -562,7 +562,7 @@ function FailoverTab() {
         {!data || data.actions.length === 0 ? (
           <Empty title="No actions" hint="Failures will trigger automatic actions." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {data.actions.map((a) => (
               <div key={a.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">

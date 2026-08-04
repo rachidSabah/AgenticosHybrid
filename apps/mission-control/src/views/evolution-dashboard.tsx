@@ -285,7 +285,7 @@ function ImprovementsTab() {
         {filtered.length === 0 ? (
           <Empty title="No improvements" hint="Run analysis to generate proposals." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {filtered.map((imp) => (
               <div key={imp.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-start justify-between">
@@ -345,7 +345,7 @@ function SafetyTab() {
         {!data || !data.history || data.history.length === 0 ? (
           <Empty title="No validations yet" hint="Run analysis to trigger safety validation." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {data.history.map((h, i) => (
               <div key={i} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
@@ -400,7 +400,7 @@ function SchedulerTab() {
         {!data || data.queue.length === 0 ? (
           <Empty title="Queue empty" hint="Validated improvements will appear here." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {data.queue.map((item) => (
               <div key={item.id} className="rounded-lg border border-border/60 px-3 py-2">
                 <div className="flex items-center justify-between">
@@ -463,7 +463,7 @@ function PlansTab() {
         {plans.length === 0 ? (
           <Empty title="No plans" hint="Schedule improvements to generate plans." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {plans.map((plan) => (
               <div key={plan.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
@@ -512,7 +512,7 @@ function KnowledgeTab() {
         {syntheses.length === 0 ? (
           <Empty title="No syntheses" hint="POST /api/evolution/synthesize to create." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {syntheses.map((s) => (
               <div key={s.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">

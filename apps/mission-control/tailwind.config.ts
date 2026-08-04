@@ -7,6 +7,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      screens: {
+        xs: "480px",
+        "3xl": "2560px",
+      },
       colors: {
         // Semantic tokens mapped to CSS variables (see globals.css).
         bg: "rgb(var(--bg) / <alpha-value>)",

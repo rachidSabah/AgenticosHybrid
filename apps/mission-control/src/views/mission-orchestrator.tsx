@@ -1123,7 +1123,7 @@ function AgentCommsLog({ missionId }: { missionId: string }) {
       {commsEvents.length === 0 ? (
         <Empty title="No agent communication yet" hint="Events will appear as agents coordinate via the EventBus." />
       ) : (
-        <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+        <div className="space-y-1.5 overflow-y-auto overflow-x-hidden no-scrollbar">
           {commsEvents.slice(0, 80).map((e, i) => {
             const p = e.payload as Record<string, any>;
             const source = String(p?.source ?? p?.agent_id ?? p?.provider ?? "system");
