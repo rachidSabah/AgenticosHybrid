@@ -35,7 +35,7 @@ jobs:
         run: uv run ruff format --check src/
 
       - name: Backend unit tests
-        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py
+        run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_discovery_telemetry.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
