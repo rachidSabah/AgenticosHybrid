@@ -223,6 +223,16 @@ _DASHBOARD_TOPICS = [
     "task.output",
     # Agent reasoning — detected status lines showing what the agent is doing
     "task.agent_status",
+    # Messaging gateways — WhatsApp + Telegram
+    "gateway.whatsapp.connected",
+    "gateway.whatsapp.disconnected",
+    "gateway.whatsapp.qr",
+    "gateway.whatsapp.message_received",
+    "gateway.whatsapp.message_sent",
+    "gateway.telegram.connected",
+    "gateway.telegram.disconnected",
+    "gateway.telegram.message_received",
+    "gateway.telegram.message_sent",
     "node.joined",
     "node.left",
     "node.leader.elected",

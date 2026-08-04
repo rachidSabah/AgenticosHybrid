@@ -67,6 +67,7 @@ export const NAV: NavItem[] = [
   { id: "desktop-settings", label: "Desktop Settings", hint: "6", icon: Settings, group: "desktop" },
   { id: "omniroute", label: "OmniRoute", hint: "R", icon: Network, group: "core" },
   { id: "gateway", label: "API Gateway", hint: "G", icon: Zap, group: "core" },
+  { id: "gateways", label: "Messaging Gateways", hint: "M", icon: MessageCircle, group: "observe" },
   { id: "governance", label: "AI Governance", hint: "V", icon: Shield, group: "observe" },
   { id: "agent-memory", label: "Agent Memory Manager", hint: "Y", icon: Database, group: "observe" },
   { id: "collaboration", label: "Live Collaboration", hint: "L", icon: Orbit, group: "build" },

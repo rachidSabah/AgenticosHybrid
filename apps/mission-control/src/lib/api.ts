@@ -564,6 +564,21 @@ export const api = {
     post<{ merged: boolean; branch: string; base: string; message?: string; error?: string; conflicts?: boolean }>(
       `/api/worktrees/${encodeURIComponent(branchName)}/merge`,
     ),
+
+  // ── Messaging Gateways ──
+  telegramStatus: () => get<{ running: boolean; username: string; recent_messages: unknown[]; allowed_users: number[] | null }>("/api/gateway/telegram/status"),
+  telegramConnect: (body: { bot_token: string; allowed_users?: number[] }) =>
+    post<{ status: string; username: string }>("/api/gateway/telegram/connect", body),
+  telegramDisconnect: () => post<{ status: string }>("/api/gateway/telegram/disconnect"),
+  telegramSend: (body: { chat_id: number | string; text: string }) =>
+    post<{ sent: boolean }>("/api/gateway/telegram/send", body),
+  telegramChats: () => get<Array<{ chat_id: number; last_message: string; timestamp: string }>>("/api/gateway/telegram/chats"),
+  whatsappStatus: () => get<{ running: boolean; connection_status: string; qr_code: string; has_qr: boolean; recent_messages: unknown[] }>("/api/gateway/whatsapp/status"),
+  whatsappConnect: (body?: { session_path?: string }) =>
+    post<{ status: string }>("/api/gateway/whatsapp/connect", body ?? {}),
+  whatsappDisconnect: () => post<{ status: string }>("/api/gateway/whatsapp/disconnect"),
+  whatsappSend: (body: { to: string; text: string }) =>
+    post<{ sent: boolean }>("/api/gateway/whatsapp/send", body),
   createMission: (body: Record<string, unknown>) =>
     post<MissionType>("/api/missions", body),
   getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),

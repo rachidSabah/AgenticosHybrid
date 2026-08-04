@@ -833,6 +833,74 @@ def create_app(platform: Platform) -> FastAPI:
         except Exception as exc:
             raise HTTPException(500, f"Merge failed: {exc}") from exc
 
+    # ── Messaging Gateways (WhatsApp + Telegram) ──
+    from agentic_os.adapters.gateway.telegram_gateway import TelegramGateway
+    from agentic_os.adapters.gateway.whatsapp_gateway import WhatsAppGateway
+
+    _telegram_gateway = TelegramGateway(platform.bus)
+    _whatsapp_gateway = WhatsAppGateway(platform.bus)
+
+    # Telegram endpoints
+    @app.get("/api/gateway/telegram/status")
+    async def telegram_status() -> dict:
+        return _telegram_gateway.get_status()
+
+    @app.post("/api/gateway/telegram/connect")
+    async def telegram_connect(body: dict) -> dict:
+        token = body.get("bot_token", "")
+        allowed_users = body.get("allowed_users", [])
+        if not token:
+            raise HTTPException(400, "bot_token is required")
+        _telegram_gateway._bot_token = token
+        _telegram_gateway._allowed_users = set(allowed_users) if allowed_users else None
+        await _telegram_gateway.start()
+        return {"status": "connected", "username": _telegram_gateway.bot_username}
+
+    @app.post("/api/gateway/telegram/disconnect")
+    async def telegram_disconnect() -> dict:
+        await _telegram_gateway.stop()
+        return {"status": "disconnected"}
+
+    @app.post("/api/gateway/telegram/send")
+    async def telegram_send(body: dict) -> dict:
+        chat_id = body.get("chat_id")
+        text = body.get("text", "")
+        if not chat_id or not text:
+            raise HTTPException(400, "chat_id and text are required")
+        sent = await _telegram_gateway.send_message(int(chat_id), text)
+        return {"sent": sent}
+
+    @app.get("/api/gateway/telegram/chats")
+    async def telegram_chats() -> list[dict]:
+        return _telegram_gateway.get_recent_chats()
+
+    # WhatsApp endpoints
+    @app.get("/api/gateway/whatsapp/status")
+    async def whatsapp_status() -> dict:
+        return _whatsapp_gateway.get_status()
+
+    @app.post("/api/gateway/whatsapp/connect")
+    async def whatsapp_connect(body: dict | None = None) -> dict:
+        session_path = body.get("session_path", "") if body else ""
+        if session_path:
+            _whatsapp_gateway._session_path = session_path
+        await _whatsapp_gateway.start()
+        return {"status": _whatsapp_gateway.connection_status}
+
+    @app.post("/api/gateway/whatsapp/disconnect")
+    async def whatsapp_disconnect() -> dict:
+        await _whatsapp_gateway.stop()
+        return {"status": "disconnected"}
+
+    @app.post("/api/gateway/whatsapp/send")
+    async def whatsapp_send(body: dict) -> dict:
+        to = body.get("to", "")
+        text = body.get("text", "")
+        if not to or not text:
+            raise HTTPException(400, "to and text are required")
+        sent = await _whatsapp_gateway.send_message(to, text)
+        return {"sent": sent}
+
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
         """List all registered agents (Orchestrator agents + discovered brains)."""

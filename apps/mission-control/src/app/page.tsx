@@ -399,6 +399,13 @@ const VIEWS: Record<string, () => ReactNode> = {
       </Suspense>
     </ErrorBoundary>
   ),
+  "gateways": () => (
+    <ErrorBoundary viewName="Messaging Gateways" fallback={<ViewSkeleton title="Messaging Gateways" />}>
+      <Suspense fallback={<ViewSkeleton title="Messaging Gateways" />}>
+        <GatewayDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
   "local-agents": () => (
     <ErrorBoundary viewName="Local Agents" fallback={<ViewSkeleton title="Local Agents" />}>
       <Suspense fallback={<ViewSkeleton title="Local Agents" />}>
