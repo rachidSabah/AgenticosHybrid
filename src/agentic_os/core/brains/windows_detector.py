@@ -149,7 +149,13 @@ async def _run_powershell(script: str, timeout: float = 10.0) -> str:
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         return stdout.decode("utf-16-le", errors="replace").strip() if stdout else ""
-    except (TimeoutError, subprocess.TimeoutExpired, FileNotFoundError, OSError, NotImplementedError):
+    except (  # noqa: PERF203
+        TimeoutError,
+        subprocess.TimeoutExpired,
+        FileNotFoundError,
+        OSError,
+        NotImplementedError,
+    ):
         return ""
 
 
