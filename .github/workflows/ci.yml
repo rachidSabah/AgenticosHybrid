@@ -38,10 +38,10 @@ jobs:
         run: uv run ruff format --check
 
       - name: Type check
-        run: uv run ty check src/ || true  # agentic_os_mod import issue is pre-existing
+        run: uv run ty check src/
 
       - name: Test
-        run: uv run pytest -v --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_autonomous_os.py --ignore=tests/test_distributed.py -x -q
+        run: uv run pytest -v --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py -x -q
 
   frontend:
     runs-on: ubuntu-latest

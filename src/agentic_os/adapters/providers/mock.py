@@ -20,7 +20,13 @@ class MockProvider:
             name=name, kind=kind, supports_streaming=False, supports_tools=False
         )
 
-    async def execute(self, agent: Agent, task: Task) -> str:
+    async def execute(
+        self,
+        agent: Agent,
+        task: Task,
+        on_output=None,
+        cwd: str | None = None,
+    ) -> str:
         log.info("mock.execute", agent=agent.id, task=task.id, title=task.title)
         await anyio.sleep(0.2)  # simulate work
         if "fail" in task.title.lower():
