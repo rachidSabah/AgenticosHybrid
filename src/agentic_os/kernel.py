@@ -567,9 +567,9 @@ class Kernel:
             # — useful in CI where the Windows process scan has been
             # observed to crash the backend silently.
             import os as _os
-            _skip_brain_autodetect = _os.environ.get("AGENTICOS_SKIP_BRAIN_AUTODETECT", "").lower() in (
-                "1", "true", "yes", "on",
-            )
+
+            _skip_flag = _os.environ.get("AGENTICOS_SKIP_BRAIN_AUTODETECT", "")
+            _skip_brain_autodetect = _skip_flag.lower() in ("1", "true", "yes", "on")
             if _skip_brain_autodetect:
                 _diag("Brains", "AUTO_DETECT_SKIPPED", "AGENTICOS_SKIP_BRAIN_AUTODETECT set")
             else:
