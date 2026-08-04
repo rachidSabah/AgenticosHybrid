@@ -1,4 +1,4 @@
-name: Release
+﻿name: Release
 
 on:
   push:
@@ -16,7 +16,7 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
-  # ── Linux Build ──────────────────────────────────────────
+  # ΓöÇΓöÇ Linux Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   build-linux:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Linux (AppImage / DEB / RPM)"
@@ -26,7 +26,7 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install system dependencies
         run: |
@@ -42,7 +42,7 @@ jobs:
             rpm
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -57,7 +57,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -105,13 +105,13 @@ jobs:
           ls -la dist/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-artifacts
           path: apps/mission-control/dist/artifacts/*
           if-no-files-found: error
 
-  # ── Windows Build ───────────────────────────────────────
+  # ΓöÇΓöÇ Windows Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   build-windows:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Windows (EXE / ZIP)"
@@ -121,10 +121,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -139,7 +139,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -219,13 +219,13 @@ jobs:
           Get-ChildItem $ArtifactsDir
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-artifacts
           path: apps/mission-control/dist/artifacts/*
           if-no-files-found: error
 
-  # ── macOS Build ─────────────────────────────────────────
+  # ΓöÇΓöÇ macOS Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   build-macos:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "macOS (DMG)"
@@ -235,10 +235,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -253,7 +253,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -297,13 +297,13 @@ jobs:
           ls -la dist/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-artifacts
           path: apps/mission-control/dist/artifacts/*
           if-no-files-found: warn
 
-  # ── Aggregate & Release ─────────────────────────────────
+  # ΓöÇΓöÇ Aggregate & Release ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Publish Release"
@@ -314,10 +314,10 @@ jobs:
       actions: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
 
@@ -385,16 +385,16 @@ jobs:
           ### Installation
 
           **Windows:**
-          - \`AgenticOS-Setup-x64.exe\` — NSIS installer
-          - \`AgenticOS-Portable-x64.zip\` — Portable (no install required)
+          - \`AgenticOS-Setup-x64.exe\` ΓÇö NSIS installer
+          - \`AgenticOS-Portable-x64.zip\` ΓÇö Portable (no install required)
 
           **Linux:**
-          - \`AgenticOS-x86_64.AppImage\` — AppImage (chmod +x and run)
-          - \`AgenticOS-x86_64.deb\` — Debian/Ubuntu package
-          - \`AgenticOS-x86_64.rpm\` — Fedora/RHEL package
+          - \`AgenticOS-x86_64.AppImage\` ΓÇö AppImage (chmod +x and run)
+          - \`AgenticOS-x86_64.deb\` ΓÇö Debian/Ubuntu package
+          - \`AgenticOS-x86_64.rpm\` ΓÇö Fedora/RHEL package
 
           **macOS:**
-          - \`AgenticOS-x86_64.dmg\` — Apple Disk Image
+          - \`AgenticOS-x86_64.dmg\` ΓÇö Apple Disk Image
 
           ### Changelog
 

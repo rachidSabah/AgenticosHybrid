@@ -17,10 +17,10 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -40,7 +40,7 @@ jobs:
         run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_discovery_telemetry.py --ignore=tests/test_omniroute
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -66,7 +66,7 @@ jobs:
         working-directory: apps/mission-control
         run: npx next build
 
-      # ── Full System E2E Test ──
+      # ΓöÇΓöÇ Full System E2E Test ΓöÇΓöÇ
       - name: Start backend (Linux)
         if: matrix.os == 'ubuntu-latest'
         env:
@@ -82,7 +82,7 @@ jobs:
             cat /tmp/backend.log
             exit 1
           fi
-          echo "✓ Backend booted successfully"
+          echo "Γ£ô Backend booted successfully"
 
       - name: Start backend (Windows)
         if: matrix.os == 'windows-latest'
@@ -90,16 +90,17 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         shell: pwsh
         run: |
-          # Set env vars directly in the PowerShell session so they are
-          # inherited by the child process spawned via Start-Process.
-          # GitHub Actions 'env:' block sets workflow env but Start-Process
-          # child processes need $env: assignments in the same session.
+          # FIX: Set env vars via $env: in the current PowerShell session.
+          # The GitHub Actions 'env:' block does NOT propagate to child processes
+          # spawned by Start-Process. Setting $env: here ensures the uv child
+          # process inherits AGENTICOS_SKIP_BRAIN_AUTODETECT=1, preventing the
+          # brain auto-detection from crashing the backend silently on Windows CI.
           $env:AGENTICOS_SKIP_BRAIN_AUTODETECT = "1"
           $env:PYTHONUTF8 = "1"
           $env:PYTHONIOENCODING = "utf-8"
           if ($env:NVIDIA_API_KEY) { $env:NVIDIA_API_KEY = $env:NVIDIA_API_KEY }
 
-          # Start backend with PassThru so we can detect early crashes
+          # Start backend with -PassThru so we can track PID and detect crashes
           $proc = Start-Process `
             -FilePath "uv" `
             -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" `
@@ -130,7 +131,7 @@ jobs:
             Get-Content backend_err.log -Tail 50 -ErrorAction SilentlyContinue
             exit 1
           }
-          Write-Host "✓ Backend booted successfully"
+          Write-Host "Γ£ô Backend booted successfully"
 
       - name: Verify all API endpoints (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -150,12 +151,12 @@ jobs:
             METHOD=$(echo $endpoint | cut -d' ' -f1)
             PATH_=$(echo $endpoint | cut -d' ' -f2)
             CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8000${PATH_}")
-            echo "  $METHOD $PATH_ → $CODE"
+            echo "  $METHOD $PATH_ ΓåÆ $CODE"
             if [ "$CODE" != "200" ] && [ "$CODE" != "404" ]; then
-              echo "  ⚠ Unexpected status: $CODE"
+              echo "  ΓÜá Unexpected status: $CODE"
             fi
           done
-          echo "✓ All endpoints checked"
+          echo "Γ£ô All endpoints checked"
 
       - name: Verify all API endpoints (Windows)
         if: matrix.os == 'windows-latest'
@@ -176,12 +177,12 @@ jobs:
           foreach ($ep in $endpoints) {
             try {
               $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000$ep" -UseBasicParsing -ErrorAction SilentlyContinue
-              Write-Host "  GET $ep → $($resp.StatusCode)"
+              Write-Host "  GET $ep ΓåÆ $($resp.StatusCode)"
             } catch {
-              Write-Host "  GET $ep → ERROR: $_"
+              Write-Host "  GET $ep ΓåÆ ERROR: $_"
             }
           }
-          Write-Host "✓ All endpoints checked"
+          Write-Host "Γ£ô All endpoints checked"
 
       - name: Create + plan + start mission (Linux)
         if: matrix.os == 'ubuntu-latest'

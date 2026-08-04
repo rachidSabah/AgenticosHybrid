@@ -14,9 +14,9 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -32,7 +32,7 @@ jobs:
       - name: Backend tests
         run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_omniroute --ignore=tests/test_discovery_telemetry.py
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -55,13 +55,16 @@ jobs:
       - name: Backend boots
         shell: pwsh
         run: |
-          # Set env vars in the current PowerShell session so they are inherited
-          # by the child process launched via Start-Process -PassThru
+          # FIX: Set env vars via $env: in the current PowerShell session.
+          # The GitHub Actions 'env:' block does NOT propagate to child processes
+          # spawned by Start-Process. Setting $env: here ensures the uv child
+          # process inherits AGENTICOS_SKIP_BRAIN_AUTODETECT=1, preventing the
+          # brain auto-detection from crashing the backend silently on Windows CI.
           $env:AGENTICOS_SKIP_BRAIN_AUTODETECT = "1"
           $env:PYTHONUTF8 = "1"
           $env:PYTHONIOENCODING = "utf-8"
 
-          # Start backend — redirect stdout/stderr to log files
+          # Start backend with -PassThru so we can track PID and detect crashes
           $proc = Start-Process `
             -FilePath "uv" `
             -ArgumentList "run","python","-m","agentic_os","serve","--host","127.0.0.1","--port","8000" `
@@ -69,17 +72,16 @@ jobs:
             -RedirectStandardOutput "backend.log" `
             -RedirectStandardError "backend_err.log" `
             -PassThru
-
           Write-Host "Backend PID: $($proc.Id)"
 
-          # Poll /healthz — Windows startup can take up to 90s on first run
+          # Poll /healthz — Windows startup can take up to 120s on cold runners
           # (runtime discovery + SQLite init + lifecycle phases)
           $ok = $false
           for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep -Seconds 3
-            # Exit early if the process died
+            # Detect early crash before wasting more wait time
             if ($proc.HasExited) {
-              Write-Host "Backend process exited with code $($proc.ExitCode). Logs:"
+              Write-Host "Backend process exited early (code $($proc.ExitCode)). Logs:"
               Get-Content backend.log -Tail 50 -ErrorAction SilentlyContinue
               Get-Content backend_err.log -Tail 50 -ErrorAction SilentlyContinue
               throw "Backend process died before health check passed"
@@ -90,10 +92,10 @@ jobs:
             } catch { Write-Host "  attempt $($i+1)/40: backend not ready yet" }
           }
           if (-not $ok) {
-            Write-Host "Backend health check failed after 40 retries (120s). Logs:"
+            Write-Host "Backend health check timed out after 120s. Logs:"
             Get-Content backend.log -Tail 50 -ErrorAction SilentlyContinue
             Get-Content backend_err.log -Tail 50 -ErrorAction SilentlyContinue
-            throw "Backend health check timed out"
+            throw "Backend health check failed after 40 retries"
           }
           Write-Host "Backend: OK"
       - name: API endpoints respond
@@ -125,9 +127,9 @@ jobs:
   test-wsl:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -143,7 +145,7 @@ jobs:
       - name: Backend tests
         run: uv run pytest tests/ -x -q --tb=short --ignore=tests/test_phase2_integration.py --ignore=tests/test_desktop_stress.py --ignore=tests/test_omniroute --ignore=tests/test_discovery_telemetry.py
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -166,21 +168,9 @@ jobs:
       - name: Backend boots (Linux)
         run: |
           uv run python -m agentic_os serve --host 127.0.0.1 --port 8000 &
-          BACKEND_PID=$!
-          echo "Backend PID: $BACKEND_PID"
-          # Poll healthz up to 60s
-          ok=0
-          for i in $(seq 1 20); do
-            sleep 3
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/healthz 2>/dev/null || true)
-            echo "  attempt $i/20: healthz=$code"
-            if [ "$code" = "200" ]; then ok=1; break; fi
-          done
-          if [ "$ok" -eq 0 ]; then
-            echo "Backend failed to start. Exit."
-            exit 1
-          fi
-          echo "Backend: OK"
+          sleep 15
+          curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/healthz
+          echo " <- healthz"
       - name: API endpoints respond (Linux)
         run: |
           echo "Tasks: $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/tasks)"

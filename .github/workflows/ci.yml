@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -18,10 +18,10 @@ jobs:
         python-version: ["3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -50,10 +50,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
@@ -84,7 +84,7 @@ jobs:
       - name: E2E smoke test
         run: npm run test:e2e -- --project=chromium
 
-  # ── Cross-platform build smoke test ──
+  # ΓöÇΓöÇ Cross-platform build smoke test ΓöÇΓöÇ
   cross-platform-smoke:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
@@ -95,9 +95,9 @@ jobs:
       run:
         working-directory: apps/mission-control
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
