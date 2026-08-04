@@ -34,7 +34,9 @@ class OpenAICompatibleProvider:
             name=name, kind="openai_compatible", supports_streaming=False, supports_tools=False
         )
 
-    async def execute(self, agent: Agent, task: Task) -> str:
+    async def execute(
+        self, agent: Agent, task: Task, on_output=None, cwd: str | None = None
+    ) -> str:
         url = f"{self._base_url}/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self._api_key:

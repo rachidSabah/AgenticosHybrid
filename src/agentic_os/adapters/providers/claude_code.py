@@ -32,7 +32,9 @@ class ClaudeCodeProvider:
             name=name, kind="claude_code", supports_streaming=True, supports_tools=True
         )
 
-    async def execute(self, agent: Agent, task: Task) -> str:
+    async def execute(
+        self, agent: Agent, task: Task, on_output=None, cwd: str | None = None
+    ) -> str:
         if not shutil.which(self._bin):
             raise RuntimeError(f"claude CLI not found at '{self._bin}'")
         prompt = f"{task.title}\n\n{task.description}".strip()

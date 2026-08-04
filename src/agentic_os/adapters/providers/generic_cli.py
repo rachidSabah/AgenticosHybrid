@@ -56,7 +56,9 @@ class GenericCLIProvider:
         self._display_name = display_name or bin_path
         self._capabilities = capabilities or ["coding", "reasoning"]
 
-    async def execute(self, agent: Agent, task: Task) -> str:
+    async def execute(
+        self, agent: Agent, task: Task, on_output=None, cwd: str | None = None
+    ) -> str:
         """Execute a task by invoking the CLI binary."""
         resolved_bin = shutil.which(self._bin) or self._bin
         if not shutil.which(resolved_bin):
