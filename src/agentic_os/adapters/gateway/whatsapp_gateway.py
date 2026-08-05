@@ -150,7 +150,7 @@ class WhatsAppGateway:
             raise RuntimeError(
                 "Node.js is not installed or not on PATH. "
                 "WhatsApp gateway requires Node.js to run the bridge script."
-            )
+            ) from None
         except Exception as exc:
             raise RuntimeError(f"Failed to start WhatsApp bridge: {exc}") from exc
 

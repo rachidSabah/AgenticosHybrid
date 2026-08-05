@@ -87,9 +87,8 @@ class TelegramGateway:
             )
         except ImportError:
             raise RuntimeError(
-                "python-telegram-bot is not installed. "
-                "Run: pip install python-telegram-bot"
-            )
+                "python-telegram-bot is not installed. Run: pip install python-telegram-bot"
+            ) from None
 
         self._bot = Bot(token=self._bot_token)
         self._app = Application.builder().token(self._bot_token).build()
@@ -101,8 +100,7 @@ class TelegramGateway:
             log.info("telegram.connected", username=self._bot_username)
         except Exception as exc:
             raise RuntimeError(
-                f"Failed to connect to Telegram API. Check your bot token. "
-                f"Error: {exc}"
+                f"Failed to connect to Telegram API. Check your bot token. Error: {exc}"
             ) from exc
 
         # Register handlers
