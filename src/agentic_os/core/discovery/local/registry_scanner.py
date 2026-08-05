@@ -10,6 +10,7 @@ import asyncio
 import logging
 import platform
 import re
+import subprocess
 from typing import Any
 
 log = logging.getLogger("agentic_os.local_discovery.registry_scanner")
@@ -43,8 +44,9 @@ class RegistryScanner:
     Uses the ``reg`` command-line tool (available on all Windows versions).
     On non-Windows platforms :meth:`scan` returns an empty list.
 
-    Thread-safety: not required — instances are used from a single
-    asyncio task.
+    Thread-safety: subprocesses run inside executor threads via
+    ``asyncio.to_thread`` — safe under any event loop, including
+    SelectorEventLoop on Windows.
     """
 
     def __init__(self) -> None:
@@ -104,26 +106,39 @@ class RegistryScanner:
         Returns a list of sub-key dicts with ``DisplayName``,
         ``DisplayVersion``, ``InstallLocation`` etc.
         """
-        proc = await asyncio.create_subprocess_exec(
-            "reg",
-            "query",
-            reg_path,
-            "/s",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            log.warning("Registry query timed out for %s", reg_path)
-            return []
-
-        if proc.returncode != 0:
+        returncode, stdout = await asyncio.to_thread(self._query_reg, reg_path)
+        if returncode is None:
+            raise FileNotFoundError  # reg unavailable → scan() skips registry
+        if returncode != 0:
             return []  # Key may not exist
 
         return self._parse_reg_output(stdout.decode("utf-8", errors="replace"))
+
+    @staticmethod
+    def _query_reg(reg_path: str, timeout: float = 10.0) -> tuple[int | None, bytes]:
+        """Run ``reg query /s`` synchronously; returns ``(returncode, stdout)``.
+
+        ``returncode`` is ``None`` when ``reg`` is unavailable. Runs in an
+        executor thread so the scanner works under SelectorEventLoop on
+        Windows, which does not support ``asyncio`` subprocesses.
+        """
+        try:
+            result = subprocess.run(
+                ["reg", "query", reg_path, "/s"],
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("Registry query timed out for %s", reg_path)
+            return 124, b""
+        except FileNotFoundError:
+            log.debug("reg command not found — skipping registry scan")
+            return None, b""
+        except OSError as exc:
+            log.warning("Registry query failed for %s: %s", reg_path, exc)
+            return None, b""
+        return result.returncode, result.stdout
 
     @staticmethod
     def _parse_reg_output(text: str) -> list[dict[str, str]]:

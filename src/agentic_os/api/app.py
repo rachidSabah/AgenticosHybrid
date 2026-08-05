@@ -13,6 +13,7 @@ import asyncio
 import collections.abc
 import dataclasses
 import json
+import subprocess
 import time
 from collections import deque
 from datetime import UTC, datetime
@@ -719,15 +720,15 @@ def create_app(platform: Platform) -> FastAPI:
         base = wt.base_branch if wt else "main"
 
         async def _git(args: list[str]) -> str:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["git", *args],
+                capture_output=True,
+                text=True,
                 cwd=root,
+                timeout=30,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            return stdout.decode("utf-8", errors="replace")
+            return result.stdout or ""
 
         try:
             # Get list of changed files
@@ -795,18 +796,18 @@ def create_app(platform: Platform) -> FastAPI:
         base = wt.base_branch if wt else "main"
 
         async def _git(args: list[str]) -> tuple[str, str, int]:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = await asyncio.to_thread(
+                subprocess.run,
+                ["git", *args],
+                capture_output=True,
+                text=True,
                 cwd=_get_workspace_root(),
+                timeout=60,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
             return (
-                stdout.decode("utf-8", errors="replace").strip(),
-                stderr.decode("utf-8", errors="replace").strip(),
-                proc.returncode or 0,
+                (result.stdout or "").strip(),
+                (result.stderr or "").strip(),
+                result.returncode or 0,
             )
 
         try:

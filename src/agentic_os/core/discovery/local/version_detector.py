@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import subprocess
 
 log = logging.getLogger("agentic_os.local_discovery.version_detector")
 
@@ -108,18 +109,18 @@ class VersionDetector:
     ) -> str:
         """Run *executable_path flag* and parse output with *patterns*."""
         try:
-            proc = await asyncio.create_subprocess_exec(
-                executable_path,
-                flag,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = await asyncio.to_thread(
+                subprocess.run,
+                [executable_path, flag],
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=self._timeout,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
-        except (TimeoutError, FileNotFoundError, OSError) as exc:
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
             log.debug("Version detection failed for %s: %s", executable_path, exc)
             return ""
 
-        output = (stdout + stderr).decode("utf-8", errors="replace").strip()
+        output = (result.stdout + result.stderr).decode("utf-8", errors="replace").strip()
         return self._parse_version(output, patterns)
 
     @staticmethod

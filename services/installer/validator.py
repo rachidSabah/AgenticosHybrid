@@ -11,13 +11,11 @@ import os
 import platform
 import shutil
 import subprocess
-import sys
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
-from services.installer.provider_catalog import ProviderDef
 from agentic_os.infrastructure.logging import get_logger
+from services.installer.provider_catalog import ProviderDef
 
 log = get_logger("installer.validator")
 
@@ -127,7 +125,9 @@ class ValidationPipeline:
         # Stage 1b: Binary checks
         result.executable_exists = os.path.exists(exe)
         result.executable_is_file = os.path.isfile(exe)
-        result.executable_executable = os.access(exe, os.X_OK) if platform.system() != "Windows" else True
+        result.executable_executable = (
+            os.access(exe, os.X_OK) if platform.system() != "Windows" else True
+        )
 
         if not result.executable_exists:
             result.errors.append(f"Path does not exist: {exe}")
@@ -143,10 +143,7 @@ class ValidationPipeline:
         self._detect_features(result)
 
         # Overall pass/fail
-        result.passed = (
-            result.executable_exists
-            and result.version_command_success
-        )
+        result.passed = result.executable_exists and result.version_command_success
 
         return result
 
@@ -182,24 +179,32 @@ class ValidationPipeline:
     async def _run_command(
         self, cmd: list[str], timeout: float | None = None
     ) -> tuple[str, str, int | None, float]:
-        """Run a command and return (stdout, stderr, exit_code, elapsed_ms)."""
+        """Run a command and return (stdout, stderr, exit_code, elapsed_ms).
+
+        The subprocess runs inside an executor thread (``asyncio.to_thread``)
+        so validation works under SelectorEventLoop on Windows, which does
+        not support ``asyncio`` subprocesses (``create_subprocess_exec``
+        raises ``NotImplementedError`` there).
+        """
         t0 = time.perf_counter()
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            result = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout or self._timeout,
             )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout or self._timeout
-                )
-                elapsed = (time.perf_counter() - t0) * 1000
-                return stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace"), proc.returncode, elapsed
-            except asyncio.TimeoutError:
-                proc.kill()
-                elapsed = (time.perf_counter() - t0) * 1000
-                return "", "TIMEOUT", None, elapsed
+            elapsed = (time.perf_counter() - t0) * 1000
+            return (
+                result.stdout.decode("utf-8", errors="replace"),
+                result.stderr.decode("utf-8", errors="replace"),
+                result.returncode,
+                elapsed,
+            )
+        except subprocess.TimeoutExpired:
+            elapsed = (time.perf_counter() - t0) * 1000
+            return "", "TIMEOUT", None, elapsed
         except FileNotFoundError:
             return "", "NOT_FOUND", None, 0.0
         except PermissionError:
@@ -272,15 +277,9 @@ class ValidationPipeline:
         result.supports_vision = any(
             s in output for s in ["vision", "image", "visual", "screenshot"]
         )
-        result.supports_attachments = any(
-            s in output for s in ["attach", "upload", "file"]
-        )
-        result.supports_code_execution = any(
-            s in output for s in ["execute", "sandbox", "run"]
-        )
-        result.supports_shell = any(
-            s in output for s in ["shell", "bash", "terminal"]
-        )
+        result.supports_attachments = any(s in output for s in ["attach", "upload", "file"])
+        result.supports_code_execution = any(s in output for s in ["execute", "sandbox", "run"])
+        result.supports_shell = any(s in output for s in ["shell", "bash", "terminal"])
         result.supports_web_browsing = any(
             s in output for s in ["browser", "web", "search", "fetch"]
         )

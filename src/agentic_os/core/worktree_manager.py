@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,18 +63,32 @@ class WorktreeManager:
                 pass
 
     async def _run_git(self, args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd or self._workspace_root,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        """Run a git command off the event loop.
+
+        On Windows the SelectorEventLoop cannot do ``asyncio.create_subprocess_exec``
+        (raises ``NotImplementedError``), so git is run synchronously in a worker
+        thread via ``asyncio.to_thread`` (loop-agnostic).
+        """
+
+        def _capture() -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["git", *args],
+                capture_output=True,
+                text=True,
+                cwd=cwd or self._workspace_root,
+                timeout=30,
+            )
+
+        try:
+            result = await asyncio.wait_for(asyncio.to_thread(_capture), timeout=35)
+        except (TimeoutError, subprocess.TimeoutExpired):
+            return "", "git command timed out", 124
+        except Exception as exc:  # noqa: BLE001 - surface any subprocess error
+            return "", f"git command failed: {exc}", 1
         return (
-            stdout.decode("utf-8", errors="replace").strip(),
-            stderr.decode("utf-8", errors="replace").strip(),
-            proc.returncode or 0,
+            (result.stdout or "").strip(),
+            (result.stderr or "").strip(),
+            result.returncode or 0,
         )
 
     async def create_worktree(
