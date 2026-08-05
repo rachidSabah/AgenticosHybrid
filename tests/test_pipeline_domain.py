@@ -365,7 +365,9 @@ class TestPipeline:
         assert v2.edges == pipeline.edges
         assert v2.status == PipelineStatus.DRAFT
         assert v2.created_at == pipeline.created_at
-        assert v2.updated_at > pipeline.updated_at
+        # Use >= (not >) because Windows clock resolution can be ~1ms,
+        # causing two _utcnow() calls within the same tick to be equal.
+        assert v2.updated_at >= pipeline.updated_at
 
     def test_new_version_with_overrides(self) -> None:
         stage1 = PipelineStage(id="s1", type=StageType.AGENT, label="Agent")

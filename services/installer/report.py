@@ -9,13 +9,12 @@ from __future__ import annotations
 import json
 import os
 import platform
-import time
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
-from services.installer.validator import ValidationReport, ValidationResult
 from agentic_os.infrastructure.logging import get_logger
+from services.installer.validator import ValidationReport
 
 log = get_logger("installer.report")
 
@@ -125,7 +124,7 @@ class InstallReport:
 
         lines.extend([
             "",
-            f"--- Environment ---",
+            "--- Environment ---",
         ])
         for key, val in self.system_info.items():
             lines.append(f"  {key}: {val}")
@@ -166,7 +165,7 @@ class InstallReportGenerator:
     ) -> InstallReport:
         """Generate a report from a validation run."""
         report = InstallReport()
-        report.generated_at = datetime.now(timezone.utc).isoformat()
+        report.generated_at = datetime.now(UTC).isoformat()
         report.platform = platform.platform()
         report.hostname = platform.node()
 
@@ -203,14 +202,14 @@ class InstallReportGenerator:
             "os_version": platform.version(),
             "architecture": platform.machine(),
             "python_version": platform.python_version(),
-            "node": self._check_runtime("node", "--version"),
-            "npm": self._check_runtime("npm", "--version"),
+            "node": self._check_runtime("node", "--version") or "",
+            "npm": self._check_runtime("npm", "--version") or "",
             "python": self._check_runtime("python3", "--version")
-                       or self._check_runtime("python", "--version"),
-            "cargo": self._check_runtime("cargo", "--version"),
-            "docker": self._check_runtime("docker", "--version"),
-            "git": self._check_runtime("git", "--version"),
-            "wsl": self._check_runtime("wsl", "--version"),
+                       or self._check_runtime("python", "--version") or "",
+            "cargo": self._check_runtime("cargo", "--version") or "",
+            "docker": self._check_runtime("docker", "--version") or "",
+            "git": self._check_runtime("git", "--version") or "",
+            "wsl": self._check_runtime("wsl", "--version") or "",
         }
 
         # Bound providers
@@ -237,7 +236,7 @@ class InstallReportGenerator:
         if not os.path.isfile(self._report_path):
             return None
         try:
-            with open(self._report_path, "r") as f:
+            with open(self._report_path) as f:
                 data = json.load(f)
             report = InstallReport()
             report.generated_at = data.get("generated_at", "")
@@ -280,5 +279,5 @@ class InstallReportGenerator:
             if result.returncode == 0:
                 return result.stdout.strip().split("\n")[0][:60]
             return None
-        except (subprocess.TimeoutExpired, OSError):
+        except (subprocess.TimeoutExpired, OSError, NotImplementedError):
             return None

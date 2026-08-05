@@ -80,7 +80,13 @@ class LocalDatabaseManager:
         return str(data_dir / "desktop.db")
 
     async def initialize(self) -> None:
-        self._conn = sqlite3.connect(self._db_path)
+        # check_same_thread=False is required because asyncio may run
+        # different coroutines on different threads (event loop thread +
+        # to_thread pool threads). Without it, any cross-thread use of the
+        # connection raises 'SQLite objects created in a thread can only
+        # be used in that same thread', which on Windows can crash the
+        # process via the native sqlite3 library.
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         await self._run_migrations()
         log.info("Local database initialized", path=self._db_path)

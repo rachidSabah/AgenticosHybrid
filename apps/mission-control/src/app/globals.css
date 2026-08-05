@@ -120,6 +120,27 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow: hidden; /* OS shell manages its own scroll regions */
+  /* Use dynamic viewport height to handle mobile browser chrome */
+  min-height: 100dvh;
+}
+
+/* ── Scrollbar cleanup ──
+   Thin, modern scrollbars. Firefox uses scrollbar-width.
+   WebKit uses ::-webkit-scrollbar.
+   Only ONE scrollbar should be visible at a time (the .scroll-page).
+   Panels use overflow:hidden by default; data grids opt-in to scroll. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+
+/* Hide scrollbars on panels that don't need them */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Ambient backdrop — subtle radial depth, GPU-friendly */
@@ -173,7 +194,7 @@ body {
   }
 }
 
-/* Custom scrollbars — thin, unobtrusive */
+/* Custom scrollbars — thin, unobtrusive (legacy selector, applies to .scroll-page) */
 ::-webkit-scrollbar {
   width: 9px;
   height: 9px;
@@ -184,6 +205,9 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--faint));
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Neural dash flow — animated stroke-offset for connection lines */
@@ -238,36 +262,50 @@ body {
 
 /* ── Responsive Layout Utilities ── */
 
-/* Single-scroll page container — eliminates nested scrolling */
+/* Single-scroll page container — eliminates nested scrolling.
+   This is the ONE place vertical scrolling happens in the app.
+   Every view renders inside this scroll container; panels inside
+   views must NOT add their own overflow-y-auto. */
 .scroll-page {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  scroll-behavior: smooth;
+  min-height: 100dvh;
 }
 
-/* No horizontal scroll ever */
+/* No horizontal scroll ever — global guarantee */
 .no-hscroll {
   overflow-x: hidden;
   max-width: 100%;
 }
+.no-vscroll {
+  overflow-y: hidden;
+}
 
-/* Responsive grid: 12-col desktop → 4-col tablet → 1-col mobile */
+/* ── Responsive grid system ──
+   Breakpoints: <640 (mobile), 640-768 (sm), 768-1024 (tablet),
+   1024-1280 (desktop), 1280-1536 (lg), 1536-1920 (xl), 1920-2560 (2xl), 2560+ (3xl)
+   Column counts: 1 → 2 → 3 → 4 → 5 → 6 → 6 → 6 */
 .rgrid {
   display: grid;
-  grid-template-columns: repeat(var(--mc-grid-cols, 12), minmax(0, 1fr));
+  grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 1rem;
 }
-
-@media (max-width: 1023px) {
-  .rgrid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+@media (min-width: 640px) {
+  .rgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-@media (max-width: 639px) {
-  .rgrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+@media (min-width: 768px) {
+  .rgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .rgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1280px) {
+  .rgrid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (min-width: 1536px) {
+  .rgrid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 /* Auto-fill grid for cards — adapts to container width */
@@ -276,11 +314,17 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
 }
-
 @media (max-width: 639px) {
   .card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Auto-fit grid — collapses empty tracks */
+.card-grid-fit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 1rem;
 }
 
 /* Responsive flex that wraps */
@@ -289,9 +333,8 @@ body {
   flex-wrap: wrap;
   gap: 1rem;
 }
-
 .rflex > * {
-  flex: 1 1 280px;
+  flex: 1 1 min(280px, 100%);
   min-width: 0;
 }
 
@@ -308,7 +351,6 @@ body {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-
 .table-container table {
   width: 100%;
   min-width: 500px;

@@ -621,7 +621,7 @@ function EvolutionTab() {
         {recs.length === 0 ? (
           <Empty title="No recommendations" hint="Run /api/ecosystem/analyze to generate recommendations." />
         ) : (
-          <div className="space-y-3 max-h-[60vh] overflow-auto">
+          <div className="space-y-3 overflow-hidden">
             {recs.map((rec) => (
               <div key={rec.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-start justify-between">
@@ -738,7 +738,7 @@ function MarketplaceTab() {
         {tasks.length === 0 ? (
           <Empty title="No tasks" hint="Publish a task to begin." />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <div className="space-y-2 overflow-hidden">
             {tasks.map((task) => (
               <div key={task.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">

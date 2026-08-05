@@ -803,7 +803,11 @@ class TestStrategies:
         req = RoutingRequest(task_type="chat")
 
         results = set()
-        for _ in range(5):
+        # Use 20 trials (not 5) — with 4 candidates and uniform random
+        # scores, the probability that a single candidate wins all 20 is
+        # (1/4)^19 ≈ 2.3e-12, so this is effectively deterministic.
+        # (With 5 trials, P(same winner) ≈ 0.4%, which flakes CI ~1 in 250 runs.)
+        for _ in range(20):
             result = await strategy.evaluate(list(candidates), req, policy)
             results.add(result[0].model.model_id)
 

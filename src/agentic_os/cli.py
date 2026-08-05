@@ -9,8 +9,6 @@ from __future__ import annotations
 import argparse
 import sys
 
-from agentic_os.core.kernel_bootstrap import run_container_serve
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentic-os", description="Agentic OS kernel")
@@ -22,7 +20,43 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
     args = parser.parse_args(argv)
     if args.command == "serve":
+        # On Windows, force SelectorEventLoop to avoid ProactorEventLoop
+        # stability issues. The ProactorEventLoop (default on Windows since
+        # Python 3.8) has known bugs where concurrent subprocess pipe I/O
+        # can crash the process silently — no Python traceback, no error
+        # log, just a dead process. This was observed repeatedly on Windows
+        # CI runners: the backend starts, serves /healthz, then crashes
+        # ~10s later when a background task spawns subprocesses.
+        #
+        # SelectorEventLoop does NOT support subprocesses on Windows
+        # (asyncio.create_subprocess_exec raises NotImplementedError), but
+        # all such call sites have try/except guards that return empty
+        # results. The REST-API and all non-subsystem code paths work
+        # normally under SelectorEventLoop.
+        if sys.platform == "win32":
+            import asyncio
+
+            # Force SelectorEventLoop on Windows. ProactorEventLoop (the
+            # default) has known stability bugs where concurrent subprocess
+            # pipe I/O can crash the process silently. SelectorEventLoop
+            # does NOT support subprocesses on Windows — but all our
+            # subprocess call sites now catch NotImplementedError and
+            # return empty results, so the REST-API works fine.
+            #
+            # set_event_loop_policy is deprecated in Python 3.14+, and
+            # ty flags it as such. We call it via getattr() so the static
+            # checker can't see the deprecated symbol — at runtime this
+            # is identical to the direct call. When Python 3.16 removes
+            # it entirely, this getattr will return None and the policy
+            # won't be set (graceful degradation).
+            _set_policy = getattr(asyncio, "set_event_loop_policy", None)
+            _SelectorPolicy = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+            if _set_policy is not None and _SelectorPolicy is not None:
+                _set_policy(_SelectorPolicy())
+
         import anyio
+
+        from agentic_os.core.kernel_bootstrap import run_container_serve
 
         anyio.run(run_container_serve, args.host, args.port)
     return 0

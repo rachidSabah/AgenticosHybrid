@@ -86,34 +86,36 @@ function AgentAircraft({
 function FlightComms() {
   const events = useStore((s) => s.events);
   return (
-    <div className="space-y-1 h-full overflow-y-auto pr-1">
-      <div className="sticky top-0 bg-background/80 backdrop-blur-sm pb-1 text-[9px] uppercase tracking-wider text-faint/50 flex items-center gap-2">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="shrink-0 bg-bg/80 backdrop-blur-sm pb-1 text-[9px] uppercase tracking-wider text-faint/50 flex items-center gap-2">
         <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok animate-pulse" />
         LIVE COMMS · {events.length} messages
       </div>
-      <AnimatePresence mode="popLayout">
-        {events.slice(0, 30).map((e, i) => {
-          const isFail = e.topic?.includes("fail") || e.topic?.includes("denied") || e.topic?.includes("error");
-          const isOk = e.topic?.includes("complete") || e.topic?.includes("start") || e.topic?.includes("healthy");
-          return (
-            <motion.div
-              key={e.id || `evt-${i}`}
-              layout
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: Math.max(0.3, 1 - i * 0.025), y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="flex items-center gap-2 rounded-lg px-2 py-1 font-mono text-[10px] hover:bg-surface/40"
-            >
-              <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isFail ? "bg-danger" : isOk ? "bg-ok" : "bg-faint/40"}`} />
-              <span className="w-28 shrink-0 truncate text-faint">{e.topic?.split(".").slice(0, 2).join(".") ?? "—"}</span>
-              <span className="flex-1 truncate text-muted">{e.source}</span>
-              <span className="shrink-0 text-faint/50">{new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-      {events.length === 0 && <Empty title="Awaiting transmissions…" hint="EventBus traffic appears here." />}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 no-scrollbar">
+        <AnimatePresence mode="popLayout">
+          {events.slice(0, 50).map((e, i) => {
+            const isFail = e.topic?.includes("fail") || e.topic?.includes("denied") || e.topic?.includes("error");
+            const isOk = e.topic?.includes("complete") || e.topic?.includes("start") || e.topic?.includes("healthy");
+            return (
+              <motion.div
+                key={e.id || `evt-${i}`}
+                layout
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: Math.max(0.3, 1 - i * 0.025), y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="flex items-center gap-2 rounded-lg px-2 py-1 font-mono text-[10px] hover:bg-surface/40"
+              >
+                <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${isFail ? "bg-danger" : isOk ? "bg-ok" : "bg-faint/40"}`} />
+                <span className="w-28 shrink-0 truncate text-faint">{e.topic?.split(".").slice(0, 2).join(".") ?? "—"}</span>
+                <span className="flex-1 truncate text-muted">{e.source}</span>
+                <span className="shrink-0 text-faint/50">{new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+        {events.length === 0 && <Empty title="Awaiting transmissions…" hint="EventBus traffic appears here." />}
+      </div>
     </div>
   );
 }
@@ -167,9 +169,11 @@ export function MissionOverview() {
   }, [agents]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      {/* ── COMMAND CENTER TOP BAR ── */}
-      <div className="col-span-12 flex flex-wrap items-center gap-4 rounded-2xl border border-border/50 bg-surface/30 px-5 py-3">
+    <div className="grid h-full gap-4 p-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
+    >
+      {/* ── COMMAND CENTER TOP BAR — full width ── */}
+      <div className="col-span-full flex flex-wrap items-center gap-4 rounded-2xl border border-border/50 bg-surface/30 px-5 py-3">
         <div className="flex items-center gap-3">
           <div className={`h-3 w-3 rounded-full ${isEventBusLive ? "bg-ok animate-pulse" : "bg-danger"} shadow-lg ${isEventBusLive ? "shadow-ok/30" : "shadow-danger/30"}`} />
           <span className="text-sm font-bold tracking-[0.15em] uppercase">AI Command Center</span>
@@ -188,7 +192,7 @@ export function MissionOverview() {
 
       {/* ── LEFT: Agent Fleet (Air Traffic Control View) ── */}
       <Panel title="Agent Fleet" subtitle="Live air traffic control"
-        className="col-span-4 row-span-3"
+        className="min-h-[300px]"
         actions={
           <div className="flex items-center gap-2 text-[10px]">
             <Badge tone="ok">{allProviders.filter((p) => p.status === "healthy").length} healthy</Badge>
@@ -196,42 +200,46 @@ export function MissionOverview() {
           </div>
         }
       >
-        <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-          <div className="mb-2 grid grid-cols-1 md:grid-cols-5 gap-1 text-[8px] uppercase tracking-wider text-faint/50">
+        <div className="flex h-full flex-col overflow-hidden">
+          <div className="mb-2 shrink-0 grid grid-cols-1 md:grid-cols-5 gap-1 text-[8px] uppercase tracking-wider text-faint/50">
             <span className="col-span-2">AGENT</span>
             <span>STATUS</span>
             <span>TASKS</span>
             <span>LATENCY</span>
           </div>
-          {allProviders.filter((p) => p?.provider).map((p, i) => (
-            <AgentAircraft
-              key={`agent-${i}`}
-              provider={p.provider}
-              status={p.status}
-              latency={p.latency_ms}
-              taskCount={taskCounts[p.provider] || 0}
-              index={i}
-            />
-          ))}
-          {allProviders.length === 0 && (
-            <Empty title="No agents detected" hint="Agents appear when they register with the EventBus." />
-          )}
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 no-scrollbar">
+            <div className="space-y-2">
+              {allProviders.filter((p) => p?.provider).map((p, i) => (
+                <AgentAircraft
+                  key={`agent-${i}`}
+                  provider={p.provider}
+                  status={p.status}
+                  latency={p.latency_ms}
+                  taskCount={taskCounts[p.provider] || 0}
+                  index={i}
+                />
+              ))}
+              {allProviders.length === 0 && (
+                <Empty title="No agents detected" hint="Agents appear when they register with the EventBus." />
+              )}
+            </div>
+          </div>
         </div>
       </Panel>
 
       {/* ── CENTER: Flight Communications (Live EventBus) ── */}
       <Panel title="Flight Communications" subtitle="Real-time EventBus messages"
-        className="col-span-5 row-span-3"
+        className="min-h-[300px]"
         actions={<span className="text-[9px] text-faint/50 tabular-nums">{events.length} total events</span>}
       >
         <FlightComms />
       </Panel>
 
       {/* ── RIGHT TOP: System Control ── */}
-      <SystemControl className="col-span-3 row-span-2" />
+      <SystemControl className="min-h-[200px]" />
 
       {/* ── RIGHT MIDDLE: Executive Command ── */}
-      <Panel title="Executive Command" subtitle="AI leadership hierarchy" className="col-span-3 row-span-1">
+      <Panel title="Executive Command" subtitle="AI leadership hierarchy" className="min-h-[160px]">
         <div className="space-y-2">
           {allProviders.length === 0 ? (
             <Empty title="No active executives" hint="Discovered providers populate executive command" />
@@ -258,7 +266,7 @@ export function MissionOverview() {
 
 
       {/* ── BOTTOM LEFT: Capabilities ── */}
-      <Panel title="Available Capabilities" subtitle={`${caps.length} registered`} className="col-span-3 row-span-1">
+      <Panel title="Available Capabilities" subtitle={`${caps.length} registered`} className="min-h-[140px]">
         <div className="flex flex-wrap gap-1.5">
           {caps.length > 0 ? caps.map((c, i) => (
             <Badge key={`cap-${i}`} tone={c.requires_approval ? "warn" : "default"}>{c.name}</Badge>
@@ -267,20 +275,22 @@ export function MissionOverview() {
       </Panel>
 
       {/* ── BOTTOM CENTER MISSION LOG ── */}
-      <Panel title="Mission Log" subtitle="Security-relevant actions" className="col-span-6 row-span-1" contentClassName="p-0">
-        <div className="divide-y divide-border/50 max-h-[120px] overflow-y-auto">
-          {audit.length > 0 ? audit.slice(0, 8).map((e) => (
-            <div key={e.id} className="flex items-center gap-3 px-4 py-1.5 text-xs">
-              <span className="w-24 shrink-0 truncate text-faint">{e.action}</span>
-              <span className="flex-1 truncate">{e.target || e.principal}</span>
-              <Badge tone={e.outcome === "deny" ? "danger" : e.outcome === "allow" ? "ok" : "default"}>{e.outcome}</Badge>
-            </div>
-          )) : <Empty title="No mission log entries" />}
+      <Panel title="Mission Log" subtitle="Security-relevant actions" className="min-h-[140px]" contentClassName="p-0">
+        <div className="flex h-full flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden divide-y divide-border/50 no-scrollbar">
+            {audit.length > 0 ? audit.slice(0, 12).map((e) => (
+              <div key={e.id} className="flex items-center gap-3 px-4 py-1.5 text-xs">
+                <span className="w-24 shrink-0 truncate text-faint">{e.action}</span>
+                <span className="flex-1 truncate">{e.target || e.principal}</span>
+                <Badge tone={e.outcome === "deny" ? "danger" : e.outcome === "allow" ? "ok" : "default"}>{e.outcome}</Badge>
+              </div>
+            )) : <Empty title="No mission log entries" />}
+          </div>
         </div>
       </Panel>
 
       {/* ── BOTTOM RIGHT: Agent Fleet Summary ── */}
-      <Panel title="Fleet Summary" subtitle="Aggregate health" className="col-span-3 row-span-1">
+      <Panel title="Fleet Summary" subtitle="Aggregate health" className="min-h-[140px]">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-ok" />

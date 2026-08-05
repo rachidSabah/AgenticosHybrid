@@ -10,11 +10,12 @@ import asyncio
 import os
 import shutil
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
+from typing import Any
 
-from services.installer.provider_catalog import ProviderDef
 from agentic_os.infrastructure.logging import get_logger
+from services.installer.provider_catalog import ProviderDef
 
 log = get_logger("installer.watcher")
 
@@ -186,9 +187,9 @@ class RuntimeWatcher:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
                 if proc.returncode == 0:
                     return stdout.decode("utf-8", errors="replace").strip().split("\n")[0].strip()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
-        except (FileNotFoundError, PermissionError, OSError):
+        except (FileNotFoundError, PermissionError, OSError, NotImplementedError):
             pass
         return None
 

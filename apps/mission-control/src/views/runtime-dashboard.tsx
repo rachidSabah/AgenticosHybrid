@@ -1092,10 +1092,21 @@ export default function RuntimeDashboard() {
   const counters = useMemo(() => {
     const total = runtimes.length;
     const running = runtimes.filter(
-      (r) => r.status === "ready" || r.status === "busy" || r.status === "idle",
+      (r) =>
+        r.status === "ready" ||
+        r.status === "busy" ||
+        r.status === "idle" ||
+        r.status === "running" ||
+        r.status === "starting" ||
+        r.status === "streaming",
     ).length;
     const stopped = runtimes.filter(
-      (r) => r.status === "stopped" || r.status === "crashed" || r.status === "failed",
+      (r) =>
+        r.status === "stopped" ||
+        r.status === "crashed" ||
+        r.status === "failed" ||
+        r.status === "discovered" ||
+        r.status === "unknown",
     ).length;
     return { total, running, stopped };
   }, [runtimes]);
@@ -1264,8 +1275,12 @@ export default function RuntimeDashboard() {
                       className="ml-auto flex w-40 items-center justify-end gap-1"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {rt.status === "ready" || rt.status === "busy" || rt.status === "idle" ||
-                       rt.status === "streaming" ? (
+                      {rt.status === "ready" ||
+                      rt.status === "busy" ||
+                      rt.status === "idle" ||
+                      rt.status === "running" ||
+                      rt.status === "starting" ||
+                      rt.status === "streaming" ? (
                         <>
                           <button
                             onClick={() => handleAction("stop", rt.id)}

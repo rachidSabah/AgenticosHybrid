@@ -159,13 +159,16 @@ export function AgentConstellation() {
   }, [storeEvents]);
 
   return (
-    <div className="h-full w-full bg-[#03040c] text-slate-100 font-sans select-none overflow-hidden text-xs flex flex-col justify-between p-3 gap-3">
+    <div className="h-full w-full bg-[#03040c] text-slate-100 font-sans select-none overflow-hidden text-xs flex flex-col p-3 gap-3">
       
-      {/* ── TOP SECTION: CONSTELLATION STAGE (CENTER & RIGHT PANELS) ── */}
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 min-h-0 relative">
+      {/* ── TOP SECTION: CONSTELLATION STAGE ──
+          Responsive: auto-fit grid, min 400px per column */}
+      <div className="flex-1 grid gap-3 min-h-0 relative"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(400px, 100%), 1fr))" }}
+      >
         
-        {/* CENTER STAGE: AGENT CONSTELLATION CANVAS (8 COLS) */}
-        <div className="col-span-8 relative flex flex-col justify-between p-3 overflow-hidden rounded-xl border border-cyan-900/30 bg-radial-gradient">
+        {/* CENTER STAGE: AGENT CONSTELLATION CANVAS */}
+        <div className="relative flex flex-col justify-between p-3 overflow-hidden rounded-xl border border-cyan-900/30 min-h-[400px]">
           
           {/* Constellation Overview Top-Left Overlay */}
           <div className="absolute top-3 left-3 z-10 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-3 backdrop-blur-md w-52 font-mono text-[10px]">
@@ -299,8 +302,8 @@ export function AgentConstellation() {
 
         </div>
 
-        {/* RIGHT PANEL STAGE: LIVE EVENT STREAM, COMMUNICATION & MISSION PROGRESS (4 COLS) */}
-        <div className="col-span-4 flex flex-col gap-3 min-h-0">
+        {/* RIGHT PANEL STAGE: LIVE EVENT STREAM, COMMUNICATION & MISSION PROGRESS */}
+        <div className="flex flex-col gap-3 min-h-0 min-w-[300px]">
           
           {/* Live Event Stream Panel */}
           <div className="bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 font-mono text-[10px]">
@@ -397,8 +400,11 @@ export function AgentConstellation() {
         </div>
       </div>
 
-      {/* ── BOTTOM SECTION: SYSTEM TELEMETRY, EVENT BUS, TASK DISTRIBUTION, TOKEN FLOW, CONNECTION MAP ── */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 shrink-0 h-32 font-mono text-[10px]">
+      {/* ── BOTTOM SECTION: SYSTEM TELEMETRY, EVENT BUS, TASK DISTRIBUTION, TOKEN FLOW, CONNECTION MAP ──
+          Responsive: auto-fit grid, min 200px per panel */}
+      <div className="grid gap-3 shrink-0 font-mono text-[10px]"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
+      >
         
         {/* System Telemetry Gauges */}
         <div className="col-span-3 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
