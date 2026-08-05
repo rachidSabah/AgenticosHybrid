@@ -29,6 +29,7 @@ from agentic_os.domain.desktop import (
     RestoreConfig,
     RuntimeType,
     UpdateChannel,
+    UpdateHistoryRecord,
     UpdateManifest,
 )
 
@@ -112,6 +113,38 @@ class TestAutoUpdateManager:
         mgr = AutoUpdateManager()
         pending = await mgr.get_pending_update()
         assert pending is None
+
+    @pytest.mark.asyncio
+    async def test_manifest_coerces_string_channel(self) -> None:
+        """API bodies pass enum fields as raw strings — install must not crash."""
+        manifest = UpdateManifest(
+            version="1.1.0",
+            download_url="https://example.com/setup.exe",
+            channel="stable",  # raw string from frontend JSON
+            installer_type="exe",  # raw string from frontend JSON
+        )
+        assert manifest.channel == UpdateChannel.STABLE
+        assert manifest.installer_type == InstallerType.EXE
+        d = manifest.to_dict()
+        assert d["channel"] == "stable"
+        assert d["installer_type"] == "exe"
+
+        # Case-insensitive conversion + unknown-value fallback
+        assert UpdateManifest(channel="BETA").channel == UpdateChannel.BETA
+        assert UpdateManifest(channel="bogus").channel == UpdateChannel.STABLE
+
+    def test_history_record_coerces_string_fields(self) -> None:
+        """UpdateHistoryRecord built from untyped data must serialize safely."""
+        record = UpdateHistoryRecord(
+            from_version="1.0.0",
+            to_version="1.1.0",
+            channel="stable",  # raw string (e.g. persisted JSON)
+            status="failed",
+        )
+        assert record.channel == UpdateChannel.STABLE
+        assert record.status.value == "failed"
+        assert record.to_dict()["channel"] == "stable"
+        assert record.to_dict()["status"] == "failed"
 
     @pytest.mark.asyncio
     async def test_set_version(self) -> None:

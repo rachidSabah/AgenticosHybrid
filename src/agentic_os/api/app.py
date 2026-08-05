@@ -13,6 +13,7 @@ import asyncio
 import collections.abc
 import dataclasses
 import json
+import subprocess
 import time
 from collections import deque
 from datetime import UTC, datetime
@@ -234,6 +235,17 @@ class _UnavailableSentinel:
             )
 
         return _unavailable
+
+
+def _run_git_text(args: list[str], cwd: str, timeout: int) -> subprocess.CompletedProcess[str]:
+    """Run ``git args`` synchronously, returning typed text output."""
+    return subprocess.run(
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        timeout=timeout,
+    )
 
 
 def create_app(platform: Platform) -> FastAPI:
@@ -719,15 +731,8 @@ def create_app(platform: Platform) -> FastAPI:
         base = wt.base_branch if wt else "main"
 
         async def _git(args: list[str]) -> str:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=root,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
-            return stdout.decode("utf-8", errors="replace")
+            result = await asyncio.to_thread(_run_git_text, args, root, 30)
+            return result.stdout or ""
 
         try:
             # Get list of changed files
@@ -795,18 +800,11 @@ def create_app(platform: Platform) -> FastAPI:
         base = wt.base_branch if wt else "main"
 
         async def _git(args: list[str]) -> tuple[str, str, int]:
-            proc = await asyncio.create_subprocess_exec(
-                "git",
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=_get_workspace_root(),
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+            result = await asyncio.to_thread(_run_git_text, args, _get_workspace_root(), 60)
             return (
-                stdout.decode("utf-8", errors="replace").strip(),
-                stderr.decode("utf-8", errors="replace").strip(),
-                proc.returncode or 0,
+                (result.stdout or "").strip(),
+                (result.stderr or "").strip(),
+                result.returncode or 0,
             )
 
         try:
@@ -5375,22 +5373,76 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.get("/api/desktop/updates/check")
         async def check_updates(channel: str = "stable") -> list[dict]:
-            if desktop.update is None:
-                return []
-            from agentic_os.domain.desktop import UpdateChannel
+            if desktop.update is not None:
+                from agentic_os.domain.desktop import UpdateChannel
 
-            ch = UpdateChannel(channel)
-            releases = await desktop.update.check_for_updates(ch)
-            return [r.to_dict() for r in releases]
+                ch = UpdateChannel(channel)
+                releases = await desktop.update.check_for_updates(ch)
+                return [r.to_dict() for r in releases]
+
+            # Fallback: query GitHub releases API directly when the Tauri
+            # desktop update manager isn't available (e.g. dev server).
+            import json as _json
+            import urllib.request as _urlreq
+
+            try:
+                req = _urlreq.Request(
+                    "https://api.github.com/repos/rachidSabah/AgenticosHybrid/releases?per_page=10",
+                    headers={"Accept": "application/vnd.github.v3+json"},
+                )
+                with _urlreq.urlopen(req, timeout=10) as resp:
+                    data = _json.loads(resp.read())
+            except Exception as exc:
+                log.warning("Failed to fetch GitHub releases: %s", exc)
+                return []
+
+            result: list[dict] = []
+            for item in data:
+                if item.get("draft", False):
+                    continue
+                tag = item.get("tag_name", "")
+                if not tag:
+                    continue
+                version_str = tag.lstrip("v")
+                is_prerelease = item.get("prerelease", False)
+
+                # Channel filtering
+                if channel == "stable" and is_prerelease:
+                    continue
+
+                # Find download URL for the release assets
+                assets = item.get("assets", [])
+                download_url = ""
+                for asset in assets:
+                    name = asset.get("name", "")
+                    if name.endswith(".exe") or name.endswith(".dmg") or name.endswith(".AppImage"):
+                        download_url = asset.get("browser_download_url", "")
+                        break
+
+                result.append(
+                    {
+                        "version": version_str,
+                        "tag": tag,
+                        "url": download_url or item.get("html_url", ""),
+                        "published_at": item.get("published_at"),
+                        "release_notes": item.get("body", ""),
+                        "prerelease": is_prerelease,
+                        "channel": "beta" if is_prerelease else "stable",
+                    }
+                )
+            return result
 
         @app.get("/api/desktop/updates/status")
         async def get_update_status() -> dict:
-            if desktop.update is None:
-                return {"status": "idle", "version": "1.0.0-rc1"}
-            return {
-                "status": (await desktop.update.get_update_status()).value,
-                "version": await desktop.update.get_current_version(),
-            }
+            if desktop.update is not None:
+                return {
+                    "status": (await desktop.update.get_update_status()).value,
+                    "version": await desktop.update.get_current_version(),
+                }
+            # Fallback: return the package version
+            from agentic_os import __version__ as _pkg_version
+
+            return {"status": "up-to-date", "version": _pkg_version}
 
         @app.get("/api/desktop/updates/history")
         async def get_update_history(limit: int = 50) -> list[dict]:
@@ -5413,27 +5465,49 @@ def create_app(platform: Platform) -> FastAPI:
 
         @app.post("/api/desktop/updates/download")
         async def download_update(body: dict) -> dict:
-            if desktop.update is None:
-                raise HTTPException(503, "Update manager not available")
-            from agentic_os.domain.desktop import UpdateManifest
+            if desktop.update is not None:
+                from agentic_os.domain.desktop import UpdateManifest
 
-            manifest = UpdateManifest(
-                **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
-            )
-            success = await desktop.update.download_update(manifest)
-            return {"success": success}
+                manifest = UpdateManifest(
+                    **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
+                )
+                success = await desktop.update.download_update(manifest)
+                return {"success": success}
+            # Fallback: return the download URL so the frontend can
+            # redirect the browser to download the installer directly.
+            download_url = body.get("download_url", "")
+            if download_url:
+                return {
+                    "success": True,
+                    "download_url": download_url,
+                    "message": "Open the download URL in your browser",
+                }
+            raise HTTPException(503, "Update manager not available and no download_url provided")
 
         @app.post("/api/desktop/updates/install")
         async def install_update(body: dict) -> dict:
-            if desktop.update is None:
-                raise HTTPException(503, "Update manager not available")
-            from agentic_os.domain.desktop import UpdateManifest
+            if desktop.update is not None:
+                from agentic_os.domain.desktop import UpdateManifest
 
-            manifest = UpdateManifest(
-                **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
-            )
-            result = await desktop.update.install_update(manifest)
-            return result.to_dict()
+                manifest = UpdateManifest(
+                    **{k: v for k, v in body.items() if k in UpdateManifest.__dataclass_fields__}
+                )
+                result = await desktop.update.install_update(manifest)
+                return result.to_dict()
+            # Fallback: return instructions for manual install
+            download_url = body.get("download_url", "")
+            version = body.get("version", "")
+            return {
+                "success": True,
+                "previous_version": "",
+                "new_version": version,
+                "installed_at": "",
+                "duration_seconds": 0,
+                "download_url": download_url,
+                "message": (
+                    f"Download {version} from {download_url} and install manually (dev server mode)"
+                ),
+            }
 
         # ── Dev-Mode Git Updates (works on localhost:3000 + any checkout) ──
         # These endpoints detect whether the local git checkout is behind

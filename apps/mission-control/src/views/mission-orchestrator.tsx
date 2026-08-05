@@ -206,9 +206,9 @@ export function MissionOrchestrator() {
   }, [missionUpdates, missionStore, selectedMission]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_2fr]">
       {/* Left column */}
-      <div className="col-span-12 lg:col-span-4 flex flex-col gap-4">
+      <div className="flex flex-col gap-4 min-h-0">
         <AgentStatusList />
         <Panel
           title="Missions"
@@ -335,7 +335,7 @@ export function MissionOrchestrator() {
       </div>
 
       {/* Right column */}
-      <div className="col-span-12 lg:col-span-8 flex flex-col gap-4">
+      <div className="flex flex-col gap-4 min-h-0">
         {selectedMission ? (
           <>
             <MissionDetail mission={selectedMission} onRefresh={loadMissions} />
@@ -885,7 +885,7 @@ function MissionDetail({ mission, onRefresh }: { mission: MissionType; onRefresh
           <span className="capitalize">· {mission.plan.risk_level} risk</span>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {cols.map((c) => (
           <div key={c.label} className="glass rounded-xl px-3 py-2">
             <div className="text-[10px] uppercase tracking-wider text-faint">{c.label}</div>
@@ -1194,7 +1194,7 @@ function MergePipelinePanel() {
       subtitle="Results collected, merged, and validated"
       className="h-full"
     >
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {MERGE_STAGES.map((stage) => {
           const state = stageStates[stage.id] ?? "pending";
           return (
@@ -1464,7 +1464,7 @@ function RoutingPlanner({ mission }: { mission: MissionType }) {
       className="h-full"
     >
       {/* Strategy selector grid */}
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-1.5">
+      <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2">
         {ROUTING_STRATEGIES.map((s) => (
           <button
             key={s.id}

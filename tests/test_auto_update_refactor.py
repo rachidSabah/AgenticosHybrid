@@ -147,6 +147,43 @@ class TestAutoUpdateManagerRefactored:
             assert len(beta_releases) == 2
 
     @pytest.mark.asyncio
+    async def test_release_parsing_skips_non_semver_tags(self) -> None:
+        """Tags like a stray 'main' release must not surface as installable."""
+        mgr = AutoUpdateManager()
+        mock_data = [
+            {
+                "tag_name": "main",  # stray tag/release — not a real version
+                "prerelease": False,
+                "draft": False,
+                "html_url": "https://github.com/rachidSabah/AgenticosHybrid/releases/tag/main",
+                "published_at": "2026-08-01T12:00:00Z",
+                "body": "",
+                "assets": [
+                    {
+                        "name": "setup.exe",
+                        "browser_download_url": "https://example.com/setup.exe",
+                        "size": 100,
+                    }
+                ],
+            },
+            {
+                "tag_name": "v1.2.0",
+                "prerelease": False,
+                "draft": False,
+                "html_url": "https://github.com/rachidSabah/AgenticosHybrid/releases/tag/v1.2.0",
+                "published_at": "2026-08-02T12:00:00Z",
+                "body": "Real release",
+                "assets": [],
+            },
+        ]
+
+        with patch.object(mgr, "_fetch_json", return_value=mock_data):
+            releases = await mgr.check_for_updates(UpdateChannel.STABLE)
+            assert len(releases) == 1
+            assert releases[0].version == "1.2.0"
+            assert all(r.version != "main" for r in releases)
+
+    @pytest.mark.asyncio
     async def test_asset_selection(self) -> None:
         mgr = AutoUpdateManager()
         assets = [

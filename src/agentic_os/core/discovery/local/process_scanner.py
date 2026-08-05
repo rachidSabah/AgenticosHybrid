@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import platform
+import subprocess
 from typing import Any
 
 log = logging.getLogger("agentic_os.local_discovery.process_scanner")
@@ -37,11 +38,37 @@ class ProcessScanner:
     Platform-aware: uses ``tasklist /FO CSV`` on Windows and
     ``ps aux`` on Linux/macOS.
 
-    Thread-safety: not required — used from a single asyncio task.
+    Thread-safety: subprocesses run inside executor threads via
+    ``asyncio.to_thread`` — the scanner is safe under any event loop,
+    including SelectorEventLoop on Windows.
     """
 
     def __init__(self) -> None:
         self._system = platform.system().lower()
+
+    @staticmethod
+    def _run_capture(args: list[str], timeout: float = 10.0) -> bytes | None:
+        """Run *args* in a subprocess and return stdout, or ``None`` on failure.
+
+        Runs synchronously inside an executor thread (via ``asyncio.to_thread``)
+        so the scanner works under SelectorEventLoop on Windows, which does not
+        support ``asyncio`` subprocesses (``create_subprocess_exec`` raises
+        ``NotImplementedError`` there).
+        """
+        try:
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("%s timed out", args[0])
+            return None
+        except (FileNotFoundError, OSError) as exc:
+            log.warning("%s failed: %s", args[0], exc)
+            return None
+        return result.stdout
 
     async def scan(self) -> list[dict[str, Any]]:
         """List running processes and return matches.
@@ -60,18 +87,8 @@ class ProcessScanner:
     async def _scan_windows(self) -> list[dict[str, Any]]:
         """Parse ``tasklist /FO CSV`` output."""
         results: list[dict[str, Any]] = []
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "tasklist",
-                "/FO",
-                "CSV",
-                "/NH",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        except (TimeoutError, FileNotFoundError) as exc:
-            log.warning("tasklist failed: %s", exc)
+        stdout = await asyncio.to_thread(self._run_capture, ["tasklist", "/FO", "CSV", "/NH"])
+        if stdout is None:
             return []
 
         text = stdout.decode("utf-8", errors="replace")
@@ -119,16 +136,8 @@ class ProcessScanner:
     async def _scan_posix(self) -> list[dict[str, Any]]:
         """Parse ``ps aux`` output."""
         results: list[dict[str, Any]] = []
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "ps",
-                "aux",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        except (TimeoutError, FileNotFoundError) as exc:
-            log.warning("ps aux failed: %s", exc)
+        stdout = await asyncio.to_thread(self._run_capture, ["ps", "aux"])
+        if stdout is None:
             return []
 
         text = stdout.decode("utf-8", errors="replace")

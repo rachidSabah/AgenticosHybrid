@@ -494,9 +494,9 @@ export const api = {
     get<import("./desktop-types").UpdateHistoryRecord[]>("/api/desktop/updates/history"),
   pendingUpdate: () => get<import("./desktop-types").UpdateManifest | null>("/api/desktop/updates/pending"),
   downloadUpdate: (body: import("./desktop-types").UpdateManifest) =>
-    post<{ success: boolean }>("/api/desktop/updates/download", body),
+    postThrow<{ success: boolean; download_url?: string; message?: string }>("/api/desktop/updates/download", body),
   installUpdate: (body: import("./desktop-types").UpdateManifest) =>
-    post<import("./desktop-types").UpdateResult>("/api/desktop/updates/install", body),
+    postThrow<import("./desktop-types").UpdateResult & { download_url?: string; message?: string }>("/api/desktop/updates/install", body),
 
   // Channels
   channels: () => get<string[]>("/api/desktop/channels"),
