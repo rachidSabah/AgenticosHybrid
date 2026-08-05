@@ -172,9 +172,7 @@ class Orchestrator:
         # planned instead of leaking to unselected agents.
         if preferred_agents:
             selected = {name.strip().lower() for name in preferred_agents if name}
-            real_candidates = [
-                p for p in real_candidates if p.name.lower() in selected
-            ]
+            real_candidates = [p for p in real_candidates if p.name.lower() in selected]
             if not real_candidates:
                 log.info(
                     "dispatcher.no_preferred_provider",
@@ -215,7 +213,7 @@ class Orchestrator:
             and hasattr(provider, "_fallback_mode")
             and self._failed_providers  # only set fallback_mode if real providers failed
         ):
-            provider._fallback_mode = True  # type: ignore[union-attr]
+            provider._fallback_mode = True  # type: ignore[attr-defined]
         return provider
 
     def _mark_provider_failed(self, provider_name: str) -> None:

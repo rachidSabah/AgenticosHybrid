@@ -269,7 +269,7 @@ function SwarmListTab() {
         title="Swarms"
         subtitle={`${swarms.length} active`}
         className="min-h-0"
-        headerAction={
+        actions={
           <button
             onClick={() => setShowCreate(!showCreate)}
             className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition"
