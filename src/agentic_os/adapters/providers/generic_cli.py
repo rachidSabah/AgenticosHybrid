@@ -11,10 +11,10 @@ For CLIs that take a prompt argument: passes it as the last arg.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 
+from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
 from agentic_os.infrastructure.logging import get_logger
 
@@ -82,47 +82,35 @@ class GenericCLIProvider:
 
         if self._stdin_mode:
             # Pipe prompt via stdin — most compatible across CLIs
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE,
-                env=env,
-            )
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(input=prompt.encode("utf-8")),
+                returncode, stdout, stderr = await run_cli(
+                    args,
+                    input_data=prompt.encode("utf-8"),
+                    env=env,
                     timeout=_DEFAULT_TIMEOUT,
+                    on_output=on_output,
                 )
             except TimeoutError:
-                proc.kill()
-                await proc.wait()
                 raise RuntimeError(f"{self._bin} timed out after {_DEFAULT_TIMEOUT}s") from None
         else:
             # Pass prompt as last positional argument
             args.append(prompt)
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(),
+                returncode, stdout, stderr = await run_cli(
+                    args,
+                    env=env,
                     timeout=_DEFAULT_TIMEOUT,
+                    on_output=on_output,
                 )
             except TimeoutError:
-                proc.kill()
-                await proc.wait()
                 raise RuntimeError(f"{self._bin} timed out after {_DEFAULT_TIMEOUT}s") from None
 
-        stdout_text = stdout.decode("utf-8", errors="replace").strip()
         stderr_text = stderr.decode("utf-8", errors="replace").strip()
 
-        if proc.returncode != 0:
-            raise RuntimeError(f"{self._bin} exited {proc.returncode}: {stderr_text[:200]}")
+        if returncode != 0:
+            raise RuntimeError(f"{self._bin} exited {returncode}: {stderr_text[:200]}")
 
+        stdout_text = stdout.decode("utf-8", errors="replace").strip()
         return stdout_text or f"[{self._bin}] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:

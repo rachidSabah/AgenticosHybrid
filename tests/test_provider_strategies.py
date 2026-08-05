@@ -43,22 +43,24 @@ class TestStrategyCommands:
         assert "-p" in cmd
         assert "--output-format" in cmd
         assert "text" in cmd
-        # Prompt must be in the command
-        assert any("Write hello world" in c for c in cmd)
+        # Prompt must travel via stdin (avoids Windows cmd.exe 8191-char limit)
+        assert b"Write hello world" in s.build_stdin(make_task())
 
     def test_hermes_builds_correct_command(self):
         s = HermesExecutionStrategy()
         cmd = s.build_command(make_task(), "hermes")
         assert cmd[0] == "hermes"
-        assert "-p" in cmd
-        assert "--output-format" in cmd
+        assert "-z" in cmd
+        assert "--output-format" not in cmd
 
     def test_opencode_uses_run_subcommand(self):
         s = OpenCodeExecutionStrategy()
         cmd = s.build_command(make_task(), "opencode")
         assert cmd[0] == "opencode"
         assert "run" in cmd
-        assert any("Write hello world" in c for c in cmd)
+        # Prompt via stdin (opencode is an npm .cmd shim on Windows)
+        assert "-" in cmd
+        assert b"Write hello world" in s.build_stdin(make_task())
 
     def test_codex_uses_prompt_flag(self):
         s = CodexExecutionStrategy()
@@ -78,6 +80,9 @@ class TestStrategyCommands:
         cmd = s.build_command(make_task(), "gemini")
         assert cmd[0] == "gemini"
         assert "-p" in cmd
+        assert "--output-format" in cmd
+        # Prompt via stdin (gemini is an npm .cmd shim on Windows)
+        assert b"Write hello world" in s.build_stdin(make_task())
 
     def test_agy_uses_run_subcommand(self):
         s = AGYExecutionStrategy()
@@ -253,13 +258,12 @@ class TestPromptBuilding:
         assert prompt.endswith("Desc")
 
     def test_prompt_survives_in_command(self):
-        """The prompt must appear in the CLI command for arg-based strategies."""
+        """The prompt must reach the CLI (argv for exe-based strategies, stdin otherwise)."""
         s = ClaudeExecutionStrategy()
         task = Task(title="Write hello", role="coding", description="in Python")
         cmd = s.build_command(task, "claude")
-        # The prompt should be one of the args
-        prompt_in_cmd = any("Write hello" in c and "in Python" in c for c in cmd)
-        assert prompt_in_cmd, f"Prompt not found in command: {cmd}"
+        # Prompt travels via stdin for shim-based CLIs (Windows cmd.exe limit)
+        assert b"Write hello" in s.build_stdin(task) and b"in Python" in s.build_stdin(task)
 
 
 # ── Output Parsing ─────────────────────────────────────────────────────

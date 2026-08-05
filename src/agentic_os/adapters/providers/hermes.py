@@ -10,9 +10,10 @@ adapter with base_url pointing at the Hermes API endpoint.
 
 from __future__ import annotations
 
-import asyncio
+import os
 import shutil
 
+from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
 from agentic_os.infrastructure.logging import get_logger
 
@@ -51,28 +52,21 @@ class HermesProvider:
                 f"Hermes CLI not found at '{self._bin}'. Install with: pip install hermes-cli"
             )
         prompt = f"{task.title}\n\n{task.description}".strip()
-        env = dict(__import__("os").environ)
+        env = dict(os.environ)
         if self._api_key:
             env["HERMES_CONFIG"] = self._api_key
         log.info("hermes.execute", agent=agent.id, task=task.id)
-        proc = await asyncio.create_subprocess_exec(
-            self._bin,
-            "-p",
-            prompt,
-            "--output-format",
-            "text",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
+            returncode, stdout, stderr = await run_cli(
+                [self._bin, "-p", prompt, "--output-format", "text"],
+                env=env,
+                timeout=self._timeout,
+                on_output=on_output,
+            )
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
             raise TimeoutError(f"{self._bin} timed out after {self._timeout}s") from None
-        if proc.returncode != 0:
-            raise RuntimeError(f"hermes exited {proc.returncode}: {stderr.decode().strip()}")
+        if returncode != 0:
+            raise RuntimeError(f"hermes exited {returncode}: {stderr.decode().strip()}")
         return stdout.decode().strip() or f"[hermes] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:

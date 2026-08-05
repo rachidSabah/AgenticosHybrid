@@ -36,6 +36,7 @@ import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
 from agentic_os.infrastructure.logging import get_logger
 
@@ -139,7 +140,13 @@ class ClaudeExecutionStrategy(ProviderExecutionStrategy):
         return "claude_code"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", self.build_prompt(task), "--output-format", "text"]
+        # Prompt is passed via stdin (build_stdin) — passing it as argv on
+        # Windows exceeds the 32K command-line limit once workspace context
+        # is included ("The command line is too long", exit 1).
+        return [bin_path, "-p", "--output-format", "text"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -155,8 +162,17 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
     def kind(self) -> str:
         return "hermes"
 
+    @property
+    def timeout_s(self) -> float:
+        # Real agent runs (workspace context + tool calls) routinely exceed
+        # 120s; the default timeout was killing them mid-execution.
+        return 600.0
+
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", self.build_prompt(task), "--output-format", "text"]
+        # hermes uses -z for a one-shot prompt (no --output-format flag; it
+        # exits 2 with a usage error if passed). Keep the prompt under the
+        # Windows 32K cmdline limit when workspace context is large.
+        return [bin_path, "-z", self.build_prompt(task)[:24000]]
 
     def health_command(self, bin_path: str) -> list[str] | None:
         # Use --help instead of --version: hermes --version performs a network
@@ -169,14 +185,20 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
 
 
 class OpenCodeExecutionStrategy(ProviderExecutionStrategy):
-    """OpenCode CLI: `opencode run "{prompt}"`"""
+    """OpenCode CLI: `opencode run -` (prompt via stdin)"""
 
     @property
     def kind(self) -> str:
         return "opencode"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "run", self.build_prompt(task)]
+        # Prompt via stdin: opencode is an npm .cmd shim on Windows, and
+        # cmd.exe truncates command lines at 8191 chars ("The command line is
+        # too long", exit 1) once workspace context is included.
+        return [bin_path, "run", "-"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -226,7 +248,13 @@ class GeminiExecutionStrategy(ProviderExecutionStrategy):
         return 180.0  # Gemini CLI can be slow to initialize
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", self.build_prompt(task)]
+        # Prompt via stdin with an empty -p value: gemini is an npm .cmd shim
+        # on Windows (8191-char cmd.exe limit); -p "" + stdin keeps the
+        # command line short and gemini appends stdin input to the prompt.
+        return [bin_path, "-p", "", "--output-format", "text"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         # Use --version (exits in ~6s on Windows). --help triggers interactive
@@ -391,8 +419,6 @@ class StrategyBasedProvider:
         If ``cwd`` is provided, the CLI subprocess runs in that directory
         (used for git worktree isolation).
         """
-        import asyncio
-
         resolved_bin = shutil.which(self._config.bin_path) or self._config.bin_path
         if not shutil.which(resolved_bin):
             raise RuntimeError(
@@ -415,90 +441,30 @@ class StrategyBasedProvider:
             timeout=timeout,
         )
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE if stdin_data is not None else asyncio.subprocess.DEVNULL,
-            env=env,
-            cwd=cwd,
-        )
-
-        # If no streaming callback, use the original communicate() path
-        if on_output is None:
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(input=stdin_data),
-                    timeout=timeout,
-                )
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
-                raise RuntimeError(
-                    f"{self._config.bin_path} ({self._config.kind}) timed out after {timeout}s"
-                ) from None
-
-            if proc.returncode != 0:
-                stderr_text = stderr.decode("utf-8", errors="replace").strip()[:200]
-                raise RuntimeError(
-                    f"{self._config.bin_path} ({self._config.kind}) "
-                    f"exited {proc.returncode}: {stderr_text}"
-                )
-
-            result = self._strategy.parse_output(stdout, stderr, task)
-            return result or f"[{self._config.kind}] completed '{task.title}'"
-
-        # Streaming path: read stdout/stderr line-by-line
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
-
-        async def _read_stream(stream, stream_name: str, store: list[str]):
-            while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                decoded = line.decode("utf-8", errors="replace").rstrip("\n\r")
-                store.append(decoded)
-                try:
-                    on_output(decoded, stream_name)
-                except Exception:
-                    pass  # don't let callback errors crash execution
-
+        # asyncio.create_subprocess_exec raises NotImplementedError under the
+        # Selector event loop policy forced on Windows (see cli.py) — run the
+        # CLI in a worker thread instead (see run_cli module docs).
         try:
-            # Write stdin if needed, then read streams concurrently
-            async def _feed_stdin():
-                if stdin_data is not None and proc.stdin:
-                    proc.stdin.write(stdin_data)
-                    await proc.stdin.drain()
-                    proc.stdin.close()
-
-            await asyncio.wait_for(
-                asyncio.gather(
-                    _feed_stdin(),
-                    _read_stream(proc.stdout, "stdout", stdout_lines),
-                    _read_stream(proc.stderr, "stderr", stderr_lines),
-                    proc.wait(),
-                ),
+            returncode, stdout, stderr = await run_cli(
+                cmd,
+                input_data=stdin_data,
+                env=env,
+                cwd=cwd,
                 timeout=timeout,
+                on_output=on_output,
             )
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
             raise RuntimeError(
                 f"{self._config.bin_path} ({self._config.kind}) timed out after {timeout}s"
             ) from None
 
-        stdout_bytes = "\n".join(stdout_lines).encode()
-        stderr_bytes = "\n".join(stderr_lines).encode()
-
-        if proc.returncode != 0:
-            stderr_text = "\n".join(stderr_lines).strip()[:200]
+        if returncode != 0:
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()[:200]
             raise RuntimeError(
-                f"{self._config.bin_path} ({self._config.kind}) "
-                f"exited {proc.returncode}: {stderr_text}"
+                f"{self._config.bin_path} ({self._config.kind}) exited {returncode}: {stderr_text}"
             )
 
-        result = self._strategy.parse_output(stdout_bytes, stderr_bytes, task)
+        result = self._strategy.parse_output(stdout, stderr, task)
         return result or f"[{self._config.kind}] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:
