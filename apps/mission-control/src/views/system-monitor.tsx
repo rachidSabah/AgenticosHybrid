@@ -1,382 +1,160 @@
 "use client";
 
-import { useShallow } from "zustand/react/shallow";
-import { Panel, Stat, StatusDot, Empty } from "@/components/ui/primitives";
+import { useCallback, useEffect, useState, useRef } from "react";
+import { Panel, Badge, Empty } from "@/components/ui/primitives";
 import { useStore, selectMetrics } from "@/lib/store";
+import { useShallow } from "zustand/react/shallow";
 import { api } from "@/lib/api";
-import { safeFixed, safeNum, safeStr, safeArr, safeLen } from "@/lib/safe";
-import { useMemo, useEffect, useCallback, useState, useRef } from "react";
-import { List, type RowComponentProps } from "react-window";
-import { AutoSizer } from "react-virtualized-auto-sizer";
+import { safeFixed } from "@/lib/safe";
 import type { DesktopPerformanceMetrics } from "@/lib/desktop-types";
 
-// ── Polling hook for live resource metrics ──
-function usePerformancePoll(intervalMs = 5_000) {
-  const setPerformance = useStore((s) => s.setPerformance);
-  const connected = useStore((s) => s.connected);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetch = useCallback(async () => {
-    try {
-      const p = await api.performance();
-      setPerformance(p);
-      setError(null);
-    } catch {
-      setError("Performance endpoint unreachable");
-    }
-  }, [setPerformance]);
-
-  useEffect(() => {
-    if (!connected) return;
-    fetch();
-    const id = setInterval(fetch, intervalMs);
-    return () => clearInterval(id);
-  }, [connected, intervalMs, fetch]);
-
-  return error;
+function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
-// ── Resource gauge ──
-function Gauge({
-  label,
-  percent,
-  used,
-  total,
-  unit = "%",
-  tone = "accent",
-}: {
-  label: string;
-  percent: number;
-  used: number;
-  total: number;
-  unit?: string;
-  tone?: string;
-}) {
-  const hue = percent > 90 ? "danger" : percent > 70 ? "warn" : tone;
-  const barColor =
-    hue === "danger"
-      ? "bg-danger"
-      : hue === "warn"
-        ? "bg-warn"
-        : "bg-accent";
+function KpiCard({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "ok" | "warn" | "danger" | "accent" }) {
+  const toneClass = { default: "text-text", ok: "text-ok", warn: "text-warn", danger: "text-danger", accent: "text-accent" }[tone];
   return (
-    <div className="glass rounded-xl px-4 py-3">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-faint">
-          {label}
-        </span>
-        <span className="text-xs font-semibold tabular-nums text-text">
-          {percent.toFixed(1)}
-          {unit}
-        </span>
+    <div className="glass rounded-xl px-4 py-3 flex flex-col gap-1">
+      <div className="text-[10px] uppercase tracking-wider text-faint">{label}</div>
+      <div className={`text-2xl font-bold tabular-nums ${toneClass}`}>{value}</div>
+    </div>
+  );
+}
+
+function ProgressBar({ value, label, tone }: { value: number; label: string; tone?: "ok" | "warn" | "danger" | "accent" }) {
+  const colorMap: Record<string, string> = { ok: "bg-ok", warn: "bg-warn", danger: "bg-danger", accent: "bg-accent" };
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="text-faint">{label}</span>
+        <span className="font-mono tabular-nums text-muted">{value.toFixed(1)}%</span>
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface/50">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
-          style={{ width: `${Math.min(percent, 100)}%` }}
-        />
-      </div>
-      <div className="mt-1 flex justify-between text-[10px] text-faint tabular-nums">
-        <span>{used.toFixed(1)} used</span>
-        <span>{total.toFixed(1)} total</span>
+      <div className="h-2 overflow-hidden rounded-full bg-surface/50">
+        <div className={`h-full rounded-full ${colorMap[tone ?? "accent"] ?? "bg-accent"} transition-all`} style={{ width: `${Math.min(value, 100)}%` }} />
       </div>
     </div>
   );
 }
 
-// ── Virtualized Event Row ──
-
-function EventRow({ index, style, events }: { index: number; style: React.CSSProperties; events: Array<{ id: string; topic: string; source: string; timestamp: string }> }) {
-  const e = events[index];
-  return (
-    <div style={style} className="flex items-center gap-3 px-4 py-1.5">
-      <StatusDot
-        status={
-          e.topic.includes("fail") || e.topic.includes("denied")
-            ? "danger"
-            : "healthy"
-        }
-      />
-      <span className="w-44 shrink-0 truncate text-faint">{e.topic}</span>
-      <span className="flex-1 truncate text-muted">{e.source}</span>
-      <span className="text-faint">{new Date(e.timestamp).toLocaleTimeString()}</span>
-    </div>
-  );
-}
-
-// ── Main component ──
 export function SystemMonitor() {
   const m = useStore(useShallow(selectMetrics));
-  const connected = useStore((s) => s.connected);
   const events = useStore((s) => s.events);
-  const perf = useStore((s) => s.performance);
-  const pollError = usePerformancePoll();
+  const connected = useStore((s) => s.connected);
 
-  // Reset pollError when it resolves so we don't show stale error on reconnect
-  const rates = useMemo(() => {
-    const now = Date.now();
-    const windowMs = 60_000;
-    const recent = events.filter(
-      (e) => now - new Date(e.timestamp).getTime() < windowMs,
-    );
-    const buckets = new Array(60).fill(0);
-    for (const e of recent) {
-      const ts = new Date(e.timestamp).getTime();
-      const idx = Math.min(
-        59,
-        Math.max(0, Math.floor((now - ts) / 1000)),
-      );
-      buckets[59 - idx] += 1;
+  const [perf, setPerf] = useState<DesktopPerformanceMetrics | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const poll = useCallback(async () => {
+    try {
+      const p = await api.performance();
+      setPerf(p);
+      setPollError(null);
+    } catch (err) {
+      setPollError(String(err));
     }
+  }, []);
+
+  useEffect(() => {
+    poll();
+    timerRef.current = setInterval(poll, 5000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [poll]);
+
+  const rates = (() => {
+    const now = Date.now();
+    const recent = events.filter((e) => now - new Date(e.timestamp).getTime() < 60000);
     const perSec = recent.length / 60;
     const counts: Record<string, number> = {};
     for (const e of recent) counts[e.topic] = (counts[e.topic] ?? 0) + 1;
-    const byTopic = Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 12);
-    const maxTopic = byTopic[0]?.[1] ?? 1;
-    return { buckets, perSec, byTopic, maxTopic };
-  }, [events]);
+    const byTopic = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    return { perSec, byTopic };
+  })();
 
   return (
-    <div className="grid h-full gap-4 p-4"
-      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
-    >
-      {/* Top stats bar */}
-      <div className="col-span-12 flex flex-wrap gap-3">
-        <Stat
-          label="Connection"
-          value={connected ? "live" : "offline"}
-          tone={connected ? "ok" : "danger"}
-        />
-        <Stat
-          label="Throughput"
-          value={`${rates.perSec.toFixed(1)}/s`}
-          tone="accent"
-        />
-        <Stat label="Agents" value={m.agents} />
-        <Stat label="Tasks" value={m.tasks} />
-        <Stat label="Providers" value={m.providers} />
-        <Stat
-          label="Errors"
-          value={m.errors}
-          tone={m.errors ? "danger" : "ok"}
-        />
-        <Stat label="Cost" value={`$${m.cost.toFixed(4)}`} tone="warn" />
-        <Stat
-          label="Latency"
-          value={`${safeFixed(m?.latency, 0)}ms`}
-          tone={m.latency > 1000 ? "warn" : "default"}
-        />
+    <div className="flex h-full flex-col gap-3 p-4">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">System Monitor</h2>
+          <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-ok animate-pulse" : "bg-danger"}`} />
+          <span className="text-[10px] text-faint">{connected ? "Live" : "Offline"}</span>
+        </div>
+        <button onClick={poll} className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/30">Refresh</button>
       </div>
 
-      {/* System Resources — CPU, RAM, Disk */}
-      <Panel
-        title="System Resources"
-        subtitle={
-          perf
-            ? `live · ${perf.process_count} processes · up ${formatUptime(perf.uptime_seconds)}`
-            : pollError
-              ? "unreachable"
-              : "awaiting data…"
-        }
-        className=""
-      >
-        <div className="flex flex-col gap-3">
+      {/* ── KPI Stats Row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+        <KpiCard label="Connection" value={connected ? "Live" : "Offline"} tone={connected ? "ok" : "danger"} />
+        <KpiCard label="Throughput" value={`${rates.perSec.toFixed(1)}/s`} tone="accent" />
+        <KpiCard label="Agents" value={m.agents} tone="default" />
+        <KpiCard label="Errors" value={m.errors} tone={m.errors ? "danger" : "ok"} />
+      </div>
+
+      {/* ── Two-column content ── */}
+      <div className="grid flex-1 gap-3 min-h-0 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+        {/* Left: System Resources */}
+        <Panel title="System Resources" subtitle={perf ? `${perf.process_count} processes · up ${formatUptime(perf.uptime_seconds)}` : "Loading…"}>
           {perf ? (
-            <>
-              <Gauge
-                label="CPU"
-                percent={perf.cpu_usage_percent}
-                used={perf.cpu_usage_percent}
-                total={100}
-                tone="accent"
-              />
-              <Gauge
-                label="Memory"
-                percent={perf.memory_usage_percent}
-                used={perf.memory_used_mb}
-                total={perf.memory_total_mb}
-                unit=" MB"
-                tone="accent"
-              />
-              <Gauge
-                label="Disk"
-                percent={perf.disk_usage_percent}
-                used={perf.disk_total_gb - perf.disk_free_gb}
-                total={perf.disk_total_gb}
-                unit=" GB"
-                tone="accent"
-              />
-              <div className="mt-1 grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-faint tabular-nums">
-                <span>Windows: {perf.window_count}</span>
+            <div className="space-y-4">
+              <ProgressBar value={perf.cpu_usage_percent} label="CPU" tone={perf.cpu_usage_percent > 80 ? "danger" : perf.cpu_usage_percent > 60 ? "warn" : "accent"} />
+              <ProgressBar value={perf.memory_usage_percent} label="Memory" tone={perf.memory_usage_percent > 80 ? "danger" : perf.memory_usage_percent > 60 ? "warn" : "accent"} />
+              <ProgressBar value={perf.disk_usage_percent} label="Disk" tone={perf.disk_usage_percent > 90 ? "danger" : perf.disk_usage_percent > 75 ? "warn" : "accent"} />
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="rounded-lg border border-border/40 p-2">
+                  <div className="text-[9px] uppercase text-faint">Memory</div>
+                  <div className="text-sm font-bold tabular-nums">{safeFixed(perf.memory_used_mb, 0)}/{safeFixed(perf.memory_total_mb, 0)} MB</div>
+                </div>
+                <div className="rounded-lg border border-border/40 p-2">
+                  <div className="text-[9px] uppercase text-faint">Disk Free</div>
+                  <div className="text-sm font-bold tabular-nums">{safeFixed(perf.disk_free_gb, 1)} GB</div>
+                </div>
               </div>
-            </>
-          ) : (
-            <Empty
-              title={
-                pollError
-                  ? "Backend performance API unreachable"
-                  : "Waiting for backend…"
-              }
-              hint={
-                pollError
-                  ? "The system-monitor endpoint is not available. Check backend health."
-                  : "System metrics appear on first successful poll."
-              }
-            />
-          )}
-        </div>
-      </Panel>
-
-      {/* Event Throughput chart */}
-      <Panel
-        title="Event Throughput"
-        subtitle="Events per second (last 60s)"
-        className=""
-      >
-        <ThroughputChart rates={rates.buckets} />
-      </Panel>
-
-      {/* Topic Breakdown */}
-      <Panel
-        title="Topic Breakdown"
-        subtitle="By live event count"
-        className=""
-      >
-        <div className="space-y-1.5">
-          {rates.byTopic.map(([topic, count]) => (
-            <div key={topic} className="flex items-center gap-2 text-xs">
-              <span className="w-40 shrink-0 truncate font-mono text-faint">
-                {topic}
-              </span>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface/50">
-                <div
-                  className="h-full bg-accent/70"
-                  style={
-                    {
-                      width: `${(count / rates.maxTopic) * 100}%`,
-                    }
-                  }
-                />
-              </div>
-              <span className="w-8 text-right tabular-nums text-muted">
-                {count}
-              </span>
             </div>
-          ))}
-          {rates.byTopic.length === 0 && <Empty title="No events yet" />}
-        </div>
-      </Panel>
+          ) : (
+            <Empty title="No performance data" hint={pollError ?? "Polling…"} />
+          )}
+        </Panel>
 
-      {/* Resource Usage Detail */}
-      <Panel
-        title="Resource Details"
-        subtitle="Process-level snapshot from backend"
-        className=""
-      >
-        {perf ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-            <MetricTile label="Processes" value={perf.process_count} />
-            <MetricTile label="Windows" value={perf.window_count} />
-            <MetricTile
-              label="Free Disk"
-              value={`${(perf.disk_free_gb ?? 0).toFixed(1)} GB`}
-            />
-            <MetricTile
-              label="Memory Used"
-              value={`${(perf.memory_used_mb ?? 0).toFixed(0)} MB`}
-            />
-            <MetricTile
-              label="Total Memory"
-              value={`${(perf.memory_total_mb ?? 0).toFixed(0)} MB`}
-            />
-            <MetricTile
-              label="Total Disk"
-              value={`${(perf.disk_total_gb ?? 0).toFixed(1)} GB`}
-            />
+        {/* Right: Event Topics */}
+        <Panel title="Event Topics" subtitle={`${rates.byTopic.length} active`}>
+          <div className="min-h-0 max-h-[300px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-1.5">
+            {rates.byTopic.length === 0 ? (
+              <Empty title="No events" hint="EventBus traffic appears here." />
+            ) : (
+              rates.byTopic.map(([topic, count]) => {
+                const maxCount = rates.byTopic[0]?.[1] ?? 1;
+                const pct = (count / maxCount) * 100;
+                return (
+                  <div key={topic} className="rounded-lg border border-border/40 p-2">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="truncate font-mono text-muted">{topic}</span>
+                      <span className="text-faint tabular-nums">{count}</span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface/50">
+                      <div className="h-full rounded-full bg-accent/60" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
-        ) : (
-          <Empty title="No details available" />
-        )}
-      </Panel>
-
-      {/* Recent Events */}
-      <Panel
-        title="Recent Events"
-        subtitle="Raw EventBus envelope stream"
-        className=" min-h-0 flex-1"
-        contentClassName="p-0"
-      >
-        {events.length === 0 ? (
-          <div className="p-4">
-            <Empty title="Awaiting stream…" />
-          </div>
-        ) : (
-          <div className="h-full w-full">
-            <AutoSizer
-              renderProp={({ height, width }) => (
-                <List<{ events: Array<{ id: string; topic: string; source: string; timestamp: string }> }>
-                  style={{ height: height ?? 0, width: width ?? 0 }}
-                  rowCount={events.length}
-                  rowHeight={36}
-                  rowProps={{ events }}
-                  rowComponent={EventRow}
-                  className="divide-y divide-border/40 font-mono text-xs"
-                  overscanCount={20}
-                />
-              )}
-            />
-          </div>
-        )}
-      </Panel>
-    </div>
-  );
-}
-
-// ── Shared sub-components ──
-
-function MetricTile({
-  label,
-  value,
-}: {
-  label: string;
-  value: string | number;
-}) {
-  return (
-    <div className="glass rounded-lg px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-faint">
-        {label}
+        </Panel>
       </div>
-      <div className="mt-0.5 text-sm font-semibold tabular-nums text-text">
-        {value}
+
+      {/* ── Bottom stats row ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+        <KpiCard label="Tasks" value={m.tasks} tone="default" />
+        <KpiCard label="Providers" value={m.providers} tone="default" />
+        <KpiCard label="Cost" value={`$${m.cost.toFixed(4)}`} tone="warn" />
+        <KpiCard label="Latency" value={`${safeFixed(m?.latency, 0)}ms`} tone={m.latency > 1000 ? "warn" : "default"} />
       </div>
     </div>
   );
-}
-
-function ThroughputChart({ rates }: { rates: number[] }) {
-  const max = Math.max(1, ...rates);
-  return (
-    <div className="flex h-full items-end gap-[2px]">
-      {rates.map((v, i) => (
-        <div
-          key={i}
-          className="flex-1 rounded-sm bg-accent/70"
-          style={{
-            height: `${(v / max) * 100}%`,
-            minHeight: v > 0 ? 2 : 1,
-            opacity: 0.4 + (i / 60) * 0.6,
-          }}
-          title={`${v} evt/s`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
