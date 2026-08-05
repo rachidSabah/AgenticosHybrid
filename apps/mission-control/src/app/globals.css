@@ -391,3 +391,57 @@ body {
     animation: none !important;
   }
 }
+
+/* ── Fluid Typography ──
+   Uses clamp() to scale font sizes smoothly from 320px to 2560px.
+   No media query jumps — continuous scaling. */
+.text-fluid-xs { font-size: clamp(9px, 0.5rem + 0.1vw, 11px); }
+.text-fluid-sm { font-size: clamp(11px, 0.625rem + 0.15vw, 13px); }
+.text-fluid-base { font-size: clamp(13px, 0.75rem + 0.2vw, 15px); }
+.text-fluid-lg { font-size: clamp(15px, 0.875rem + 0.25vw, 18px); }
+.text-fluid-xl { font-size: clamp(18px, 1rem + 0.3vw, 24px); }
+.text-fluid-2xl { font-size: clamp(22px, 1.25rem + 0.4vw, 32px); }
+.text-fluid-3xl { font-size: clamp(28px, 1.5rem + 0.5vw, 48px); }
+
+/* ── Container Queries ──
+   Enable components to respond to their container's width,
+   not just the viewport. */
+@container (max-width: 640px) {
+  .cq-stack { flex-direction: column !important; }
+  .cq-stack > * { width: 100% !important; max-width: 100% !important; }
+  .cq-hide-sm { display: none !important; }
+}
+
+@container (min-width: 1024px) {
+  .cq-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .cq-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .cq-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+}
+
+/* ── DPI / High-Density Fixes ── */
+@media (min-resolution: 1.25dppx) {
+  /* Slightly increase border widths on HiDPI displays
+     so they don't disappear */
+  * { border-width: 1px; }
+}
+
+@media (min-resolution: 2dppx) {
+  /* On retina/4K displays, ensure text rendering is crisp */
+  body { -webkit-font-smoothing: antialiased; }
+}
+
+/* ── Windows Display Scaling ──
+   At 150%+ scaling, the viewport is smaller in CSS pixels,
+   so we need to ensure layout still works. */
+@media (max-width: 1280px) and (min-resolution: 1.5dppx) {
+  .rgrid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+}
+
+/* ── Touch Targets ──
+   Ensure minimum 40px touch targets for accessibility */
+@media (pointer: coarse) {
+  button, [role="button"], .clickable {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
