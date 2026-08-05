@@ -147,17 +147,32 @@ export function MissionOverview() {
   const providerCount = m.providers;
   const recentPulses = events.filter((e) => Date.now() - new Date(e.timestamp).getTime() < 5000).length;
   const allProviders = useMemo(() => {
-    const merged = Array.isArray(providersData) ? [...providersData] : [];
+    const merged: ProviderHealthRecord[] = Array.isArray(providersData) ? [...providersData] : [];
+    // Merge providers from the store (WebSocket events)
     for (const p of Object.values(providers)) {
       if (!merged.find((d) => d.provider?.toLowerCase() === p.provider?.toLowerCase())) {
         merged.push(p as unknown as ProviderHealthRecord);
+      }
+    }
+    // Also merge discovered agents as fleet members — they represent
+    // the actual runtimes (Git, Node, Python, Docker, etc.) detected
+    // on the system. Without this, the fleet panel would be empty
+    // when no LLM providers are configured.
+    for (const a of Object.values(agents)) {
+      const providerName = a.provider || a.id;
+      if (!merged.find((d) => d.provider?.toLowerCase() === providerName?.toLowerCase())) {
+        merged.push({
+          provider: providerName,
+          status: a.health === "healthy" ? "healthy" : a.health === "degraded" ? "degraded" : "down",
+          latency_ms: 0,
+        } as unknown as ProviderHealthRecord);
       }
     }
     // Filter out dev/testing providers that should not appear in the production fleet
     return merged.filter(
       (p) => p?.provider && !["mock", "Mock"].includes(p.provider)
     );
-  }, [providersData, providers]);
+  }, [providersData, providers, agents]);
 
   // Compute active tasks per provider
   const taskCounts = useMemo(() => {
