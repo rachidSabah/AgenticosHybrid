@@ -50,11 +50,13 @@ export function ProviderControlCenter() {
   }, [providersLive, restHealth]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
+    <div
+      className="grid h-full gap-4 p-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(400px, 100%), 1fr))" }}
+    >
       <Panel
         title="Providers"
         subtitle={`${rows.length} registered${connected ? " · live" : ""}`}
-        className="col-span-5"
       >
         <div className="space-y-2">
           {rows.map((p) => (
@@ -84,7 +86,7 @@ export function ProviderControlCenter() {
         </div>
       </Panel>
 
-      <Panel title="Provider Detail" subtitle={selected ?? "Select a provider"} className="col-span-7">
+      <Panel title="Provider Detail" subtitle={selected ?? "Select a provider"}>
         {!selected ? (
           <Empty title="Provider telemetry" hint="Pick a provider to inspect models and routing." />
         ) : (

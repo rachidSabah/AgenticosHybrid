@@ -631,7 +631,10 @@ class TestLocalDiscoveryServiceStartStopIntegration:
             assert result.agents_new == 2
             assert result.agents_updated == 0
             assert len(result.errors) == 0
-            assert result.duration_ms > 0
+            # Use >= because run_discovery() uses time.time() (non-monotonic)
+            # for duration_ms, and Windows time.time() has ~16ms resolution,
+            # so a fast mock-driven discovery can produce 0.0 ms.
+            assert result.duration_ms >= 0
             assert "hermes" in result.tools_detected
 
     async def test_scanner_failure_does_not_crash_service(self) -> None:

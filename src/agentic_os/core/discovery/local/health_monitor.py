@@ -236,7 +236,7 @@ class HealthMonitor:
                 )
                 await proc.wait()
                 return proc.returncode == 0
-        except (TimeoutError, FileNotFoundError, OSError):
+        except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
             return False
 
     async def _publish_health_changed(

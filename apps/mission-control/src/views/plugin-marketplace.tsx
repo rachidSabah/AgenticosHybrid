@@ -105,7 +105,9 @@ export function PluginMarketplace() {
   };
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full gap-4 p-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
+    >
       {/* Header */}
       <div className="col-span-12 flex items-center gap-4 rounded-2xl border border-border/50 bg-surface/30 px-5 py-3">
         <span className="text-sm font-bold tracking-[0.15em] uppercase">Plugin Marketplace</span>
@@ -120,7 +122,7 @@ export function PluginMarketplace() {
       </div>
 
       {/* Installed Providers */}
-      <Panel title="Provider Plugins" subtitle={`${providers.length} loaded adapters`} className="col-span-12 lg:col-span-6">
+      <Panel title="Provider Plugins" subtitle={`${providers.length} loaded adapters`} className="">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           {providers.map((p) => (
             <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5 flex items-center gap-2.5">
@@ -140,7 +142,7 @@ export function PluginMarketplace() {
       </Panel>
 
       {/* Installed MCP Servers */}
-      <Panel title="MCP Servers" subtitle={`${mcps.length} registered`} className="col-span-12 lg:col-span-6">
+      <Panel title="MCP Servers" subtitle={`${mcps.length} registered`} className="">
         {mcps.length > 0 ? (
           <div className="space-y-1.5">
             {mcps.map((m) => (

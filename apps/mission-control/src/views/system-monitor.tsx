@@ -139,7 +139,9 @@ export function SystemMonitor() {
   }, [events]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
+    <div className="grid h-full gap-4 p-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
+    >
       {/* Top stats bar */}
       <div className="col-span-12 flex flex-wrap gap-3">
         <Stat
@@ -178,7 +180,7 @@ export function SystemMonitor() {
               ? "unreachable"
               : "awaiting data…"
         }
-        className="col-span-12 lg:col-span-4"
+        className=""
       >
         <div className="flex flex-col gap-3">
           {perf ? (
@@ -231,7 +233,7 @@ export function SystemMonitor() {
       <Panel
         title="Event Throughput"
         subtitle="Events per second (last 60s)"
-        className="col-span-12 lg:col-span-8"
+        className=""
       >
         <ThroughputChart rates={rates.buckets} />
       </Panel>
@@ -240,7 +242,7 @@ export function SystemMonitor() {
       <Panel
         title="Topic Breakdown"
         subtitle="By live event count"
-        className="col-span-12 lg:col-span-4"
+        className=""
       >
         <div className="space-y-1.5">
           {rates.byTopic.map(([topic, count]) => (
@@ -271,7 +273,7 @@ export function SystemMonitor() {
       <Panel
         title="Resource Details"
         subtitle="Process-level snapshot from backend"
-        className="col-span-12 lg:col-span-4"
+        className=""
       >
         {perf ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
@@ -303,7 +305,7 @@ export function SystemMonitor() {
       <Panel
         title="Recent Events"
         subtitle="Raw EventBus envelope stream"
-        className="col-span-12 lg:col-span-8 min-h-0 flex-1"
+        className=" min-h-0 flex-1"
         contentClassName="p-0"
       >
         {events.length === 0 ? (

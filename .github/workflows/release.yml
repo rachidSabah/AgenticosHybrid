@@ -1,4 +1,4 @@
-name: Release
+﻿name: Release
 
 on:
   push:
@@ -16,7 +16,7 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
-  # ── Linux Build ──────────────────────────────────────────
+  # ΓöÇΓöÇ Linux Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   build-linux:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Linux (AppImage / DEB / RPM)"
@@ -34,7 +34,6 @@ jobs:
           sudo apt-get install -y -qq \
             libgtk-3-dev \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             libssl-dev \
@@ -112,10 +111,10 @@ jobs:
           path: apps/mission-control/dist/artifacts/*
           if-no-files-found: error
 
-  # ── Windows Build ───────────────────────────────────────
+  # ΓöÇΓöÇ Windows Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   build-windows:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    name: "Windows (EXE / MSI / ZIP)"
+    name: "Windows (EXE / ZIP)"
     runs-on: windows-latest
     defaults:
       run:
@@ -164,7 +163,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx tauri build --bundles nsis,msi
+        run: npx tauri build --bundles nsis
 
       - name: Create portable ZIP
         shell: pwsh
@@ -210,12 +209,6 @@ jobs:
             Copy-Item $f.FullName "$ArtifactsDir/${Product}-Setup-x64.exe" -Force
           }
 
-          # Copy MSI installer
-          $msiFiles = Get-ChildItem "src-tauri/target/release/bundle/msi" -Filter "*.msi" -ErrorAction SilentlyContinue
-          foreach ($f in $msiFiles) {
-            Copy-Item $f.FullName "$ArtifactsDir/${Product}-Setup-x64.msi" -Force
-          }
-
           # Generate SHA256 checksums
           $checksumsPath = "$ArtifactsDir/SHA256SUMS.txt"
           Get-ChildItem $ArtifactsDir -File | ForEach-Object {
@@ -232,7 +225,7 @@ jobs:
           path: apps/mission-control/dist/artifacts/*
           if-no-files-found: error
 
-  # ── macOS Build ─────────────────────────────────────────
+  # ΓöÇΓöÇ macOS Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   build-macos:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "macOS (DMG)"
@@ -310,7 +303,7 @@ jobs:
           path: apps/mission-control/dist/artifacts/*
           if-no-files-found: warn
 
-  # ── Aggregate & Release ─────────────────────────────────
+  # ΓöÇΓöÇ Aggregate & Release ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     name: "Publish Release"
@@ -363,7 +356,7 @@ jobs:
             "windows": {
               "os": "Windows 10+",
               "arch": "x86_64",
-              "installers": ["AgenticOS-Setup-x64.exe", "AgenticOS-Setup-x64.msi", "AgenticOS-Portable-x64.zip"]
+              "installers": ["AgenticOS-Setup-x64.exe", "AgenticOS-Portable-x64.zip"]
             },
             "linux": {
               "os": "Linux (glibc >= 2.28)",
@@ -392,17 +385,16 @@ jobs:
           ### Installation
 
           **Windows:**
-          - \`AgenticOS-Setup-x64.exe\` — NSIS installer
-          - \`AgenticOS-Setup-x64.msi\` — MSI installer
-          - \`AgenticOS-Portable-x64.zip\` — Portable (no install required)
+          - \`AgenticOS-Setup-x64.exe\` ΓÇö NSIS installer
+          - \`AgenticOS-Portable-x64.zip\` ΓÇö Portable (no install required)
 
           **Linux:**
-          - \`AgenticOS-x86_64.AppImage\` — AppImage (chmod +x and run)
-          - \`AgenticOS-x86_64.deb\` — Debian/Ubuntu package
-          - \`AgenticOS-x86_64.rpm\` — Fedora/RHEL package
+          - \`AgenticOS-x86_64.AppImage\` ΓÇö AppImage (chmod +x and run)
+          - \`AgenticOS-x86_64.deb\` ΓÇö Debian/Ubuntu package
+          - \`AgenticOS-x86_64.rpm\` ΓÇö Fedora/RHEL package
 
           **macOS:**
-          - \`AgenticOS-x86_64.dmg\` — Apple Disk Image
+          - \`AgenticOS-x86_64.dmg\` ΓÇö Apple Disk Image
 
           ### Changelog
 

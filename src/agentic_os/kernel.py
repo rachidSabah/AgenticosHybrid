@@ -385,8 +385,25 @@ class Kernel:
         async def _bg_start() -> None:
             try:
                 await self._start_subsystems()
-            except Exception as exc:
-                _diag("BackgroundInit", "FATAL", str(exc))
+            except BaseException as exc:
+                # Catch BaseException (not just Exception) so that
+                # SystemExit / KeyboardInterrupt / asyncio.CancelledError
+                # are logged instead of silently killing the bg task.
+                # On Windows CI we've seen the backend die silently
+                # partway through subsystem init; this is a diagnostic
+                # net to surface the cause.
+                import traceback as _tb
+
+                _diag(
+                    "BackgroundInit",
+                    "FATAL",
+                    f"{type(exc).__name__}: {exc}",
+                )
+                print(
+                    f"{_STARTUP_LOG_PREFIX} BackgroundInit traceback:\n{_tb.format_exc()}",
+                    file=__import__("sys").stderr,
+                    flush=True,
+                )
 
         asyncio.create_task(_bg_start())
         _diag("Kernel", "CRITICAL_READY", "API server will start immediately")
@@ -563,65 +580,75 @@ class Kernel:
             self.brain_runtime_bridge = RuntimeBridge()
 
             # ── Auto-detect locally installed brains ──
-            _diag("Brains", "AUTO_DETECTING")
-            try:
-                detected = await self.brain_runtime_bridge.detect_all_with_windows()
-                registered = 0
-                # Central hub ID for the constellation graph
-                _HUB_ID = "agenticos-hub"
-                for record in detected:
-                    # Only register brains that are actually installed
-                    if record.health < 50:
-                        continue
-                    await self.brain_registry.register(record)
-                    registered += 1
+            # Allow skipping via env var (AGENTICOS_SKIP_BRAIN_AUTODETECT=1)
+            # — useful in CI where the Windows process scan has been
+            # observed to crash the backend silently.
+            import os as _os
 
-                    # Add a constellation graph edge: hub → brain
-                    if self.brain_graph is not None:
-                        await self.brain_graph.add_edge(
-                            source_id=_HUB_ID,
-                            target_id=record.id,
-                            rel_type=RelationshipType.PARENT,
-                            metadata={"label": f"{record.display_name} managed by AgenticOS"},
-                            weight=max(1.0, record.health / 100.0),
-                        )
-                    # Publish events the frontend main store understands
-                    if self.bus:
-                        await self.bus.publish(
-                            EventEnvelope(
-                                type="provider.registered",
-                                source="kernel",
-                                topic="provider.registered",
-                                payload={
-                                    "name": record.display_name,
-                                    "provider": record.display_name,
-                                    "vendor": record.vendor,
-                                    "status": "healthy" if record.health >= 80 else "degraded",
-                                    "latency_ms": record.latency,
-                                },
+            _skip_flag = _os.environ.get("AGENTICOS_SKIP_BRAIN_AUTODETECT", "")
+            _skip_brain_autodetect = _skip_flag.lower() in ("1", "true", "yes", "on")
+            if _skip_brain_autodetect:
+                _diag("Brains", "AUTO_DETECT_SKIPPED", "AGENTICOS_SKIP_BRAIN_AUTODETECT set")
+            else:
+                _diag("Brains", "AUTO_DETECTING")
+                try:
+                    detected = await self.brain_runtime_bridge.detect_all_with_windows()
+                    registered = 0
+                    # Central hub ID for the constellation graph
+                    _HUB_ID = "agenticos-hub"
+                    for record in detected:
+                        # Only register brains that are actually installed
+                        if record.health < 50:
+                            continue
+                        await self.brain_registry.register(record)
+                        registered += 1
+
+                        # Add a constellation graph edge: hub → brain
+                        if self.brain_graph is not None:
+                            await self.brain_graph.add_edge(
+                                source_id=_HUB_ID,
+                                target_id=record.id,
+                                rel_type=RelationshipType.PARENT,
+                                metadata={"label": f"{record.display_name} managed by AgenticOS"},
+                                weight=max(1.0, record.health / 100.0),
                             )
-                        )
-                        if record.health >= 50:
+                        # Publish events the frontend main store understands
+                        if self.bus:
                             await self.bus.publish(
                                 EventEnvelope(
-                                    type="agent.started",
+                                    type="provider.registered",
                                     source="kernel",
-                                    topic="agent.started",
+                                    topic="provider.registered",
                                     payload={
-                                        "id": record.id,
                                         "name": record.display_name,
                                         "provider": record.display_name,
-                                        "role": "assistant",
-                                        "status": "running"
-                                        if record.status in ("connected", "busy", "executing")
-                                        else "idle",
-                                        "capabilities": list(record.capabilities),
+                                        "vendor": record.vendor,
+                                        "status": "healthy" if record.health >= 80 else "degraded",
+                                        "latency_ms": record.latency,
                                     },
                                 )
                             )
-                _diag("Brains", "AUTO_DETECTED", f"{registered} runtimes found")
-            except Exception as exc:
-                _diag("Brains", "AUTO_DETECT_FAILED", str(exc))
+                            if record.health >= 50:
+                                await self.bus.publish(
+                                    EventEnvelope(
+                                        type="agent.started",
+                                        source="kernel",
+                                        topic="agent.started",
+                                        payload={
+                                            "id": record.id,
+                                            "name": record.display_name,
+                                            "provider": record.display_name,
+                                            "role": "assistant",
+                                            "status": "running"
+                                            if record.status in ("connected", "busy", "executing")
+                                            else "idle",
+                                            "capabilities": list(record.capabilities),
+                                        },
+                                    )
+                                )
+                    _diag("Brains", "AUTO_DETECTED", f"{registered} runtimes found")
+                except Exception as exc:
+                    _diag("Brains", "AUTO_DETECT_FAILED", str(exc))
 
             _diag(
                 "Brains",
@@ -647,19 +674,31 @@ class Kernel:
             # converts them into BrainRecord registrations, so this is the
             # event-driven path that keeps BrainRegistry in sync with the
             # installed tools at runtime (not just at startup auto-detect).
-            _diag("LocalDiscovery", "STARTING")
-            try:
-                self.local_discovery = LocalDiscoveryService()
-                await self.local_discovery.start(event_bus=self.bus)
-                if self._platform_instance is not None:
-                    self._platform_instance.local_discovery = self.local_discovery
+            #
+            # Same env var as Brains auto-detect: LocalDiscovery also spawns
+            # subprocesses (tasklist, reg query, ps) on Windows via the
+            # asyncio ProactorEventLoop, and has been observed to crash
+            # the backend silently. Skip when the env var is set.
+            if _skip_brain_autodetect:
                 _diag(
                     "LocalDiscovery",
-                    "STARTED",
-                    f"{len(await self.local_discovery.get_agents())} agents found",
+                    "SKIPPED",
+                    "AGENTICOS_SKIP_BRAIN_AUTODETECT set",
                 )
-            except Exception as exc:
-                _diag("LocalDiscovery", "FAILED", str(exc))
+            else:
+                _diag("LocalDiscovery", "STARTING")
+                try:
+                    self.local_discovery = LocalDiscoveryService()
+                    await self.local_discovery.start(event_bus=self.bus)
+                    if self._platform_instance is not None:
+                        self._platform_instance.local_discovery = self.local_discovery
+                    _diag(
+                        "LocalDiscovery",
+                        "STARTED",
+                        f"{len(await self.local_discovery.get_agents())} agents found",
+                    )
+                except Exception as exc:
+                    _diag("LocalDiscovery", "FAILED", str(exc))
 
             # ── Phase 11: Executive Intelligence Layer ──
             _diag("Executive", "STARTING")

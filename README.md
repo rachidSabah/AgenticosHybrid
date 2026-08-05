@@ -1,8 +1,104 @@
-# AgenticOS v1.0.0-rc9
+# AgenticOS v1.0.0-rc10
 
 A **local-first, event-bus-driven AI Agent Operating System** that orchestrates autonomous agents, swarms, and distributed runtimes across a single node or an entire cluster — with a polished desktop runtime, an immersive Mission Control dashboard, and a fully autonomous self-improving ecosystem.
 
 [GitHub](https://github.com/rachidSabah/AgenticosHybrid) | [Changelog](CHANGELOG.md) | [Architecture](ARCHITECTURE.md) | [Security](SECURITY.md) | [Roadmap](ROADMAP.md)
+
+---
+
+## Download & Install
+
+Pre-built installers are available on the [GitHub Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases):
+
+| Platform | Installer | Type |
+|----------|-----------|------|
+| **Windows 10+** | `AgenticOS-Setup-x64.exe` | NSIS installer (recommended) |
+| **Windows 10+** | `AgenticOS-Portable-x64.zip` | Portable (no install needed) |
+| **Linux** | `AgenticOS-x86_64.AppImage` | AppImage (chmod +x and run) |
+| **Linux** | `AgenticOS-x86_64.deb` | Debian/Ubuntu package |
+| **Linux** | `AgenticOS-x86_64.rpm` | Fedora/RHEL package |
+| **macOS 12+** | `AgenticOS-x86_64.dmg` | Apple Disk Image |
+
+> **Note:** MSI installer was removed in rc10 because WiX requires numeric-only
+> pre-release identifiers. The NSIS `.exe` installer works on all Windows versions.
+
+### Quick Start
+
+```bash
+# Clone and run from source (development)
+git clone https://github.com/rachidSabah/AgenticosHybrid.git
+cd AgenticosHybrid
+uv sync --dev
+uv run python -m agentic_os serve --host 127.0.0.1 --port 8000
+```
+
+Then open `http://127.0.0.1:8000` in your browser, or launch the desktop app:
+
+```bash
+cd apps/mission-control
+npm ci --legacy-peer-deps
+npm run tauri dev
+```
+
+---
+
+## Screenshots
+
+### Mission Control Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/overview-light.png" alt="Mission Control — Light theme" width="45%">
+  &nbsp;
+  <img src="docs/screenshots/overview-dark.png" alt="Mission Control — Dark theme" width="45%">
+</p>
+<p align="center"><em>Mission Control dashboard — light & dark themes</em></p>
+
+### Desktop Runtime
+
+<p align="center">
+  <img src="docs/screenshots/desktop-overview.png" alt="Desktop Overview" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-runtimes.png" alt="Runtime Discovery" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-diagnostics.png" alt="Diagnostics" width="30%">
+</p>
+<p align="center"><em>Desktop runtime: overview, runtime discovery, diagnostics</em></p>
+
+### Core Subsystems
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/brain.png" alt="Brain Registry" width="200px"><br><sub>Brain Registry</sub></td>
+<td align="center"><img src="docs/screenshots/providers.png" alt="Providers" width="200px"><br><sub>Provider Management</sub></td>
+<td align="center"><img src="docs/screenshots/swarm.png" alt="Swarm" width="200px"><br><sub>Swarm Orchestration</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/discovery.png" alt="Discovery" width="200px"><br><sub>Runtime Discovery</sub></td>
+<td align="center"><img src="docs/screenshots/memory.png" alt="Memory" width="200px"><br><sub>Memory System</sub></td>
+<td align="center"><img src="docs/screenshots/mcp.png" alt="MCP" width="200px"><br><sub>MCP Framework</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/workflow.png" alt="Workflow" width="200px"><br><sub>Workflow Engine</sub></td>
+<td align="center"><img src="docs/screenshots/pipeline.png" alt="Pipeline" width="200px"><br><sub>Pipeline Engine</sub></td>
+<td align="center"><img src="docs/screenshots/constellation.png" alt="Constellation" width="200px"><br><sub>Brain Constellation</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/execution.png" alt="Execution" width="200px"><br><sub>Execution Log</sub></td>
+<td align="center"><img src="docs/screenshots/timeline.png" alt="Timeline" width="200px"><br><sub>Event Timeline</sub></td>
+<td align="center"><img src="docs/screenshots/monitor.png" alt="Monitor" width="200px"><br><sub>System Monitor</sub></td>
+</tr>
+</table>
+
+### Desktop Settings & Updates
+
+<p align="center">
+  <img src="docs/screenshots/desktop-settings.png" alt="Settings" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-updates.png" alt="Updates" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/desktop-offline.png" alt="Offline Mode" width="30%">
+</p>
+<p align="center"><em>Settings, auto-updates, and offline mode</em></p>
 
 ---
 
@@ -13,6 +109,26 @@ AgenticOS is a complete desktop environment purpose-built for running AI agents 
 Whether you want to run local LLMs via Ollama, connect to cloud providers like Anthropic or OpenAI, use MCP (Model Context Protocol) tools, or orchestrate multi-agent swarms, AgenticOS manages every aspect of the lifecycle — installation, configuration, runtime discovery, updates, and diagnostics — through a graphical interface.
 
 Built on a hexagonal (clean) architecture with an event bus at its core, AgenticOS is modular, observable, and secure by construction. It runs on Windows, Linux, and macOS, and is fully containerizable for server deployments.
+
+## Screenshots
+
+### Mission Control — Mission Overview
+![Mission Overview](docs/screenshots/mission-overview-full.png)
+*Real-time agent status, running tasks, uptime metrics and activity graphs on a single dark dashboard.*
+
+### Agent Constellation — Live Topology
+![Agent Constellation](docs/screenshots/agent-constellation-full.png)
+*Interactive network graph showing all registered agents, their roles, connections, and live task flow.*
+
+### Provider Control Center
+![Provider Control Center](docs/screenshots/provider-control-full.png)
+*Manage every AI provider — OpenAI, Anthropic, Ollama, NVIDIA NIM, LM Studio — with health monitoring, cost tracking, and routing weight controls.*
+
+### Swarm Orchestration
+![Swarm Orchestration](docs/screenshots/swarm-orchestration-full.png)
+*Multi-agent swarm executing a mission in hierarchical pattern with role assignments, consensus votes, and a live event stream.*
+
+---
 
 ## Features
 
@@ -100,20 +216,45 @@ That's it. No terminal, no package managers, no configuration files.
 
 ## Windows Installation
 
+> **Download the latest release:** [AgenticOS-Setup-x64.exe](https://github.com/rachidSabah/AgenticosHybrid/releases/latest) · [AgenticOS-Portable-x64.zip](https://github.com/rachidSabah/AgenticosHybrid/releases/latest)
+
+![Windows Installer](docs/screenshots/windows-installer.png)
+*The AgenticOS NSIS installer guides you through installation in under 60 seconds.*
+
 ### Requirements
 
 - Windows 10 22H2 or later (Windows 11 recommended)
-- 8 GB RAM (16 GB recommended)
-- WebView2 Runtime (installed automatically with the app on Windows 11; available via Windows Update on Windows 10)
+- 8 GB RAM (16 GB recommended for large models)
+- WebView2 Runtime (pre-installed on Windows 11; available via Windows Update on Windows 10)
 - 1 GB free disk space
 
-### Steps
+### Option A — NSIS Installer (recommended)
 
-1. Download the latest `AgenticOS-Setup-x64.exe` or `AgenticOS-Setup-x64.msi` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
-2. Double-click the installer and follow the on-screen instructions.
+1. Download `AgenticOS-Setup-x64.exe` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
+2. Run the installer — it installs Python runtime, backend, frontend, and registers file associations.
 3. AgenticOS launches automatically after installation.
 
-A portable ZIP version (`AgenticOS-Portable-x64.zip`) is also available — extract and run `AgenticOS.exe` with no installation required.
+### Option B — Portable ZIP (no installation)
+
+1. Download `AgenticOS-Portable-x64.zip` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases).
+2. Extract to any folder (e.g. a USB drive).
+3. Run `start.bat` or `start.ps1` to launch AgenticOS — no admin rights required.
+
+### Build from Source (Windows)
+
+```powershell
+# Prerequisites: Node.js 20+, Rust stable, Python 3.12+
+git clone https://github.com/rachidSabah/AgenticosHybrid
+cd AgenticosHybrid
+pip install uv
+uv sync
+cd apps/mission-control
+npm ci --legacy-peer-deps
+npx tauri build --bundles nsis   # produces AgenticOS-Setup-x64.exe
+```
+
+The built installer is placed in `apps/mission-control/src-tauri/target/release/bundle/nsis/`.
+
 
 ## Linux Installation
 

@@ -372,23 +372,60 @@ export default function DesktopUpdates() {
       {releases.length > 0 && (
         <Panel title="Available Updates" subtitle={`${releases.length} release(s)`}>
           <div className="space-y-2">
-            {releases.map((r, i) => (
-              <div key={r.tag || i} className="flex items-center gap-3 rounded-lg border border-border/40 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{r.version}</span>
-                    <Badge tone={r.channel === "stable" ? "ok" : r.channel === "beta" ? "warn" : "accent"}>{r.channel}</Badge>
-                    {r.prerelease && <Badge tone="info">Pre-release</Badge>}
+            {releases.map((r, i) => {
+              // Construct a minimal UpdateManifest from the ReleaseInfo
+              // so we can reuse handleDownload / handleInstall.
+              const manifest: UpdateManifest = {
+                version: r.version,
+                download_url: r.url,
+                checksum_sha256: "",
+                size_bytes: 0,
+                release_date: r.published_at ?? "",
+                min_version: "",
+                changelog: r.release_notes ? r.release_notes.split("\n").filter(Boolean) : [],
+                mandatory: false,
+                channel: r.channel,
+              };
+              const isCurrent = r.version === version;
+              return (
+                <div key={r.tag || i} className="flex flex-wrap items-center gap-3 rounded-lg border border-border/40 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{r.version}</span>
+                      <Badge tone={r.channel === "stable" ? "ok" : r.channel === "beta" ? "warn" : "accent"}>{r.channel}</Badge>
+                      {r.prerelease && <Badge tone="info">Pre-release</Badge>}
+                      {isCurrent && <Badge tone="default">Installed</Badge>}
+                    </div>
+                    {r.release_notes && (
+                      <div className="mt-0.5 text-[11px] text-faint line-clamp-2">{r.release_notes}</div>
+                    )}
+                    {r.published_at && (
+                      <div className="mt-0.5 text-[11px] text-faint">{new Date(r.published_at).toLocaleDateString()}</div>
+                    )}
                   </div>
-                  {r.release_notes && (
-                    <div className="mt-0.5 text-[11px] text-faint line-clamp-2">{r.release_notes}</div>
-                  )}
-                  {r.published_at && (
-                    <div className="mt-0.5 text-[11px] text-faint">{new Date(r.published_at).toLocaleDateString()}</div>
+                  {!isCurrent && (
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        onClick={() => handleDownload(manifest)}
+                        disabled={downloading}
+                        aria-label={`Download ${r.version}`}
+                        className="rounded-lg border border-border/60 px-3 py-1.5 text-xs font-medium transition hover:bg-surface/20 disabled:opacity-50"
+                      >
+                        {downloading ? "Downloading…" : "Download"}
+                      </button>
+                      <button
+                        onClick={() => handleInstall(manifest)}
+                        disabled={installing}
+                        aria-label={`Install ${r.version}`}
+                        className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
+                      >
+                        {installing ? "Installing…" : "Install"}
+                      </button>
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       )}

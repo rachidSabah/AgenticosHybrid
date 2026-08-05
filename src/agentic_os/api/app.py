@@ -393,14 +393,14 @@ def create_app(platform: Platform) -> FastAPI:
     import os as _os_mod
     from pathlib import Path as _Path
 
-    _WORKSPACE_KEY = "agentic_os.workspace"
-    _workspace_state: dict[str, str] = {"path": ""}
+    from agentic_os.domain.workspace import (
+        get_workspace_root as _get_workspace_root,
+    )
+    from agentic_os.domain.workspace import (
+        set_workspace_root as _set_workspace_root,
+    )
 
-    def _get_workspace_root() -> str:
-        """Get the current workspace root, defaulting to cwd."""
-        if _workspace_state["path"]:
-            return _workspace_state["path"]
-        return _os_mod.getcwd()
+    _WORKSPACE_KEY = "agentic_os.workspace"
 
     def _is_safe_path(workspace_root: str, rel_path: str) -> bool:
         """Reject path traversal — no .. or absolute paths."""
@@ -567,8 +567,8 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "path is required")
         if not _os_mod.path.isdir(path):
             raise HTTPException(404, f"Directory not found: {path}")
-        _workspace_state["path"] = _os_mod.path.realpath(path)
-        return {"path": _workspace_state["path"]}
+        real_path = _set_workspace_root(path)
+        return {"path": real_path}
 
     @app.get("/api/workspace/current")
     async def workspace_current() -> dict:
@@ -853,7 +853,10 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "bot_token is required")
         _telegram_gateway._bot_token = token
         _telegram_gateway._allowed_users = set(allowed_users) if allowed_users else None
-        await _telegram_gateway.start()
+        try:
+            await _telegram_gateway.start()
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
         return {"status": "connected", "username": _telegram_gateway.bot_username}
 
     @app.post("/api/gateway/telegram/disconnect")
@@ -884,7 +887,10 @@ def create_app(platform: Platform) -> FastAPI:
         session_path = body.get("session_path", "") if body else ""
         if session_path:
             _whatsapp_gateway._session_path = session_path
-        await _whatsapp_gateway.start()
+        try:
+            await _whatsapp_gateway.start()
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
         return {"status": _whatsapp_gateway.connection_status}
 
     @app.post("/api/gateway/whatsapp/disconnect")

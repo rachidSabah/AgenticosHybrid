@@ -51,11 +51,11 @@ class TelegramGateway:
         self._allowed_users = set(allowed_users) if allowed_users else None
         self._bot: Any = None
         self._app: Any = None
-        self._bot_username: str = ""
         self._running = False
+        self._bot_username: str = ""
         self._recent_messages: list[dict] = []
-        self._chat_missions: dict[int, list[str]] = {}  # chat_id → [mission_ids]
-        self._mission_chats: dict[str, int] = {}  # mission_id → chat_id
+        self._chat_missions: dict[int, list[str]] = {}
+        self._mission_chats: dict[str, int] = {}
 
     @property
     def is_running(self) -> bool:
@@ -63,15 +63,19 @@ class TelegramGateway:
 
     @property
     def bot_username(self) -> str:
-        if self._bot_username:
-            return f"@{self._bot_username}"
-        return ""
+        return f"@{self._bot_username}" if self._bot_username else ""
 
     async def start(self) -> None:
-        """Start the Telegram bot."""
+        """Start the Telegram bot.
+
+        Raises RuntimeError if the bot cannot start (missing token,
+        missing python-telegram-bot package, invalid token, network
+        error reaching Telegram API). The caller (API endpoint) should
+        catch this and return an HTTP error so the frontend can display
+        the failure reason.
+        """
         if not self._bot_token:
-            log.warning("telegram.no_token", message="Set TELEGRAM_BOT_TOKEN to enable")
-            return
+            raise RuntimeError("Bot token is required. Get one from @BotFather on Telegram.")
 
         try:
             from telegram import Bot
@@ -82,20 +86,22 @@ class TelegramGateway:
                 filters,
             )
         except ImportError:
-            log.error("telegram.import_failed", message="pip install python-telegram-bot")
-            return
+            raise RuntimeError(
+                "python-telegram-bot is not installed. Run: pip install python-telegram-bot"
+            ) from None
 
         self._bot = Bot(token=self._bot_token)
         self._app = Application.builder().token(self._bot_token).build()
 
-        # Get bot info
+        # Get bot info — validates the token against Telegram API
         try:
             me = await self._bot.get_me()
             self._bot_username = me.username or ""
             log.info("telegram.connected", username=self._bot_username)
         except Exception as exc:
-            log.error("telegram.connect_failed", error=str(exc))
-            return
+            raise RuntimeError(
+                f"Failed to connect to Telegram API. Check your bot token. Error: {exc}"
+            ) from exc
 
         # Register handlers
         self._app.add_handler(CommandHandler("start", self._on_start))
@@ -115,7 +121,7 @@ class TelegramGateway:
                 type="gateway.telegram.connected",
                 source="telegram_gateway",
                 topic="gateway.telegram.connected",
-                payload={"username": self._bot.username},
+                payload={"username": self._bot_username},
             )
         )
 
@@ -124,7 +130,7 @@ class TelegramGateway:
         # Start polling in background
         await self._app.initialize()
         await self._app.start()
-        if self._app.updater is not None:
+        if self._app.updater:
             await self._app.updater.start_polling(drop_pending_updates=True)
         log.info("telegram.polling_started")
 

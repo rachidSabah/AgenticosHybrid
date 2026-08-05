@@ -19,17 +19,17 @@ export function Panel({
   contentClassName?: string;
 }) {
   return (
-    <section className={clsx("panel flex min-h-0 flex-col", className)}>
+    <section className={clsx("panel flex min-h-0 flex-col h-full", className)}>
       {(title || actions) && (
-        <header className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
+        <header className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3">
           <div className="min-w-0">
             {title && <h2 className="truncate text-sm font-semibold tracking-tight">{title}</h2>}
             {subtitle && <p className="truncate text-[11px] text-faint">{subtitle}</p>}
           </div>
-          {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
+          {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={clsx("min-h-0 flex-1 overflow-auto p-4", contentClassName)}>{children}</div>
+      <div className={clsx("min-h-0 flex-1 overflow-hidden p-4", contentClassName)}>{children}</div>
     </section>
   );
 }

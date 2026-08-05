@@ -149,7 +149,13 @@ async def _run_powershell(script: str, timeout: float = 10.0) -> str:
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         return stdout.decode("utf-16-le", errors="replace").strip() if stdout else ""
-    except (TimeoutError, subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except (
+        TimeoutError,
+        subprocess.TimeoutExpired,
+        FileNotFoundError,
+        OSError,
+        NotImplementedError,
+    ):
         return ""
 
 
@@ -169,7 +175,7 @@ async def _where_exe(name: str) -> str:
             if line and line.lower().endswith(".exe"):
                 return line
         return lines[0].strip() if lines else ""
-    except (FileNotFoundError, OSError):
+    except (FileNotFoundError, OSError, NotImplementedError):
         return ""
 
 
@@ -191,7 +197,7 @@ async def _get_version(
         # Extract semantic version (first match)
         m = re.search(r"(\d+\.\d+\.\d+[a-zA-Z0-9._-]*)", output)
         return m.group(1) if m else output[:50]
-    except (TimeoutError, FileNotFoundError, OSError):
+    except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
         return ""
 
 

@@ -145,7 +145,7 @@ class _GenericCliConnector(BrainConnector):
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
                 version = stdout.decode("utf-8", errors="replace").strip()
-            except (TimeoutError, FileNotFoundError, OSError):
+            except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
                 version = ""
 
         caps = [f"cli:{self._exe_name}"]

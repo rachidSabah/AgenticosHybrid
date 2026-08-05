@@ -322,7 +322,11 @@ class TestRuntimeHealthMonitor:
         runtime = Runtime(name="python3", binary_path="/usr/bin/python3")
         health = await monitor.check(runtime)
         assert health.healthy is True
-        assert health.response_time_ms > 0
+        # Use >= (not >) because subprocess.run is mocked here — it returns
+        # instantly, so the measured (time.monotonic() - start) * 1000 can
+        # legitimately be 0.0 on Windows where monotonic reads adjacent to a
+        # no-op function call may not tick.
+        assert health.response_time_ms >= 0
 
     @patch("subprocess.run", side_effect=FileNotFoundError)
     async def test_check_file_not_found(self, mock_run, monitor) -> None:
