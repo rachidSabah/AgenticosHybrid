@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { 
-  RefreshCw, ZoomIn, ZoomOut
-} from "lucide-react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { RefreshCw, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { useStore } from "@/lib/store";
 
-// Base color mapping per provider
+// ── Provider Colors ──
 const PROVIDER_COLORS: Record<string, string> = {
   claude: "#d980ff",
   hermes: "#00f0ff",
@@ -19,6 +17,10 @@ const PROVIDER_COLORS: Record<string, string> = {
   openai: "#818cf8",
   anthropic: "#d980ff",
   google: "#f97316",
+  git: "#10b981",
+  node: "#84cc16",
+  python: "#3b82f6",
+  docker: "#06b6d4",
 };
 
 function getProviderColor(name: string): string {
@@ -26,14 +28,45 @@ function getProviderColor(name: string): string {
   for (const k of Object.keys(PROVIDER_COLORS)) {
     if (low.includes(k)) return PROVIDER_COLORS[k];
   }
-  return "#00f0ff";
+  return "#818cf8";
 }
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const s = Math.floor(seconds % 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+// ── Node position calculation with collision avoidance ──
+function computeNodePositions(
+  nodeCount: number,
+  containerWidth: number,
+  containerHeight: number,
+  zoom: number
+): Array<{ x: number; y: number }> {
+  if (nodeCount <= 1) return [{ x: containerWidth / 2, y: containerHeight / 2 }];
+
+  const positions: Array<{ x: number; y: number }> = [];
+  const cx = containerWidth / 2;
+  const cy = containerHeight / 2;
+
+  // Core node at center
+  positions.push({ x: cx, y: cy });
+
+  // Outer nodes in a circle — radius scales with container size and zoom
+  const minRadius = 80;
+  const maxRadius = Math.min(containerWidth, containerHeight) * 0.4;
+  const radius = Math.max(minRadius, maxRadius) / zoom;
+
+  for (let i = 0; i < nodeCount - 1; i++) {
+    const angle = (i / (nodeCount - 1)) * Math.PI * 2 - Math.PI / 2;
+    const x = cx + radius * Math.cos(angle);
+    const y = cy + radius * Math.sin(angle);
+    positions.push({ x, y });
+  }
+
+  return positions;
 }
 
 export function AgentConstellation() {
@@ -44,514 +77,393 @@ export function AgentConstellation() {
   const telemetry = useStore((s) => s.telemetry);
   const performance = useStore((s) => s.performance);
 
-  // Ensure brains/agents are hydrated from REST when this tab is first opened.
   useEffect(() => {
     void useStore.getState().hydrate();
   }, []);
 
-  const [activePlayback, setActivePlayback] = useState<"1x" | "2x" | "4x">("4x");
+  const [activePlayback] = useState<"1x" | "2x" | "4x">("4x");
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Dynamically compute constellation nodes from live discovered providers / agents
+  // ── Canvas ref + ResizeObserver ──
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasSize({ width: Math.round(width), height: Math.round(height) });
+        }
+      }
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // ── Build constellation nodes from live data ──
   const constellationNodes = useMemo(() => {
     const providerList = Object.values(storeProviders).filter(
       (p) => p?.provider && !["mock", "Mock"].includes(p.provider)
     );
-    
-    // Central Mission Control Core Node
+
     const coreNode = {
       id: "mission_control_core",
-      name: "MISSION CONTROL CORE",
-      sub: "Central Intelligence & Orchestration",
+      name: "MISSION CONTROL",
+      sub: "Central Intelligence",
       status: "ONLINE",
       color: "#00f0ff",
       isCore: true,
-      pos: { x: 50, y: 44 },
     };
 
-    if (providerList.length === 0) {
-      return [coreNode];
-    }
+    if (providerList.length === 0) return [coreNode];
 
-    // Circular constellation arrangement around Central Core for all discovered runtimes
-    const n = providerList.length;
-    const outerNodes = providerList.map((p, idx) => {
-      const angle = (idx / n) * Math.PI * 2 - Math.PI / 2;
-      const radiusX = 34; // percentage radius
-      const radiusY = 32;
-      const x = 50 + radiusX * Math.cos(angle);
-      const y = 44 + radiusY * Math.sin(angle);
-
-      return {
-        id: `${p.provider.toLowerCase().replace(/\s+/g, "_")}-${idx}`,
-        name: p.provider.toUpperCase(),
-        sub: p.status === "healthy" ? "Discovered Runtime" : p.status,
-        status: p.status === "healthy" ? "ACTIVE" : p.status.toUpperCase(),
-        color: getProviderColor(p.provider),
-        isCore: false,
-        pos: { x: Math.round(x), y: Math.round(y) },
-      };
-    });
+    const outerNodes = providerList.map((p, idx) => ({
+      id: `${p.provider.toLowerCase().replace(/\s+/g, "_")}-${idx}`,
+      name: p.provider.toUpperCase(),
+      sub: p.status === "healthy" ? "Active Runtime" : p.status,
+      status: p.status === "healthy" ? "ACTIVE" : p.status.toUpperCase(),
+      color: getProviderColor(p.provider),
+      isCore: false,
+    }));
 
     return [coreNode, ...outerNodes];
   }, [storeProviders]);
 
-  // Dynamically compute live active communication connections
+  // ── Compute positions with collision avoidance ──
+  const nodePositions = useMemo(() => {
+    return computeNodePositions(constellationNodes.length, canvasSize.width, canvasSize.height, zoom);
+  }, [constellationNodes.length, canvasSize, zoom]);
+
+  // ── Connections (hub-and-spoke) ──
   const connections = useMemo(() => {
-    const links = constellationNodes
-      .filter(n => !n.isCore)
-      .map(n => ({
-        from: n.id,
-        to: "mission_control_core",
-        color: n.color,
-      }));
-
-    // Add inter-agent links if active tasks or events reference multiple runtimes
-    if (constellationNodes.length >= 3) {
-      for (let i = 1; i < constellationNodes.length - 1; i++) {
-        links.push({
-          from: constellationNodes[i].id,
-          to: constellationNodes[i + 1].id,
-          color: constellationNodes[i].color,
-        });
-      }
-    }
-
-    return links;
+    return constellationNodes
+      .filter((n) => !n.isCore)
+      .map((n) => ({ from: n.id, to: "mission_control_core", color: n.color }));
   }, [constellationNodes]);
 
-  // Real-time task & event metrics derived from store
-  const totalAgentsCount = useMemo(() => Math.max(Object.keys(storeAgents).length, constellationNodes.length - 1), [storeAgents, constellationNodes]);
-  const activeAgentsCount = useMemo(() => {
-    const list = Object.values(storeProviders);
-    return list.length > 0 ? list.filter(p => p.status === "healthy").length : 0;
-  }, [storeProviders]);
+  // ── Metrics ──
+  const totalAgentsCount = Math.max(Object.keys(storeAgents).length, constellationNodes.length - 1);
+  const activeAgentsCount = Object.values(storeProviders).filter((p) => p.status === "healthy").length;
+  const runningTasksCount = Object.values(storeTasks).filter((t) => t.status === "running").length;
+  const completedTasksCount = Object.values(storeTasks).filter((t) => t.status === "completed").length;
 
-  const runningTasksCount = useMemo(() => {
-    const tasks = Object.values(storeTasks);
-    return tasks.length > 0 ? tasks.filter(t => t.status === "running").length : 0;
-  }, [storeTasks]);
-
-  const completedTasksCount = useMemo(() => {
-    const tasks = Object.values(storeTasks);
-    return tasks.length > 0 ? tasks.filter(t => t.status === "completed").length : 0;
-  }, [storeTasks]);
-
-  // Task counts grouped by provider (derived from task ID prefix)
-  const taskCountByProvider = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const t of Object.values(storeTasks)) {
-      const prefix = (t.id || t.title || "").split("_")[0].toLowerCase();
-      if (prefix) counts[prefix] = (counts[prefix] || 0) + 1;
-    }
-    return counts;
-  }, [storeTasks]);
-
-  // Live event stream directly consuming EventBus
   const liveEvents = useMemo(() => {
-    if (storeEvents.length > 0) {
-      return storeEvents.slice(0, 6).map((e) => ({
-        time: new Date(e.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        agent: `${e.topic.replace(/\./g, ' ')}`,
-        detail: JSON.stringify(e.payload).slice(0, 32),
-      }));
-    }
-    return [];
+    return storeEvents.slice(0, 6).map((e) => ({
+      time: new Date(e.timestamp).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      agent: e.topic.replace(/\./g, " "),
+      detail: JSON.stringify(e.payload).slice(0, 32),
+    }));
   }, [storeEvents]);
 
+  // ── Pan handlers ──
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  }, [pan]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  }, [isDragging, dragStart]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const resetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
   return (
-    <div className="h-full w-full bg-[#03040c] text-slate-100 font-sans select-none overflow-hidden text-xs flex flex-col p-3 gap-3">
-      
-      {/* ── TOP SECTION: CONSTELLATION STAGE ──
-          Responsive: auto-fit grid, min 400px per column */}
-      <div className="flex-1 grid gap-3 min-h-0 relative"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(400px, 100%), 1fr))" }}
-      >
-        
-        {/* CENTER STAGE: AGENT CONSTELLATION CANVAS */}
-        <div className="relative flex flex-col justify-between p-3 overflow-hidden rounded-xl border border-cyan-900/30 min-h-[400px]">
-          
-          {/* Constellation Overview Top-Left Overlay */}
-          <div className="absolute top-3 left-3 z-10 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-3 backdrop-blur-md w-52 font-mono text-[10px]">
-            <div className="text-slate-400 text-[9px] uppercase tracking-wider mb-2 font-bold">
+    <div className="flex h-full w-full flex-col gap-3 p-4 bg-bg text-text select-none">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">Agent Constellation</h2>
+          <span className="text-[10px] text-faint">Interactive network topology</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))}
+            className="rounded-lg border border-border/60 p-1.5 hover:bg-surface/30 transition"
+            aria-label="Zoom out"
+          >
+            <ZoomOut size={14} />
+          </button>
+          <span className="text-[10px] text-faint tabular-nums w-10 text-center">{Math.round(zoom * 100)}%</span>
+          <button
+            onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
+            className="rounded-lg border border-border/60 p-1.5 hover:bg-surface/30 transition"
+            aria-label="Zoom in"
+          >
+            <ZoomIn size={14} />
+          </button>
+          <button
+            onClick={resetView}
+            className="rounded-lg border border-border/60 p-1.5 hover:bg-surface/30 transition"
+            aria-label="Reset view"
+          >
+            <Maximize2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main content: Canvas + Right panel ── */}
+      <div className="grid flex-1 gap-3 min-h-0 grid-cols-1 lg:grid-cols-[1fr_280px]">
+        {/* ── Canvas ── */}
+        <div
+          ref={canvasRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          className="relative min-h-[300px] overflow-hidden rounded-xl border border-border/40 bg-surface/20 cursor-grab active:cursor-grabbing"
+          style={{ cursor: isDragging ? "grabbing" : "grab" }}
+        >
+          {/* Grid texture background */}
+          <div className="absolute inset-0 grid-texture opacity-30" />
+
+          {/* SVG connections layer — uses viewBox for responsive scaling */}
+          <svg
+            className="absolute inset-0 h-full w-full pointer-events-none"
+            viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Orbit rings */}
+            <circle
+              cx={canvasSize.width / 2}
+              cy={canvasSize.height / 2}
+              r={Math.min(canvasSize.width, canvasSize.height) * 0.35 / zoom}
+              fill="none"
+              stroke="rgb(var(--border) / 0.3)"
+              strokeWidth="1"
+              strokeDasharray="4 6"
+            />
+            <circle
+              cx={canvasSize.width / 2}
+              cy={canvasSize.height / 2}
+              r={Math.min(canvasSize.width, canvasSize.height) * 0.2 / zoom}
+              fill="none"
+              stroke="rgb(var(--border) / 0.2)"
+              strokeWidth="1"
+              strokeDasharray="3 5"
+            />
+
+            {/* Connection lines */}
+            {connections.map((conn, idx) => {
+              const fromNode = constellationNodes.find((n) => n.id === conn.from);
+              const toNode = constellationNodes.find((n) => n.id === conn.to);
+              if (!fromNode || !toNode) return null;
+              const fromIdx = constellationNodes.indexOf(fromNode);
+              const toIdx = constellationNodes.indexOf(toNode);
+              const fromPos = nodePositions[fromIdx];
+              const toPos = nodePositions[toIdx];
+              if (!fromPos || !toPos) return null;
+
+              return (
+                <line
+                  key={idx}
+                  x1={fromPos.x + pan.x}
+                  y1={fromPos.y + pan.y}
+                  x2={toPos.x + pan.x}
+                  y2={toPos.y + pan.y}
+                  stroke={conn.color}
+                  strokeWidth="1.5"
+                  strokeOpacity="0.4"
+                  strokeDasharray="4 4"
+                  className="animate-dash-flow"
+                />
+              );
+            })}
+          </svg>
+
+          {/* Node layer — positioned with absolute coordinates */}
+          {constellationNodes.map((node, idx) => {
+            const pos = nodePositions[idx];
+            if (!pos) return null;
+            const isCore = node.isCore;
+            const nodeSize = isCore ? 64 : 40;
+
+            return (
+              <div
+                key={node.id}
+                className="absolute flex flex-col items-center z-10 transition-transform duration-300"
+                style={{
+                  left: `${pos.x + pan.x}px`,
+                  top: `${pos.y + pan.y}px`,
+                  transform: `translate(-50%, -50%) scale(${zoom})`,
+                  transformOrigin: "center center",
+                }}
+              >
+                {/* Pulsing aura */}
+                <div
+                  className={`absolute rounded-full opacity-20 animate-ping ${isCore ? "w-24 h-24" : "w-16 h-16"}`}
+                  style={{ backgroundColor: node.color }}
+                />
+
+                {/* Node circle */}
+                <div
+                  className={`relative flex items-center justify-center rounded-full border-2 shadow-lg ${isCore ? "w-16 h-16" : "w-10 h-10"}`}
+                  style={{
+                    borderColor: node.color,
+                    backgroundColor: "rgb(var(--surface) / 0.9)",
+                    boxShadow: `0 0 ${isCore ? 30 : 12}px ${node.color}40`,
+                  }}
+                >
+                  <div
+                    className="rounded-full"
+                    style={{
+                      width: isCore ? 32 : 20,
+                      height: isCore ? 32 : 20,
+                      backgroundColor: node.color,
+                      opacity: 0.7,
+                    }}
+                  />
+                </div>
+
+                {/* Label — hidden when zoomed out */}
+                {zoom > 0.7 && (
+                  <div
+                    className={`mt-2 bg-surface/90 border rounded-lg px-2 py-1 backdrop-blur-sm text-center shadow-md ${isCore ? "border-accent/40" : "border-border/40"}`}
+                    style={{ minWidth: isCore ? 120 : 80 }}
+                  >
+                    <div className={`font-semibold tracking-wide truncate ${isCore ? "text-[10px]" : "text-[9px]"}`} style={{ color: node.color }}>
+                      {node.name}
+                    </div>
+                    <div className="text-[8px] text-faint">{node.sub}</div>
+                    {node.status && (
+                      <div className="mt-0.5 flex items-center justify-center gap-1">
+                        <span
+                          className={`h-1 w-1 rounded-full ${node.status === "ACTIVE" || node.status === "ONLINE" ? "bg-ok" : "bg-faint"} animate-pulse`}
+                        />
+                        <span className={`text-[8px] font-bold ${node.status === "ACTIVE" || node.status === "ONLINE" ? "text-ok" : "text-faint"}`}>
+                          {node.status}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Overview overlay top-left */}
+          <div className="absolute top-3 left-3 z-20 glass rounded-xl p-3 backdrop-blur-md w-48 font-mono text-[10px]">
+            <div className="text-faint text-[9px] uppercase tracking-wider mb-2 font-bold">
               Constellation Overview
             </div>
             <div className="space-y-1">
               <div className="flex justify-between items-center">
-                <span className="text-slate-400">TOTAL AGENTS</span>
-                <span className="font-bold text-white">{totalAgentsCount}</span>
+                <span className="text-faint">TOTAL</span>
+                <span className="font-bold text-text">{totalAgentsCount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-400">ACTIVE</span>
-                <span className="font-bold text-emerald-400">{activeAgentsCount}</span>
+                <span className="text-faint">ACTIVE</span>
+                <span className="font-bold text-ok">{activeAgentsCount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-400">BUSY</span>
-                <span className="font-bold text-amber-400">7</span>
+                <span className="text-faint">RUNNING</span>
+                <span className="font-bold text-warn">{runningTasksCount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-400">IDLE</span>
-                <span className="font-bold text-slate-400">7</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">OFFLINE</span>
-                <span className="font-bold text-rose-500">4</span>
-              </div>
-            </div>
-
-            {/* Network Status Badge */}
-            <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-              <div className="text-[8px] text-slate-400">NETWORK STATUS</div>
-              <div className="text-cyan-400 font-bold text-xs flex items-center gap-1">
-                <span>98%</span>
-                <span className="text-[8px] text-emerald-400 font-normal">STABLE</span>
+                <span className="text-faint">COMPLETED</span>
+                <span className="font-bold text-info">{completedTasksCount}</span>
               </div>
             </div>
           </div>
-
-          {/* ── 3D NEURAL CONSTELLATION CANVAS & HOLOGRAM BRAINS ── */}
-          <div className="absolute inset-0 z-0 flex items-center justify-center">
-            
-            {/* Background Synaptic Starfield SVG */}
-            <svg className="w-full h-full absolute inset-0 pointer-events-none">
-              {/* Outer Orbit Concentric Rings */}
-              <circle cx="50%" cy="44%" r="36%" fill="none" stroke="#00f0ff" strokeWidth="0.8" strokeOpacity="0.15" strokeDasharray="4 6" />
-              <circle cx="50%" cy="44%" r="22%" fill="none" stroke="#d980ff" strokeWidth="0.8" strokeOpacity="0.15" strokeDasharray="3 5" />
-              
-              {/* Glowing Synaptic Connection Pathways */}
-              {connections.map((conn, idx) => {
-                const fromNode = constellationNodes.find(n => n.id === conn.from);
-                const toNode = constellationNodes.find(n => n.id === conn.to);
-                if (!fromNode || !toNode) return null;
-                return (
-                  <g key={idx}>
-                    <line 
-                      x1={`${fromNode.pos.x}%`}
-                      y1={`${fromNode.pos.y}%`}
-                      x2={`${toNode.pos.x}%`}
-                      y2={`${toNode.pos.y}%`}
-                      stroke={conn.color}
-                      strokeWidth="1.2"
-                      strokeOpacity="0.35"
-                      strokeDasharray="4 4"
-                      className="animate-pulse"
-                    />
-                  </g>
-                );
-              })}
-            </svg>
-
-            {/* Render Constellation Holographic Brain Nodes */}
-            {constellationNodes.map((node) => {
-              const isCenter = node.isCore;
-              return (
-                <div
-                  key={node.id}
-                  className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-all duration-500 hover:scale-105"
-                  style={{ left: `${node.pos.x}%`, top: `${node.pos.y}%` }}
-                >
-                  {/* Holographic Glowing Brain Visualizer */}
-                  <div className="relative flex items-center justify-center">
-                    
-                    {/* Pulsing Hologram Outer Aura */}
-                    <div 
-                      className={`absolute rounded-full animate-ping opacity-30 ${isCenter ? 'w-44 h-44' : 'w-18 h-18'}`}
-                      style={{ backgroundColor: node.color }}
-                    />
-                    
-                    {/* Outer Orbit Ring */}
-                    <div 
-                      className={`rounded-full border border-dashed animate-spin-slow flex items-center justify-center ${isCenter ? 'w-40 h-40 border-cyan-400/40' : 'w-16 h-16 border-slate-600/50'}`}
-                      style={{ animationDuration: isCenter ? '15s' : '25s' }}
-                    />
-
-                    {/* Holographic Brain Icon Art */}
-                    <div className={`absolute flex items-center justify-center rounded-full bg-[#080d26]/90 border shadow-2xl ${isCenter ? 'w-32 h-32 border-cyan-400 shadow-[0_0_50px_rgba(0,240,255,0.5)]' : 'w-12 h-12 border-slate-700'}`} style={{ borderColor: node.color }}>
-                      
-                      {/* Brain Neural Net Hologram Graphic */}
-                      <svg className={isCenter ? 'w-24 h-24' : 'w-8 h-8'} viewBox="0 0 100 100">
-                        <path d="M 50 20 C 35 15, 20 30, 25 50 C 20 65, 35 80, 50 75 C 45 65, 45 35, 50 20 Z" fill={node.color} fillOpacity="0.25" stroke={node.color} strokeWidth="1.5" />
-                        <path d="M 50 20 C 65 15, 80 30, 75 50 C 80 65, 65 80, 50 75 C 55 65, 55 35, 50 20 Z" fill={node.color} fillOpacity="0.25" stroke={node.color} strokeWidth="1.5" />
-                        <circle cx="50" cy="45" r="4" fill={node.color} />
-                      </svg>
-                      
-                      {/* AI Tag */}
-                      <span className="absolute -top-2 px-1.5 py-0.5 rounded bg-[#090d24] border border-cyan-400/50 text-[8px] font-mono text-cyan-300 font-bold">
-                        AI
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Brain Agent Info Card Overlay */}
-                  <div className={`mt-1.5 bg-[#090d26]/90 border rounded-xl p-1.5 backdrop-blur-md font-mono text-[9px] text-center shadow-lg min-w-[105px] ${isCenter ? 'border-cyan-400 shadow-[0_0_25px_rgba(0,240,255,0.3)]' : 'border-slate-800'}`}>
-                    <div className="font-bold text-white tracking-wider">
-                      {node.name}
-                    </div>
-                    <div className="text-[8px] text-slate-400">{node.sub}</div>
-                    
-                    {node.status && (
-                      <div className="mt-0.5 flex items-center justify-center gap-1">
-                        <span className={`w-1 h-1 rounded-full ${node.status === "ACTIVE" || node.status === "ONLINE" ? "bg-emerald-400" : "bg-slate-400"} animate-ping`}></span>
-                        <span className={`${node.status === "ACTIVE" || node.status === "ONLINE" ? "text-emerald-400" : "text-slate-400"} font-bold text-[8px]`}>{node.status}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
         </div>
 
-        {/* RIGHT PANEL STAGE: LIVE EVENT STREAM, COMMUNICATION & MISSION PROGRESS */}
-        <div className="flex flex-col gap-3 min-h-0 min-w-[300px]">
-          
-          {/* Live Event Stream Panel */}
-          <div className="bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 font-mono text-[10px]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="font-bold text-white uppercase tracking-wider text-[9px]">Live Event Stream</span>
-              <span className="text-emerald-400 text-[8px]">All Systems Live</span>
+        {/* ── Right panel: Live events + communication ── */}
+        <div className="flex flex-col gap-3 min-h-0">
+          {/* Live Event Stream */}
+          <div className="glass rounded-xl p-3 font-mono text-[10px] shrink-0">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold text-text uppercase tracking-wider text-[9px]">Live Events</span>
+              <span className="text-ok text-[8px]">● Live</span>
             </div>
-            <div className="space-y-1.5 text-[9px]">
+            <div className="min-h-0 max-h-[180px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-1.5 text-[9px]">
               {liveEvents.map((ev, i) => (
-                <div key={i} className="flex items-start gap-1.5 text-slate-300 border-b border-slate-800/40 pb-1">
-                  <span className="text-slate-500 text-[8px] shrink-0">{ev.time}</span>
-                  <div>
-                    <div className="font-semibold text-cyan-300">{ev.agent}</div>
-                    <div className="text-slate-400 text-[8px]">{ev.detail}</div>
+                <div key={i} className="flex items-start gap-1.5 border-b border-border/30 pb-1">
+                  <span className="text-faint text-[8px] shrink-0">{ev.time}</span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-accent truncate">{ev.agent}</div>
+                    <div className="text-faint text-[8px] truncate">{ev.detail}</div>
                   </div>
+                </div>
+              ))}
+              {liveEvents.length === 0 && (
+                <div className="text-faint text-center py-2">No events yet</div>
+              )}
+            </div>
+          </div>
+
+          {/* Telemetry mini-cards */}
+          <div className="glass rounded-xl p-3 shrink-0">
+            <div className="text-faint text-[9px] uppercase tracking-wider font-bold mb-2">Telemetry</div>
+            <div className="grid grid-cols-2 gap-2 text-center">
+              {[
+                { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-accent" },
+                { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-ok" },
+                { label: "AGENTS", val: `${totalAgentsCount}`, color: "text-info" },
+                { label: "TOKENS", val: `${telemetry.tokens || 0}`, color: "text-warn" },
+              ].map((m) => (
+                <div key={m.label} className="bg-surface/40 rounded-lg p-1.5 border border-border/30">
+                  <div className="text-[8px] text-faint">{m.label}</div>
+                  <div className={`font-bold text-xs ${m.color}`}>{m.val}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Agent Communication Matrix Panel */}
-          <div className="bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 font-mono text-[10px]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="font-bold text-white uppercase tracking-wider text-[9px]">Agent Communication</span>
-              <span className="text-cyan-400 text-[8px]">Live Traffic</span>
+          {/* Playback speed indicator */}
+          <div className="glass rounded-xl p-2 flex items-center justify-between shrink-0">
+            <span className="text-[9px] text-faint uppercase tracking-wider">Playback</span>
+            <div className="flex items-center gap-1">
+              {(["1x", "2x", "4x"] as const).map((speed) => (
+                <button
+                  key={speed}
+                  className={`rounded px-2 py-0.5 text-[9px] font-mono transition ${
+                    activePlayback === speed
+                      ? "bg-accent/20 text-accent"
+                      : "text-faint hover:bg-surface/30"
+                  }`}
+                >
+                  {speed}
+                </button>
+              ))}
             </div>
-            <div className="space-y-1 text-[9px]">
-              {(() => {
-                const providerSet = new Set<string>();
-                Object.values(storeProviders).forEach((p) => {
-                  if (p.provider && p.provider.toLowerCase() !== "mock") providerSet.add(p.provider);
-                });
-                const providers = Array.from(providerSet);
-                if (providers.length < 2) {
-                  return <div className="text-slate-500 text-center py-2">No inter-agent communication yet</div>;
-                }
-                const pairs: { pair: string; rate: string }[] = [];
-                for (let i = 0; i < providers.length && pairs.length < 6; i++) {
-                  for (let j = i + 1; j < providers.length && pairs.length < 6; j++) {
-                    pairs.push({ pair: `${providers[i]} ↔ ${providers[j]}`, rate: "0 msg/min" });
-                  }
-                }
-                return pairs.map((c, i) => (
-                  <div key={i} className="flex justify-between items-center text-slate-300 border-b border-slate-800/40 pb-0.5">
-                    <span className="text-slate-300">{c.pair}</span>
-                    <span className="text-cyan-400 font-semibold">{c.rate}</span>
-                  </div>
-                ));
-              })()}
-            </div>
-          </div>
-
-          {/* Mission Progress Radial Chart Panel */}
-          <div className="bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 font-mono text-[10px]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="font-bold text-white uppercase tracking-wider text-[9px]">Mission Progress</span>
-              <button className="text-slate-500 hover:text-white">✕</button>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Radial Donut Progress Chart */}
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#1e293b" strokeWidth="3.8" />
-                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00f0ff" strokeWidth="3.8" strokeDasharray="78, 100" />
-                </svg>
-                <div className="absolute text-center">
-                  <div className="text-sm font-bold text-white">{runningTasksCount + completedTasksCount}</div>
-                  <div className="text-[7px] text-slate-400">Active Tasks</div>
-                </div>
-              </div>
-
-              {/* Task Status Legend */}
-              <div className="space-y-0.5 text-[9px]">
-                <div className="flex items-center gap-1.5 text-slate-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> {runningTasksCount} Running
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> {completedTasksCount} Completed
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> 3 Waiting
-                </div>
-                <div className="flex items-center gap-1.5 text-slate-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> {telemetry.errors || 2} Failed
-                </div>
-              </div>
-            </div>
-            <div className="mt-1.5 pt-1.5 border-t border-slate-800 flex justify-between items-center text-[9px]">
-              <span className="text-slate-400">Overall Progress</span>
-              <span className="text-cyan-400 font-bold">{runningTasksCount + completedTasksCount > 0 ? Math.round(completedTasksCount / (runningTasksCount + completedTasksCount) * 100) : 0}%</span>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* ── BOTTOM SECTION: SYSTEM TELEMETRY, EVENT BUS, TASK DISTRIBUTION, TOKEN FLOW, CONNECTION MAP ──
-          Responsive: auto-fit grid, min 200px per panel */}
-      <div className="grid gap-3 shrink-0 font-mono text-[10px]"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))" }}
-      >
-        
-        {/* System Telemetry Gauges */}
-        <div className="col-span-3 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
-          <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">System Telemetry <span className="text-[7px] font-normal text-slate-500">Live Metrics</span></div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-1.5 text-center">
-            {[
-              { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
-              { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },
-              { label: "GPU", val: "76%", color: "text-indigo-400" },
-              { label: "NET", val: "32%", color: "text-pink-400" },
-            ].map((m) => (
-              <div key={m.label} className="bg-slate-900/60 rounded-lg p-1 border border-slate-800">
-                <div className="text-[8px] text-slate-500">{m.label}</div>
-                <div className={`font-bold text-xs ${m.color}`}>{m.val}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Event Bus Sparkline */}
-        <div className="col-span-2 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
-          <div>
-            <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Event Bus</div>
-            <div className="text-white font-bold text-xs">{storeEvents.length * 120 || 0} <span className="text-[8px] text-cyan-400 font-normal">events/sec</span></div>
-          </div>
-          <div className="h-10 flex items-end gap-0.5">
-            {[20, 50, 80, 40, 90, 30, 70, 60, 100, 40, 85, 55, 95, 60].map((h, i) => (
-              <div key={i} className="flex-1 bg-cyan-400/50 rounded-xs" style={{ height: `${h}%` }} />
-            ))}
-          </div>
-        </div>
-
-        {/* Task Distribution Histogram — derived from live taskCountByProvider */}
-        <div className="col-span-3 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
-          <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Task Distribution <span className="text-[7px] font-normal text-slate-500">By Agent</span></div>
-          <div className="h-14 flex items-end justify-between gap-1 px-1">
-            {(() => {
-              const histogramColors = ["bg-indigo-500", "bg-cyan-500", "bg-emerald-500", "bg-pink-500", "bg-amber-500", "bg-purple-500", "bg-blue-500", "bg-teal-500"];
-              const entries = Object.entries(taskCountByProvider).filter(([k]) => k && k !== "mock");
-              if (entries.length === 0) {
-                return <div className="text-slate-500 text-[9px] m-auto">No task distribution data</div>;
-              }
-              return entries.slice(0, 8).map(([provider, val], idx) => {
-                const name = provider.charAt(0).toUpperCase() + provider.slice(1);
-                return (
-                  <div key={provider} className="flex flex-col items-center flex-1 h-full justify-end">
-                    <span className="text-[8px] text-slate-300 font-bold mb-0.5">{val}</span>
-                    <div className={`w-full rounded-t ${histogramColors[idx % histogramColors.length]}`} style={{ height: `${Math.min(val * 10, 100)}%` }} />
-                    <span className="text-[7px] text-slate-500 truncate w-full text-center mt-0.5">{name}</span>
-                  </div>
-                );
-              });
-            })()}
-          </div>
-        </div>
-
-        {/* Token Flow Line Chart */}
-        <div className="col-span-2 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
-          <div>
-            <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Token Flow</div>
-            <div className="text-white font-bold text-xs">{telemetry.tokens || 7861} <span className="text-[8px] text-cyan-400 font-normal">tokens/sec</span></div>
-          </div>
-          <div className="h-10 flex items-end">
-            <svg className="w-full h-full" viewBox="0 0 100 30" preserveAspectRatio="none">
-              <path d="M 0 25 Q 25 5, 50 18 T 100 8" fill="none" stroke="#00f0ff" strokeWidth="1.5" />
-              <path d="M 0 28 Q 25 15, 50 22 T 100 12" fill="none" stroke="#d980ff" strokeWidth="1.5" />
-            </svg>
-          </div>
-        </div>
-
-        {/* Connection Map Network Graphic */}
-        <div className="col-span-2 bg-[#090d24]/80 border border-cyan-900/40 rounded-xl p-2.5 flex flex-col justify-between">
-          <div className="text-slate-400 text-[9px] uppercase tracking-wider font-bold">Connection Map <span className="text-[7px] font-normal text-slate-500">Real-time Network</span></div>
-          <div className="h-14 flex items-center justify-center">
-            <svg className="w-full h-full" viewBox="0 0 100 50">
-              <circle cx="20" cy="25" r="3" fill="#00f0ff" />
-              <circle cx="50" cy="10" r="3" fill="#d980ff" />
-              <circle cx="50" cy="40" r="3" fill="#38bdf8" />
-              <circle cx="80" cy="25" r="3" fill="#f472b6" />
-              <line x1="20" y1="25" x2="50" y2="10" stroke="#00f0ff" strokeWidth="0.8" opacity="0.6" />
-              <line x1="20" y1="25" x2="50" y2="40" stroke="#00f0ff" strokeWidth="0.8" opacity="0.6" />
-              <line x1="50" y1="10" x2="80" y2="25" stroke="#d980ff" strokeWidth="0.8" opacity="0.6" />
-              <line x1="50" y1="40" x2="80" y2="25" stroke="#38bdf8" strokeWidth="0.8" opacity="0.6" />
-            </svg>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── FOOTER: OPERATION STATUS & TIMELINE CONTROL BAR ── */}
-      <div className="bg-[#090d24]/90 border border-cyan-900/40 rounded-xl p-2 backdrop-blur-md flex items-center justify-between font-mono text-[10px] shrink-0">
-        <div className="flex items-center gap-5">
-          <div>
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Operation Status</div>
-            <div className="text-emerald-400 font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              <span>All Systems Operational</span>
-            </div>
-          </div>
-
-          <div className="border-l border-slate-800 pl-4">
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Active Tasks</div>
-            <div className="text-white font-semibold flex items-center gap-2">
-              <span>{runningTasksCount > 0 ? `${runningTasksCount} task${runningTasksCount !== 1 ? 's' : ''} running` : completedTasksCount > 0 ? `${completedTasksCount} tasks completed` : "No active tasks"}</span>
-              {runningTasksCount + completedTasksCount > 0 && (
-                <span className="text-cyan-400">{completedTasksCount > 0 ? Math.round(completedTasksCount / (runningTasksCount + completedTasksCount) * 100) : 0}% complete</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-5">
-          <div>
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Uptime</div>
-            <div className="text-white font-bold">{performance?.uptime_seconds ? formatDuration(performance.uptime_seconds) : "—"}</div>
-          </div>
-          <div>
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Ready Providers</div>
-            <div className="text-white font-bold">{activeAgentsCount}</div>
-          </div>
-          <div>
-            <div className="text-slate-500 text-[8px] uppercase tracking-wider">Active Agents</div>
-            <div className="text-cyan-400 font-bold">{activeAgentsCount}/{totalAgentsCount}</div>
-          </div>
-
-          {/* Playback Speed Controls */}
-          <div className="flex items-center gap-1 border-l border-slate-800 pl-3">
-            {(["1x", "2x", "4x"] as const).map((spd) => (
-              <button
-                key={spd}
-                onClick={() => setActivePlayback(spd)}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                  activePlayback === spd
-                    ? "bg-cyan-500/20 border border-cyan-500/50 text-cyan-300"
-                    : "bg-slate-900 text-slate-400 hover:text-white"
-                }`}
-              >
-                {spd}
-              </button>
-            ))}
           </div>
         </div>
       </div>
 
+      {/* ── Footer: Status bar ── */}
+      <div className="glass rounded-xl px-3 py-2 flex items-center justify-between font-mono text-[9px] shrink-0">
+        <div className="flex items-center gap-4">
+          <span className="text-faint">UPTIME</span>
+          <span className="text-ok font-bold">{formatDuration(performance?.uptime_seconds ?? 0)}</span>
+          <span className="text-faint">|</span>
+          <span className="text-faint">ZOOM</span>
+          <span className="text-accent font-bold">{Math.round(zoom * 100)}%</span>
+          <span className="text-faint">|</span>
+          <span className="text-faint">NODES</span>
+          <span className="text-text font-bold">{constellationNodes.length}</span>
+          <span className="text-faint">|</span>
+          <span className="text-faint">LINKS</span>
+          <span className="text-text font-bold">{connections.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-ok">● SYSTEM ONLINE</span>
+        </div>
+      </div>
     </div>
   );
 }
-
-export { AgentConstellation as agentConstellation };
-export default AgentConstellation;
