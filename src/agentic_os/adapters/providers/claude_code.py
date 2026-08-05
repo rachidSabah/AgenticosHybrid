@@ -1,16 +1,19 @@
 """Claude Code provider adapter.
 
-Drives the real ``claude`` CLI as a subprocess, piping the task as a prompt.
-This is the first-class integration called out in the product brief. The adapter
-is side-effect-isolated: it only shells out, parses output, and raises on
+Drives the real ``claude`` CLI as a subprocess, piping the task prompt
+via **stdin** (not argv) to avoid the Windows ``cmd.exe`` 8191-char
+command line limit.
+
+Side-effect-isolated: it only shells out, parses output, and raises on
 non-zero exit so the Supervisor/Recovery layer can react.
 """
 
 from __future__ import annotations
 
-import asyncio
+import os
 import shutil
 
+from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
 from agentic_os.infrastructure.logging import get_logger
 
@@ -37,30 +40,31 @@ class ClaudeCodeProvider:
     ) -> str:
         if not shutil.which(self._bin):
             raise RuntimeError(f"claude CLI not found at '{self._bin}'")
+
         prompt = f"{task.title}\n\n{task.description}".strip()
-        env = dict(__import__("os").environ)
+        # Build env — inject API key only if configured, never log it
+        env = dict(os.environ)
         if self._api_key:
             env["ANTHROPIC_API_KEY"] = self._api_key
-        log.info("claude_code.execute", agent=agent.id, task=task.id)
-        proc = await asyncio.create_subprocess_exec(
-            self._bin,
-            "-p",
-            prompt,
-            "--output-format",
-            "text",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+
+        log.info("claude_code.execute", agent=agent.id, task=task.id, has_stdin=True)
+
+        # claude -p --output-format text  (prompt goes via stdin)
+        rc, stdout_str, stderr_str = await run_cli(
+            [self._bin, "-p", "--output-format", "text"],
+            input_data=prompt.encode("utf-8"),
             env=env,
+            cwd=cwd,
+            timeout=self._timeout,
+            on_output=on_output,
         )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise TimeoutError(f"{self._bin} timed out after {self._timeout}s") from None
-        if proc.returncode != 0:
-            raise RuntimeError(f"claude exited {proc.returncode}: {stderr.decode().strip()}")
-        return stdout.decode().strip() or f"[claude_code] completed '{task.title}'"
+
+        if rc == -999:
+            raise RuntimeError(f"{self._bin} timed out after {self._timeout}s") from None
+        if rc != 0:
+            raise RuntimeError(f"claude exited {rc}: {stderr_str.strip()}")
+
+        return stdout_str.strip() or f"[claude_code] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:
         return shutil.which(self._bin) is not None

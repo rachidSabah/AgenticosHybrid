@@ -1,22 +1,26 @@
 """Hermes Agent provider adapter.
 
 Drives the real ``hermes`` CLI as a subprocess. Hermes is assumed to be
-installed globally (pip install hermes) or available on PATH. The adapter
-shells out for task execution so the Supervisor/Recovery layer can wrap it.
+installed globally (pip install hermes) or available on PATH.
 
-For API-based usage (Hermes HTTP API), users configure via the openai_compatible
-adapter with base_url pointing at the Hermes API endpoint.
+The real hermes CLI contract is ``-z PROMPT`` — it has **no**
+``--output-format`` flag; passing one makes it exit 2 with a usage error.
+Timeout is 600s — real agent runs with workspace context + tool calls
+routinely exceed 120s.
 """
 
 from __future__ import annotations
 
-import asyncio
+import os
 import shutil
 
+from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
 from agentic_os.infrastructure.logging import get_logger
 
 log = get_logger("provider.hermes")
+
+_DEFAULT_TIMEOUT = 600.0
 
 
 class HermesProvider:
@@ -31,7 +35,7 @@ class HermesProvider:
         bin_path: str = "hermes",
         api_key: str = "",
         name: str = "hermes",
-        timeout: float = 300.0,
+        timeout: float = _DEFAULT_TIMEOUT,
     ) -> None:
         self._bin = bin_path
         self._api_key = api_key
@@ -50,30 +54,31 @@ class HermesProvider:
             raise RuntimeError(
                 f"Hermes CLI not found at '{self._bin}'. Install with: pip install hermes-cli"
             )
+
         prompt = f"{task.title}\n\n{task.description}".strip()
-        env = dict(__import__("os").environ)
+        # Build env — inject HERMES_CONFIG only if set, never log it
+        env = dict(os.environ)
         if self._api_key:
             env["HERMES_CONFIG"] = self._api_key
+
         log.info("hermes.execute", agent=agent.id, task=task.id)
-        proc = await asyncio.create_subprocess_exec(
-            self._bin,
-            "-p",
-            prompt,
-            "--output-format",
-            "text",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+
+        # hermes -z "{prompt}"  (no --output-format flag)
+        rc, stdout_str, stderr_str = await run_cli(
+            [self._bin, "-z", prompt],
+            input_data=None,
             env=env,
+            cwd=cwd,
+            timeout=self._timeout,
+            on_output=on_output,
         )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self._timeout)
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise TimeoutError(f"{self._bin} timed out after {self._timeout}s") from None
-        if proc.returncode != 0:
-            raise RuntimeError(f"hermes exited {proc.returncode}: {stderr.decode().strip()}")
-        return stdout.decode().strip() or f"[hermes] completed '{task.title}'"
+
+        if rc == -999:
+            raise RuntimeError(f"{self._bin} timed out after {self._timeout}s") from None
+        if rc != 0:
+            raise RuntimeError(f"hermes exited {rc}: {stderr_str.strip()}")
+
+        return stdout_str.strip() or f"[hermes] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:
         return shutil.which(self._bin) is not None

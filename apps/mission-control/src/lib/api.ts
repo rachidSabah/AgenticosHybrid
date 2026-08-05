@@ -43,8 +43,12 @@ async function get<T>(path: string, fallback?: T): Promise<T> {
     }
     return (await res.json()) as T;
   } catch (err) {
-    // Network error / JSON parse error — log + return safe default, never throw
-    if (process.env.NODE_ENV !== "production") console.error(`[api.get] ${path}:`, err);
+    // Network error / JSON parse error — return safe default, never throw.
+    // Only log in non-production AND suppress TypeError "Failed to fetch"
+    // which floods the console when the backend is briefly restarting.
+    if (process.env.NODE_ENV !== "production" && !(err instanceof TypeError)) {
+      console.error(`[api.get] ${path}:`, err);
+    }
     if (fallback !== undefined) return fallback;
     if (path.includes("health") || path.includes("status")) {
       return { status: "offline", healthy: false, state: "offline", bus: "offline" } as unknown as T;

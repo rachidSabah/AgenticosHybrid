@@ -184,7 +184,21 @@ class Orchestrator:
             task_role=role,
             failed_in_cooldown=len(self._failed_providers),
         )
-        return self.providers.get(self.settings.provider_default) or self.providers.default()
+        provider = self.providers.get(self.settings.provider_default) or self.providers.default()
+        # If the fallback is a MockProvider AND there were real providers
+        # that failed (in cooldown), switch mock to fallback_mode so mock
+        # execution marks the task as failed instead of returning canned
+        # "completed" text. This prevents missions from showing "completed"
+        # while zero files are written to the workspace.
+        # NOTE: If no real providers ever existed (e.g. tests that register
+        # only MockProvider), fallback_mode is NOT set so tests still pass.
+        if (
+            provider
+            and hasattr(provider, "_fallback_mode")
+            and self._failed_providers  # only set fallback_mode if real providers failed
+        ):
+            provider._fallback_mode = True  # type: ignore[union-attr]
+        return provider
 
     def _mark_provider_failed(self, provider_name: str) -> None:
         self._failed_providers[provider_name] = _time.monotonic()
