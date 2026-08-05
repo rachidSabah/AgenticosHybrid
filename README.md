@@ -8,16 +8,16 @@ A **local-first, event-bus-driven AI Agent Operating System** that orchestrates 
 
 ## Download & Install
 
-Pre-built installers are available on the [GitHub Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases):
+Pre-built installers are available on the [GitHub Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases/latest):
 
-| Platform | Installer | Type |
-|----------|-----------|------|
-| **Windows 10+** | `AgenticOS-Setup-x64.exe` | NSIS installer (recommended) |
-| **Windows 10+** | `AgenticOS-Portable-x64.zip` | Portable (no install needed) |
-| **Linux** | `AgenticOS-x86_64.AppImage` | AppImage (chmod +x and run) |
-| **Linux** | `AgenticOS-x86_64.deb` | Debian/Ubuntu package |
-| **Linux** | `AgenticOS-x86_64.rpm` | Fedora/RHEL package |
-| **macOS 12+** | `AgenticOS-x86_64.dmg` | Apple Disk Image |
+| Platform | Installer | Size | Type |
+|----------|-----------|------|------|
+| **Windows 10+** | [`AgenticOS-Setup-x64.exe`](https://github.com/rachidSabah/AgenticosHybrid/releases/latest/download/AgenticOS-Setup-x64.exe) | 6.2 MB | NSIS installer (recommended) |
+| **Windows 10+** | [`AgenticOS-Portable-x64.zip`](https://github.com/rachidSabah/AgenticosHybrid/releases/latest/download/AgenticOS-Portable-x64.zip) | 7.7 MB | Portable (no install needed) |
+| **Linux** | [`AgenticOS-x86_64.AppImage`](https://github.com/rachidSabah/AgenticosHybrid/releases/latest/download/AgenticOS-x86_64.AppImage) | 78.9 MB | AppImage (chmod +x and run) |
+| **Linux** | [`AgenticOS-x86_64.deb`](https://github.com/rachidSabah/AgenticosHybrid/releases/latest/download/AgenticOS-x86_64.deb) | 7.9 MB | Debian/Ubuntu package |
+| **Linux** | [`AgenticOS-x86_64.rpm`](https://github.com/rachidSabah/AgenticosHybrid/releases/latest/download/AgenticOS-x86_64.rpm) | 7.9 MB | Fedora/RHEL package |
+| **macOS 12+** | [`AgenticOS-x86_64.dmg`](https://github.com/rachidSabah/AgenticosHybrid/releases/latest/download/AgenticOS-x86_64.dmg) | 7.6 MB | Apple Disk Image |
 
 > **Note:** MSI installer was removed in rc10 because WiX requires numeric-only
 > pre-release identifiers. The NSIS `.exe` installer works on all Windows versions.
