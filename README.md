@@ -42,63 +42,89 @@ npm run tauri dev
 
 ---
 
-## Screenshots
+## Screenshots (Live)
+
+All screenshots below are captured from the **live running system** — backend serving real data, frontend rendering actual views.
 
 ### Mission Control Dashboard
 
 <p align="center">
-  <img src="docs/screenshots/overview-light.png" alt="Mission Control — Light theme" width="45%">
+  <img src="docs/screenshots/live/overview-light.png" alt="Mission Control — Light theme" width="45%">
   &nbsp;
-  <img src="docs/screenshots/overview-dark.png" alt="Mission Control — Dark theme" width="45%">
+  <img src="docs/screenshots/live/overview-dark.png" alt="Mission Control — Dark theme" width="45%">
 </p>
 <p align="center"><em>Mission Control dashboard — light & dark themes</em></p>
+
+### Core Intelligence Views
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/live/brain.png" alt="AI Brain" width="200px"><br><sub>AI Brain</sub></td>
+<td align="center"><img src="docs/screenshots/live/constellation.png" alt="Agent Constellation" width="200px"><br><sub>Agent Constellation</sub></td>
+<td align="center"><img src="docs/screenshots/live/swarm.png" alt="Swarm" width="200px"><br><sub>Swarm Orchestration</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/live/ecosystem.png" alt="Ecosystem" width="200px"><br><sub>Ecosystem</sub></td>
+<td align="center"><img src="docs/screenshots/live/cluster.png" alt="Cluster" width="200px"><br><sub>Cluster Federation</sub></td>
+<td align="center"><img src="docs/screenshots/live/evolution.png" alt="Evolution" width="200px"><br><sub>Evolution</sub></td>
+</tr>
+</table>
+
+### Orchestration & Execution
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/live/missions.png" alt="Missions" width="200px"><br><sub>Mission Orchestrator</sub></td>
+<td align="center"><img src="docs/screenshots/live/execution.png" alt="Execution" width="200px"><br><sub>Execution Graph</sub></td>
+<td align="center"><img src="docs/screenshots/live/workflow.png" alt="Workflow" width="200px"><br><sub>Workflow Studio</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/live/pipeline.png" alt="Pipeline" width="200px"><br><sub>Pipeline Builder</sub></td>
+<td align="center"><img src="docs/screenshots/live/timeline.png" alt="Timeline" width="200px"><br><sub>Task Timeline</sub></td>
+<td align="center"><img src="docs/screenshots/live/executions.png" alt="Executions" width="200px"><br><sub>Execution Timeline</sub></td>
+</tr>
+</table>
+
+### Provider & Runtime Management
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/live/providers.png" alt="Providers" width="200px"><br><sub>Provider Control Center</sub></td>
+<td align="center"><img src="docs/screenshots/live/discovery.png" alt="Discovery" width="200px"><br><sub>Runtime Discovery</sub></td>
+<td align="center"><img src="docs/screenshots/live/runtime.png" alt="Runtime" width="200px"><br><sub>Runtime Dashboard</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/live/memory.png" alt="Memory" width="200px"><br><sub>Memory Explorer</sub></td>
+<td align="center"><img src="docs/screenshots/live/plugins.png" alt="Plugins" width="200px"><br><sub>Plugin Marketplace</sub></td>
+<td align="center"><img src="docs/screenshots/live/mcp.png" alt="MCP" width="200px"><br><sub>MCP Manager</sub></td>
+</tr>
+</table>
+
+### System Monitoring & Gateways
+
+<table>
+<tr>
+<td align="center"><img src="docs/screenshots/live/monitor.png" alt="Monitor" width="200px"><br><sub>System Monitor</sub></td>
+<td align="center"><img src="docs/screenshots/live/gateways.png" alt="Gateways" width="200px"><br><sub>Messaging Gateways</sub></td>
+<td align="center"><img src="docs/screenshots/live/omniroute.png" alt="OmniRoute" width="200px"><br><sub>OmniRoute</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/screenshots/live/gateway.png" alt="API Gateway" width="200px"><br><sub>API Gateway</sub></td>
+<td align="center"><img src="docs/screenshots/live/desktop-diagnostics.png" alt="Diagnostics" width="200px"><br><sub>Desktop Diagnostics</sub></td>
+<td align="center"><img src="docs/screenshots/live/desktop-overview.png" alt="Desktop" width="200px"><br><sub>Desktop Overview</sub></td>
+</tr>
+</table>
 
 ### Desktop Runtime
 
 <p align="center">
-  <img src="docs/screenshots/desktop-overview.png" alt="Desktop Overview" width="30%">
+  <img src="docs/screenshots/live/desktop-runtimes.png" alt="Desktop Runtimes" width="30%">
   &nbsp;
-  <img src="docs/screenshots/desktop-runtimes.png" alt="Runtime Discovery" width="30%">
+  <img src="docs/screenshots/live/desktop-updates.png" alt="Desktop Updates" width="30%">
   &nbsp;
-  <img src="docs/screenshots/desktop-diagnostics.png" alt="Diagnostics" width="30%">
+  <img src="docs/screenshots/live/desktop-settings.png" alt="Desktop Settings" width="30%">
 </p>
-<p align="center"><em>Desktop runtime: overview, runtime discovery, diagnostics</em></p>
-
-### Core Subsystems
-
-<table>
-<tr>
-<td align="center"><img src="docs/screenshots/brain.png" alt="Brain Registry" width="200px"><br><sub>Brain Registry</sub></td>
-<td align="center"><img src="docs/screenshots/providers.png" alt="Providers" width="200px"><br><sub>Provider Management</sub></td>
-<td align="center"><img src="docs/screenshots/swarm.png" alt="Swarm" width="200px"><br><sub>Swarm Orchestration</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/screenshots/discovery.png" alt="Discovery" width="200px"><br><sub>Runtime Discovery</sub></td>
-<td align="center"><img src="docs/screenshots/memory.png" alt="Memory" width="200px"><br><sub>Memory System</sub></td>
-<td align="center"><img src="docs/screenshots/mcp.png" alt="MCP" width="200px"><br><sub>MCP Framework</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/screenshots/workflow.png" alt="Workflow" width="200px"><br><sub>Workflow Engine</sub></td>
-<td align="center"><img src="docs/screenshots/pipeline.png" alt="Pipeline" width="200px"><br><sub>Pipeline Engine</sub></td>
-<td align="center"><img src="docs/screenshots/constellation.png" alt="Constellation" width="200px"><br><sub>Brain Constellation</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/screenshots/execution.png" alt="Execution" width="200px"><br><sub>Execution Log</sub></td>
-<td align="center"><img src="docs/screenshots/timeline.png" alt="Timeline" width="200px"><br><sub>Event Timeline</sub></td>
-<td align="center"><img src="docs/screenshots/monitor.png" alt="Monitor" width="200px"><br><sub>System Monitor</sub></td>
-</tr>
-</table>
-
-### Desktop Settings & Updates
-
-<p align="center">
-  <img src="docs/screenshots/desktop-settings.png" alt="Settings" width="30%">
-  &nbsp;
-  <img src="docs/screenshots/desktop-updates.png" alt="Updates" width="30%">
-  &nbsp;
-  <img src="docs/screenshots/desktop-offline.png" alt="Offline Mode" width="30%">
-</p>
-<p align="center"><em>Settings, auto-updates, and offline mode</em></p>
+<p align="center"><em>Desktop runtime: runtimes, updates, settings</em></p>
 
 ---
 
