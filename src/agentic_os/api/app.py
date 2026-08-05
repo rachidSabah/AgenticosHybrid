@@ -614,7 +614,7 @@ def create_app(platform: Platform) -> FastAPI:
                     "created_at": datetime.now(UTC).isoformat(),
                 },
             ]
-            platform._swarms_store = swarms_store
+            platform._swarms_store = swarms_store  # ty: ignore[unresolved-attribute]
         return swarms_store
 
     @app.post("/api/swarm/create")
@@ -632,7 +632,7 @@ def create_app(platform: Platform) -> FastAPI:
             "created_at": datetime.now(UTC).isoformat(),
         }
         swarms_store.append(new_swarm)
-        platform._swarms_store = swarms_store
+        platform._swarms_store = swarms_store  # ty: ignore[unresolved-attribute]
         return new_swarm
 
     @app.put("/api/swarm/{swarm_id}")
@@ -655,7 +655,7 @@ def create_app(platform: Platform) -> FastAPI:
     async def swarm_delete(swarm_id: str) -> dict:
         swarms_store = getattr(platform, "_swarms_store", [])
         updated = [s for s in swarms_store if s["id"] != swarm_id]
-        platform._swarms_store = updated
+        platform._swarms_store = updated  # ty: ignore[unresolved-attribute]
         return {"deleted": swarm_id}
 
     @app.get("/api/swarm/agents")
@@ -699,7 +699,7 @@ def create_app(platform: Platform) -> FastAPI:
         """Return real task list from orchestrator / missions."""
         tasks: list[dict] = []
         missions = (
-            platform.orchestrator.list_missions()  # type: ignore[union-attr,call-non-callable]
+            platform.orchestrator.list_missions()  # type: ignore[union-attr,call-non-callable]  # ty: ignore[call-non-callable]
             if hasattr(platform.orchestrator, "list_missions")
             else []
         )

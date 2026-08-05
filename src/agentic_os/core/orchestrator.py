@@ -213,7 +213,7 @@ class Orchestrator:
             and hasattr(provider, "_fallback_mode")
             and self._failed_providers  # only set fallback_mode if real providers failed
         ):
-            provider._fallback_mode = True  # type: ignore[attr-defined]
+            provider._fallback_mode = True  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
         return provider
 
     def _mark_provider_failed(self, provider_name: str) -> None:

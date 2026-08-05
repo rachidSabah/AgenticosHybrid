@@ -148,7 +148,7 @@ def _run_sync(
             if item is _DONE:
                 done_count += 1
             elif on_output is not None:
-                line_str, stream_name = item  # type: ignore[misc]
+                line_str, stream_name = item  # type: ignore[assignment, misc]  # ty: ignore[not-iterable]
                 try:
                     on_output(line_str, stream_name)
                 except Exception:
