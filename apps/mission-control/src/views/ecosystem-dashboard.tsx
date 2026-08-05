@@ -192,8 +192,8 @@ function OverviewTab() {
           : "default";
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Runtimes" value={liveStats?.total_runtimes ?? 0} />
         <Stat label="Healthy" value={liveStats?.healthy_runtimes ?? 0} tone="ok" />
         <Stat label="Capabilities" value={liveStats?.unique_capabilities ?? 0} />
@@ -216,7 +216,7 @@ function OverviewTab() {
         </div>
       </div>
 
-      <Panel title="Ecosystem Health" subtitle={liveHealth?.level ?? "—"} className="col-span-6">
+      <Panel title="Ecosystem Health" subtitle={liveHealth?.level ?? "—"} className="lg:col-span-1">
         {!liveHealth ? (
           <Empty title="No health data" hint="Ecosystem not running yet." />
         ) : (
@@ -264,7 +264,7 @@ function OverviewTab() {
         )}
       </Panel>
 
-      <Panel title="Runtime Distribution" subtitle="Health breakdown" className="col-span-6">
+      <Panel title="Runtime Distribution" subtitle="Health breakdown" className="lg:col-span-1">
         {!liveStats ? (
           <Empty title="No runtimes" hint="Discover runtimes to populate the ecosystem." />
         ) : (
@@ -294,7 +294,7 @@ function OverviewTab() {
         )}
       </Panel>
 
-      <Panel title="Ecosystem Actions" subtitle="Self-optimization controls" className="col-span-12">
+      <Panel title="Ecosystem Actions" subtitle="Self-optimization controls" className="col-span-full">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <ActionButton label="Analyze" description="Run evolution analyzers" endpoint="/api/ecosystem/analyze" />
           <ActionButton label="Optimize" description="Continuous self-optimization" endpoint="/api/ecosystem/optimize" />
@@ -404,8 +404,8 @@ function CapabilitiesTab() {
   const edges = (graph?.edges ?? []) as Array<{ source: string; target: string; type: string; weight: number }>;
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Nodes" value={stats?.total_nodes ?? 0} />
         <Stat label="Edges" value={stats?.total_edges ?? 0} />
         <Stat label="Brains" value={stats?.nodes_by_type?.brain ?? 0} tone="ok" />
@@ -418,7 +418,7 @@ function CapabilitiesTab() {
         </div>
       </div>
 
-      <Panel title="Capability Coverage" subtitle="Capabilities → provider brains" className="col-span-6">
+      <Panel title="Capability Coverage" subtitle="Capabilities → provider brains" className="lg:col-span-1">
         {nodes.length === 0 ? (
           <Empty title="No capabilities" hint="Discover runtimes with capabilities." />
         ) : (
@@ -451,7 +451,7 @@ function CapabilitiesTab() {
         )}
       </Panel>
 
-      <Panel title="Edge Distribution" subtitle="By relationship type" className="col-span-6">
+      <Panel title="Edge Distribution" subtitle="By relationship type" className="lg:col-span-1">
         {!stats?.edges_by_type ? (
           <Empty title="No edges" hint="No capability relationships recorded." />
         ) : (
@@ -503,8 +503,8 @@ function CollaborationsTab() {
   }>;
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Links" value={stats?.total_links ?? 0} />
         <Stat label="Runtimes" value={stats?.unique_runtimes ?? 0} />
         <Stat label="Collaborations" value={stats?.total_collaborations ?? 0} />
@@ -516,7 +516,7 @@ function CollaborationsTab() {
         </div>
       </div>
 
-      <Panel title="Trust Links" subtitle="Pairwise collaboration history" className="col-span-7">
+      <Panel title="Trust Links" subtitle="Pairwise collaboration history" className="lg:col-span-1">
         {links.length === 0 ? (
           <Empty title="No collaborations yet" hint="Run a mission with multiple members to populate." />
         ) : (
@@ -542,7 +542,7 @@ function CollaborationsTab() {
         )}
       </Panel>
 
-      <Panel title="Runtime Trust Scores" subtitle="Average incoming trust" className="col-span-5">
+      <Panel title="Runtime Trust Scores" subtitle="Average incoming trust" className="lg:col-span-1">
         {!data?.runtime_stats || Object.keys(data.runtime_stats).length === 0 ? (
           <Empty title="No runtimes" hint="Collaborations will populate trust scores." />
         ) : (
@@ -598,8 +598,8 @@ function EvolutionTab() {
   const typeOptions = ["all", "recommended_capability", "recommended_routing", "recommended_collaboration", "recommended_optimization"];
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Recommendations" value={recs.length} />
         <div className="ml-auto flex items-center gap-1">
           {typeOptions.map((t) => (
@@ -617,7 +617,7 @@ function EvolutionTab() {
         </div>
       </div>
 
-      <Panel title="Evolution Recommendations" subtitle="Self-improvement opportunities" className="col-span-12">
+      <Panel title="Evolution Recommendations" subtitle="Self-improvement opportunities" className="col-span-full">
         {recs.length === 0 ? (
           <Empty title="No recommendations" hint="Run /api/ecosystem/analyze to generate recommendations." />
         ) : (
@@ -696,8 +696,8 @@ function MarketplaceTab() {
   }, [publishTitle, publishCap, load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Published" value={stats?.published ?? 0} />
         <Stat label="Awarded" value={stats?.awarded ?? 0} tone="ok" />
         <Stat label="Completed" value={stats?.completed ?? 0} tone="ok" />
@@ -708,7 +708,7 @@ function MarketplaceTab() {
         </div>
       </div>
 
-      <Panel title="Publish Task" subtitle="Submit a task to the global marketplace" className="col-span-12">
+      <Panel title="Publish Task" subtitle="Submit a task to the global marketplace" className="col-span-full">
         <div className="flex gap-2">
           <input
             type="text"
@@ -734,7 +734,7 @@ function MarketplaceTab() {
         </div>
       </Panel>
 
-      <Panel title="Tasks" subtitle={`${tasks.length} total`} className="col-span-12">
+      <Panel title="Tasks" subtitle={`${tasks.length} total`} className="col-span-full">
         {tasks.length === 0 ? (
           <Empty title="No tasks" hint="Publish a task to begin." />
         ) : (

@@ -158,8 +158,8 @@ function OverviewTab() {
     : "danger";
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Proposals" value={liveStats?.total_proposals ?? 0} />
         <Stat label="Pending" value={liveStats?.pending ?? 0} />
         <Stat label="Applied" value={liveStats?.applied ?? 0} tone="ok" />
@@ -172,7 +172,7 @@ function OverviewTab() {
         </div>
       </div>
 
-      <Panel title="System Readiness" subtitle={liveReadiness?.level ?? "—"} className="col-span-6">
+      <Panel title="System Readiness" subtitle={liveReadiness?.level ?? "—"} className="lg:col-span-1">
         {!liveReadiness ? (
           <Empty title="No readiness data" hint="Run analysis to assess." />
         ) : (
@@ -205,7 +205,7 @@ function OverviewTab() {
         )}
       </Panel>
 
-      <Panel title="Evolution Actions" subtitle="Self-improvement controls" className="col-span-6">
+      <Panel title="Evolution Actions" subtitle="Self-improvement controls" className="lg:col-span-1">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <ActionButton label="Analyze" description="Generate + validate proposals" endpoint="/api/evolution/analyze" />
           <ActionButton label="Schedule Next" description="Pick next improvement" endpoint="/api/evolution/schedule" />
@@ -268,8 +268,8 @@ function ImprovementsTab() {
   const filtered = filter === "all" ? improvements : improvements.filter((i) => i.status === filter);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Total" value={improvements.length} />
         <Stat label="Pending" value={improvements.filter((i) => i.status === "proposed").length} />
         <Stat label="Applied" value={improvements.filter((i) => i.status === "applied").length} tone="ok" />
@@ -281,7 +281,7 @@ function ImprovementsTab() {
         </div>
       </div>
 
-      <Panel title="Improvement Queue" subtitle={`${filtered.length} items`} className="col-span-12">
+      <Panel title="Improvement Queue" subtitle={`${filtered.length} items`} className="col-span-full">
         {filtered.length === 0 ? (
           <Empty title="No improvements" hint="Run analysis to generate proposals." />
         ) : (
@@ -332,8 +332,8 @@ function SafetyTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Validations" value={String(data?.validator?.total_validations ?? 0)} />
         <Stat label="Approved" value={String(data?.validator?.approved ?? 0)} tone="ok" />
         <Stat label="Rejected" value={String(data?.validator?.rejected ?? 0)} tone={(Number(data?.validator?.rejected ?? 0)) > 0 ? "danger" : "default"} />
@@ -341,7 +341,7 @@ function SafetyTab() {
         <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
-      <Panel title="Safety Validation History" subtitle="Recent validation reports" className="col-span-12">
+      <Panel title="Safety Validation History" subtitle="Recent validation reports" className="col-span-full">
         {!data || !data.history || data.history.length === 0 ? (
           <Empty title="No validations yet" hint="Run analysis to trigger safety validation." />
         ) : (
@@ -387,8 +387,8 @@ function SchedulerTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Queue" value={String(data?.stats?.queue_size ?? 0)} />
         <Stat label="Active" value={String(data?.stats?.active ?? 0)} tone="ok" />
         <Stat label="Scheduled" value={String(data?.stats?.total_scheduled ?? 0)} />
@@ -396,7 +396,7 @@ function SchedulerTab() {
         <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
-      <Panel title="Execution Queue" subtitle="Pending improvements (ordered by priority + risk)" className="col-span-6">
+      <Panel title="Execution Queue" subtitle="Pending improvements (ordered by priority + risk)" className="lg:col-span-1">
         {!data || data.queue.length === 0 ? (
           <Empty title="Queue empty" hint="Validated improvements will appear here." />
         ) : (
@@ -414,7 +414,7 @@ function SchedulerTab() {
         )}
       </Panel>
 
-      <Panel title="Active Improvements" subtitle="Currently scheduled/executing" className="col-span-6">
+      <Panel title="Active Improvements" subtitle="Currently scheduled/executing" className="lg:col-span-1">
         {!data || data.scheduled.length === 0 ? (
           <Empty title="No active improvements" hint="Schedule next to start execution." />
         ) : (
@@ -453,13 +453,13 @@ function PlansTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Plans" value={plans.length} />
         <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
-      <Panel title="Generation Plans" subtitle="Blueprints for new artifacts" className="col-span-12">
+      <Panel title="Generation Plans" subtitle="Blueprints for new artifacts" className="col-span-full">
         {plans.length === 0 ? (
           <Empty title="No plans" hint="Schedule improvements to generate plans." />
         ) : (
@@ -502,13 +502,13 @@ function KnowledgeTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Syntheses" value={syntheses.length} />
         <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
-      <Panel title="Knowledge Syntheses" subtitle="Extracted patterns + insights" className="col-span-12">
+      <Panel title="Knowledge Syntheses" subtitle="Extracted patterns + insights" className="col-span-full">
         {syntheses.length === 0 ? (
           <Empty title="No syntheses" hint="POST /api/evolution/synthesize to create." />
         ) : (

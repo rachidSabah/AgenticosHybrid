@@ -166,8 +166,8 @@ function OverviewTab() {
   const liveStats = (clusterLive?.statistics as ClusterStats | null) ?? stats;
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Nodes" value={liveStats?.total_nodes ?? 0} />
         <Stat label="Active" value={liveStats?.active_nodes ?? 0} tone="ok" />
         <Stat label="Degraded" value={liveStats?.degraded_nodes ?? 0} tone="warn" />
@@ -190,7 +190,7 @@ function OverviewTab() {
       <Panel
         title="Cluster Health"
         subtitle={status ? (status.is_leader ? "Leader (this node)" : "Follower") : "—"}
-        className="col-span-6"
+        className="lg:col-span-1"
       >
         {!liveStats ? (
           <Empty title="No cluster data" hint="Cluster controller not running." />
@@ -216,7 +216,7 @@ function OverviewTab() {
         )}
       </Panel>
 
-      <Panel title="Cluster Actions" subtitle="Federation controls" className="col-span-6">
+      <Panel title="Cluster Actions" subtitle="Federation controls" className="lg:col-span-1">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <ActionButton label="Discover" description="Re-discover nodes" endpoint="/api/cluster/discover" />
           <ActionButton label="Rebalance" description="Rebalance workload" endpoint="/api/cluster/rebalance" />
@@ -290,8 +290,8 @@ function TopologyTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Nodes" value={topo?.nodes.length ?? 0} />
         <Stat label="Connections" value={topo?.connections.length ?? 0} />
         <Stat label="Leader" value={topo?.leader_id ? "Elected" : "—"} tone="ok" />
@@ -302,7 +302,7 @@ function TopologyTab() {
         </div>
       </div>
 
-      <Panel title="Cluster Topology Graph" subtitle="Nodes and connections" className="col-span-12">
+      <Panel title="Cluster Topology Graph" subtitle="Nodes and connections" className="col-span-full">
         {!topo || topo.nodes.length === 0 ? (
           <Empty title="No topology" hint="Add remote nodes to populate." />
         ) : (
@@ -373,8 +373,8 @@ function NodesTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Total Nodes" value={nodes.length} />
         <Stat label="Active" value={nodes.filter((n) => n.status === "active").length} tone="ok" />
         <Stat label="Degraded" value={nodes.filter((n) => n.status === "degraded").length} tone="warn" />
@@ -383,7 +383,7 @@ function NodesTab() {
         </div>
       </div>
 
-      <Panel title="Cluster Nodes" subtitle={`${nodes.length} total`} className="col-span-12">
+      <Panel title="Cluster Nodes" subtitle={`${nodes.length} total`} className="col-span-full">
         {nodes.length === 0 ? (
           <Empty title="No nodes" hint="Cluster controller not running." />
         ) : (
@@ -442,8 +442,8 @@ function BrainsTab() {
   }, [load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Local Brains" value={String(data?.stats?.local_brains ?? 0)} />
         <Stat label="Remote Brains" value={String(data?.stats?.remote_brains ?? 0)} />
         <Stat label="Total" value={String(data?.stats?.total_brains ?? 0)} />
@@ -453,7 +453,7 @@ function BrainsTab() {
         </div>
       </div>
 
-      <Panel title="Remote Brains" subtitle="Brains on other cluster nodes" className="col-span-12">
+      <Panel title="Remote Brains" subtitle="Brains on other cluster nodes" className="col-span-full">
         {!data || data.remote_brains.length === 0 ? (
           <Empty title="No remote brains" hint="Add remote nodes to discover their brains." />
         ) : (
@@ -521,8 +521,8 @@ function FailoverTab() {
   }, [brainId, nodeId, load]);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 p-4">
-      <div className="col-span-12 flex items-center gap-3">
+    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
+      <div className="col-span-full flex items-center gap-3">
         <Stat label="Triggers" value={String(data?.stats?.triggers_detected ?? 0)} />
         <Stat label="Started" value={String(data?.stats?.actions_started ?? 0)} />
         <Stat label="Completed" value={String(data?.stats?.actions_completed ?? 0)} tone="ok" />
@@ -532,7 +532,7 @@ function FailoverTab() {
         </div>
       </div>
 
-      <Panel title="Manual Failover" subtitle="Trigger a recovery action" className="col-span-12">
+      <Panel title="Manual Failover" subtitle="Trigger a recovery action" className="col-span-full">
         <div className="flex gap-2">
           <input
             type="text"
@@ -558,7 +558,7 @@ function FailoverTab() {
         </div>
       </Panel>
 
-      <Panel title="Failover Actions" subtitle={`${data?.actions.length ?? 0} total`} className="col-span-12">
+      <Panel title="Failover Actions" subtitle={`${data?.actions.length ?? 0} total`} className="col-span-full">
         {!data || data.actions.length === 0 ? (
           <Empty title="No actions" hint="Failures will trigger automatic actions." />
         ) : (
