@@ -853,7 +853,10 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "bot_token is required")
         _telegram_gateway._bot_token = token
         _telegram_gateway._allowed_users = set(allowed_users) if allowed_users else None
-        await _telegram_gateway.start()
+        try:
+            await _telegram_gateway.start()
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
         return {"status": "connected", "username": _telegram_gateway.bot_username}
 
     @app.post("/api/gateway/telegram/disconnect")
@@ -884,7 +887,10 @@ def create_app(platform: Platform) -> FastAPI:
         session_path = body.get("session_path", "") if body else ""
         if session_path:
             _whatsapp_gateway._session_path = session_path
-        await _whatsapp_gateway.start()
+        try:
+            await _whatsapp_gateway.start()
+        except RuntimeError as exc:
+            raise HTTPException(502, str(exc)) from exc
         return {"status": _whatsapp_gateway.connection_status}
 
     @app.post("/api/gateway/whatsapp/disconnect")

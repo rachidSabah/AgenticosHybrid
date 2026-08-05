@@ -123,7 +123,12 @@ class WhatsAppGateway:
         return self._connection_status
 
     async def start(self) -> None:
-        """Start the WhatsApp gateway."""
+        """Start the WhatsApp gateway.
+
+        Raises RuntimeError if Node.js is not installed or the bridge
+        process cannot be spawned. The caller (API endpoint) should catch
+        this and return an HTTP error.
+        """
         os.makedirs(self._session_path, exist_ok=True)
 
         # Write the bridge script
@@ -142,11 +147,12 @@ class WhatsAppGateway:
                 env=env,
             )
         except FileNotFoundError:
-            log.error("whatsapp.node_not_found", message="Node.js is required for WhatsApp gateway")
-            return
+            raise RuntimeError(
+                "Node.js is not installed or not on PATH. "
+                "WhatsApp gateway requires Node.js to run the bridge script."
+            )
         except Exception as exc:
-            log.error("whatsapp.start_failed", error=str(exc))
-            return
+            raise RuntimeError(f"Failed to start WhatsApp bridge: {exc}") from exc
 
         self._running = True
         self._connection_status = "connecting"

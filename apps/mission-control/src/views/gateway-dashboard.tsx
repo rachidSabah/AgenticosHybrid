@@ -58,7 +58,7 @@ function TelegramPanel() {
       await api.telegramConnect({ bot_token: token });
       await loadStatus();
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setConnecting(false);
     }
@@ -69,7 +69,7 @@ function TelegramPanel() {
       await api.telegramDisconnect();
       await loadStatus();
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -79,7 +79,7 @@ function TelegramPanel() {
       await api.telegramSend({ chat_id: sendChatId, text: sendText });
       setSendText("");
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -200,7 +200,7 @@ function WhatsAppPanel() {
       await api.whatsappConnect();
       await loadStatus();
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setConnecting(false);
     }
@@ -211,7 +211,7 @@ function WhatsAppPanel() {
       await api.whatsappDisconnect();
       await loadStatus();
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -221,7 +221,7 @@ function WhatsAppPanel() {
       await api.whatsappSend({ to: sendTo, text: sendText });
       setSendText("");
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

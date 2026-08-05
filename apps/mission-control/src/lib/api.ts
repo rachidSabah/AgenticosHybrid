@@ -74,6 +74,44 @@ async function post<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
   }
 }
 
+/**
+ * Like `post()` but THROWS on error instead of swallowing it.
+ * Use this for operations where the caller needs to know if it
+ * succeeded (gateway connect/disconnect, update download/install).
+ *
+ * Includes a 30s timeout via AbortController — if the backend
+ * hangs (e.g. waiting for an external API like Telegram), the
+ * fetch is aborted and an error is thrown.
+ */
+async function postThrow<T>(path: string, body?: unknown, timeoutMs = 30000): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const errBody = await res.json();
+        detail = errBody.detail || errBody.error || errBody.message || detail;
+      } catch { /* response wasn't JSON */ }
+      throw new Error(detail);
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s — the backend may be unreachable or the external service is not responding.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function put<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
@@ -568,17 +606,17 @@ export const api = {
   // ── Messaging Gateways ──
   telegramStatus: () => get<{ running: boolean; username: string; recent_messages: unknown[]; allowed_users: number[] | null }>("/api/gateway/telegram/status"),
   telegramConnect: (body: { bot_token: string; allowed_users?: number[] }) =>
-    post<{ status: string; username: string }>("/api/gateway/telegram/connect", body),
-  telegramDisconnect: () => post<{ status: string }>("/api/gateway/telegram/disconnect"),
+    postThrow<{ status: string; username: string }>("/api/gateway/telegram/connect", body),
+  telegramDisconnect: () => postThrow<{ status: string }>("/api/gateway/telegram/disconnect"),
   telegramSend: (body: { chat_id: number | string; text: string }) =>
-    post<{ sent: boolean }>("/api/gateway/telegram/send", body),
+    postThrow<{ sent: boolean }>("/api/gateway/telegram/send", body),
   telegramChats: () => get<Array<{ chat_id: number; last_message: string; timestamp: string }>>("/api/gateway/telegram/chats"),
   whatsappStatus: () => get<{ running: boolean; connection_status: string; qr_code: string; has_qr: boolean; recent_messages: unknown[] }>("/api/gateway/whatsapp/status"),
   whatsappConnect: (body?: { session_path?: string }) =>
-    post<{ status: string }>("/api/gateway/whatsapp/connect", body ?? {}),
-  whatsappDisconnect: () => post<{ status: string }>("/api/gateway/whatsapp/disconnect"),
+    postThrow<{ status: string }>("/api/gateway/whatsapp/connect", body ?? {}),
+  whatsappDisconnect: () => postThrow<{ status: string }>("/api/gateway/whatsapp/disconnect"),
   whatsappSend: (body: { to: string; text: string }) =>
-    post<{ sent: boolean }>("/api/gateway/whatsapp/send", body),
+    postThrow<{ sent: boolean }>("/api/gateway/whatsapp/send", body),
   createMission: (body: Record<string, unknown>) =>
     post<MissionType>("/api/missions", body),
   getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),
