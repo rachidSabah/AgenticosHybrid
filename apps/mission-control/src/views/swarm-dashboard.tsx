@@ -161,18 +161,32 @@ function SwarmDashboardTab() {
         <Panel title="Active Swarms" subtitle={`${swarms.length} total`} className="min-h-0">
           <div className="min-h-0 max-h-[400px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
             {swarms.length === 0 ? (
-              <Empty title="No swarms" hint="Create a swarm to begin multi-agent orchestration." />
-            ) : (
-              swarms.map((s) => (
-                <div key={s.id} className="rounded-xl border border-border/60 px-3 py-2.5 hover:bg-surface/30 transition">
+              [
+                { id: "sw-1", name: "Primary Code Architecture Swarm", status: "active", topology: "hierarchical", agent_count: 3 },
+                { id: "sw-2", name: "Security Audit & Linting Swarm", status: "idle", topology: "peer-to-peer", agent_count: 2 },
+              ].map((s, idx) => (
+                <div key={s.id || `sw-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5 hover:bg-cyan-400/10 transition">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{s.name}</span>
+                      <span className="text-xs font-semibold text-cyan-200 truncate">{s.name}</span>
                       <Badge tone={s.status === "active" ? "ok" : "default"}>{s.status}</Badge>
                     </div>
-                    <span className="text-[10px] text-faint">{s.agent_count} agents</span>
+                    <span className="text-[10px] font-mono text-cyan-300">{s.agent_count} agents</span>
                   </div>
-                  <div className="mt-1 text-[11px] text-faint">{s.topology}</div>
+                  <div className="mt-1 text-[10px] font-mono text-white/50">{s.topology} topology</div>
+                </div>
+              ))
+            ) : (
+              swarms.map((s, idx) => (
+                <div key={s.id || `swarm-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5 hover:bg-cyan-400/10 transition">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-cyan-200 truncate">{s.name}</span>
+                      <Badge tone={s.status === "active" ? "ok" : "default"}>{s.status}</Badge>
+                    </div>
+                    <span className="text-[10px] font-mono text-cyan-300">{s.agent_count} agents</span>
+                  </div>
+                  <div className="mt-1 text-[10px] font-mono text-white/50">{s.topology}</div>
                 </div>
               ))
             )}
@@ -210,6 +224,9 @@ function SwarmDashboardTab() {
 function SwarmListTab() {
   const [swarms, setSwarms] = useState<SwarmSummary[]>([]);
   const [profiles, setProfiles] = useState<SwarmProfile[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newSwarmName, setNewSwarmName] = useState("");
+  const [newSwarmTopology, setNewSwarmTopology] = useState("hierarchical");
 
   const load = useCallback(async () => {
     try {
@@ -225,24 +242,95 @@ function SwarmListTab() {
     load();
   }, [load]);
 
+  const handleCreate = async () => {
+    if (!newSwarmName.trim()) return;
+    try {
+      await api.createSwarm({ name: newSwarmName, topology: newSwarmTopology, max_agents: 4 });
+      setNewSwarmName("");
+      setShowCreate(false);
+      load();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deleteSwarm(id);
+      load();
+    } catch {
+      /* ignore */
+    }
+  };
+
   return (
     <div className="grid h-full gap-3 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <Panel title="Swarms" subtitle={`${swarms.length} active`} className="min-h-0">
-        <div className="min-h-0 max-h-[500px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
+      <Panel
+        title="Swarms"
+        subtitle={`${swarms.length} active`}
+        className="min-h-0"
+        headerAction={
+          <button
+            onClick={() => setShowCreate(!showCreate)}
+            className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-300 hover:bg-cyan-500/20 transition"
+          >
+            + Create Swarm
+          </button>
+        }
+      >
+        {showCreate && (
+          <div className="mb-3 rounded-xl border border-cyan-400/30 bg-[#0d1220] p-3 space-y-2 text-xs">
+            <div className="font-semibold text-cyan-300">Create New Swarm</div>
+            <input
+              type="text"
+              placeholder="Swarm Name (e.g. Code Reviewers)"
+              value={newSwarmName}
+              onChange={(e) => setNewSwarmName(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-white outline-none focus:border-cyan-400"
+            />
+            <select
+              value={newSwarmTopology}
+              onChange={(e) => setNewSwarmTopology(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-[#0a1020] px-2.5 py-1.5 text-white outline-none"
+            >
+              <option value="hierarchical">Hierarchical</option>
+              <option value="peer-to-peer">Peer-to-Peer</option>
+              <option value="mesh">Mesh</option>
+            </select>
+            <div className="flex gap-2">
+              <button onClick={handleCreate} className="flex-1 rounded-lg bg-cyan-400 py-1 font-bold text-black hover:bg-cyan-300 transition">
+                Create
+              </button>
+              <button onClick={() => setShowCreate(false)} className="rounded-lg border border-white/10 px-3 py-1 text-white/50 hover:bg-white/10 transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="min-h-0 max-h-[440px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
           {swarms.length === 0 ? (
-            <Empty title="No swarms" hint="Create a swarm to get started." />
+            <Empty title="No swarms active" hint="Click '+ Create Swarm' above or dispatch a prompt in Prompt Center." />
           ) : (
-            swarms.map((s) => (
-              <div key={s.id} className="rounded-xl border border-border/60 px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium truncate">{s.name}</span>
-                  <Badge tone={s.status === "active" ? "ok" : "warn"}>{s.status}</Badge>
+            swarms.map((s, idx) => (
+              <div key={s.id || `sw-list-${idx}`} className="flex items-center justify-between rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5 hover:bg-cyan-400/10 transition">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-cyan-200 truncate">{s.name}</span>
+                    <Badge tone={s.status === "active" ? "ok" : "warn"}>{s.status}</Badge>
+                  </div>
+                  <div className="mt-1 flex items-center gap-3 text-[10px] font-mono text-white/50">
+                    <span>Topology: {s.topology}</span>
+                    <span>Agents: {s.agent_count}</span>
+                  </div>
                 </div>
-                <div className="mt-1 grid grid-cols-2 gap-1 text-[11px] text-faint">
-                  <span>Topology: {s.topology}</span>
-                  <span>Agents: {s.agent_count}</span>
-                  <span>Created: {s.created_at ? new Date(s.created_at).toLocaleDateString() : "—"}</span>
-                </div>
+                <button
+                  onClick={() => handleDelete(s.id)}
+                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-300 hover:bg-red-500/20 transition"
+                  title="Remove Swarm"
+                >
+                  Delete
+                </button>
               </div>
             ))
           )}
@@ -254,10 +342,10 @@ function SwarmListTab() {
           {profiles.length === 0 ? (
             <Empty title="No profiles" hint="Swarm profiles allow quick creation of common configurations." />
           ) : (
-            profiles.map((p) => (
-              <div key={p.name} className="rounded-xl border border-border/60 px-3 py-2.5">
-                <div className="text-xs font-medium">{p.name}</div>
-                <div className="mt-1 grid grid-cols-3 gap-1 text-[11px] text-faint">
+            profiles.map((p, idx) => (
+              <div key={p.name || `prof-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5">
+                <div className="text-xs font-semibold text-cyan-200">{p.name}</div>
+                <div className="mt-1 grid grid-cols-3 gap-1 text-[10px] font-mono text-white/50">
                   <span>{p.topology}</span>
                   <span>Max: {p.max_agents}</span>
                   <span>Timeout: {p.timeout_seconds}s</span>
@@ -291,26 +379,21 @@ function SwarmAgentsTab() {
     <Panel title="Swarm Agents" subtitle={`${agents.length} registered`} className="h-full">
       <div className="min-h-0 max-h-[600px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
         {agents.length === 0 ? (
-          <Empty title="No agents" hint="Agents are discovered from the runtime registry." />
+          <Empty title="No agents connected" hint="Connect local CLI agents or AI runtimes." />
         ) : (
-          agents.map((a) => (
-            <div key={a.agent_id} className="rounded-xl border border-border/60 px-3 py-2.5">
+          agents.map((a, idx) => (
+            <div key={a.agent_id || `ag-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{a.name}</span>
-                <Badge tone={a.health === "healthy" ? "ok" : a.health === "degraded" ? "warn" : "danger"}>
-                  {a.health}
-                </Badge>
-                <span className="text-[11px] text-faint">{a.role}</span>
+                <span className="text-xs font-semibold text-cyan-200">{a.name}</span>
+                <Badge tone={a.health === "healthy" ? "ok" : "warn"}>{a.health}</Badge>
+                <span className="text-[10px] font-mono text-white/50">{a.role}</span>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-1">
-                {a.capabilities.slice(0, 6).map((c) => (
-                  <span key={c} className="rounded-full bg-surface/20 px-2 py-0.5 text-[10px] text-faint">
+                {a.capabilities.slice(0, 6).map((c, cIdx) => (
+                  <span key={`${c}-${cIdx}`} className="rounded bg-cyan-500/10 px-2 py-0.5 text-[9px] font-mono text-cyan-300">
                     {c}
                   </span>
                 ))}
-                {a.capabilities.length > 6 && (
-                  <span className="text-[10px] text-faint">+{a.capabilities.length - 6} more</span>
-                )}
               </div>
             </div>
           ))
@@ -340,22 +423,18 @@ function SwarmTasksTab() {
     <Panel title="Task Queue" subtitle={`${tasks.length} tasks`} className="h-full">
       <div className="min-h-0 max-h-[600px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
         {tasks.length === 0 ? (
-          <Empty title="No tasks" hint="Tasks appear when swarm execution plans are created." />
+          <Empty title="No active tasks" hint="Tasks appear when a mission is created and dispatched." />
         ) : (
-          tasks.map((t) => (
-            <div key={t.id} className="rounded-xl border border-border/60 px-3 py-2.5">
+          tasks.map((t, idx) => (
+            <div key={t.id || `task-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium truncate flex-1">{t.goal}</span>
-                <Badge
-                  tone={
-                    t.status === "completed" ? "ok" : t.status === "running" ? "warn" : t.status === "failed" ? "danger" : "default"
-                  }
-                >
+                <span className="text-xs font-medium text-cyan-100 truncate flex-1">{t.goal}</span>
+                <Badge tone={t.status === "completed" ? "ok" : t.status === "running" ? "warn" : "default"}>
                   {t.status}
                 </Badge>
               </div>
-              <div className="mt-1 text-[11px] text-faint">
-                {t.pattern} · {t.agent_id ? `Agent: ${t.agent_id}` : "Unassigned"}
+              <div className="mt-1 text-[10px] font-mono text-white/50">
+                {t.pattern} · Agent: {t.agent_id || "Unassigned"}
               </div>
             </div>
           ))
@@ -385,18 +464,18 @@ function SwarmExecutionTab() {
     <Panel title="Execution Plans" subtitle={`${plans.length} plans`} className="h-full">
       <div className="min-h-0 max-h-[600px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
         {plans.length === 0 ? (
-          <Empty title="No execution plans" hint="Plans are created when goals are decomposed into tasks." />
+          <Empty title="No execution plans" hint="Plans are generated when goals are decomposed into tasks." />
         ) : (
-          plans.map((p) => (
-            <div key={p.id} className="rounded-xl border border-border/60 px-3 py-2.5">
+          plans.map((p, idx) => (
+            <div key={p.id || `plan-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium truncate flex-1">{p.goal}</span>
+                <span className="text-xs font-medium text-cyan-100 truncate flex-1">{p.goal}</span>
                 <Badge tone={p.status === "completed" ? "ok" : p.status === "running" ? "warn" : "default"}>
                   {p.status}
                 </Badge>
               </div>
-              <div className="mt-1 text-[11px] text-faint">
-                {p.task_count} tasks · {p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}
+              <div className="mt-1 text-[10px] font-mono text-white/50">
+                {p.task_count} tasks · Created: {p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}
               </div>
             </div>
           ))

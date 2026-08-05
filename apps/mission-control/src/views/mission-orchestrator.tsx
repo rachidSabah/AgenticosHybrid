@@ -202,6 +202,17 @@ export function MissionOrchestrator() {
           prev ? { ...prev, ...missionStore[prev.id] } : prev,
         );
       }
+      // Auto-select the newest mission when nothing is selected yet, so
+      // missions created from the Prompt Center show their detail panel
+      // immediately instead of the "No mission selected" empty state.
+      if (!selectedMission) {
+        const storeList = Object.values(missionStore).sort(
+          (a, b) =>
+            new Date(b.created_at ?? b.updated_at ?? 0).getTime() -
+            new Date(a.created_at ?? a.updated_at ?? 0).getTime(),
+        );
+        if (storeList.length > 0) setSelectedMission(storeList[0]);
+      }
     }
   }, [missionUpdates, missionStore, selectedMission]);
 

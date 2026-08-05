@@ -726,6 +726,38 @@ class SwarmCoordinator:
             for sid, phase in self._swarm_phases.items()
         ]
 
+    def record_mission(
+        self,
+        mission_id: str,
+        title: str,
+        agents: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Register a prompt mission as a mission-triggered swarm execution.
+
+        Called when a mission starts so prompt-driven work surfaces in swarm
+        orchestration (swarm list + history + EventBus) without requiring a
+        manual /api/swarm/create. The pseudo swarm id is prefixed with
+        "mission-" so real swarms and mission triggers stay distinguishable.
+        """
+        agents = [a for a in (agents or []) if a]
+        swarm_id = f"mission-{mission_id}"
+        if swarm_id not in self._swarm_phases:
+            self._swarm_phases[swarm_id] = SwarmPhase.EXECUTING
+        if swarm_id not in self._swarm_members:
+            self._swarm_members[swarm_id] = [{"id": name, "role": "member"} for name in agents]
+        if swarm_id not in self._swarm_roles:
+            self._swarm_roles[swarm_id] = {}
+        entry = {
+            "swarm_id": swarm_id,
+            "goal": title,
+            "member_count": len(self._swarm_members[swarm_id]),
+            "created_at": _now_iso(),
+            "phase": SwarmPhase.EXECUTING.value,
+            "source": "mission",
+        }
+        self._swarm_history.append(entry)
+        return entry
+
     def get_swarm_members(self, swarm_id: str) -> list[dict[str, Any]]:
         return self._swarm_members.get(swarm_id, [])
 
