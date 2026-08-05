@@ -82,6 +82,8 @@ async def test_create_worktree_runs_git_add(tmp_path) -> None:
 
     def _fake_git(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert args[0] == "git"
+        if args[1:3] == ["rev-parse", "--is-inside-work-tree"]:
+            return _FakeResult(stdout="true", stderr="", returncode=0)  # type: ignore[return-value]
         assert args[1] == "worktree"
         assert args[2] == "add"
         return _FakeResult(stdout="", stderr="", returncode=0)  # type: ignore[return-value]
