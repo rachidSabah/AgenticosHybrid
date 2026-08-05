@@ -261,7 +261,6 @@ class TestPromptBuilding:
         """The prompt must reach the CLI (argv for exe-based strategies, stdin otherwise)."""
         s = ClaudeExecutionStrategy()
         task = Task(title="Write hello", role="coding", description="in Python")
-        cmd = s.build_command(task, "claude")
         # Prompt travels via stdin for shim-based CLIs (Windows cmd.exe limit)
         assert b"Write hello" in s.build_stdin(task) and b"in Python" in s.build_stdin(task)
 

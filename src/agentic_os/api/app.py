@@ -237,6 +237,17 @@ class _UnavailableSentinel:
         return _unavailable
 
 
+def _run_git_text(args: list[str], cwd: str, timeout: int) -> subprocess.CompletedProcess[str]:
+    """Run ``git args`` synchronously, returning typed text output."""
+    return subprocess.run(
+        ["git", *args],
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        timeout=timeout,
+    )
+
+
 def create_app(platform: Platform) -> FastAPI:
     from agentic_os.api.diagnostics_service import RuntimeDiagnosticsService
 
@@ -720,14 +731,7 @@ def create_app(platform: Platform) -> FastAPI:
         base = wt.base_branch if wt else "main"
 
         async def _git(args: list[str]) -> str:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                ["git", *args],
-                capture_output=True,
-                text=True,
-                cwd=root,
-                timeout=30,
-            )
+            result = await asyncio.to_thread(_run_git_text, args, root, 30)
             return result.stdout or ""
 
         try:
@@ -796,14 +800,7 @@ def create_app(platform: Platform) -> FastAPI:
         base = wt.base_branch if wt else "main"
 
         async def _git(args: list[str]) -> tuple[str, str, int]:
-            result = await asyncio.to_thread(
-                subprocess.run,
-                ["git", *args],
-                capture_output=True,
-                text=True,
-                cwd=_get_workspace_root(),
-                timeout=60,
-            )
+            result = await asyncio.to_thread(_run_git_text, args, _get_workspace_root(), 60)
             return (
                 (result.stdout or "").strip(),
                 (result.stderr or "").strip(),

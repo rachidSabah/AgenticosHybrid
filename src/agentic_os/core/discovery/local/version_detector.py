@@ -39,6 +39,18 @@ _VERSION_STRATEGIES: dict[str, tuple[str, list[str]]] = {
 }
 
 
+def _run_version_capture(
+    executable_path: str, flag: str, timeout: float
+) -> subprocess.CompletedProcess[bytes]:
+    """Run *executable_path flag*, capturing output (typed for ty)."""
+    return subprocess.run(
+        [executable_path, flag],
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        timeout=timeout,
+    )
+
+
 class VersionDetector:
     """Detect tool versions by running ``--version`` subprocess.
 
@@ -110,17 +122,17 @@ class VersionDetector:
         """Run *executable_path flag* and parse output with *patterns*."""
         try:
             result = await asyncio.to_thread(
-                subprocess.run,
-                [executable_path, flag],
-                capture_output=True,
-                stdin=subprocess.DEVNULL,
-                timeout=self._timeout,
+                _run_version_capture, executable_path, flag, self._timeout
             )
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
             log.debug("Version detection failed for %s: %s", executable_path, exc)
             return ""
 
-        output = (result.stdout + result.stderr).decode("utf-8", errors="replace").strip()
+        output = (
+            ((result.stdout or b"") + (result.stderr or b""))
+            .decode("utf-8", errors="replace")
+            .strip()
+        )
         return self._parse_version(output, patterns)
 
     @staticmethod

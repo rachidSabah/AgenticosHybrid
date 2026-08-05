@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, TypeVar
 from uuid import uuid4
 
 
@@ -307,8 +307,10 @@ class RuntimeInfo:
 
 # ── Update Models ──
 
+E = TypeVar("E", bound=StrEnum)
 
-def _coerce_enum(enum_cls: type[StrEnum], value: Any, default: StrEnum) -> StrEnum:
+
+def _coerce_enum(enum_cls: type[E], value: Any, default: E) -> E:
     """Coerce *value* to *enum_cls*, tolerating raw strings from JSON bodies.
 
     The update API builds manifests straight from frontend JSON, where enum
