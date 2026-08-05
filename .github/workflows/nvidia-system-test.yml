@@ -98,6 +98,11 @@ jobs:
           $env:AGENTICOS_SKIP_BRAIN_AUTODETECT = "1"
           $env:PYTHONUTF8 = "1"
           $env:PYTHONIOENCODING = "utf-8"
+          # Disable desktop update check on startup — on Windows CI, the
+          # update check calls asyncio.to_thread(urllib.request.urlopen)
+          # which has been observed to crash the process silently under
+          # SelectorEventLoop. The update check is non-essential for CI.
+          $env:AGENTICOS_DESKTOP_CHECK_UPDATES_ON_START = "0"
           if ($env:NVIDIA_API_KEY) { $env:NVIDIA_API_KEY = $env:NVIDIA_API_KEY }
 
           # Start backend with -PassThru so we can track PID and detect crashes
@@ -218,6 +223,20 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
+          # Retry helper — Windows backend can briefly become unavailable
+          function Invoke-WithRetry {
+            param([scriptblock]$Action, [string]$Name, [int]$Retries = 5)
+            for ($i = 0; $i -lt $Retries; $i++) {
+              try {
+                return & $Action
+              } catch {
+                Write-Host "  $Name attempt $($i+1)/$Retries failed: $($_.Exception.Message)"
+                Start-Sleep -Seconds 3
+              }
+            }
+            throw "$Name failed after $Retries retries"
+          }
+
           Write-Host "=== Create Mission ==="
           $body = @{
             title = "NVIDIA CI Test"
@@ -226,17 +245,18 @@ jobs:
             priority = "high"
             execution_mode = "hybrid"
           } | ConvertTo-Json
-          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing
+
+          $resp = Invoke-WithRetry -Action { Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions" -Method POST -Body $body -ContentType "application/json" -UseBasicParsing } -Name "Create Mission" -Retries 5
           $mission = $resp.Content | ConvertFrom-Json
           $mid = $mission.id
           Write-Host "Mission ID: $mid"
 
           Write-Host "=== Plan Mission ==="
-          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions/$mid/plan" -Method POST -UseBasicParsing | Out-Null
+          Invoke-WithRetry -Action { Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions/$mid/plan" -Method POST -UseBasicParsing | Out-Null } -Name "Plan Mission" -Retries 3
           Write-Host "Plan created"
 
           Write-Host "=== Start Mission ==="
-          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions/$mid/start" -Method POST -UseBasicParsing | Out-Null
+          Invoke-WithRetry -Action { Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/missions/$mid/start" -Method POST -UseBasicParsing | Out-Null } -Name "Start Mission" -Retries 3
           Write-Host "Mission started"
 
           Write-Host "=== Wait for execution (30s) ==="

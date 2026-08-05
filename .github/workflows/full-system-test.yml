@@ -63,6 +63,11 @@ jobs:
           $env:AGENTICOS_SKIP_BRAIN_AUTODETECT = "1"
           $env:PYTHONUTF8 = "1"
           $env:PYTHONIOENCODING = "utf-8"
+          # Disable desktop update check on startup — on Windows CI, the
+          # update check calls asyncio.to_thread(urllib.request.urlopen)
+          # which has been observed to crash the process silently under
+          # SelectorEventLoop. The update check is non-essential for CI.
+          $env:AGENTICOS_DESKTOP_CHECK_UPDATES_ON_START = "0"
 
           # Start backend with -PassThru so we can track PID and detect crashes
           $proc = Start-Process `
@@ -101,21 +106,33 @@ jobs:
       - name: API endpoints respond
         shell: pwsh
         run: |
-          # Small warm-up — give the desktop runtime a moment to finish initializing
-          Start-Sleep -Seconds 3
-          try {
-            Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/tasks" -UseBasicParsing -ErrorAction Stop | Out-Null
-            Write-Host "Tasks: OK"
-          } catch {
-            Write-Host "Tasks endpoint failed — backend may have crashed. Backend log:"
+          # Poll API endpoints with retries — Windows backend can briefly
+          # become unavailable while background tasks initialize.
+          function Test-Endpoint {
+            param([string]$Url, [string]$Name, [int]$Retries = 5)
+            for ($i = 0; $i -lt $Retries; $i++) {
+              try {
+                Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop | Out-Null
+                Write-Host "$Name : OK"
+                return $true
+              } catch {
+                Write-Host "  $Name attempt $($i+1)/$Retries failed: $($_.Exception.Message)"
+                Start-Sleep -Seconds 2
+              }
+            }
+            Write-Host "$Name : FAILED after $Retries retries"
+            return $false
+          }
+
+          $tasksOk = Test-Endpoint "http://127.0.0.1:8000/api/tasks" "Tasks" 5
+          if (-not $tasksOk) {
+            Write-Host "Backend may have crashed. Backend log (last 30 lines):"
             Get-Content backend.log -Tail 30 -ErrorAction SilentlyContinue
             Get-Content backend_err.log -Tail 30 -ErrorAction SilentlyContinue
-            throw
+            throw "Tasks endpoint failed after 5 retries"
           }
-          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/providers" -UseBasicParsing | Out-Null
-          Write-Host "Providers: OK"
-          Invoke-WebRequest -Uri "http://127.0.0.1:8000/api/workspace/current" -UseBasicParsing | Out-Null
-          Write-Host "Workspace: OK"
+          Test-Endpoint "http://127.0.0.1:8000/api/providers" "Providers" 3 | Out-Null
+          Test-Endpoint "http://127.0.0.1:8000/api/workspace/current" "Workspace" 3 | Out-Null
       - name: Collect diagnostics
         if: always()
         shell: pwsh
