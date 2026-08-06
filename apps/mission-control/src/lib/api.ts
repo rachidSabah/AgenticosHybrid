@@ -43,8 +43,12 @@ async function get<T>(path: string, fallback?: T): Promise<T> {
     }
     return (await res.json()) as T;
   } catch (err) {
-    // Network error / JSON parse error — log + return safe default, never throw
-    if (process.env.NODE_ENV !== "production") console.error(`[api.get] ${path}:`, err);
+    // Network error / JSON parse error — return safe default, never throw.
+    // Only log in non-production AND suppress TypeError "Failed to fetch"
+    // which floods the console when the backend is briefly restarting.
+    if (process.env.NODE_ENV !== "production" && !(err instanceof TypeError)) {
+      console.error(`[api.get] ${path}:`, err);
+    }
     if (fallback !== undefined) return fallback;
     if (path.includes("health") || path.includes("status")) {
       return { status: "offline", healthy: false, state: "offline", bus: "offline" } as unknown as T;
@@ -68,7 +72,7 @@ async function post<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
     return (await res.json()) as T;
   } catch (err) {
     // Network error — log + return safe default, never throw
-    if (process.env.NODE_ENV !== "production") console.error(`[api.post] ${path}:`, err);
+    if (process.env.NODE_ENV !== "production" && !(err instanceof TypeError)) console.error(`[api.post] ${path}:`, err);
     if (fallback !== undefined) return fallback;
     return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
   }
@@ -120,14 +124,17 @@ async function put<T>(path: string, body?: unknown, fallback?: T): Promise<T> {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) {
+      // HTTP error — return safe default, never throw
       if (fallback !== undefined) return fallback;
       return { success: false, status: "error", error: `HTTP ${res.status}` } as unknown as T;
     }
     return (await res.json()) as T;
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") console.error(`[api.put] ${path}:`, err);
+    if (process.env.NODE_ENV !== "production" && !(err instanceof TypeError)) {
+      console.error(`[api.post] ${path}:`, err);
+    }
     if (fallback !== undefined) return fallback;
-    return { success: false, status: "offline", error: "Control plane offline" } as unknown as T;
+    return { success: false, status: "offline", error: "Backend offline" } as unknown as T;
   }
 }
 
@@ -386,11 +393,11 @@ export const api = {
   swarmList: () =>
     get<import("./types").SwarmSummary[]>("/api/swarm/swarms"),
   createSwarm: (body: Record<string, unknown>) =>
-    post<import("./types").SwarmDetail>("/api/swarm/swarms", body),
+    post<import("./types").SwarmDetail>("/api/swarm/create", body),
   swarmDetail: (swarmId: string) =>
     get<import("./types").SwarmDetail>(`/api/swarm/swarms/${encodeURIComponent(swarmId)}`),
   deleteSwarm: (swarmId: string) =>
-    del<{ deleted: string }>(`/api/swarm/swarms/${encodeURIComponent(swarmId)}`),
+    del<{ deleted: string }>(`/api/swarm/${encodeURIComponent(swarmId)}`),
 
   swarmAgents: () =>
     get<import("./types").SwarmAgentInfo[]>("/api/swarm/agents"),
@@ -490,9 +497,9 @@ export const api = {
     get<import("./desktop-types").UpdateHistoryRecord[]>("/api/desktop/updates/history"),
   pendingUpdate: () => get<import("./desktop-types").UpdateManifest | null>("/api/desktop/updates/pending"),
   downloadUpdate: (body: import("./desktop-types").UpdateManifest) =>
-    post<{ success: boolean }>("/api/desktop/updates/download", body),
+    postThrow<{ success: boolean; download_url?: string; message?: string }>("/api/desktop/updates/download", body),
   installUpdate: (body: import("./desktop-types").UpdateManifest) =>
-    post<import("./desktop-types").UpdateResult>("/api/desktop/updates/install", body),
+    postThrow<import("./desktop-types").UpdateResult & { download_url?: string; message?: string }>("/api/desktop/updates/install", body),
 
   // Channels
   channels: () => get<string[]>("/api/desktop/channels"),

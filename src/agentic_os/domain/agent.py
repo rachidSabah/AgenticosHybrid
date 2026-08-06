@@ -103,6 +103,9 @@ class Task(BaseModel):
     result: str | None = None
     error: str | None = None
     mission_id: str = ""
+    # Restricts dispatch to a named set of providers (agent selection from the
+    # Prompt Center). Empty means "route through the default selection logic".
+    preferred_agents: list[str] = Field(default_factory=list)
 
     def touch(self) -> None:
         self.updated_at = _utcnow()

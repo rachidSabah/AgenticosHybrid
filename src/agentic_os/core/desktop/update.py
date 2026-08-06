@@ -419,6 +419,11 @@ class AutoUpdateManager:
                 version_str = tag.lstrip("v")
                 ver = Version(version_str)
 
+                if not ver.is_valid:
+                    # Skip non-semver tags (e.g. a stray git tag/release named
+                    # "main") — they are not installable updates.
+                    continue
+
                 if version_str in self._ignored_versions:
                     continue
 

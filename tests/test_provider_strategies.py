@@ -43,22 +43,31 @@ class TestStrategyCommands:
         assert "-p" in cmd
         assert "--output-format" in cmd
         assert "text" in cmd
-        # Prompt must be in the command
-        assert any("Write hello world" in c for c in cmd)
+        # Prompt must be in stdin, not argv (avoids cmd.exe 8191-char limit)
+        stdin = s.build_stdin(make_task())
+        assert stdin is not None
+        assert b"Write hello world" in stdin
 
     def test_hermes_builds_correct_command(self):
         s = HermesExecutionStrategy()
         cmd = s.build_command(make_task(), "hermes")
         assert cmd[0] == "hermes"
-        assert "-p" in cmd
-        assert "--output-format" in cmd
+        assert "-z" in cmd
+        # hermes has NO --output-format flag (exit 2 if passed)
+        assert "--output-format" not in cmd
+        # Prompt is passed as -z argument (not stdin)
+        assert any("Write hello world" in c for c in cmd)
 
     def test_opencode_uses_run_subcommand(self):
         s = OpenCodeExecutionStrategy()
         cmd = s.build_command(make_task(), "opencode")
         assert cmd[0] == "opencode"
         assert "run" in cmd
-        assert any("Write hello world" in c for c in cmd)
+        # opencode reads prompt from stdin via "-"
+        assert "-" in cmd
+        stdin = s.build_stdin(make_task())
+        assert stdin is not None
+        assert b"Write hello world" in stdin
 
     def test_codex_uses_prompt_flag(self):
         s = CodexExecutionStrategy()
@@ -78,6 +87,12 @@ class TestStrategyCommands:
         cmd = s.build_command(make_task(), "gemini")
         assert cmd[0] == "gemini"
         assert "-p" in cmd
+        assert "--output-format" in cmd
+        assert "text" in cmd
+        # Gemini reads prompt from stdin when -p has empty value
+        stdin = s.build_stdin(make_task())
+        assert stdin is not None
+        assert b"Write hello world" in stdin
 
     def test_agy_uses_run_subcommand(self):
         s = AGYExecutionStrategy()
@@ -129,6 +144,10 @@ class TestStrategyProperties:
 
     def test_default_timeout_is_120(self):
         assert ClaudeExecutionStrategy().timeout_s == 120.0
+
+    def test_hermes_has_extended_timeout(self):
+        """Hermes runs with workspace context + tool calls routinely exceed 120s."""
+        assert HermesExecutionStrategy().timeout_s == 600.0
 
     def test_all_strategies_support_streaming(self):
         for cls in [
@@ -253,13 +272,18 @@ class TestPromptBuilding:
         assert prompt.endswith("Desc")
 
     def test_prompt_survives_in_command(self):
-        """The prompt must appear in the CLI command for arg-based strategies."""
+        """The prompt must appear in build_stdin for stdin-based CLIs.
+
+        For CLIs that read from stdin (claude, opencode, gemini), the prompt
+        is NOT in the argv — it's sent via build_stdin to avoid the Windows
+        cmd.exe 8191-char command line limit.
+        """
         s = ClaudeExecutionStrategy()
         task = Task(title="Write hello", role="coding", description="in Python")
-        cmd = s.build_command(task, "claude")
-        # The prompt should be one of the args
-        prompt_in_cmd = any("Write hello" in c and "in Python" in c for c in cmd)
-        assert prompt_in_cmd, f"Prompt not found in command: {cmd}"
+        stdin = s.build_stdin(task)
+        assert stdin is not None
+        assert b"Write hello" in stdin
+        assert b"in Python" in stdin
 
 
 # ── Output Parsing ─────────────────────────────────────────────────────

@@ -191,6 +191,9 @@ class Mission:
     priority: MissionPriority = MissionPriority.MEDIUM
     execution_mode: ExecutionMode = ExecutionMode.HYBRID
     constraints: list[str] = field(default_factory=list)
+    # Named agents (providers) the user selected for this mission. When
+    # non-empty, every planned task is dispatched ONLY to these agents.
+    preferred_agents: list[str] = field(default_factory=list)
     deadline: datetime | None = None
     tags: list[str] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
@@ -212,6 +215,7 @@ class Mission:
             "priority": self.priority.value,
             "execution_mode": self.execution_mode.value,
             "constraints": self.constraints,
+            "preferred_agents": self.preferred_agents,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "tags": self.tags,
             "attachments": [a.to_dict() for a in self.attachments],

@@ -11,16 +11,15 @@ For CLIs that take a prompt argument: passes it as the last arg.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 
+from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
 from agentic_os.infrastructure.logging import get_logger
 
 log = get_logger("provider.generic_cli")
 
-# Default timeout: 120 seconds (some agents like Gemini can be slow to start)
 _DEFAULT_TIMEOUT = 120.0
 
 
@@ -78,52 +77,28 @@ class GenericCLIProvider:
             prompt_len=len(prompt),
         )
 
-        args = [resolved_bin] + self._extra_args
-
         if self._stdin_mode:
-            # Pipe prompt via stdin — most compatible across CLIs
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                stdin=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(input=prompt.encode("utf-8")),
-                    timeout=_DEFAULT_TIMEOUT,
-                )
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
-                raise RuntimeError(f"{self._bin} timed out after {_DEFAULT_TIMEOUT}s") from None
+            args = [resolved_bin] + self._extra_args
+            stdin_data = prompt.encode("utf-8")
         else:
-            # Pass prompt as last positional argument
-            args.append(prompt)
-            proc = await asyncio.create_subprocess_exec(
-                *args,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=_DEFAULT_TIMEOUT,
-                )
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
-                raise RuntimeError(f"{self._bin} timed out after {_DEFAULT_TIMEOUT}s") from None
+            args = [resolved_bin] + self._extra_args + [prompt]
+            stdin_data = None
 
-        stdout_text = stdout.decode("utf-8", errors="replace").strip()
-        stderr_text = stderr.decode("utf-8", errors="replace").strip()
+        rc, stdout_str, stderr_str = await run_cli(
+            args,
+            input_data=stdin_data,
+            env=env,
+            cwd=cwd,
+            timeout=_DEFAULT_TIMEOUT,
+            on_output=on_output,
+        )
 
-        if proc.returncode != 0:
-            raise RuntimeError(f"{self._bin} exited {proc.returncode}: {stderr_text[:200]}")
+        if rc == -999:
+            raise RuntimeError(f"{self._bin} timed out after {_DEFAULT_TIMEOUT}s")
+        if rc != 0:
+            raise RuntimeError(f"{self._bin} exited {rc}: {stderr_str[:200]}")
 
-        return stdout_text or f"[{self._bin}] completed '{task.title}'"
+        return stdout_str.strip() or f"[{self._bin}] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:
         return shutil.which(self._bin) is not None

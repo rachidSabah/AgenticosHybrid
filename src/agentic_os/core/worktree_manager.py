@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,18 +63,32 @@ class WorktreeManager:
                 pass
 
     async def _run_git(self, args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
-        proc = await asyncio.create_subprocess_exec(
-            "git",
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd or self._workspace_root,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        """Run a git command off the event loop.
+
+        On Windows the SelectorEventLoop cannot do ``asyncio.create_subprocess_exec``
+        (raises ``NotImplementedError``), so git is run synchronously in a worker
+        thread via ``asyncio.to_thread`` (loop-agnostic).
+        """
+
+        def _capture() -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["git", *args],
+                capture_output=True,
+                text=True,
+                cwd=cwd or self._workspace_root,
+                timeout=30,
+            )
+
+        try:
+            result = await asyncio.wait_for(asyncio.to_thread(_capture), timeout=35)
+        except (TimeoutError, subprocess.TimeoutExpired):
+            return "", "git command timed out", 124
+        except Exception as exc:  # noqa: BLE001 - surface any subprocess error
+            return "", f"git command failed: {exc}", 1
         return (
-            stdout.decode("utf-8", errors="replace").strip(),
-            stderr.decode("utf-8", errors="replace").strip(),
-            proc.returncode or 0,
+            (result.stdout or "").strip(),
+            (result.stderr or "").strip(),
+            result.returncode or 0,
         )
 
     async def create_worktree(
@@ -108,6 +123,41 @@ class WorktreeManager:
             )
             self._worktrees[branch_name] = wt
             return wt
+
+        # Check if the workspace root is a git repo before creating worktrees.
+        # Fresh folders like E:\Mission are not git repos, so git worktree add
+        # fails with "fatal: invalid reference: <branch>". If not a repo,
+        # either git init + initial commit (so branches can exist) or skip
+        # worktree creation gracefully and let agents run in the workspace root.
+        _, _, is_repo_rc = await self._run_git(["rev-parse", "--is-inside-work-tree"])
+        if is_repo_rc != 0:
+            # Not a git repo — try git init + initial commit
+            log.info("worktree.not_git_repo", workspace=self._workspace_root, action="git_init")
+            _, _, init_rc = await self._run_git(["init"])
+            if init_rc == 0:
+                # Create an initial commit so branches can be created
+                await self._run_git(["add", "-A"])
+                await self._run_git(["commit", "-m", "Initial commit (auto-created by AgenticOS)"])
+                log.info("worktree.git_initialized", workspace=self._workspace_root)
+            else:
+                # git init failed — skip worktree creation gracefully
+                log.info(
+                    "worktree.skip_not_repo",
+                    branch=branch_name,
+                    workspace=self._workspace_root,
+                    message=(
+                        "Not a git repo and git init failed — agents will run in workspace root"
+                    ),
+                )
+                wt = Worktree(
+                    branch=branch_name,
+                    path=self._workspace_root,
+                    agent_id=agent_id,
+                    task_id=task_id,
+                    base_branch=base_branch,
+                )
+                self._worktrees[branch_name] = wt
+                return wt
 
         # Create the worktree: git worktree add -b {branch} {path} {base}
         stdout, stderr, rc = await self._run_git(

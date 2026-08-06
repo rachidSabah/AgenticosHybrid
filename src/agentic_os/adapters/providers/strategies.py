@@ -132,14 +132,21 @@ class ProviderExecutionStrategy(ABC):
 
 
 class ClaudeExecutionStrategy(ProviderExecutionStrategy):
-    """Claude Code CLI: `claude -p "{prompt}" --output-format text`"""
+    """Claude Code CLI: ``claude -p --output-format text`` (prompt via stdin).
+
+    The prompt is sent via **stdin**, not as an argv argument, to avoid
+    the Windows ``cmd.exe`` 8191-char command line limit.
+    """
 
     @property
     def kind(self) -> str:
         return "claude_code"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", self.build_prompt(task), "--output-format", "text"]
+        return [bin_path, "-p", "--output-format", "text"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -149,14 +156,24 @@ class ClaudeExecutionStrategy(ProviderExecutionStrategy):
 
 
 class HermesExecutionStrategy(ProviderExecutionStrategy):
-    """Hermes CLI: `hermes -p "{prompt}" --output-format text`"""
+    """Hermes CLI: ``hermes -z "{prompt}"``.
+
+    The real hermes CLI contract is ``-z PROMPT``. It has **no**
+    ``--output-format`` flag; passing one makes it exit 2 with a usage
+    error. Timeout is 600s — real agent runs with workspace context +
+    tool calls routinely exceed 120s.
+    """
 
     @property
     def kind(self) -> str:
         return "hermes"
 
+    @property
+    def timeout_s(self) -> float:
+        return 600.0
+
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", self.build_prompt(task), "--output-format", "text"]
+        return [bin_path, "-z", self.build_prompt(task)]
 
     def health_command(self, bin_path: str) -> list[str] | None:
         # Use --help instead of --version: hermes --version performs a network
@@ -169,14 +186,21 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
 
 
 class OpenCodeExecutionStrategy(ProviderExecutionStrategy):
-    """OpenCode CLI: `opencode run "{prompt}"`"""
+    """OpenCode CLI: ``opencode run -`` (prompt via stdin).
+
+    The prompt is sent via **stdin** to avoid the Windows ``cmd.exe``
+    8191-char command line limit.
+    """
 
     @property
     def kind(self) -> str:
         return "opencode"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "run", self.build_prompt(task)]
+        return [bin_path, "run", "-"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -215,7 +239,11 @@ class AiderExecutionStrategy(ProviderExecutionStrategy):
 
 
 class GeminiExecutionStrategy(ProviderExecutionStrategy):
-    """Gemini CLI: `gemini -p "{prompt}"`"""
+    """Gemini CLI: ``gemini -p "" --output-format text`` (prompt via stdin).
+
+    Gemini appends stdin input when ``-p`` has an empty value. The prompt
+    is sent via **stdin** to avoid the Windows ``cmd.exe`` 8191-char limit.
+    """
 
     @property
     def kind(self) -> str:
@@ -226,7 +254,10 @@ class GeminiExecutionStrategy(ProviderExecutionStrategy):
         return 180.0  # Gemini CLI can be slow to initialize
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", self.build_prompt(task)]
+        return [bin_path, "-p", "", "--output-format", "text"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         # Use --version (exits in ~6s on Windows). --help triggers interactive
@@ -391,7 +422,9 @@ class StrategyBasedProvider:
         If ``cwd`` is provided, the CLI subprocess runs in that directory
         (used for git worktree isolation).
         """
-        import asyncio
+        import shutil
+
+        from agentic_os.adapters.providers.run_cli import run_cli
 
         resolved_bin = shutil.which(self._config.bin_path) or self._config.bin_path
         if not shutil.which(resolved_bin):
@@ -415,89 +448,27 @@ class StrategyBasedProvider:
             timeout=timeout,
         )
 
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE if stdin_data is not None else asyncio.subprocess.DEVNULL,
+        rc, stdout_str, stderr_str = await run_cli(
+            cmd,
+            input_data=stdin_data,
             env=env,
             cwd=cwd,
+            timeout=timeout,
+            on_output=on_output,
         )
 
-        # If no streaming callback, use the original communicate() path
-        if on_output is None:
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(input=stdin_data),
-                    timeout=timeout,
-                )
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
-                raise RuntimeError(
-                    f"{self._config.bin_path} ({self._config.kind}) timed out after {timeout}s"
-                ) from None
-
-            if proc.returncode != 0:
-                stderr_text = stderr.decode("utf-8", errors="replace").strip()[:200]
-                raise RuntimeError(
-                    f"{self._config.bin_path} ({self._config.kind}) "
-                    f"exited {proc.returncode}: {stderr_text}"
-                )
-
-            result = self._strategy.parse_output(stdout, stderr, task)
-            return result or f"[{self._config.kind}] completed '{task.title}'"
-
-        # Streaming path: read stdout/stderr line-by-line
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
-
-        async def _read_stream(stream, stream_name: str, store: list[str]):
-            while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                decoded = line.decode("utf-8", errors="replace").rstrip("\n\r")
-                store.append(decoded)
-                try:
-                    on_output(decoded, stream_name)
-                except Exception:
-                    pass  # don't let callback errors crash execution
-
-        try:
-            # Write stdin if needed, then read streams concurrently
-            async def _feed_stdin():
-                if stdin_data is not None and proc.stdin:
-                    proc.stdin.write(stdin_data)
-                    await proc.stdin.drain()
-                    proc.stdin.close()
-
-            await asyncio.wait_for(
-                asyncio.gather(
-                    _feed_stdin(),
-                    _read_stream(proc.stdout, "stdout", stdout_lines),
-                    _read_stream(proc.stderr, "stderr", stderr_lines),
-                    proc.wait(),
-                ),
-                timeout=timeout,
-            )
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
+        if rc == -999:
             raise RuntimeError(
                 f"{self._config.bin_path} ({self._config.kind}) timed out after {timeout}s"
-            ) from None
-
-        stdout_bytes = "\n".join(stdout_lines).encode()
-        stderr_bytes = "\n".join(stderr_lines).encode()
-
-        if proc.returncode != 0:
-            stderr_text = "\n".join(stderr_lines).strip()[:200]
-            raise RuntimeError(
-                f"{self._config.bin_path} ({self._config.kind}) "
-                f"exited {proc.returncode}: {stderr_text}"
             )
 
+        if rc != 0:
+            raise RuntimeError(
+                f"{self._config.bin_path} ({self._config.kind}) exited {rc}: {stderr_str[:200]}"
+            )
+
+        stdout_bytes = stdout_str.encode("utf-8")
+        stderr_bytes = stderr_str.encode("utf-8")
         result = self._strategy.parse_output(stdout_bytes, stderr_bytes, task)
         return result or f"[{self._config.kind}] completed '{task.title}'"
 

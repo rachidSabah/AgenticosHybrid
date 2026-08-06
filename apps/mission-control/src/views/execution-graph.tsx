@@ -56,56 +56,62 @@ interface FilterState {
 function TaskNode({ data }: { data: ExecutionNode["data"] }) {
   const color: Record<string, string> = {
     created: "#64748b",
-    planned: "#64748b",
-    dispatched: "#64748b",
-    assigned: "#64748b",
+    planned: "#06b6d4",
+    dispatched: "#8b5cf6",
+    assigned: "#3b82f6",
     running: "#10b981",
-    completed: "#3b82f6",
+    completed: "#22d3ee",
     failed: "#ef4444",
     paused: "#f59e0b",
     cancelled: "#64748b",
   };
-  const nodeColor = color[data.status as string] || "#64748b";
+  const nodeColor = color[data.status as string] || "#06b6d4";
 
   const glow: Record<string, string> = {
     created: "rgba(100,116,139,0.15)",
-    planned: "rgba(100,116,139,0.15)",
-    dispatched: "rgba(100,116,139,0.15)",
-    assigned: "rgba(100,116,139,0.15)",
-    running: "rgba(16,185,129,0.2)",
-    completed: "rgba(59,130,246,0.2)",
-    failed: "rgba(239,68,68,0.2)",
-    paused: "rgba(245,158,11,0.2)",
+    planned: "rgba(6,182,212,0.2)",
+    dispatched: "rgba(139,92,246,0.25)",
+    assigned: "rgba(59,130,246,0.2)",
+    running: "rgba(16,185,129,0.35)",
+    completed: "rgba(34,211,238,0.35)",
+    failed: "rgba(239,68,68,0.3)",
+    paused: "rgba(245,158,11,0.25)",
     cancelled: "rgba(100,116,139,0.15)",
   };
-  const nodeGlow = glow[data.status as string] || "rgba(100,116,139,0.15)";
+  const nodeGlow = glow[data.status as string] || "rgba(6,182,212,0.2)";
 
-  const isActive = data.status === "running";
+  const isActive = data.status === "running" || data.status === "dispatched";
 
   return (
     <motion.div
-      className="relative rounded-2xl border px-4 py-3 min-w-[180px] backdrop-blur-sm"
+      className="relative rounded-2xl border px-4 py-3 min-w-[200px] backdrop-blur-xl shadow-2xl overflow-hidden"
       style={
         {
-          background: "rgba(12,14,22,0.92)",
-          borderColor: nodeColor,
-          boxShadow: `0 0 20px ${nodeGlow}, inset 0 0 20px ${nodeGlow}`,
+          background: "rgba(8,12,24,0.94)",
+          borderColor: `${nodeColor}88`,
+          boxShadow: `0 0 25px ${nodeGlow}, inset 0 0 15px ${nodeGlow}`,
         }
       }
       initial={{ scale: 0.9, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
+      {/* Sci-fi corner status stripe */}
+      <div
+        className="absolute top-0 left-0 h-1 w-full"
+        style={{ background: `linear-gradient(90deg, ${nodeColor}, transparent)` }}
+      />
+
       {/* Animated glow ring for active nodes */}
       {isActive && (
         <span
-          className="absolute -inset-[2px] rounded-[14px] opacity-50 animate-pulse"
+          className="absolute -inset-[2px] rounded-[16px] opacity-60 animate-pulse"
           style={{ border: `1px solid ${nodeColor}`, boxShadow: `0 0 30px ${nodeColor}` }}
         />
       )}
 
-      <Handle type="target" position={Position.Left} style={{ background: nodeColor, width: 8, height: 8 }} />
-      <Handle type="source" position={Position.Right} style={{ background: nodeColor, width: 8, height: 8 }} />
+      <Handle type="target" position={Position.Left} style={{ background: nodeColor, width: 9, height: 9, border: "2px solid #05060e" }} />
+      <Handle type="source" position={Position.Right} style={{ background: nodeColor, width: 9, height: 9, border: "2px solid #05060e" }} />
 
       <div className="flex items-center gap-3">
         {/* Status dot with pulse */}
@@ -381,57 +387,107 @@ export function ExecutionGraph() {
     const executionEdges: ExecutionEdge[] = [];
 
     // Task nodes
-    Object.values(tasks).forEach((task) => {
+    const taskList = Object.values(tasks);
+    if (taskList.length === 0) {
       executionNodes.push({
-        id: `task-${task.id}`,
+        id: "task-demo-1",
         type: "task",
-        position: { x: Math.random() * 800, y: Math.random() * 600 },
+        position: { x: 300, y: 120 },
         data: {
-          label: task.title || task.id,
-          status: task.status,
+          label: "Decompose Microservice Architecture",
+          status: "completed",
           type: "task",
-          startedAt: Date.now() - 1000 * 60 * 5,
-          duration: task.status === "completed" ? 60 * 1000 : undefined,
-          tags: [task.role],
+          startedAt: Date.now() - 1000 * 60 * 12,
+          duration: 45000,
+          tags: ["architecture"],
         },
       });
-    });
+      executionNodes.push({
+        id: "task-demo-2",
+        type: "task",
+        position: { x: 580, y: 220 },
+        data: {
+          label: "Synthesize API Routes & Contracts",
+          status: "running",
+          type: "task",
+          startedAt: Date.now() - 1000 * 60 * 2,
+          tags: ["api-gen"],
+        },
+      });
+    } else {
+      taskList.forEach((task, i) => {
+        executionNodes.push({
+          id: `task-${task.id}`,
+          type: "task",
+          position: { x: 280 + (i % 3) * 260, y: 100 + Math.floor(i / 3) * 140 },
+          data: {
+            label: task.title || task.id,
+            status: task.status,
+            type: "task",
+            startedAt: Date.now() - 1000 * 60 * 5,
+            duration: task.status === "completed" ? 60 * 1000 : undefined,
+            tags: [task.role],
+          },
+        });
+      });
+    }
 
     // Agent nodes
-    Object.values(agents).forEach((agent) => {
+    const agentList = Object.values(agents);
+    if (agentList.length === 0) {
       executionNodes.push({
-        id: `agent-${agent.id}`,
+        id: "agent-demo-1",
         type: "agent",
-        position: { x: Math.random() * 800, y: Math.random() * 600 },
+        position: { x: 60, y: 120 },
         data: {
-          label: agent.role,
-          status: agent.status,
+          label: "Claude Code CLI",
+          status: "running",
           type: "agent",
-          startedAt: Date.now() - 1000 * 60 * 5,
-          duration: agent.status === "completed" ? 60 * 1000 : undefined,
-          tags: [agent.provider],
+          startedAt: Date.now() - 1000 * 60 * 20,
+          tags: ["claude"],
         },
       });
-
-      // Agent-task edges
-      if (agent.current_task) {
-        executionEdges.push({
-          id: `edge-${agent.id}-${agent.current_task}`,
-          source: `agent-${agent.id}`,
-          target: `task-${agent.current_task}`,
-          animated: agent.status === "running",
-          style: { stroke: "#6366f1", strokeOpacity: 0.5, strokeWidth: 1.5 },
-        });
-      }
-      // Agent → system-health edge (live DAG connectivity)
       executionEdges.push({
-        id: `edge-sys-${agent.id}`,
-        source: `system-health`,
-        target: `agent-${agent.id}`,
-        animated: false,
-        style: { stroke: "#10b981", strokeOpacity: 0.2, strokeWidth: 0.5 },
+        id: "edge-demo-1",
+        source: "agent-demo-1",
+        target: "task-demo-1",
+        animated: true,
+        style: { stroke: "#22d3ee", strokeOpacity: 0.8, strokeWidth: 2 },
       });
-    });
+      executionEdges.push({
+        id: "edge-demo-2",
+        source: "task-demo-1",
+        target: "task-demo-2",
+        animated: true,
+        style: { stroke: "#8b5cf6", strokeOpacity: 0.8, strokeWidth: 2 },
+      });
+    } else {
+      agentList.forEach((agent, i) => {
+        executionNodes.push({
+          id: `agent-${agent.id}`,
+          type: "agent",
+          position: { x: 50, y: 100 + i * 140 },
+          data: {
+            label: agent.role,
+            status: agent.status,
+            type: "agent",
+            startedAt: Date.now() - 1000 * 60 * 5,
+            duration: agent.status === "completed" ? 60 * 1000 : undefined,
+            tags: [agent.provider],
+          },
+        });
+
+        if (agent.current_task) {
+          executionEdges.push({
+            id: `edge-${agent.id}-${agent.current_task}`,
+            source: `agent-${agent.id}`,
+            target: `task-${agent.current_task}`,
+            animated: agent.status === "running",
+            style: { stroke: "#22d3ee", strokeOpacity: 0.8, strokeWidth: 2 },
+          });
+        }
+      });
+    }
 
     // System nodes
     executionNodes.push({
@@ -513,11 +569,11 @@ export function ExecutionGraph() {
 
   const clearFilters = () => {
     setFilters({
-      status: ["running", "completed", "failed", "paused", "cancelled"],
+      status: ["running", "completed", "failed", "paused", "cancelled", "created", "planned", "dispatched", "assigned"],
       type: ["task", "agent", "system"],
       search: "",
       sort: "newest",
-      dimension: "3d",
+      dimension: "2d",
     });
   };
 

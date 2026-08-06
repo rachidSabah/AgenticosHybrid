@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, TypeVar
 from uuid import uuid4
 
 
@@ -307,6 +307,28 @@ class RuntimeInfo:
 
 # ── Update Models ──
 
+E = TypeVar("E", bound=StrEnum)
+
+
+def _coerce_enum(enum_cls: type[E], value: Any, default: E) -> E:
+    """Coerce *value* to *enum_cls*, tolerating raw strings from JSON bodies.
+
+    The update API builds manifests straight from frontend JSON, where enum
+    fields arrive as plain strings (e.g. ``channel="stable"``). Convert them
+    (case-insensitively) so ``.value`` access in ``to_dict()`` and install
+    flows never raises ``AttributeError``; fall back to *default* for values
+    that match no member.
+    """
+    if isinstance(value, enum_cls):
+        return value
+    if isinstance(value, str):
+        for candidate in (value, value.lower()):
+            try:
+                return enum_cls(candidate)
+            except ValueError:
+                continue
+    return default
+
 
 @dataclass
 class ReleaseInfo:
@@ -346,6 +368,11 @@ class UpdateManifest:
     channel: UpdateChannel = UpdateChannel.STABLE
     installer_type: InstallerType = InstallerType.EXE
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # API constructs this straight from frontend JSON — coerce enum fields.
+        self.channel = _coerce_enum(UpdateChannel, self.channel, UpdateChannel.STABLE)
+        self.installer_type = _coerce_enum(InstallerType, self.installer_type, InstallerType.EXE)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -421,6 +448,12 @@ class UpdateHistoryRecord:
     duration_seconds: float = 0.0
     error: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Records may be built from untyped data (API bodies, persisted JSON) —
+        # coerce so to_dict() never crashes on a raw string.
+        self.channel = _coerce_enum(UpdateChannel, self.channel, UpdateChannel.STABLE)
+        self.status = _coerce_enum(UpdateStatus, self.status, UpdateStatus.COMPLETED)
 
     def to_dict(self) -> dict[str, Any]:
         return {

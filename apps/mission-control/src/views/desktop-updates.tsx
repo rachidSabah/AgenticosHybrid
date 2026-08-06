@@ -166,10 +166,16 @@ export default function DesktopUpdates() {
   const handleDownload = async (manifest: UpdateManifest) => {
     setDownloading(true);
     try {
-      await api.downloadUpdate(manifest);
+      const result = await api.downloadUpdate(manifest);
+      // If the backend returned a download_url (dev server mode),
+      // open it in the browser so the user can download manually.
+      const downloadUrl = (result as { download_url?: string }).download_url;
+      if (downloadUrl) {
+        window.open(downloadUrl, "_blank");
+      }
       setPending(manifest);
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setDownloading(false);
     }
@@ -178,10 +184,18 @@ export default function DesktopUpdates() {
   const handleInstall = async (manifest: UpdateManifest) => {
     setInstalling(true);
     try {
-      await api.installUpdate(manifest);
+      const result = await api.installUpdate(manifest);
+      // If the backend returned a download_url (dev server mode),
+      // open it in the browser so the user can download the installer.
+      const downloadUrl = (result as { download_url?: string; message?: string }).download_url;
+      if (downloadUrl) {
+        window.open(downloadUrl, "_blank");
+        const msg = (result as { message?: string }).message;
+        if (msg) setError(msg);
+      }
       load();
     } catch (err) {
-      setError(String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setInstalling(false);
     }

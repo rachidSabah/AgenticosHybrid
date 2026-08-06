@@ -91,6 +91,7 @@ class Orchestrator:
         description: str = "",
         user_prompt: str = "",
         mission_id: str = "",
+        preferred_agents: list[str] | None = None,
     ) -> Task:
         task = Task(
             title=title,
@@ -98,6 +99,7 @@ class Orchestrator:
             description=description,
             user_prompt=user_prompt,
             mission_id=mission_id,
+            preferred_agents=preferred_agents or [],
         )
         self.registry.register_task(task)
         await self.bus.publish(
@@ -123,7 +125,7 @@ class Orchestrator:
         task = self._canonical_task(event.payload.get("id"))
         if task is None:
             return
-        provider = self._select_provider(task.role)
+        provider = self._select_provider(task.role, task.preferred_agents)
         if provider is None:
             log.error("dispatcher.no_provider", task=task.id, role=task.role)
             return
@@ -142,7 +144,7 @@ class Orchestrator:
             )
         )
 
-    def _select_provider(self, role: str):
+    def _select_provider(self, role: str, preferred_agents: list[str] | None = None):
         all_providers = self.providers.list_providers()
         if not all_providers:
             return None
@@ -164,6 +166,20 @@ class Orchestrator:
                 if provider_caps and not provider_caps.intersection(required_caps):
                     continue
             real_candidates.append(p)
+        # Agent selection (Prompt Center): when the mission pinned a set of
+        # preferred agents, restrict dispatch to exactly those providers. If
+        # none of them are real candidates, return None so the task stays
+        # planned instead of leaking to unselected agents.
+        if preferred_agents:
+            selected = {name.strip().lower() for name in preferred_agents if name}
+            real_candidates = [p for p in real_candidates if p.name.lower() in selected]
+            if not real_candidates:
+                log.info(
+                    "dispatcher.no_preferred_provider",
+                    task_role=role,
+                    preferred_agents=sorted(selected),
+                )
+                return None
         if real_candidates:
             idx = self._provider_rr_idx % len(real_candidates)
             self._provider_rr_idx += 1
@@ -184,7 +200,21 @@ class Orchestrator:
             task_role=role,
             failed_in_cooldown=len(self._failed_providers),
         )
-        return self.providers.get(self.settings.provider_default) or self.providers.default()
+        provider = self.providers.get(self.settings.provider_default) or self.providers.default()
+        # If the fallback is a MockProvider AND there were real providers
+        # that failed (in cooldown), switch mock to fallback_mode so mock
+        # execution marks the task as failed instead of returning canned
+        # "completed" text. This prevents missions from showing "completed"
+        # while zero files are written to the workspace.
+        # NOTE: If no real providers ever existed (e.g. tests that register
+        # only MockProvider), fallback_mode is NOT set so tests still pass.
+        if (
+            provider
+            and hasattr(provider, "_fallback_mode")
+            and self._failed_providers  # only set fallback_mode if real providers failed
+        ):
+            provider._fallback_mode = True  # type: ignore[attr-defined]  # ty: ignore[invalid-assignment]
+        return provider
 
     def _mark_provider_failed(self, provider_name: str) -> None:
         self._failed_providers[provider_name] = _time.monotonic()
@@ -281,7 +311,7 @@ class Orchestrator:
         return wt_path
 
     async def dispatch_task(self, task: Task) -> None:
-        provider = self._select_provider(task.role)
+        provider = self._select_provider(task.role, task.preferred_agents)
         if provider is None:
             return
         task.attempts += 1

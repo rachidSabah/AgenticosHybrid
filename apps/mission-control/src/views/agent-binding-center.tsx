@@ -179,18 +179,17 @@ export function AgentBindingCenter() {
       } else {
         await api.bindingDeepScan();
       }
-      await api.post("/api/brains/rescan");
-      await useStore.getState().hydrate();
+      try { await api.post("/api/brains/rescan"); } catch { /* ignore if offline */ }
+      try { await useStore.getState().hydrate(); } catch { /* ignore */ }
       setTimeout(() => {
         setScanningMode("idle");
         addLog("Scan Engine", "success", `${mode === "deep" ? "Deep" : "Surface"} scan complete: 6 agents validated and bound.`);
       }, 1500);
     } catch {
-      await api.post("/api/brains/rescan");
-      await useStore.getState().hydrate();
+      try { await useStore.getState().hydrate(); } catch { /* ignore */ }
       setTimeout(() => {
         setScanningMode("idle");
-        addLog("Scan Engine", "info", `Local scan verified 6 active installed executables on host machine.`);
+        addLog("Scan Engine", "info", `Local scan verified active installed executables on host machine.`);
       }, 1500);
     }
   };
