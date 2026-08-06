@@ -32,7 +32,7 @@ describe("Mission Control — E2E Smoke", () => {
   it("all views export a matching component", async () => {
     const viewModules = [
       { path: "@/views/mission-overview", name: "MissionOverview" },
-      { path: "@/views/ai-brain", name: "AiBrain" },
+      { path: "@/views/ai-brain", name: "AIBrain" },
       { path: "@/views/agent-constellation", name: "AgentConstellation" },
       { path: "@/views/mission-orchestrator", name: "MissionOrchestrator" },
       { path: "@/views/discovery-dashboard", name: "DiscoveryDashboard" },
