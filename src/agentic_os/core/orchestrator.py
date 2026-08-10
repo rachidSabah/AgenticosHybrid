@@ -52,6 +52,41 @@ _ROLE_CAPABILITY_MAP: dict[str, list[str]] = {
 _PROVIDER_COOLDOWN_S = 30.0
 
 
+def _is_unusable_output(text: str) -> bool:
+    """Heuristic: provider output that must not be persisted as a task report.
+
+    Guards against two failure modes observed with bound agent CLIs:
+
+    * **Binary data** that survived the lossy ``utf-8`` decode in
+      ``parse_output`` — compressed archives (e.g. bzip2) and other binary
+      streams decode to a high density of replacement chars / control bytes
+      and would corrupt the ``task_*.md`` report if written verbatim.
+    * **Prompt-wrapper echo** — some CLIs respond to the built mission wrapper
+      by printing it back verbatim instead of doing real work, so the report
+      would contain only the input prompt, no result.
+
+    ``text`` may be ``None``/empty when a provider produced no stdout; that is
+    already handled upstream by the empty-result fallback, so it is *not*
+    treated as unusable here (only garbage/echo).
+    """
+    if not text:
+        return False
+    sample = max(1, len(text))
+    replacement = text.count("�")
+    control = sum(1 for ch in text if ord(ch) < 32 and ch not in "\t\n\r")
+    if replacement / sample > 0.1 or control / sample > 0.05:
+        return True
+    # Prompt-wrapper echo: the distinctive wrapper markers appear verbatim.
+    markers = (
+        "CRITICAL INSTRUCTION FOR FILE CREATION",
+        "Mission Request",
+        "Assigned Task",
+        "Task Title",
+    )
+    present = sum(1 for m in markers if m in text)
+    return present >= 2 and len(text) > 200
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -297,10 +332,35 @@ class Orchestrator:
         return _on_output
 
     async def _create_worktree_for_agent(self, agent: Agent, task: Task) -> str | None:
-        """Create a git worktree for isolated agent execution."""
+        """Create a git worktree for isolated agent execution.
+
+        The worktree manager's workspace root is synced to the *active
+        workspace* (get_workspace_root()) before creating the worktree so
+        agents execute inside the user-selected workspace (e.g. ``E:\\Mission``),
+        never inside the backend's process cwd (e.g. the Agenticos repo).
+        Without this, worktrees default to ``os.getcwd()`` and agents analyze
+        and modify the wrong project, producing empty/echoed results while the
+        task .md outputs still get written to the real workspace.
+        """
         if self.worktree_manager is None:
             return None
         try:
+            from agentic_os.domain.workspace import get_workspace_root
+
+            ws_root = get_workspace_root()
+            if ws_root and _os.path.isdir(ws_root):
+                self.worktree_manager.set_workspace_root(ws_root)
+            # Non-git workspaces (e.g. a fresh E:\Mission) run the agent
+            # directly in the workspace root so produced files land there,
+            # instead of in a worktree checkout that is never merged back.
+            if not _os.path.isdir(_os.path.join(ws_root, ".git")):
+                log.info(
+                    "worktree.skipped_non_git_workspace",
+                    agent=agent.id,
+                    workspace=ws_root,
+                    reason="workspace is not a git repo — agent runs in workspace root",
+                )
+                return None
             branch = self.worktree_manager.auto_branch_name(agent.id, task.id)
             wt = await self.worktree_manager.create_worktree(
                 branch_name=branch,
@@ -438,48 +498,74 @@ class Orchestrator:
 
                 ws_root = get_workspace_root()
                 if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                    # 1. Save execution summary report
-                    filename = f"task_{task.id[:8]}_{task.role}.md"
-                    out_path = _os.path.join(ws_root, filename)
-                    with open(out_path, "w", encoding="utf-8") as f:
-                        f.write(f"# Output for Task: {task.title}\n\n{result}\n")
-                    log.info("task.output_persisted", path=out_path, bytes=len(result))
+                    if _is_unusable_output(result):
+                        # Don't persist binary/garbage or an echoed prompt
+                        # wrapper as a text report. Write an honest diagnostic
+                        # note instead so the mission record reflects that no
+                        # usable output was produced.
+                        note = (
+                            f"# Output for Task: {task.title}\n\n"
+                            "> WARNING: provider output could not be persisted as text "
+                            "(binary data or an echoed prompt wrapper).\n\n"
+                            f"> provider: {provider.info.kind}\n"
+                            f"> workspace: {ws_root}\n\n"
+                            "No source files were extracted. Verify the provider CLI "
+                            "and the workspace before re-running.\n"
+                        )
+                        out_path = _os.path.join(ws_root, f"task_{task.id[:8]}_{task.role}.md")
+                        with open(out_path, "w", encoding="utf-8") as f:
+                            f.write(note)
+                        log.warning(
+                            "task.output_unusable",
+                            path=out_path,
+                            provider=provider.info.kind,
+                            bytes=len(result),
+                        )
+                    else:
+                        # 1. Save execution summary report
+                        filename = f"task_{task.id[:8]}_{task.role}.md"
+                        out_path = _os.path.join(ws_root, filename)
+                        with open(out_path, "w", encoding="utf-8") as f:
+                            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+                        log.info("task.output_persisted", path=out_path, bytes=len(result))
 
-                    # 2. Extract code blocks with target filenames or language extensions
-                    pattern = _re.compile(r"```(?:\w+[:\s]+([^\n]+)|(\w+))\n(.*?)```", _re.DOTALL)
-                    for match in pattern.finditer(result):
-                        filename_meta, lang, code_content = match.groups()
-                        code = code_content.strip()
-                        if not code:
-                            continue
+                        # 2. Extract code blocks with target filenames or language extensions
+                        pattern = _re.compile(
+                            r"```(?:\w+[:\s]+([^\n]+)|(\w+))\n(.*?)```", _re.DOTALL
+                        )
+                        for match in pattern.finditer(result):
+                            filename_meta, lang, code_content = match.groups()
+                            code = code_content.strip()
+                            if not code:
+                                continue
 
-                        # Determine target filename
-                        target_filename = None
-                        if filename_meta and "." in filename_meta and " " not in filename_meta:
-                            target_filename = filename_meta.strip()
-                        elif lang:
-                            ext_map = {
-                                "html": "index.html",
-                                "css": "styles.css",
-                                "javascript": "script.js",
-                                "js": "script.js",
-                                "python": "app.py",
-                                "py": "app.py",
-                                "json": "config.json",
-                            }
-                            ext = ext_map.get(lang.lower())
-                            if ext:
-                                target_filename = f"{task.role}_{ext}"
+                            # Determine target filename
+                            target_filename = None
+                            if filename_meta and "." in filename_meta and " " not in filename_meta:
+                                target_filename = filename_meta.strip()
+                            elif lang:
+                                ext_map = {
+                                    "html": "index.html",
+                                    "css": "styles.css",
+                                    "javascript": "script.js",
+                                    "js": "script.js",
+                                    "python": "app.py",
+                                    "py": "app.py",
+                                    "json": "config.json",
+                                }
+                                ext = ext_map.get(lang.lower())
+                                if ext:
+                                    target_filename = f"{task.role}_{ext}"
 
-                        if target_filename:
-                            code_file_path = _os.path.join(ws_root, target_filename)
-                            with open(code_file_path, "w", encoding="utf-8") as f:
-                                f.write(code + "\n")
-                            log.info(
-                                "task.code_file_extracted",
-                                path=code_file_path,
-                                bytes=len(code),
-                            )
+                            if target_filename:
+                                code_file_path = _os.path.join(ws_root, target_filename)
+                                with open(code_file_path, "w", encoding="utf-8") as f:
+                                    f.write(code + "\n")
+                                log.info(
+                                    "task.code_file_extracted",
+                                    path=code_file_path,
+                                    bytes=len(code),
+                                )
             except Exception as e:
                 log.warning("task.persist_output_failed", error=str(e))
 

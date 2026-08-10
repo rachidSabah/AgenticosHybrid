@@ -1006,6 +1006,11 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(500, f"Merge failed: {exc}") from exc
 
     # ── Messaging Gateways (WhatsApp + Telegram) ──
+    # Shared in-memory mission store.  Defined here (before the gateways) so
+    # both channel adapters and the mission endpoints below operate on the
+    # SAME store — a remote mission is indistinguishable from a web mission.
+    _missions: dict[str, Mission] = {}
+
     from agentic_os.adapters.gateway.telegram_gateway import TelegramGateway
     from agentic_os.adapters.gateway.whatsapp_gateway import WhatsAppGateway
 
@@ -1023,8 +1028,10 @@ def create_app(platform: Platform) -> FastAPI:
         allowed_users = body.get("allowed_users", [])
         if not token:
             raise HTTPException(400, "bot_token is required")
-        _telegram_gateway._bot_token = token
-        _telegram_gateway._allowed_users = set(allowed_users) if allowed_users else None
+        _telegram_gateway.set_bot_token(token)
+        _telegram_gateway.set_allowed_users(
+            allowed_users if isinstance(allowed_users, list) else None
+        )
         try:
             await _telegram_gateway.start()
         except RuntimeError as exc:
@@ -1057,8 +1064,12 @@ def create_app(platform: Platform) -> FastAPI:
     @app.post("/api/gateway/whatsapp/connect")
     async def whatsapp_connect(body: dict | None = None) -> dict:
         session_path = body.get("session_path", "") if body else ""
+        allowed_numbers = body.get("allowed_numbers", []) if body else []
         if session_path:
-            _whatsapp_gateway._session_path = session_path
+            _whatsapp_gateway.set_session_path(session_path)
+        _whatsapp_gateway.set_allowed_numbers(
+            allowed_numbers if isinstance(allowed_numbers, list) else None
+        )
         try:
             await _whatsapp_gateway.start()
         except RuntimeError as exc:
@@ -1078,6 +1089,26 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, "to and text are required")
         sent = await _whatsapp_gateway.send_message(to, text)
         return {"sent": sent}
+
+    @app.get("/api/gateway/whatsapp/qr")
+    async def whatsapp_qr() -> Response:
+        """Serve the live WhatsApp pairing QR as a locally-rendered SVG.
+
+        The QR string comes from the running Baileys bridge on this machine
+        and is rendered here — it is never sent to an external image service
+        and never cached as a static asset.
+        """
+        qr = _whatsapp_gateway.qr_code
+        if not qr:
+            raise HTTPException(409, "No QR available — WhatsApp gateway is not pairing.")
+        from agentic_os.adapters.gateway.qr_render import render_qr_svg
+
+        svg = render_qr_svg(qr)
+        return Response(
+            content=svg,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store", "X-QR-Live": "1"},
+        )
 
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
@@ -1790,8 +1821,8 @@ def create_app(platform: Platform) -> FastAPI:
         return spec.model_dump(mode="json")
 
     # ── Mission Orchestrator API (Phase Ψ) ──
-    # In-memory store (persisted upgrade in Phase Ψ+1)
-    _missions: dict[str, Mission] = {}
+    # In-memory store (persisted upgrade in Phase Ψ+1).
+    # Defined above with the gateway wiring so gateways and endpoints share it.
 
     @app.post("/api/missions")
     async def create_mission(body: dict) -> dict:
@@ -1800,6 +1831,15 @@ def create_app(platform: Platform) -> FastAPI:
         agents = body.get("preferred_agents") or body.get("agents") or []
         if not isinstance(agents, list):
             agents = []
+        # Origin channel metadata.  Defaults to WEB; only the allow-listed
+        # channel strings are honored — anything else falls back to WEB so a
+        # forged payload cannot mislabel its origin.
+        channel = str(body.get("channel", "WEB")).upper()
+        if channel not in {"WEB", "LOCAL", "TELEGRAM", "WHATSAPP", "API"}:
+            channel = "WEB"
+        remote = body.get("remote", {})
+        if not isinstance(remote, dict):
+            remote = {}
         mission = Mission(
             title=body.get("title", ""),
             description=body.get("description", ""),
@@ -1815,6 +1855,8 @@ def create_app(platform: Platform) -> FastAPI:
             attachments=[
                 Attachment(**a) if isinstance(a, dict) else a for a in body.get("attachments", [])
             ],
+            channel=channel,
+            remote=remote,
         )
         _missions[mission.id] = mission
         await orch.bus.publish(
@@ -2077,6 +2119,58 @@ def create_app(platform: Platform) -> FastAPI:
             )
         )
         return m.to_dict()
+
+    # ── Remote Prompt Service (Telegram + WhatsApp share this) ─────────────
+    # Wraps the exact mission endpoint functions above so remote prompts
+    # flow through the SAME pipeline as the browser Prompt Center.
+    from agentic_os.adapters.gateway.remote_prompt import RemotePromptService
+
+    async def _remote_agents_source() -> list[dict]:
+        """Live agent list used by the remote /agents command (same source
+        as /api/agents but synchronous-friendly for the gateways)."""
+        agents = [a.model_dump(mode="json") for a in orch.registry.agents()]
+        if platform.brain_registry is not None:
+            try:
+                brains = await platform.brain_registry.list_all()
+            except Exception:
+                brains = []
+            known = {a.get("id") or a.get("name") for a in agents}
+            for b in brains:
+                if b.id not in known:
+                    agents.append(
+                        {
+                            "id": b.id,
+                            "name": b.display_name,
+                            "provider": b.display_name,
+                            "role": "assistant",
+                            "status": b.status.value
+                            if hasattr(b.status, "value")
+                            else str(b.status),
+                            "capabilities": list(b.capabilities),
+                            "health": "healthy"
+                            if b.health >= 80
+                            else "degraded"
+                            if b.health >= 50
+                            else "unknown",
+                            "latency_ms": b.latency,
+                        }
+                    )
+        return agents
+
+    # Allow-lists are configured via the gateway connect endpoints; when a
+    # channel has no allow-list it defaults to allow (legacy behavior).
+    _remote_service = RemotePromptService(
+        bus=platform.bus,
+        create_mission_fn=create_mission,
+        plan_mission_fn=plan_mission,
+        start_mission_fn=start_mission,
+        cancel_mission_fn=cancel_mission,
+        missions_store=_missions,
+        agents_fn=_remote_agents_source,
+    )
+    # Inject the shared service into both channel gateways.
+    _telegram_gateway.set_remote_service(_remote_service)
+    _whatsapp_gateway.set_remote_service(_remote_service)
 
     # ── Autonomous OS: Mission Lifecycle (10-state) ──
 

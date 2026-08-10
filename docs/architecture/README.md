@@ -29,6 +29,7 @@
 14. [Recovery & Failover Mechanisms](#recovery--failover-mechanisms)
 15. [Offline Mode Architecture](#offline-mode-architecture)
 16. [Update System Architecture](#update-system-architecture)
+17. [Remote Messaging Gateways](#remote-messaging-gateways)
 
 ---
 
@@ -812,3 +813,87 @@ install_update(manifest)
 - **Signature Verification** (`signature.py`): Code signing verification with GPG/Ed25519
 - **Rollback Manager** (`rollback.py`): Version state snapshots, DB migration revert
 - **Delta Updates** (`delta_update.py`): Binary diff (bsdiff) for bandwidth-efficient updates
+
+---
+
+## Remote Messaging Gateways
+
+Telegram and WhatsApp are first-class **remote clients** of Mission Control.
+Prompts received over chat are routed through the *exact same* mission pipeline
+the browser uses — there is no separate "remote mission" code path.
+
+### Design: one shared adapter
+
+```
+Telegram bot  ─┐
+               ├─→ RemotePromptService ──→ create_mission() ──→ plan_mission() ──→ start_mission()
+WhatsApp link ─┘       │                                                             │
+                (authorize, rate-limit,                                             ▼
+                 dedupe, validate)                                        shared _missions store
+                                                          (identical to the WEB/LOCAL/API path)
+```
+
+`RemotePromptService` (`adapters/gateway/remote_prompt.py`) is the single
+adapter that turns a chat message into a mission. Both transport gateways
+(`telegram_gateway.py`, `whatsapp_gateway.py`) call it. It:
+
+- **Validates the channel** — only `WEB`, `LOCAL`, `TELEGRAM`, `WHATSAPP`, `API` (no forged channels).
+- **Authorizes per identity** — per-channel allow-lists; default-allow when no list is configured (matches legacy behavior). A fixed set of `SENSITIVE_ACTIONS` (provider config, security settings, plugin install, workspace delete, user manage, system shutdown) is **never** granted over messaging.
+- **Rate-limits** per identity (sliding 60-second window).
+- **Deduplicates** by `message_id` (idempotency across bridge redelivery).
+- **Owns cancellation** — only the mission's original sender may cancel it.
+- **Publishes an audit event** for every decision (allow/deny/rate_limited/duplicate/not_found/failed) on `Topic.AUDIT`, which the dashboard broadcasts live and retains for REST replay.
+
+### Channel metadata
+
+Every mission carries its origin. The `Mission` domain model gained two fields:
+
+```python
+channel: str = "WEB"            # WEB | LOCAL | TELEGRAM | WHATSAPP | API
+remote: dict = field(default_factory=dict)  # { channel, external_account_id, session_id?, display_name? }
+```
+
+Remote missions are indistinguishable from web missions in the shared store, so
+the existing mission endpoints, orchestrator, swarm planner, and Mission Control
+views all work on them unchanged. Mission Control shows a channel badge
+(TELEGRAM/WHATSAPP) on remote missions.
+
+### Transport adapters
+
+| Gateway | Auth | Command surface |
+|---------|------|-----------------|
+| **Telegram** | Bot token from `@BotFather` (no QR — that is correct; Telegram does not pair by QR) | `/start`, `/help`, `/mission`, `/prompt`, `/status`, `/missions`, `/result`, `/agents`, `/cancel`, `/stop`, `/retry`, plus free-text → mission |
+| **WhatsApp** | Real QR pairing via a Node bridge (`wa_bridge.js`, `@whiskeysockets/baileys`); the QR is rendered locally as SVG — never an external image service | same command set |
+
+Both gateways stream task-progress events back to the originating chat and
+track which chat owns which mission.
+
+### Secrets & the QR
+
+The WhatsApp pairing QR string is a **secret**. It is therefore:
+
+- **Never** returned in the gateway status API (`has_qr` is a bool; the raw string is dropped).
+- **Never** published on the WebSocket feed or kept in the dashboard ring buffer.
+- **Never** rendered by an external image service.
+- Served **only** by `/api/gateway/whatsapp/qr`, which renders it locally to SVG with `Cache-Control: no-store` and returns `409` when no pairing is in progress.
+
+The live check lives in `tests/test_remote_prompt_gateway.py` (secret
+non-disclosure invariants).
+
+### API surface
+
+All `/api/gateway/*` endpoints sit behind the same API-key middleware as the
+rest of the control plane: when `settings.api_key` is set, every gateway
+operation (connect, disconnect, send, QR) requires `X-API-Key`.
+
+### Where things live
+
+| Concern | Module |
+|---------|--------|
+| Shared remote → mission adapter | `src/agentic_os/adapters/gateway/remote_prompt.py` |
+| Telegram transport | `src/agentic_os/adapters/gateway/telegram_gateway.py` |
+| WhatsApp transport + bridge | `src/agentic_os/adapters/gateway/whatsapp_gateway.py`, `wa_bridge.js` |
+| Local QR SVG renderer | `src/agentic_os/adapters/gateway/qr_render.py` |
+| Gateway REST + QR endpoints | `src/agentic_os/api/app.py` |
+| Remote identity & channel fields | `src/agentic_os/domain/mission.py` |
+| Unit / security tests | `tests/test_remote_prompt_gateway.py`, `tests/test_qr_render.py` |

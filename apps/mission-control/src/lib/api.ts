@@ -643,12 +643,14 @@ export const api = {
   telegramSend: (body: { chat_id: number | string; text: string }) =>
     postThrow<{ sent: boolean }>("/api/gateway/telegram/send", body),
   telegramChats: () => get<Array<{ chat_id: number; last_message: string; timestamp: string }>>("/api/gateway/telegram/chats"),
-  whatsappStatus: () => get<{ running: boolean; connection_status: string; qr_code: string; has_qr: boolean; recent_messages: unknown[] }>("/api/gateway/whatsapp/status"),
-  whatsappConnect: (body?: { session_path?: string }) =>
+  whatsappStatus: () => get<{ running: boolean; connection_status: string; has_qr: boolean; recent_messages: unknown[]; allowed_numbers: string[] | null; mission_count: number }>("/api/gateway/whatsapp/status"),
+  whatsappConnect: (body?: { session_path?: string; allowed_numbers?: string[] }) =>
     postThrow<{ status: string }>("/api/gateway/whatsapp/connect", body ?? {}),
   whatsappDisconnect: () => postThrow<{ status: string }>("/api/gateway/whatsapp/disconnect"),
   whatsappSend: (body: { to: string; text: string }) =>
     postThrow<{ sent: boolean }>("/api/gateway/whatsapp/send", body),
+  /** Live pairing QR rendered by our own backend (SVG) — never an external service. */
+  whatsappQrUrl: () => `/api/gateway/whatsapp/qr?t=${Date.now()}`,
   createMission: (body: Record<string, unknown>) =>
     post<MissionType>("/api/missions", body),
   getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),

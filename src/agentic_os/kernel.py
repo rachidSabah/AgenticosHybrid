@@ -312,6 +312,13 @@ class Kernel:
         self.executive_controller = None
         self.cognitive_controller = None
         self.swarm_coordinator = None
+        # Phase 15-18 controllers (initialized in _start_subsystems; keep None
+        # defaults so stop() can shut down cleanly if startup never reached them).
+        self.ecosystem_controller = None
+        self.cluster_controller = None
+        self.evolution_controller = None
+        self.distributed_controller = None
+        self.persistent_controller = None
         # Phase 6.2: AI Brain Registry & Constellation (initialized in _start_subsystems)
         self.brain_registry = None
         self.brain_manager = None

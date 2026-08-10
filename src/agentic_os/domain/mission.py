@@ -197,6 +197,12 @@ class Mission:
     deadline: datetime | None = None
     tags: list[str] = field(default_factory=list)
     attachments: list[Attachment] = field(default_factory=list)
+    # Origin channel: "WEB" | "LOCAL" | "TELEGRAM" | "WHATSAPP" | "API".
+    # Defaults to WEB so existing browser-created missions are unaffected.
+    channel: str = "WEB"
+    # Remote identity metadata for channel-originated missions. Carries the
+    # authenticated external account/session, never raw untrusted identifiers.
+    remote: dict = field(default_factory=dict)
     status: MissionStatus = MissionStatus.DRAFT
     plan: MissionPlan | None = None
     created_at: datetime = field(default_factory=_utcnow)
@@ -219,6 +225,8 @@ class Mission:
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "tags": self.tags,
             "attachments": [a.to_dict() for a in self.attachments],
+            "channel": self.channel,
+            "remote": self.remote,
             "status": self.status.value,
             "plan": self.plan.to_dict() if self.plan else None,
             "created_at": self.created_at.isoformat(),

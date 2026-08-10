@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentic-os"
-version = "1.0.0-rc10"
+version = "1.0.0-rc11"
 description = "Agentic OS — a local-first, event-bus-driven AI Agent Operating System."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -29,6 +29,7 @@ dependencies = [
     "opentelemetry-exporter-prometheus>=0.45b0",
     "psutil>=7.2.2",
     "python-telegram-bot>=21.0.0",
+    "qrcode>=8.0",
 ]
 
 [project.scripts]

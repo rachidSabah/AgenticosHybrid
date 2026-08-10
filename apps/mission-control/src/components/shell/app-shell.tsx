@@ -167,7 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
 
             {/* Content Area — THE SINGLE SCROLL CONTAINER for the app */}
-            <div className="relative overflow-hidden min-h-0">
+            <div className="relative overflow-hidden min-h-0 h-full">
               {/* Loading overlay — visible until WebSocket connects or timeout passes */}
               {!connected && mounted && !connectingDismissed && (
                 <motion.div

@@ -17,7 +17,7 @@ import {
   Upload, Paperclip, Download, GripVertical, BrainCircuit, MessageCircle,
   GitMerge, Kanban, CheckCircle2, XCircle, Loader2, Layers, Workflow,
   Activity, Server, Route, Terminal as TerminalIcon, GitBranch, FileDiff,
-  FolderTree,
+  FolderTree, Zap, Shield, BarChart3, Network,
 } from "lucide-react";
 import { TerminalPanel } from "@/components/shell/terminal-panel";
 import { DiffViewer } from "@/components/diff-viewer";
@@ -36,9 +36,6 @@ const TASK_COLORS: Record<string, string> = {
   blocked: "#ef4444", skipped: "#6b7280",
 };
 
-// ── Agent provider color palette ──
-// Used to assign consistent colors to discovered providers. Not a hardcoded
-// provider list — the actual agent list is derived from the live store.
 const PROVIDER_COLORS = [
   "#d97706", "#8b5cf6", "#06b6d4", "#10b981", "#4285f4", "#f97316",
   "#ec4899", "#14b8a6", "#6366f1", "#eab308",
@@ -48,7 +45,6 @@ function providerColor(name: string, index: number): string {
   return PROVIDER_COLORS[index % PROVIDER_COLORS.length];
 }
 
-// ── Events relevant for inter-agent comms ──
 const COMMS_TOPICS = new Set([
   "task.dispatched", "task.planned", "task.created",
   "agent.started", "agent.completed", "agent.failed", "agent.recovered",
@@ -56,7 +52,6 @@ const COMMS_TOPICS = new Set([
   "memory.written", "memory.evicted",
 ]);
 
-// ── Merge validation stages ──
 const MERGE_STAGES = [
   { id: "conflicts", label: "Conflict Detection", icon: GitMerge },
   { id: "merge", label: "Merge Changes", icon: Layers },
@@ -68,7 +63,6 @@ const MERGE_STAGES = [
   { id: "documentation", label: "Documentation", icon: FileText },
 ] as const;
 
-// ── OmniRoute strategy labels ──
 const ROUTING_STRATEGIES: { id: GatewayStrategy; label: string; desc: string; icon: string }[] = [
   { id: "balanced", label: "Balanced", desc: "Equal weight across all dimensions", icon: "⚖️" },
   { id: "fastest", label: "Fastest", desc: "Minimize response latency", icon: "⚡" },
@@ -77,6 +71,19 @@ const ROUTING_STRATEGIES: { id: GatewayStrategy; label: string; desc: string; ic
   { id: "reliability_first", label: "Reliability First", desc: "Least error-prone providers", icon: "🛡️" },
   { id: "latency_first", label: "Latency First", desc: "Lowest latency providers", icon: "🏎️" },
   { id: "custom", label: "Custom", desc: "Manual assignment", icon: "🎛️" },
+];
+
+// ── Futuristic Tab Bar ──
+const TABS = [
+  { id: "detail", label: "Plan & Tasks", icon: ListTodo },
+  { id: "timeline", label: "Timeline", icon: Kanban },
+  { id: "memory", label: "Shared Memory", icon: BrainCircuit },
+  { id: "comms", label: "Agent Comms", icon: MessageCircle },
+  { id: "merge", label: "Merge & Validate", icon: GitMerge },
+  { id: "validation", label: "Final Validation", icon: CheckCircle2 },
+  { id: "routing", label: "Routing", icon: Route },
+  { id: "terminal", label: "Terminal", icon: TerminalIcon },
+  { id: "review", label: "Review Changes", icon: FileDiff },
 ];
 
 // ── Main Component ──
@@ -94,16 +101,13 @@ export function MissionOrchestrator() {
   const [selectedWorktreePath, setSelectedWorktreePath] = useState<string>("");
   const [worktreeLoading, setWorktreeLoading] = useState(false);
 
-  // Live mission updates from EventBus
   const missionStore = useStore((s) => s.missions);
   const missionUpdates = useStore((s) => s.missionUpdates);
 
   const STORAGE_KEY = "mc.orchestrator.missions";
 
   const saveMissionsLocal = (list: MissionType[]) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    } catch {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
   };
 
   const loadMissions = useCallback(async () => {
@@ -124,7 +128,7 @@ export function MissionOrchestrator() {
         }
       }
       setError(null);
-    } catch (e) {
+    } catch {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         try {
@@ -141,7 +145,6 @@ export function MissionOrchestrator() {
 
   useEffect(() => { loadMissions(); }, [loadMissions]);
 
-  // Load worktrees
   const loadWorktrees = useCallback(async () => {
     setWorktreeLoading(true);
     try {
@@ -160,17 +163,12 @@ export function MissionOrchestrator() {
     return () => clearInterval(t);
   }, [loadWorktrees]);
 
-  // Open worktree in terminal or diff viewer
   const openWorktree = (wt: import("@/lib/types").WorktreeEntry, tab: string) => {
     setSelectedWorktreeBranch(wt.branch);
     setSelectedWorktreePath(wt.path);
     setRightTab(tab);
   };
 
-  // Merge live store updates — guard against reference changes that cause infinite loops.
-  // This now ALSO picks up new missions that appeared in the store (e.g. just
-  // created from Prompt Center), so the Mission Orchestrator list updates live
-  // without needing a manual refresh.
   const prevStoreKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (missionUpdates && Object.keys(missionStore).length > 0) {
@@ -178,18 +176,13 @@ export function MissionOrchestrator() {
       if (prevStoreKeyRef.current === storeKey) return;
       prevStoreKeyRef.current = storeKey;
       setMissions((prev) => {
-        // Start with the current local list, updating any missions that exist in the store.
         const updated = prev.map((m) =>
           missionStore[m.id] ? { ...m, ...missionStore[m.id] } : m,
         );
-        // Then add any store missions that aren't yet in the local list (new missions).
         const prevIds = new Set(prev.map((m) => m.id));
         for (const [id, m] of Object.entries(missionStore)) {
-          if (!prevIds.has(id)) {
-            updated.push(m);
-          }
+          if (!prevIds.has(id)) updated.push(m);
         }
-        // Sort newest-first by created_at (fallback to updated_at)
         updated.sort(
           (a, b) =>
             new Date(b.created_at ?? b.updated_at ?? 0).getTime() -
@@ -202,9 +195,6 @@ export function MissionOrchestrator() {
           prev ? { ...prev, ...missionStore[prev.id] } : prev,
         );
       }
-      // Auto-select the newest mission when nothing is selected yet, so
-      // missions created from the Prompt Center show their detail panel
-      // immediately instead of the "No mission selected" empty state.
       if (!selectedMission) {
         const storeList = Object.values(missionStore).sort(
           (a, b) =>
@@ -217,316 +207,367 @@ export function MissionOrchestrator() {
   }, [missionUpdates, missionStore, selectedMission]);
 
   return (
-    <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_2fr]">
-      {/* Left column */}
-      <div className="flex flex-col gap-4 min-h-0">
-        <AgentStatusList />
-        <Panel
-          title="Missions"
-          subtitle={`${missions.length} total`}
-          actions={
-            <div className="flex items-center gap-1">
-              <button className="pill bg-surface/60 text-faint hover:text-text" onClick={loadMissions} title="Refresh">
-                <RefreshCw size={12} />
-              </button>
-              <button
-                className="pill bg-accent/20 text-accent hover:bg-accent/30"
-                onClick={() => setShowCreate(!showCreate)}
-              >
-                {showCreate ? <X size={14} /> : <Plus size={14} />}
-                {showCreate ? "Close" : "New"}
-              </button>
-            </div>
-          }
-          className="flex-1 min-h-0"
-        >
-          {showCreate ? (
-            <MissionForm
-              onSubmit={async (data) => {
-                try {
-                  const created = await api.createMission(data);
-                  if (created && created.id) {
-                    setMissions((prev) => {
-                      const next = [created, ...prev];
-                      saveMissionsLocal(next);
-                      useStore.getState().setMissions(next);
-                      return next;
-                    });
-                    setSelectedMission(created);
-                  } else {
-                    const fallbackMission: MissionType = {
-                      id: `msn-${Date.now()}`,
-                      title: (data.title as string) || "Untitled Mission",
-                      description: (data.description as string) || "",
-                      prompt: (data.prompt as string) || "",
-                      objectives: (data.objectives as string[]) || [],
-                      deliverables: (data.deliverables as string[]) || [],
-                      constraints: (data.constraints as string[]) || [],
-                      status: "planned",
-                      priority: (data.priority as any) || "medium",
-                      execution_mode: (data.execution_mode as any) || "hybrid",
-                      tags: (data.tags as string[]) || [],
-                      attachments: [],
-                      created_at: new Date().toISOString(),
-                      updated_at: new Date().toISOString(),
-                    };
-                    setMissions((prev) => {
-                      const next = [fallbackMission, ...prev];
-                      saveMissionsLocal(next);
-                      useStore.getState().setMissions(next);
-                      return next;
-                    });
-                    setSelectedMission(fallbackMission);
-                  }
-                } catch {
-                  const fallbackMission: MissionType = {
-                    id: `msn-${Date.now()}`,
-                    title: (data.title as string) || "Untitled Mission",
-                    description: (data.description as string) || "",
-                    prompt: (data.prompt as string) || "",
-                    objectives: (data.objectives as string[]) || [],
-                    deliverables: (data.deliverables as string[]) || [],
-                    constraints: (data.constraints as string[]) || [],
-                    status: "planned",
-                    priority: (data.priority as any) || "medium",
-                    execution_mode: (data.execution_mode as any) || "hybrid",
-                    tags: (data.tags as string[]) || [],
-                    attachments: [],
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                  };
-                  setMissions((prev) => {
-                    const next = [fallbackMission, ...prev];
-                    saveMissionsLocal(next);
-                    useStore.getState().setMissions(next);
-                    return next;
-                  });
-                  setSelectedMission(fallbackMission);
-                } finally {
-                  setShowCreate(false);
-                }
-              }}
-              onCancel={() => setShowCreate(false)}
-            />
-          ) : loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => <div key={i} className="h-16 glass rounded-xl animate-pulse" />)}
-            </div>
-          ) : error ? (
-            <div className="text-sm text-danger p-3 glass rounded-xl">{error}</div>
-          ) : missions.length === 0 ? (
-            <Empty title="No missions yet" hint="Click 'New' to create your first mission." />
-          ) : (
-            <div className="space-y-2 h-full overflow-y-auto">
-              {missions.map((m) => (
-                <MissionCard
-                  key={`${m.id}-${m.status}-${m.updated_at}`}
-                  mission={m}
-                  selected={selectedMission?.id === m.id}
-                  onClick={() => { setSelectedMission(m); setRightTab("detail"); }}
-                  onPlan={async () => {
-                    setPlanning(m.id);
-                    try { await api.planMission(m.id); await loadMissions(); }
-                    finally { setPlanning(null); }
-                  }}
-                  onStart={async () => { await api.startMission(m.id); loadMissions(); }}
-                  onPause={async () => { await api.pauseMission(m.id); loadMissions(); }}
-                  onCancel={async () => { await api.cancelMission(m.id); loadMissions(); }}
-                  onDelete={async () => {
-                    await api.deleteMission(m.id);
-                    if (selectedMission?.id === m.id) setSelectedMission(null);
-                    loadMissions();
-                  }}
-                  planning={planning === m.id}
-                />
-              ))}
-            </div>
-          )}
-        </Panel>
+    <div className="flex h-full w-full flex-col overflow-y-auto lg:overflow-hidden bg-[#080a10] pb-12 lg:pb-0">
+      {/* ── Top Command Bar ── */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] bg-[#0c0e18]/80 px-4 py-3 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/20 ring-1 ring-indigo-500/40">
+            <Network size={14} className="text-indigo-400" />
+          </div>
+          <span className="text-sm font-bold tracking-tight text-white/90">Mission Orchestrator</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-400">
+            ● LIVE
+          </span>
+        </div>
       </div>
 
-      {/* Right column */}
-      <div className="flex flex-col gap-4 min-h-0">
-        {selectedMission ? (
-          <>
-            <MissionDetail mission={selectedMission} onRefresh={loadMissions} />
+      {/* ── Main Content Grid ── */}
+      <div className="flex flex-col lg:flex-row min-h-0 flex-1 overflow-visible lg:overflow-hidden">
+        {/* LEFT PANEL */}
+        <div className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/[0.06] bg-[#0a0c16]/60 p-3 lg:w-80 xl:w-96">
+          {/* Agent Status */}
+          <AgentStatusList />
 
-            {/* Tab bar for additional panels */}
-            <div className="flex items-center gap-1 rounded-xl bg-surface/20 p-0.5 shrink-0 overflow-x-auto">
-              {[
-                { id: "detail", label: "Plan & Tasks", icon: ListTodo },
-                { id: "timeline", label: "Timeline", icon: Kanban },
-                { id: "memory", label: "Shared Memory", icon: BrainCircuit },
-                { id: "comms", label: "Agent Comms", icon: MessageCircle },
-                { id: "merge", label: "Merge & Validate", icon: GitMerge },
-                { id: "validation", label: "Final Validation", icon: CheckCircle2 },
-                { id: "routing", label: "Routing", icon: Route },
-                { id: "terminal", label: "Terminal", icon: TerminalIcon },
-                { id: "review", label: "Review Changes", icon: FileDiff },
-              ].map((tab) => (
+          {/* Missions Panel */}
+          <div className="flex flex-col rounded-2xl border border-white/[0.07] bg-[#0e1020]/70 shadow-xl backdrop-blur-md overflow-hidden">
+            {/* Header */}
+            <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-white/90">Missions</div>
+                <div className="text-[10px] text-white/35">{missions.length} total</div>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
-                  key={tab.id}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
-                    rightTab === tab.id
-                      ? "bg-accent/15 text-accent"
-                      : "text-faint hover:text-text hover:bg-surface/30"
-                  }`}
-                  onClick={() => setRightTab(tab.id)}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80 transition"
+                  onClick={loadMissions} title="Refresh"
                 >
-                  <tab.icon size={12} />
-                  {tab.label}
+                  <RefreshCw size={11} />
                 </button>
-              ))}
+                <button
+                  className={`flex h-6 items-center gap-1 rounded-lg px-2 text-[10px] font-medium transition ${showCreate ? "border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20" : "border border-indigo-500/30 bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25"}`}
+                  onClick={() => setShowCreate(!showCreate)}
+                >
+                  {showCreate ? <X size={11} /> : <Plus size={11} />}
+                  {showCreate ? "Close" : "New"}
+                </button>
+              </div>
             </div>
 
-            {/* Tab content */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={rightTab}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.15 }}
-                className="flex-1 min-h-0"
-              >
-                {rightTab === "detail" && selectedMission.plan && (
-                  <MissionPlanView plan={selectedMission.plan} mission={selectedMission} />
-                )}
-                {rightTab === "detail" && !selectedMission.plan && (
-                  <Panel title="Execution Plan" subtitle="Not yet planned" className="h-full">
-                    <Empty title="No plan yet" hint="Click the Plan button on the mission card." />
-                  </Panel>
-                )}
-                {rightTab === "timeline" && <ExecutionTimeline plan={selectedMission.plan ?? null} />}
-                {rightTab === "memory" && <SharedMemoryPanel />}
-                {rightTab === "comms" && <AgentCommsLog missionId={selectedMission.id} />}
-                {rightTab === "merge" && <MergePipelinePanel mission={selectedMission} />}
-                {rightTab === "validation" && <FinalValidationPanel mission={selectedMission} />}
-                {rightTab === "routing" && <RoutingPlanner mission={selectedMission} />}
-                {rightTab === "terminal" && (
-                  selectedWorktreePath ? (
-                    <TerminalPanel
-                      worktreePath={selectedWorktreePath}
-                      onClose={() => setRightTab("detail")}
-                    />
-                  ) : (
-                    <Panel title="Terminal" subtitle="Select a worktree" className="h-full">
-                      <Empty title="No worktree selected" hint="Open a worktree from the Worktrees panel below." />
-                    </Panel>
-                  )
-                )}
-                {rightTab === "review" && (
-                  selectedWorktreeBranch ? (
-                    <DiffViewer
-                      branchName={selectedWorktreeBranch}
-                      onClose={() => setRightTab("detail")}
-                    />
-                  ) : (
-                    <Panel title="Review Changes" subtitle="Select a worktree" className="h-full">
-                      <Empty title="No worktree selected" hint="Open a worktree from the Worktrees panel below." />
-                    </Panel>
-                  )
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </>
-        ) : (
-          <Panel title="Mission Detail" subtitle="Select a mission to view" className="flex-1 min-h-0">
-            <Empty title="No mission selected" hint="Select a mission from the left panel." />
-          </Panel>
-        )}
-
-        {/* Worktree Panel — collapsible, below the tab content */}
-        <div className="shrink-0">
-          <button
-            onClick={() => setShowWorktreePanel(!showWorktreePanel)}
-            className="flex w-full items-center gap-2 rounded-lg border border-white/10 bg-surface/20 px-3 py-2 text-xs font-medium text-faint hover:bg-surface/30 transition"
-          >
-            <GitBranch size={13} className="text-emerald-400" />
-            <span>Worktrees</span>
-            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-mono text-white/60">
-              {worktrees.length}
-            </span>
-            {worktreeLoading && <Loader2 size={11} className="animate-spin text-white/30" />}
-            <span className="ml-auto">
-              {showWorktreePanel ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-            </span>
-          </button>
-          {showWorktreePanel && (
-            <div className="mt-1.5 max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-surface/10">
-              {worktrees.length === 0 ? (
-                <div className="px-3 py-4 text-center text-[10px] text-white/30">
-                  No worktrees active. Submit a task to create one.
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {showCreate ? (
+                <MissionForm
+                  onSubmit={async (data) => {
+                    try {
+                      const created = await api.createMission(data);
+                      if (created && created.id) {
+                        setMissions((prev) => {
+                          const next = [created, ...prev];
+                          saveMissionsLocal(next);
+                          useStore.getState().setMissions(next);
+                          return next;
+                        });
+                        setSelectedMission(created);
+                      } else {
+                        const fallback: MissionType = {
+                          id: `msn-${Date.now()}`,
+                          title: (data.title as string) || "Untitled Mission",
+                          description: (data.description as string) || "",
+                          prompt: (data.prompt as string) || "",
+                          objectives: (data.objectives as string[]) || [],
+                          deliverables: (data.deliverables as string[]) || [],
+                          constraints: (data.constraints as string[]) || [],
+                          status: "planned",
+                          priority: (data.priority as any) || "medium",
+                          execution_mode: (data.execution_mode as any) || "hybrid",
+                          tags: (data.tags as string[]) || [],
+                          attachments: [],
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        };
+                        setMissions((prev) => {
+                          const next = [fallback, ...prev];
+                          saveMissionsLocal(next);
+                          useStore.getState().setMissions(next);
+                          return next;
+                        });
+                        setSelectedMission(fallback);
+                      }
+                    } catch {
+                      const fallback: MissionType = {
+                        id: `msn-${Date.now()}`,
+                        title: (data.title as string) || "Untitled Mission",
+                        description: (data.description as string) || "",
+                        prompt: (data.prompt as string) || "",
+                        objectives: (data.objectives as string[]) || [],
+                        deliverables: (data.deliverables as string[]) || [],
+                        constraints: (data.constraints as string[]) || [],
+                        status: "planned",
+                        priority: (data.priority as any) || "medium",
+                        execution_mode: (data.execution_mode as any) || "hybrid",
+                        tags: (data.tags as string[]) || [],
+                        attachments: [],
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                      };
+                      setMissions((prev) => {
+                        const next = [fallback, ...prev];
+                        saveMissionsLocal(next);
+                        useStore.getState().setMissions(next);
+                        return next;
+                      });
+                      setSelectedMission(fallback);
+                    } finally {
+                      setShowCreate(false);
+                    }
+                  }}
+                  onCancel={() => setShowCreate(false)}
+                />
+              ) : loading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 animate-pulse rounded-xl bg-white/[0.04]" />
+                  ))}
+                </div>
+              ) : error ? (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">
+                  <AlertCircle size={12} className="inline mr-1" />{error}
+                </div>
+              ) : missions.length === 0 ? (
+                <div className="py-8 text-center">
+                  <div className="mb-2 text-2xl">🚀</div>
+                  <div className="text-xs font-medium text-white/50">No missions yet</div>
+                  <div className="mt-1 text-[10px] text-white/25">Click &apos;New&apos; to create your first mission.</div>
                 </div>
               ) : (
-                worktrees.map((wt) => (
-                  <div
-                    key={wt.branch}
-                    className="flex items-center gap-2 border-b border-white/5 px-3 py-2 text-xs last:border-0 hover:bg-white/[0.02]"
-                  >
-                    <GitBranch size={11} className={
-                      wt.status === "active" ? "text-emerald-400" :
-                      wt.status === "dirty" ? "text-amber-400" :
-                      wt.status === "merged" ? "text-sky-400" :
-                      "text-red-400"
-                    } />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-mono text-[10px] text-white/70 truncate">{wt.branch}</div>
-                      <div className="text-[9px] text-white/30">
-                        {wt.task_id ? `task: ${wt.task_id.slice(0, 8)}` : "unassigned"}
-                        {wt.agent_id && ` · agent: ${wt.agent_id.slice(0, 8)}`}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      <button
-                        onClick={() => openWorktree(wt, "terminal")}
-                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-emerald-400"
-                        title="Open terminal"
-                      >
-                        <TerminalIcon size={11} />
-                      </button>
-                      <button
-                        onClick={() => openWorktree(wt, "review")}
-                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-amber-400"
-                        title="Review changes"
-                      >
-                        <FileDiff size={11} />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          try {
-                            const result = await api.worktreeMerge(wt.branch);
-                            if (!result.merged) {
-                              setError(result.error || "Merge conflicts detected");
-                            }
-                            void loadWorktrees();
-                          } catch (err) {
-                            setError(String(err));
-                          }
-                        }}
-                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-sky-400"
-                        title="Merge to main"
-                      >
-                        <GitMerge size={11} />
-                      </button>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api.worktreeRemove(wt.branch);
-                            void loadWorktrees();
-                          } catch (err) {
-                            setError(String(err));
-                          }
-                        }}
-                        className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-red-400"
-                        title="Remove worktree"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                <div className="space-y-2">
+                  {missions.map((m) => (
+                    <MissionCard
+                      key={`${m.id}-${m.status}-${m.updated_at}`}
+                      mission={m}
+                      selected={selectedMission?.id === m.id}
+                      onClick={() => { setSelectedMission(m); setRightTab("detail"); }}
+                      onPlan={async () => {
+                        setPlanning(m.id);
+                        try { await api.planMission(m.id); await loadMissions(); }
+                        finally { setPlanning(null); }
+                      }}
+                      onStart={async () => { await api.startMission(m.id); loadMissions(); }}
+                      onPause={async () => { await api.pauseMission(m.id); loadMissions(); }}
+                      onCancel={async () => { await api.cancelMission(m.id); loadMissions(); }}
+                      onDelete={async () => {
+                        await api.deleteMission(m.id);
+                        if (selectedMission?.id === m.id) setSelectedMission(null);
+                        loadMissions();
+                      }}
+                      planning={planning === m.id}
+                    />
+                  ))}
+                </div>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT PANEL */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {selectedMission ? (
+            <>
+              {/* Mission Detail Header */}
+              <MissionDetail mission={selectedMission} onRefresh={loadMissions} />
+
+              {/* Futuristic Tab Bar */}
+              <div className="shrink-0 border-b border-white/[0.06] bg-[#0a0c16]/80 px-4 backdrop-blur-md">
+                <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar py-2">
+                  {TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all whitespace-nowrap ${
+                        rightTab === tab.id
+                          ? "bg-indigo-500/15 text-indigo-400 ring-1 ring-indigo-500/30"
+                          : "text-white/40 hover:bg-white/[0.04] hover:text-white/70"
+                      }`}
+                      onClick={() => setRightTab(tab.id)}
+                    >
+                      <tab.icon size={11} />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={rightTab}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.12 }}
+                    className="h-full p-4"
+                  >
+                    {rightTab === "detail" && selectedMission.plan && (
+                      <MissionPlanView plan={selectedMission.plan} mission={selectedMission} />
+                    )}
+                    {rightTab === "detail" && !selectedMission.plan && (
+                      <FuturisticEmpty
+                        icon="📋"
+                        title="No Execution Plan"
+                        hint="Click the Plan button on the mission card to generate a plan."
+                      />
+                    )}
+                    {rightTab === "timeline" && <ExecutionTimeline plan={selectedMission.plan ?? null} />}
+                    {rightTab === "memory" && <SharedMemoryPanel />}
+                    {rightTab === "comms" && <AgentCommsLog missionId={selectedMission.id} />}
+                    {rightTab === "merge" && <MergePipelinePanel mission={selectedMission} />}
+                    {rightTab === "validation" && <FinalValidationPanel mission={selectedMission} />}
+                    {rightTab === "routing" && <RoutingPlanner mission={selectedMission} />}
+                    {rightTab === "terminal" && (
+                      selectedWorktreePath ? (
+                        <TerminalPanel
+                          worktreePath={selectedWorktreePath}
+                          onClose={() => setRightTab("detail")}
+                        />
+                      ) : (
+                        <FuturisticEmpty
+                          icon="⌨️"
+                          title="No Worktree Selected"
+                          hint="Open a worktree from the Worktrees panel below."
+                        />
+                      )
+                    )}
+                    {rightTab === "review" && (
+                      selectedWorktreeBranch ? (
+                        <DiffViewer
+                          branchName={selectedWorktreeBranch}
+                          onClose={() => setRightTab("detail")}
+                        />
+                      ) : (
+                        <FuturisticEmpty
+                          icon="🔍"
+                          title="No Worktree Selected"
+                          hint="Open a worktree from the Worktrees panel below."
+                        />
+                      )
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Worktree Panel — collapsible footer */}
+              <div className="shrink-0 border-t border-white/[0.06] bg-[#0a0c16]/80 backdrop-blur-md">
+                <button
+                  onClick={() => setShowWorktreePanel(!showWorktreePanel)}
+                  className="flex w-full items-center gap-2.5 px-4 py-2.5 text-xs text-white/50 hover:text-white/70 transition"
+                >
+                  <GitBranch size={12} className="text-emerald-400 shrink-0" />
+                  <span className="font-medium">Worktrees</span>
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9px] text-white/50">
+                    {worktrees.length}
+                  </span>
+                  {worktreeLoading && <Loader2 size={10} className="animate-spin text-white/30" />}
+                  <span className="ml-auto">
+                    {showWorktreePanel ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+                  </span>
+                </button>
+                <AnimatePresence>
+                  {showWorktreePanel && (
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: "auto" }}
+                      exit={{ height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="max-h-52 overflow-y-auto border-t border-white/[0.05] px-3 pb-3 pt-2">
+                        {worktrees.length === 0 ? (
+                          <div className="py-4 text-center text-[10px] text-white/25">
+                            No worktrees active. Submit a task to create one.
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {worktrees.map((wt) => (
+                              <div
+                                key={wt.branch}
+                                className="flex items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs hover:bg-white/[0.04] transition"
+                              >
+                                <GitBranch size={10} className={
+                                  wt.status === "active" ? "text-emerald-400" :
+                                  wt.status === "dirty" ? "text-amber-400" :
+                                  wt.status === "merged" ? "text-sky-400" :
+                                  "text-red-400"
+                                } />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-mono text-[10px] text-white/70 truncate">{wt.branch}</div>
+                                  <div className="text-[9px] text-white/30">
+                                    {wt.task_id ? `task: ${wt.task_id.slice(0, 8)}` : "unassigned"}
+                                    {wt.agent_id && ` · agent: ${wt.agent_id.slice(0, 8)}`}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 gap-1">
+                                  <button
+                                    onClick={() => openWorktree(wt, "terminal")}
+                                    className="rounded-lg p-1 text-white/30 hover:bg-white/10 hover:text-emerald-400 transition"
+                                    title="Open terminal"
+                                  >
+                                    <TerminalIcon size={10} />
+                                  </button>
+                                  <button
+                                    onClick={() => openWorktree(wt, "review")}
+                                    className="rounded-lg p-1 text-white/30 hover:bg-white/10 hover:text-amber-400 transition"
+                                    title="Review changes"
+                                  >
+                                    <FileDiff size={10} />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const result = await api.worktreeMerge(wt.branch);
+                                        if (!result.merged) setError(result.error || "Merge conflicts detected");
+                                        void loadWorktrees();
+                                      } catch (err) { setError(String(err)); }
+                                    }}
+                                    className="rounded-lg p-1 text-white/30 hover:bg-white/10 hover:text-sky-400 transition"
+                                    title="Merge to main"
+                                  >
+                                    <GitMerge size={10} />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await api.worktreeRemove(wt.branch);
+                                        void loadWorktrees();
+                                      } catch (err) { setError(String(err)); }
+                                    }}
+                                    className="rounded-lg p-1 text-white/30 hover:bg-white/10 hover:text-red-400 transition"
+                                    title="Remove worktree"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-4">
+              <div className="relative flex h-24 w-24 items-center justify-center rounded-full border border-indigo-500/20 bg-indigo-500/5">
+                <Network size={36} className="text-indigo-400/60" />
+                <div className="absolute inset-0 animate-ping rounded-full border border-indigo-500/10" />
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-medium text-white/50">No Mission Selected</div>
+                <div className="mt-1 text-[11px] text-white/25">Select a mission from the left panel to begin</div>
+              </div>
             </div>
           )}
         </div>
@@ -535,8 +576,21 @@ export function MissionOrchestrator() {
   );
 }
 
+// ── Futuristic Empty State ──
+function FuturisticEmpty({ icon, title, hint }: { icon: string; title: string; hint: string }) {
+  return (
+    <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3">
+      <div className="text-3xl">{icon}</div>
+      <div className="text-center">
+        <div className="text-sm font-medium text-white/50">{title}</div>
+        <div className="mt-1 text-[11px] text-white/25">{hint}</div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
-//  EXTENDED AGENT STATUS LIST
+//  AGENT STATUS LIST
 // ══════════════════════════════════════════════════════════════
 
 function AgentStatusList() {
@@ -544,7 +598,6 @@ function AgentStatusList() {
   const connected = useStore((s) => s.connected);
   const events = useStore((s) => s.events);
 
-  // Compute queue depth per provider from recent events
   const queueDepth = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const e of events.slice(0, 100)) {
@@ -556,9 +609,6 @@ function AgentStatusList() {
     return counts;
   }, [events]);
 
-  // Derive agents EXCLUSIVELY from the live store providers. No hardcoded
-  // agent list — only discovered runtimes appear. When the backend is
-  // disconnected, agents are empty (not fake "healthy").
   const agents = Object.values(providers)
     .filter((p) => p.provider && p.provider.toLowerCase() !== "mock")
     .map((p, idx) => {
@@ -572,7 +622,6 @@ function AgentStatusList() {
         status: p.status ?? "unknown",
         latency: p.latency_ms ?? 0,
         queue: q,
-        model: "",
       };
     });
 
@@ -580,44 +629,65 @@ function AgentStatusList() {
   const busy = agents.filter((a) => a.queue > 0).length;
 
   return (
-    <Panel title="Connected Agents" subtitle={`${online} online · ${busy} active`} className="shrink-0">
-      <div className="space-y-1">
-        {agents.map((a) => (
-          <motion.div
-            key={a.id}
-            layout
-            className="flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 hover:bg-surface/20 transition-colors"
-          >
-            <StatusDot status={a.status as any} pulse={a.status === "healthy"} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium truncate">{a.label}</span>
+    <div className="rounded-2xl border border-white/[0.07] bg-[#0e1020]/70 shadow-xl backdrop-blur-md overflow-hidden">
+      <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-4 py-3">
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#4ade80]" />
+        <span className="text-xs font-semibold text-white/90">Connected Agents</span>
+        <span className="ml-auto text-[10px] text-white/35">{online} online · {busy} active</span>
+      </div>
+      <div className="space-y-px p-2">
+        {agents.length === 0 ? (
+          <div className="py-4 text-center text-[10px] text-white/25">
+            No agents discovered
+          </div>
+        ) : (
+          agents.map((a) => (
+            <motion.div
+              key={a.id}
+              layout
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-white/[0.03] transition-colors"
+            >
+              {/* Status glow dot */}
+              <div className="relative shrink-0">
+                <div className={`h-1.5 w-1.5 rounded-full ${
+                  a.status === "healthy" ? "bg-emerald-400" :
+                  a.status === "degraded" ? "bg-amber-400" :
+                  a.status === "down" ? "bg-red-400" : "bg-white/20"
+                }`} />
                 {a.status === "healthy" && (
-                  <span className="text-[9px] text-faint tabular-nums">{a.latency.toFixed(0)}ms</span>
+                  <div className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" />
                 )}
               </div>
-              <div className="text-[9px] text-faint truncate">{a.role}</div>
-            </div>
-            <div className="flex flex-col items-end gap-0.5 shrink-0">
-              {a.queue > 0 && (
-                <span className="px-1.5 py-0.5 rounded bg-accent/10 text-[9px] text-accent tabular-nums">
-                  {a.queue} queued
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-white/80 truncate">{a.label}</span>
+                  {a.status === "healthy" && (
+                    <span className="text-[9px] font-mono text-white/30 tabular-nums">{a.latency.toFixed(0)}ms</span>
+                  )}
+                </div>
+                <div className="text-[9px] text-white/30 truncate">{a.role}</div>
+              </div>
+              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                {a.queue > 0 && (
+                  <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-mono text-indigo-400 tabular-nums">
+                    {a.queue}q
+                  </span>
+                )}
+                <span className={`text-[9px] capitalize ${
+                  a.status === "healthy" ? "text-emerald-400" :
+                  a.status === "down" ? "text-red-400" : "text-amber-400"
+                }`}>
+                  {a.status}
                 </span>
-              )}
-              <span className={`text-[9px] capitalize ${
-                a.status === "healthy" ? "text-ok" :
-                a.status === "down" ? "text-danger" : "text-warn"
-              }`}>
-                {a.status}
-              </span>
-            </div>
-          </motion.div>
-        ))}
+              </div>
+            </motion.div>
+          ))
+        )}
       </div>
-      <div className="mt-1.5 text-[9px] text-center text-faint">
+      <div className="border-t border-white/[0.04] px-4 py-2 text-center text-[9px] text-white/20">
         {connected ? "· EventBus live · Runtime Discovery Engine" : "· Standalone Runtime Mode"}
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -637,61 +707,117 @@ function MissionCard({
   const completed = mission.plan?.tasks?.filter((t) => t.status === "completed").length ?? 0;
   const progress = taskCount > 0 ? Math.round((completed / taskCount) * 100) : 0;
 
+  const statusGlow: Record<string, string> = {
+    executing: "shadow-[0_0_12px_rgba(34,197,94,0.15)]",
+    failed: "shadow-[0_0_12px_rgba(239,68,68,0.12)]",
+    planned: "shadow-[0_0_12px_rgba(99,102,241,0.12)]",
+  };
+
   return (
     <motion.div
       layout
-      className={`glass rounded-xl p-3 cursor-pointer border transition-colors ${
-        selected ? "border-accent/50" : "border-transparent hover:border-border/40"
+      className={`relative cursor-pointer overflow-hidden rounded-xl border transition-all duration-200 ${
+        selected
+          ? "border-indigo-500/40 bg-indigo-500/[0.07] " + (statusGlow[mission.status] ?? "")
+          : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04]"
       }`}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <StatusDot status={mission.status} pulse={mission.status === "executing"} />
-            <span className="text-sm font-medium truncate">{mission.title}</span>
-            <Badge tone={mission.priority === "critical" ? "danger" : mission.priority === "high" ? "warn" : "info"}>
-              {mission.priority}
-            </Badge>
-          </div>
-          <div className="mt-1 flex items-center gap-3 text-[11px] text-faint">
-            <span style={{ color: statusColor }}>{mission.status}</span>
-            {taskCount > 0 && <span>{taskCount} tasks</span>}
-            {progress > 0 && <span>{progress}%</span>}
-            {mission.deadline && <span>Due {new Date(mission.deadline).toLocaleDateString()}</span>}
-          </div>
-          {(mission.status === "executing" || mission.status === "paused") && taskCount > 0 && (
-            <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface/50">
-              <div className="h-full rounded-full bg-accent/60 transition-all duration-500" style={{ width: `${progress}%` }} />
+      {/* Left accent bar */}
+      <div
+        className="absolute left-0 top-0 h-full w-0.5 rounded-r"
+        style={{ backgroundColor: statusColor, opacity: selected ? 1 : 0.4 }}
+      />
+
+      <div className="p-3 pl-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <div
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: statusColor }}
+              />
+              <span className="text-xs font-semibold text-white/90 truncate">{mission.title}</span>
+              {mission.channel && mission.channel !== "WEB" && (
+                <span className="shrink-0 rounded bg-sky-500/15 px-1 py-px text-[8px] font-medium text-sky-400">
+                  {mission.channel}
+                </span>
+              )}
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {mission.status === "planned" && (
-            <button className="pill bg-green-500/15 text-green-400 hover:bg-green-500/25 text-[10px]" onClick={(e) => { e.stopPropagation(); onStart(); }} title="Start">
-              <Play size={12} />
-            </button>
-          )}
-          {mission.status === "executing" && (
-            <button className="pill bg-yellow-500/15 text-yellow-400 hover:bg-yellow-500/25 text-[10px]" onClick={(e) => { e.stopPropagation(); onPause(); }} title="Pause">
-              <Pause size={12} />
-            </button>
-          )}
-          {mission.status === "draft" && (
-            <button className="pill bg-accent/15 text-accent hover:bg-accent/25 text-[10px]" onClick={(e) => { e.stopPropagation(); onPlan(); }} disabled={planning} title="Plan">
-              {planning ? "..." : <FileText size={12} />}
-            </button>
-          )}
-          {(mission.status === "draft" || mission.status === "planned" || mission.status === "paused") && (
-            <button className="pill bg-surface/80 text-faint hover:text-danger text-[10px]" onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete">
-              <Trash2 size={12} />
-            </button>
-          )}
-          {(mission.status === "executing" || mission.status === "paused") && (
-            <button className="pill bg-red-500/15 text-red-400 hover:bg-red-500/25 text-[10px]" onClick={(e) => { e.stopPropagation(); onCancel(); }} title="Cancel">
-              <X size={12} />
-            </button>
-          )}
+
+            <div className="mt-1.5 flex items-center gap-2 text-[10px]">
+              <span
+                className="rounded px-1.5 py-0.5 font-medium capitalize"
+                style={{ backgroundColor: `${statusColor}18`, color: statusColor }}
+              >
+                {mission.status}
+              </span>
+              <span className={`rounded px-1.5 py-0.5 capitalize ${
+                mission.priority === "critical" ? "bg-red-500/15 text-red-400" :
+                mission.priority === "high" ? "bg-amber-500/15 text-amber-400" :
+                "bg-white/[0.06] text-white/40"
+              }`}>
+                {mission.priority}
+              </span>
+              {taskCount > 0 && <span className="text-white/30">{taskCount} tasks</span>}
+              {progress > 0 && <span className="text-white/30">{progress}%</span>}
+            </div>
+
+            {(mission.status === "executing" || mission.status === "paused") && taskCount > 0 && (
+              <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${progress}%`,
+                    background: `linear-gradient(90deg, ${statusColor}88, ${statusColor})`,
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {mission.status === "planned" && (
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition"
+                onClick={onStart} title="Start"
+              >
+                <Play size={10} />
+              </button>
+            )}
+            {mission.status === "executing" && (
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition"
+                onClick={onPause} title="Pause"
+              >
+                <Pause size={10} />
+              </button>
+            )}
+            {mission.status === "draft" && (
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25 transition disabled:opacity-40"
+                onClick={onPlan} disabled={planning} title="Plan"
+              >
+                {planning ? <Loader2 size={10} className="animate-spin" /> : <FileText size={10} />}
+              </button>
+            )}
+            {(mission.status === "draft" || mission.status === "planned" || mission.status === "paused") && (
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/[0.04] text-white/30 hover:bg-red-500/15 hover:text-red-400 transition"
+                onClick={onDelete} title="Delete"
+              >
+                <Trash2 size={10} />
+              </button>
+            )}
+            {(mission.status === "executing" || mission.status === "paused") && (
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition"
+                onClick={onCancel} title="Cancel"
+              >
+                <X size={10} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>
@@ -702,12 +828,7 @@ function MissionCard({
 //  MISSION FORM
 // ══════════════════════════════════════════════════════════════
 
-function MissionForm({
-  onSubmit, onCancel,
-}: {
-  onSubmit: (data: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
+function MissionForm({ onSubmit, onCancel }: { onSubmit: (data: Record<string, unknown>) => void; onCancel: () => void }) {
   const [form, setForm] = useState({
     title: "", description: "", prompt: "",
     objectives: [""], deliverables: [""],
@@ -735,112 +856,103 @@ function MissionForm({
         deadline: form.deadline || null,
         attachment_count: attachments.length,
       });
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    setAttachments((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
-  };
-
-  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setAttachments((prev) => [...prev, ...Array.from(e.target.files!)]);
-  };
-
-  const removeAttachment = (i: number) => setAttachments((prev) => prev.filter((_, idx) => idx !== i));
+  const inputCls = "w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/80 placeholder-white/25 outline-none focus:border-indigo-500/50 focus:bg-white/[0.06] transition";
+  const selectCls = "rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs text-white/80 outline-none focus:border-indigo-500/50 transition";
 
   return (
     <div className="space-y-3">
-      <input className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-sm outline-none focus:border-accent/60"
-        placeholder="Mission title *" value={form.title}
+      <input className={inputCls} placeholder="Mission title *" value={form.title}
         onChange={(e) => update("title", e.target.value)} />
-      <textarea className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-sm outline-none focus:border-accent/60 resize-none"
-        placeholder="Mission description" rows={2} value={form.description}
-        onChange={(e) => update("description", e.target.value)} />
-      <textarea className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-sm outline-none focus:border-accent/60 resize-none font-mono text-[11px]"
-        placeholder="Prompt (full instruction for AI agents)" rows={3} value={form.prompt}
-        onChange={(e) => update("prompt", e.target.value)} />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <select className="rounded-lg border border-border/60 bg-surface/50 px-2 py-1.5 text-xs outline-none"
-          value={form.priority} onChange={(e) => update("priority", e.target.value)}>
+      <textarea className={`${inputCls} resize-none`} placeholder="Mission description" rows={2}
+        value={form.description} onChange={(e) => update("description", e.target.value)} />
+      <textarea className={`${inputCls} resize-none font-mono text-[10px]`}
+        placeholder="Prompt (full instruction for AI agents)" rows={3}
+        value={form.prompt} onChange={(e) => update("prompt", e.target.value)} />
+      <div className="grid grid-cols-2 gap-2">
+        <select className={selectCls} value={form.priority} onChange={(e) => update("priority", e.target.value)}>
           {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
-        <select className="rounded-lg border border-border/60 bg-surface/50 px-2 py-1.5 text-xs outline-none"
-          value={form.execution_mode} onChange={(e) => update("execution_mode", e.target.value)}>
+        <select className={selectCls} value={form.execution_mode} onChange={(e) => update("execution_mode", e.target.value)}>
           {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
       <ArrayInput label="Objectives" values={form.objectives} onChange={(v) => update("objectives", v)}
-        placeholder="e.g. Implement update mechanism" icon={<Target size={12} />} />
+        placeholder="e.g. Implement update mechanism" icon={<Target size={10} />} />
       <ArrayInput label="Deliverables" values={form.deliverables} onChange={(v) => update("deliverables", v)}
-        placeholder="e.g. Design document" icon={<ListTodo size={12} />} />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <input className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-xs outline-none focus:border-accent/60"
-          placeholder="Tags (comma-separated)" value={form.tags.join(", ")}
+        placeholder="e.g. Design document" icon={<ListTodo size={10} />} />
+      <div className="grid grid-cols-2 gap-2">
+        <input className={inputCls} placeholder="Tags (comma-separated)" value={form.tags.join(", ")}
           onChange={(e) => update("tags", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} />
-        <input type="date" className="w-full rounded-lg border border-border/60 bg-surface/50 px-3 py-2 text-xs outline-none focus:border-accent/60"
-          value={form.deadline} onChange={(e) => update("deadline", e.target.value)} />
+        <input type="date" className={inputCls} value={form.deadline}
+          onChange={(e) => update("deadline", e.target.value)} />
       </div>
-      {/* Drag-and-drop attachment zone */}
-      <div className={`rounded-lg border-2 border-dashed p-3 text-center transition-colors ${
-        dragOver ? "border-accent/60 bg-accent/5" : "border-border/40 hover:border-border/60"
-      }`}
+      <div
+        className={`rounded-xl border-2 border-dashed p-3 text-center transition-colors ${
+          dragOver ? "border-indigo-500/50 bg-indigo-500/5" : "border-white/10 hover:border-white/20"
+        }`}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); setAttachments((prev) => [...prev, ...Array.from(e.dataTransfer.files)]); }}
       >
-        <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFilePick} />
-        <button type="button" className="flex items-center justify-center gap-2 w-full text-xs text-faint hover:text-text transition-colors"
+        <input ref={fileRef} type="file" multiple className="hidden"
+          onChange={(e) => { if (e.target.files) setAttachments((prev) => [...prev, ...Array.from(e.target.files!)]); }} />
+        <button type="button" className="flex w-full items-center justify-center gap-2 text-[10px] text-white/30 hover:text-white/60 transition"
           onClick={() => fileRef.current?.click()}>
-          <Upload size={14} />
+          <Upload size={12} />
           <span>{dragOver ? "Drop files here" : "Drag & drop or click to add attachments"}</span>
         </button>
         {attachments.length > 0 && (
           <div className="mt-2 space-y-1 text-left">
             {attachments.map((f, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-lg bg-surface/40 px-2 py-1 text-[11px]">
-                <FileText size={10} className="text-accent shrink-0" />
-                <span className="flex-1 truncate">{f.name}</span>
-                <span className="text-faint shrink-0">{safeFixed((safeNum(f?.size) / 1024), 0)} KB</span>
-                <button className="text-faint hover:text-danger" onClick={() => removeAttachment(i)}><X size={10} /></button>
+              <div key={i} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2 py-1 text-[10px]">
+                <FileText size={10} className="text-indigo-400 shrink-0" />
+                <span className="flex-1 truncate text-white/60">{f.name}</span>
+                <span className="text-white/30 shrink-0">{safeFixed((safeNum(f?.size) / 1024), 0)} KB</span>
+                <button className="text-white/30 hover:text-red-400" onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}><X size={10} /></button>
               </div>
             ))}
           </div>
         )}
       </div>
       <div className="flex gap-2 pt-1">
-        <button className="flex-1 pill bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40"
-          onClick={handleSubmit} disabled={!form.title.trim() || submitting}>
-          {submitting ? "Creating..." : "Create Mission"}
+        <button
+          className="flex-1 rounded-lg bg-indigo-500/20 px-3 py-2 text-xs font-medium text-indigo-400 hover:bg-indigo-500/30 transition disabled:opacity-40"
+          onClick={handleSubmit} disabled={!form.title.trim() || submitting}
+        >
+          {submitting ? <span className="flex items-center justify-center gap-1"><Loader2 size={12} className="animate-spin" /> Creating...</span> : "Create Mission"}
         </button>
-        <button className="pill bg-surface/60 text-muted hover:bg-surface" onClick={onCancel}>Cancel</button>
+        <button className="rounded-lg bg-white/[0.05] px-3 py-2 text-xs text-white/50 hover:bg-white/[0.08] transition" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
     </div>
   );
 }
 
-// ── Array Input ──
 function ArrayInput({ label, values, onChange, placeholder, icon }: {
-  label: string; values: string[]; onChange: (v: string[]) => void;
-  placeholder: string; icon: React.ReactNode;
+  label: string; values: string[]; onChange: (v: string[]) => void; placeholder: string; icon: React.ReactNode;
 }) {
   const add = () => onChange([...values, ""]);
   const set = (i: number, v: string) => { const n = [...values]; n[i] = v; onChange(n); };
   const remove = (i: number) => onChange(values.filter((_, idx) => idx !== i));
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] uppercase tracking-wider text-faint flex items-center gap-1">{icon} {label}</label>
-        <button className="text-[10px] text-accent hover:text-accent/80" onClick={add}>+ Add</button>
+        <label className="flex items-center gap-1 text-[9px] font-medium uppercase tracking-widest text-white/30">
+          {icon} {label}
+        </label>
+        <button className="text-[9px] text-indigo-400 hover:text-indigo-300 transition" onClick={add}>+ Add</button>
       </div>
       {values.map((v, i) => (
         <div key={i} className="flex gap-1">
-          <input className="flex-1 rounded-lg border border-border/60 bg-surface/50 px-2 py-1.5 text-xs outline-none"
-            placeholder={placeholder} value={v} onChange={(e) => set(i, e.target.value)} />
-          <button className="text-faint hover:text-danger p-1" onClick={() => remove(i)}><X size={12} /></button>
+          <input
+            className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-white/70 placeholder-white/20 outline-none focus:border-indigo-500/40 transition"
+            placeholder={placeholder} value={v} onChange={(e) => set(i, e.target.value)}
+          />
+          <button className="text-white/20 hover:text-red-400 p-1 transition" onClick={() => remove(i)}><X size={11} /></button>
         </div>
       ))}
     </div>
@@ -848,146 +960,126 @@ function ArrayInput({ label, values, onChange, placeholder, icon }: {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MISSION DETAIL
+//  MISSION DETAIL (top header of right panel)
 // ══════════════════════════════════════════════════════════════
 
 function MissionDetail({ mission, onRefresh }: { mission: MissionType; onRefresh: () => void }) {
-  const cols = [
-    { label: "Status", value: mission.status, color: STATUS_COLORS[mission.status] },
-    { label: "Priority", value: mission.priority },
-    { label: "Mode", value: mission.execution_mode },
-    { label: "Created", value: new Date(mission.created_at).toLocaleString() },
-  ];
-  if (mission.deadline) cols.push({ label: "Deadline", value: new Date(mission.deadline).toLocaleDateString() });
-  if (mission.completed_at) cols.push({ label: "Completed", value: new Date(mission.completed_at).toLocaleString() });
-
+  const statusColor = STATUS_COLORS[mission.status] ?? "#6b7280";
   const taskCount = mission.plan?.task_count ?? 0;
   const completed = mission.plan?.tasks?.filter((t) => t.status === "completed").length ?? 0;
   const failed = mission.plan?.tasks?.filter((t) => t.status === "failed").length ?? 0;
   const progress = taskCount > 0 ? Math.round((completed / taskCount) * 100) : 0;
 
+  const metaCols = [
+    { label: "Status", value: mission.status, color: statusColor },
+    { label: "Priority", value: mission.priority },
+    { label: "Mode", value: mission.execution_mode },
+    { label: "Created", value: new Date(mission.created_at).toLocaleString() },
+  ];
+  if (mission.deadline) metaCols.push({ label: "Deadline", value: new Date(mission.deadline).toLocaleDateString() });
+
   return (
-    <Panel
-      title={mission.title}
-      subtitle={mission.description || "(no description)"}
-      actions={
-        <button className="pill bg-surface/60 text-faint hover:text-text" onClick={onRefresh} title="Refresh">
+    <div className="shrink-0 border-b border-white/[0.06] bg-[#0a0c16]/90 px-5 py-4 backdrop-blur-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {/* Title row */}
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: statusColor, boxShadow: `0 0 8px ${statusColor}80` }} />
+            <h1 className="text-base font-bold tracking-tight text-white/95 truncate">{mission.title}</h1>
+          </div>
+          {mission.description && (
+            <p className="mt-0.5 text-[11px] text-white/40 truncate">{mission.description}</p>
+          )}
+
+          {/* Plan estimate row */}
+          {mission.plan && (
+            <div className="mt-2 flex items-center gap-3 text-[10px] text-white/35">
+              <span className="flex items-center gap-1"><Clock size={9} /> ~{mission.plan.estimated_total_minutes}m estimated</span>
+              <span className="capitalize">· {mission.plan.complexity} complexity</span>
+              <span className="capitalize">· {mission.plan.risk_level} risk</span>
+            </div>
+          )}
+
+          {/* Progress bar */}
+          {(mission.status === "executing" || mission.status === "paused") && taskCount > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[10px] text-white/30">Progress</span>
+                <span className="text-[10px] font-mono text-white/50 tabular-nums">
+                  {completed}/{taskCount} tasks · {progress}%
+                  {failed > 0 && <span className="text-red-400 ml-2">{failed} failed</span>}
+                </span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${statusColor}60, ${statusColor})` }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/[0.08] hover:text-white/70 transition"
+          onClick={onRefresh} title="Refresh"
+        >
           <RefreshCw size={12} />
         </button>
-      }
-    >
-      {(mission.status === "executing" || mission.status === "paused") && taskCount > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[11px] text-faint">Progress</span>
-            <span className="text-[11px] font-medium tabular-nums">
-              {completed}/{taskCount} tasks · {progress}%
-              {failed > 0 && <span className="text-danger ml-2">{failed} failed</span>}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-surface/50">
-            <div className="h-full rounded-full bg-accent/60 transition-all duration-500"
-              style={{ width: `${progress}%` }} />
-          </div>
-        </div>
-      )}
-      {mission.plan && (
-        <div className="mb-4 text-[11px] text-faint flex items-center gap-3">
-          <span>⏱ ~{mission.plan.estimated_total_minutes}m estimated</span>
-          <span className="capitalize">· {mission.plan.complexity} complexity</span>
-          <span className="capitalize">· {mission.plan.risk_level} risk</span>
-        </div>
-      )}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        {cols.map((c) => (
-          <div key={c.label} className="glass rounded-xl px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wider text-faint">{c.label}</div>
-            <div className="mt-0.5 text-sm font-medium" style={c.color ? { color: c.color } : {}}>{c.value}</div>
+      </div>
+
+      {/* Meta stat chips */}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {metaCols.map((c) => (
+          <div key={c.label} className="rounded-lg border border-white/[0.07] bg-white/[0.03] px-2.5 py-1.5">
+            <div className="text-[8px] uppercase tracking-widest text-white/25">{c.label}</div>
+            <div className="mt-0.5 text-[11px] font-semibold capitalize" style={c.color ? { color: c.color } : { color: "rgba(255,255,255,0.75)" }}>
+              {c.value}
+            </div>
           </div>
         ))}
       </div>
-      {mission.objectives.length > 0 && (
-        <Section title="Objectives">
-          {mission.objectives.map((o, i) => (
-            <li key={i} className="text-sm text-muted flex items-start gap-2">
-              <span className="text-accent mt-0.5">◆</span> {o}
-            </li>
-          ))}
-        </Section>
-      )}
-      {mission.deliverables.length > 0 && (
-        <Section title="Deliverables">
-          {mission.deliverables.map((d, i) => (
-            <li key={i} className="text-sm text-muted flex items-start gap-2">
-              <span className="text-accent mt-0.5">◇</span> {d}
-            </li>
-          ))}
-        </Section>
-      )}
-      {mission.prompt && (
-        <Section title="Prompt">
-          <pre className="text-xs text-muted whitespace-pre-wrap bg-surface/40 rounded-lg p-3 max-h-24 overflow-y-auto">
-            {mission.prompt}
-          </pre>
-        </Section>
-      )}
-      {mission.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {mission.tags.map((t) => <Badge key={t} tone="info">{t}</Badge>)}
-        </div>
-      )}
-      {mission.attachments.length > 0 && (
-        <Section title={`Attachments (${mission.attachments.length})`}>
-          {mission.attachments.map((a) => (
-            <div key={a.id} className="text-xs text-muted flex items-center gap-2 rounded-lg bg-surface/30 px-2 py-1.5">
-              <FileText size={12} className="text-accent shrink-0" />
-              <span className="flex-1 truncate">{a.filename}</span>
-              <span className="text-[10px] text-faint shrink-0">({safeFixed((safeNum(a?.size_bytes) / 1024), 0)} KB)</span>
-              <span className="text-[10px] text-faint italic truncate">{a.description || a.mime_type}</span>
-            </div>
-          ))}
-        </Section>
-      )}
-      {mission.error && (
-        <div className="mt-2 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs text-danger">
-          <AlertCircle size={12} className="inline mr-1" />{mission.error}
-        </div>
-      )}
-    </Panel>
-  );
-}
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-3">
-      <div className="text-[10px] uppercase tracking-wider text-faint mb-1.5">{title}</div>
-      <ul className="space-y-0.5">{children}</ul>
+      {/* Error */}
+      {mission.error && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+          <AlertCircle size={12} className="shrink-0" />{mission.error}
+        </div>
+      )}
+
+      {/* Objectives / Deliverables / Tags inline */}
+      {(mission.objectives.length > 0 || mission.deliverables.length > 0 || mission.tags.length > 0) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-[10px]">
+          {mission.objectives.slice(0, 3).map((o, i) => (
+            <span key={i} className="flex items-center gap-1 rounded-lg bg-indigo-500/10 px-2 py-1 text-indigo-400">
+              <Target size={8} /> {o.slice(0, 40)}{o.length > 40 ? "…" : ""}
+            </span>
+          ))}
+          {mission.tags.map((t) => (
+            <span key={t} className="rounded-lg bg-white/[0.05] px-2 py-1 text-white/40">{t}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-//  EXECUTION TIMELINE — parallel agent visual
+//  EXECUTION TIMELINE
 // ══════════════════════════════════════════════════════════════
 
 function ExecutionTimeline({ plan }: { plan: MissionPlanType | null }) {
-  // Read live providers from the store so swimlane colors are derived from
-  // discovered runtimes (no hardcoded agent list).
-  const storeProviders = useStore((s) => s.providers);
-
-  if (!plan) {
-    return (
-      <Panel title="Execution Timeline" subtitle="No plan available" className="h-full">
-        <Empty title="No execution data" hint="The mission has not been planned yet." />
-      </Panel>
-    );
-  }
+  if (!plan) return (
+    <FuturisticEmpty icon="⏱️" title="No Execution Data" hint="The mission has not been planned yet." />
+  );
 
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const running = plan.tasks.filter((t) => t.status === "running").length;
   const progress = plan.task_count > 0 ? Math.round((completed / plan.task_count) * 100) : 0;
 
-  // Group tasks by assigned provider for the parallel swimlane visual
   const byProvider: Record<string, MissionTaskType[]> = {};
   for (const t of plan.tasks) {
     const key = t.assigned_provider || "unassigned";
@@ -996,61 +1088,67 @@ function ExecutionTimeline({ plan }: { plan: MissionPlanType | null }) {
   }
 
   return (
-    <Panel
-      title="Execution Timeline"
-      subtitle={`${completed} done · ${running} running · ${progress}%`}
-      className="h-full"
-    >
-      {/* Overall progress */}
-      <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-surface/50">
-        <div className="h-full rounded-full bg-accent/60 transition-all duration-500" style={{ width: `${progress}%` }} />
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="rounded-2xl border border-white/[0.07] bg-[#0e1020]/70 p-4 backdrop-blur-md">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-xs font-semibold text-white/80">Execution Timeline</span>
+          <span className="text-[10px] text-white/40 tabular-nums">{completed} done · {running} running · {progress}%</span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+          <motion.div
+            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          />
+        </div>
+        <div className="mt-3 flex items-center gap-4 text-[9px]">
+          {[
+            { label: "Running", color: "bg-emerald-400" },
+            { label: "Pending", color: "bg-white/20" },
+            { label: "Failed", color: "bg-red-400" },
+            { label: "Planned", color: "bg-indigo-400" },
+          ].map((l) => (
+            <span key={l.label} className="flex items-center gap-1 text-white/30">
+              <span className={`h-1.5 w-1.5 rounded-full ${l.color}`} />{l.label}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Agent swimlanes */}
-      <div className="space-y-3">
-        {Object.entries(byProvider).map(([provider, tasks], providerIdx) => {
-          // Derive color from the live store providers; fall back to palette.
-          const color = providerColor(provider, providerIdx);
-          return (
-            <div key={provider}>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color }}>
-                  {provider}
-                </span>
-              </div>
-              <div className="relative ml-3 pl-3 border-l border-border/30 space-y-1">
-                {tasks.map((task, idx) => (
-                  <div key={task.id} className="flex items-center gap-2">
-                    {/* Timeline dot */}
-                    <div className="absolute left-[-5px] w-2 h-2 rounded-full bg-surface/50"
-                      style={{ backgroundColor: TASK_COLORS[task.status] ?? "#6b7280" }} />
-                    {/* Task chip */}
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
-                      task.status === "running" ? "border-accent/50 bg-accent/10 text-accent" :
-                      task.status === "completed" ? "border-ok/30 bg-ok/10 text-ok" :
-                      task.status === "failed" ? "border-danger/30 bg-danger/10 text-danger" :
-                      "border-border/30 text-faint"
-                    }`}>
-                      {task.title}
-                    </span>
-                    <span className="text-[9px] text-faint ml-auto tabular-nums">~{task.estimated_minutes}m</span>
-                  </div>
-                ))}
-              </div>
+      {/* Swimlanes */}
+      {Object.entries(byProvider).map(([provider, tasks], providerIdx) => {
+        const color = providerColor(provider, providerIdx);
+        return (
+          <div key={provider} className="rounded-2xl border border-white/[0.07] bg-[#0e1020]/50 p-4 backdrop-blur-md">
+            <div className="mb-3 flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}80` }} />
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color }}>{provider}</span>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="mt-4 flex items-center gap-4 text-[9px] text-faint">
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" /> Running</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#6b7280]" /> Pending</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#ef4444]" /> Failed</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#6366f1]" /> Planned</span>
-      </div>
-    </Panel>
+            <div className="relative ml-3 space-y-2 pl-4 border-l border-white/[0.07]">
+              {tasks.map((task) => (
+                <div key={task.id} className="flex items-center gap-3">
+                  <div
+                    className="absolute -left-[5px] h-2 w-2 rounded-full border-2 border-[#0e1020]"
+                    style={{ backgroundColor: TASK_COLORS[task.status] ?? "#6b7280" }}
+                  />
+                  <span className={`rounded-full border px-3 py-0.5 text-[11px] transition-colors ${
+                    task.status === "running" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" :
+                    task.status === "completed" ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-500/70" :
+                    task.status === "failed" ? "border-red-500/40 bg-red-500/10 text-red-400" :
+                    "border-white/10 text-white/30"
+                  }`}>
+                    {task.title}
+                  </span>
+                  <span className="ml-auto text-[9px] tabular-nums text-white/25">~{task.estimated_minutes}m</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1066,25 +1164,27 @@ function SharedMemoryPanel() {
   const globalMemory = memory.filter((m) => m.scope === "conversation" || m.scope === "long_term");
 
   return (
-    <Panel
-      title="Shared Memory"
-      subtitle={`${memory.length} items · ${Object.keys(agents).length} agents`}
-      className="h-full"
-    >
-      {/* Memory by scope */}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-white/70">Shared Memory</span>
+        <span className="text-[10px] text-white/30">{memory.length} items · {Object.keys(agents).length} agents</span>
+      </div>
+
+      {memory.length === 0 && (
+        <FuturisticEmpty icon="🧠" title="No Shared Memory" hint="Memory items will appear as agents store context." />
+      )}
+
       {missionMemory.length > 0 && (
-        <div className="mb-4">
-          <div className="text-[10px] uppercase tracking-wider text-faint mb-1.5">Mission Context</div>
-          <div className="space-y-1.5">
+        <div>
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Mission Context</div>
+          <div className="space-y-2">
             {missionMemory.slice(0, 20).map((item) => (
-              <div key={item.id} className="glass rounded-xl px-3 py-2">
+              <div key={item.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-accent truncate">{item.key}</span>
-                  {item.agent_id && (
-                    <span className="text-[9px] text-faint shrink-0">by {item.agent_id}</span>
-                  )}
+                  <span className="text-[11px] font-semibold text-indigo-400 truncate">{item.key}</span>
+                  {item.agent_id && <span className="text-[9px] shrink-0 text-white/25">by {item.agent_id}</span>}
                 </div>
-                <p className="text-xs text-muted mt-0.5 line-clamp-2">{item.value}</p>
+                <p className="mt-1 text-[10px] text-white/40 line-clamp-2">{item.value}</p>
               </div>
             ))}
           </div>
@@ -1093,31 +1193,27 @@ function SharedMemoryPanel() {
 
       {globalMemory.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider text-faint mb-1.5">Global Context</div>
-          <div className="space-y-1.5">
+          <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Global Context</div>
+          <div className="space-y-2">
             {globalMemory.slice(0, 10).map((item) => (
-              <div key={item.id} className="glass rounded-xl px-3 py-2">
-                <div className="text-[11px] font-medium truncate">{item.key}</div>
-                <p className="text-xs text-muted mt-0.5 line-clamp-1">{item.value}</p>
+              <div key={item.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                <div className="text-[11px] font-medium text-white/60 truncate">{item.key}</div>
+                <p className="mt-0.5 text-[10px] text-white/35 line-clamp-1">{item.value}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {memory.length === 0 && (
-        <Empty title="No shared memory" hint="Memory items will appear here as agents store context." />
-      )}
-
-      <div className="mt-3 text-[9px] text-center text-faint">
+      <div className="text-center text-[9px] text-white/20">
         Prevents agents from repeatedly asking for the same information
       </div>
-    </Panel>
+    </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-//  INTER-AGENT COMMUNICATION LOG
+//  AGENT COMMS LOG
 // ══════════════════════════════════════════════════════════════
 
 function AgentCommsLog({ missionId }: { missionId: string }) {
@@ -1128,44 +1224,46 @@ function AgentCommsLog({ missionId }: { missionId: string }) {
   [events]);
 
   return (
-    <Panel
-      title="Inter-Agent Communication"
-      subtitle={`${commsEvents.length} events via EventBus`}
-      className="h-full"
-    >
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-white/70">Inter-Agent Communication</span>
+        <span className="text-[10px] text-white/30">{commsEvents.length} events via EventBus</span>
+      </div>
+
       {commsEvents.length === 0 ? (
-        <Empty title="No agent communication yet" hint="Events will appear as agents coordinate via the EventBus." />
+        <FuturisticEmpty icon="📡" title="No Agent Communication Yet" hint="Events will appear as agents coordinate via the EventBus." />
       ) : (
-        <div className="space-y-1.5 overflow-y-auto overflow-x-hidden no-scrollbar">
+        <div className="space-y-2">
           {commsEvents.slice(0, 80).map((e, i) => {
             const p = e.payload as Record<string, any>;
             const source = String(p?.source ?? p?.agent_id ?? p?.provider ?? "system");
             const target = String(p?.target ?? p?.assigned_provider ?? "");
+            const topicColor =
+              e.topic.includes("completed") ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400" :
+              e.topic.includes("failed") ? "border-red-500/30 bg-red-500/5 text-red-400" :
+              e.topic.includes("dispatched") ? "border-amber-500/30 bg-amber-500/5 text-amber-400" :
+              "border-indigo-500/30 bg-indigo-500/5 text-indigo-400";
+
             return (
-              <div key={e.id || `evt-${i}`} className="glass rounded-xl px-3 py-2 text-xs">
+              <div key={e.id || `evt-${i}`} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-mono text-faint">
+                  <span className="font-mono text-[9px] text-white/30">
                     {new Date(e.timestamp).toLocaleTimeString()}
                   </span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${
-                    e.topic.includes("completed") ? "bg-ok/10 text-ok" :
-                    e.topic.includes("failed") || e.topic === "approval.decided" ? "bg-danger/10 text-danger" :
-                    e.topic.includes("dispatched") || e.topic === "approval.requested" ? "bg-warn/10 text-warn" :
-                    "bg-accent/10 text-accent"
-                  }`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[9px] font-medium ${topicColor}`}>
                     {e.topic}
                   </span>
                 </div>
-                <div className="mt-1 flex items-center gap-2 text-muted">
-                  <span className="font-medium">{source}</span>
+                <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                  <span className="font-semibold text-white/70">{source}</span>
                   {target && (
                     <>
-                      <span className="text-faint">→</span>
-                      <span className="font-medium text-accent">{target}</span>
+                      <span className="text-white/25">→</span>
+                      <span className="font-semibold text-indigo-400">{target}</span>
                     </>
                   )}
                 </div>
-                <div className="mt-0.5 text-faint text-[10px] line-clamp-1">
+                <div className="mt-0.5 text-[10px] text-white/25 truncate">
                   {JSON.stringify(p).slice(0, 120)}
                 </div>
               </div>
@@ -1174,15 +1272,15 @@ function AgentCommsLog({ missionId }: { missionId: string }) {
         </div>
       )}
 
-      <div className="mt-3 text-[9px] text-center text-faint">
+      <div className="text-center text-[9px] text-white/20">
         Everything is event-driven · agents communicate through the EventBus
       </div>
-    </Panel>
+    </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-//  RESULT MERGE & VALIDATION PIPELINE
+//  MERGE PIPELINE PANEL
 // ══════════════════════════════════════════════════════════════
 
 function MergePipelinePanel({ mission }: { mission: MissionType }) {
@@ -1199,7 +1297,6 @@ function MergePipelinePanel({ mission }: { mission: MissionType }) {
   const hasRegression = err.includes("regression");
   const hasDocTask = plan?.tasks.some((t) => t.title.toLowerCase().includes("document")) ?? false;
 
-  // Real stage states derived from the mission plan + error state — no simulation.
   const stageStates: Record<string, "pending" | "running" | "passed" | "failed"> = useMemo(() => {
     const running = executing && !allDone;
     return {
@@ -1217,44 +1314,46 @@ function MergePipelinePanel({ mission }: { mission: MissionType }) {
   const doneStages = MERGE_STAGES.filter((s) => stageStates[s.id] === "passed").length;
 
   return (
-    <Panel
-      title="Merge & Validate"
-      subtitle={`${doneStages}/${MERGE_STAGES.length} stages · ${doneCount}/${taskCount} tasks complete`}
-      className="h-full"
-    >
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-white/70">Merge & Validate</span>
+        <span className="text-[10px] text-white/30">{doneStages}/{MERGE_STAGES.length} stages · {doneCount}/{taskCount} tasks complete</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {MERGE_STAGES.map((stage) => {
           const state = stageStates[stage.id] ?? "pending";
+          const ringColor =
+            state === "running" ? "ring-indigo-500/40 border-indigo-500/20" :
+            state === "passed" ? "ring-emerald-500/40 border-emerald-500/20" :
+            state === "failed" ? "ring-red-500/40 border-red-500/20" :
+            "border-white/[0.06]";
+          const iconColor =
+            state === "passed" ? "text-emerald-400" :
+            state === "failed" ? "text-red-400" :
+            state === "running" ? "text-indigo-400" : "text-white/20";
+
           return (
             <div
               key={stage.id}
-              className={`glass rounded-xl p-3 text-center transition-colors ${
-                state === "running" ? "ring-1 ring-accent/40" :
-                state === "passed" ? "ring-1 ring-ok/40" :
-                state === "failed" ? "ring-1 ring-danger/40" : ""
-              }`}
+              className={`rounded-xl border bg-white/[0.02] p-3 text-center ring-1 ring-transparent transition-all ${ringColor}`}
             >
-              <stage.icon size={20} className={`mx-auto mb-1 ${
-                state === "passed" ? "text-ok" :
-                state === "failed" ? "text-danger" :
-                state === "running" ? "text-accent" : "text-faint"
-              }`} />
-              <div className="text-[10px] font-medium">{stage.label}</div>
-              <div className="mt-0.5 flex items-center justify-center gap-1">
-                {state === "pending" && <span className="text-[9px] text-faint">Waiting</span>}
-                {state === "running" && <Loader2 size={10} className="animate-spin text-accent" />}
-                {state === "passed" && <CheckCircle2 size={10} className="text-ok" />}
-                {state === "failed" && <XCircle size={10} className="text-danger" />}
+              <stage.icon size={18} className={`mx-auto mb-1.5 ${iconColor}`} />
+              <div className="text-[10px] font-medium text-white/60">{stage.label}</div>
+              <div className="mt-1 flex items-center justify-center">
+                {state === "pending" && <span className="text-[9px] text-white/20">Waiting</span>}
+                {state === "running" && <Loader2 size={10} className="animate-spin text-indigo-400" />}
+                {state === "passed" && <CheckCircle2 size={10} className="text-emerald-400" />}
+                {state === "failed" && <XCircle size={10} className="text-red-400" />}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Process description */}
-      <div className="glass rounded-xl p-3 text-[11px] text-muted space-y-1">
-        <p>After all agents complete their work, the Result Merger automatically:</p>
-        <ul className="space-y-0.5 pl-4 list-disc">
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-[11px] text-white/40 space-y-1">
+        <p className="text-white/50 font-medium mb-2">After all agents complete their work, the Result Merger automatically:</p>
+        <ul className="space-y-1 pl-4 list-disc">
           <li>Detects and resolves merge conflicts</li>
           <li>Merges compatible changes from all agents</li>
           <li>Runs code formatting and linting across merged code</li>
@@ -1265,55 +1364,72 @@ function MergePipelinePanel({ mission }: { mission: MissionType }) {
           <li>Produces one unified, validated result</li>
         </ul>
       </div>
-
-      <div className="mt-2 text-[9px] text-center text-faint">
-        {allDone
-          ? "All tasks finished — stage states reflect the final mission state."
-          : "Stage states reflect the live mission plan and error state."}
-      </div>
-    </Panel>
+    </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-//  MISSION PLAN VIEW (existing, enhanced)
+//  MISSION PLAN VIEW
 // ══════════════════════════════════════════════════════════════
 
 function MissionPlanView({ plan, mission }: { plan: MissionPlanType; mission: MissionType }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <Panel
-      title="Execution Plan"
-      subtitle={`${plan.complexity} complexity · ${plan.risk_level} risk · ~${plan.estimated_total_minutes}m total · ${plan.task_count} tasks`}
-      className="h-full"
-    >
-      <div className="mb-3 text-xs text-muted">{plan.summary}</div>
+    <div className="space-y-3">
+      {/* Plan summary */}
+      <div className="rounded-2xl border border-white/[0.07] bg-[#0e1020]/70 p-4 backdrop-blur-md">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-white/80">Execution Plan</div>
+            <div className="mt-1 text-[10px] text-white/40">
+              {plan.complexity} complexity · {plan.risk_level} risk · ~{plan.estimated_total_minutes}m total · {plan.task_count} tasks
+            </div>
+            {plan.summary && <p className="mt-2 text-[11px] text-white/50 leading-relaxed">{plan.summary}</p>}
+          </div>
+        </div>
+      </div>
 
+      {/* Task list */}
       <div className="space-y-2">
         {plan.tasks.map((task, idx) => (
           <div key={task.id}>
             <motion.div
               layout
-              className={`glass rounded-xl p-3 cursor-pointer hover:border-border/40 border transition-colors ${
-                expanded === task.id ? "border-accent/30" : "border-transparent"
-              } ${task.status === "running" ? "ring-1 ring-accent/30" : ""}`}
+              className={`relative cursor-pointer overflow-hidden rounded-xl border transition-all ${
+                task.status === "running"
+                  ? "border-emerald-500/30 bg-emerald-500/[0.04] ring-1 ring-emerald-500/20"
+                  : expanded === task.id
+                  ? "border-indigo-500/30 bg-indigo-500/[0.04]"
+                  : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.10] hover:bg-white/[0.03]"
+              }`}
               onClick={() => setExpanded(expanded === task.id ? null : task.id)}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] text-faint font-mono shrink-0">{idx + 1}.</span>
-                  <StatusDot status={task.status === "running" ? "running" : task.status === "completed" ? "healthy" : task.status === "failed" ? "failed" : "idle"} pulse={task.status === "running"} />
-                  <span className="text-sm truncate">{task.title}</span>
-                  <span className="text-[10px] text-faint">~{task.estimated_minutes}m</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {task.assigned_role && <Badge tone="info">{task.assigned_role.replace(/_/g, " ")}</Badge>}
-                  {task.assigned_provider && (
-                    <span className="text-[10px] text-accent bg-accent/10 px-1.5 py-0.5 rounded">{task.assigned_provider}</span>
-                  )}
-                  {expanded === task.id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </div>
+              {/* Left accent */}
+              <div
+                className="absolute left-0 top-0 h-full w-0.5 rounded-r"
+                style={{ backgroundColor: TASK_COLORS[task.status] ?? "#6b7280" }}
+              />
+
+              <div className="flex items-center gap-3 p-3 pl-4">
+                <span className="shrink-0 font-mono text-[9px] text-white/20">{String(idx + 1).padStart(2, "0")}</span>
+                <div
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: TASK_COLORS[task.status] ?? "#6b7280" }}
+                />
+                <span className="min-w-0 flex-1 truncate text-xs text-white/80">{task.title}</span>
+                <span className="shrink-0 text-[9px] tabular-nums text-white/25">~{task.estimated_minutes}m</span>
+                {task.assigned_role && (
+                  <span className="shrink-0 rounded bg-indigo-500/10 px-1.5 py-0.5 text-[9px] text-indigo-400">
+                    {task.assigned_role.replace(/_/g, " ")}
+                  </span>
+                )}
+                {task.assigned_provider && (
+                  <span className="shrink-0 rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[9px] text-white/40">
+                    {task.assigned_provider}
+                  </span>
+                )}
+                {expanded === task.id ? <ChevronUp size={11} className="shrink-0 text-white/30" /> : <ChevronDown size={11} className="shrink-0 text-white/30" />}
               </div>
 
               <AnimatePresence>
@@ -1322,35 +1438,34 @@ function MissionPlanView({ plan, mission }: { plan: MissionPlanType; mission: Mi
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0.18 }}
                     className="overflow-hidden"
                   >
-                    <div className="mt-2 pt-2 border-t border-border/40 text-xs text-muted space-y-2">
-                      <p>{task.description}</p>
+                    <div className="border-t border-white/[0.06] px-4 py-3 space-y-2">
+                      <p className="text-[11px] text-white/50 leading-relaxed">{task.description}</p>
                       {task.dependencies.length > 0 && (
-                        <p className="text-faint">Depends on: {task.dependencies.map((d) => d.slice(0, 8)).join(", ")}</p>
+                        <p className="text-[10px] text-white/25">Depends on: {task.dependencies.map((d) => d.slice(0, 8)).join(", ")}</p>
                       )}
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px]" style={{ color: TASK_COLORS[task.status] ?? "#6b7280" }}>● {task.status}</span>
+                        <span className="text-[10px] font-medium capitalize" style={{ color: TASK_COLORS[task.status] ?? "#6b7280" }}>
+                          ● {task.status}
+                        </span>
                         {task.assigned_provider && (
-                          <span className="text-[10px] bg-accent/10 text-accent px-1.5 py-0.5 rounded">{task.assigned_provider}</span>
+                          <span className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[9px] text-white/40">{task.assigned_provider}</span>
                         )}
                       </div>
-
                       {task.output && (
-                        <div className="text-[10px] text-ok flex items-center gap-1 pt-1"><Download size={10} /> Output available</div>
-                      )}
-
-                      {task.output && (
-                        <div className="mt-1">
-                          <div className="text-[10px] uppercase tracking-wider text-faint mb-0.5">Output</div>
-                          <pre className="text-[10px] whitespace-pre-wrap bg-surface/40 rounded p-2 max-h-20 overflow-y-auto">
+                        <div>
+                          <div className="mb-1 text-[9px] uppercase tracking-widest text-white/25">Output</div>
+                          <pre className="max-h-24 overflow-y-auto rounded-lg bg-white/[0.03] p-2 text-[10px] text-white/50 whitespace-pre-wrap">
                             {task.output.slice(0, 300)}{task.output.length > 300 ? "..." : ""}
                           </pre>
                         </div>
                       )}
                       {task.error && (
-                        <div className="text-[10px] text-danger flex items-center gap-1"><AlertCircle size={10} /> {task.error}</div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-red-400">
+                          <AlertCircle size={10} /> {task.error}
+                        </div>
                       )}
                     </div>
                   </motion.div>
@@ -1359,17 +1474,19 @@ function MissionPlanView({ plan, mission }: { plan: MissionPlanType; mission: Mi
             </motion.div>
 
             {idx < plan.tasks.length - 1 && (
-              <div className="flex justify-center py-0.5"><div className="w-px h-3 bg-border/30" /></div>
+              <div className="flex justify-center py-1">
+                <div className="h-3 w-px bg-white/[0.06]" />
+              </div>
             )}
           </div>
         ))}
       </div>
-    </Panel>
+    </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-//  FINAL VALIDATION — all quality gates before mission complete
+//  FINAL VALIDATION PANEL
 // ══════════════════════════════════════════════════════════════
 
 function FinalValidationPanel({ mission }: { mission: MissionType }) {
@@ -1401,37 +1518,64 @@ function FinalValidationPanel({ mission }: { mission: MissionType }) {
   const ready = passed === total;
 
   return (
-    <Panel title="Final Validation" subtitle={`${passed}/${total} gates passed`} className="h-full">
-      <div className={`mb-4 rounded-xl p-3 text-center text-sm font-medium transition-colors ${
-        ready ? "bg-ok/10 text-ok" : "bg-warn/10 text-warn"
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-white/70">Final Validation</span>
+        <span className="text-[10px] text-white/30">{passed}/{total} gates passed</span>
+      </div>
+
+      <div className={`rounded-2xl border p-4 text-center text-sm font-semibold transition-colors ${
+        ready
+          ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-400"
+          : "border-amber-500/30 bg-amber-500/[0.08] text-amber-400"
       }`}>
         {ready ? "✅ All gates passed — mission ready to complete" : `⏳ ${total - passed} gate(s) not satisfied`}
       </div>
-      <div className="space-y-1.5">
+
+      {/* Progress bar */}
+      <div className="h-1 overflow-hidden rounded-full bg-white/[0.06]">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: ready ? "linear-gradient(90deg,#10b981,#34d399)" : "linear-gradient(90deg,#f59e0b,#fbbf24)" }}
+          initial={{ width: 0 }}
+          animate={{ width: `${(passed / total) * 100}%` }}
+          transition={{ duration: 0.6 }}
+        />
+      </div>
+
+      <div className="space-y-2">
         {gates.map((gate) => (
-          <div key={gate.id}
-            className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${gate.met ? "bg-ok/5" : "bg-warn/5"}`}
+          <div
+            key={gate.id}
+            className={`flex items-center gap-3 rounded-xl border p-3 transition-colors ${
+              gate.met
+                ? "border-emerald-500/15 bg-emerald-500/[0.05]"
+                : "border-amber-500/15 bg-amber-500/[0.05]"
+            }`}
           >
-            <div className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${
-              gate.met ? "bg-ok/20 text-ok" : "bg-warn/20 text-warn"
+            <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+              gate.met ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"
             }`}>
               {gate.met ? <Check size={12} /> : <Clock size={12} />}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium">{gate.label}</div>
-              <div className="text-[10px] text-faint">{gate.desc}</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium text-white/70">{gate.label}</div>
+              <div className="text-[10px] text-white/30">{gate.desc}</div>
             </div>
-            <span className={`text-[9px] tabular-nums ${gate.met ? "text-ok" : "text-warn"}`}>
+            <span className={`shrink-0 text-[9px] font-bold tabular-nums ${gate.met ? "text-emerald-400" : "text-amber-400"}`}>
               {gate.met ? "PASS" : "PENDING"}
             </span>
           </div>
         ))}
       </div>
-    </Panel>
+    </div>
   );
 }
 
-// ── OmniRoute Planner ──
+// ══════════════════════════════════════════════════════════════
+//  ROUTING PLANNER
+// ══════════════════════════════════════════════════════════════
+
 function RoutingPlanner({ mission }: { mission: MissionType }) {
   const [selectedStrategy, setSelectedStrategy] = useState<GatewayStrategy>("balanced");
   const [routePlan, setRoutePlan] = useState<MissionRoutePlanType | null>(null);
@@ -1456,98 +1600,105 @@ function RoutingPlanner({ mission }: { mission: MissionType }) {
     : null;
 
   return (
-    <Panel
-      title={`Routing — ${currentStrategy?.label ?? selectedStrategy}`}
-      subtitle={stratSummary ?? "Select a strategy and compare"}
-      actions={
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-white/70">
+          Routing — {currentStrategy?.label ?? selectedStrategy}
+        </span>
         <button
-          className={`pill ${loading ? "opacity-50 pointer-events-none" : "bg-accent/15 text-accent hover:bg-accent/25"}`}
-          onClick={compareRoute}
-          disabled={loading}
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-medium transition ${
+            loading
+              ? "cursor-not-allowed border-white/10 bg-white/[0.03] text-white/25"
+              : "border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
+          }`}
+          onClick={compareRoute} disabled={loading}
         >
-          {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          {loading ? " Comparing…" : " Compare"}
+          {loading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+          {loading ? "Comparing…" : "Compare"}
         </button>
-      }
-      className="h-full"
-    >
-      {/* Strategy selector grid */}
-      <div className="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2">
+      </div>
+
+      {stratSummary && (
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] text-white/40">
+          {stratSummary}
+        </div>
+      )}
+
+      {/* Strategy grid */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {ROUTING_STRATEGIES.map((s) => (
           <button
             key={s.id}
             onClick={() => { setSelectedStrategy(s.id); setRoutePlan(null); }}
-            className={`rounded-xl p-2.5 text-left transition-all ${
+            className={`rounded-xl border p-2.5 text-left transition-all ${
               selectedStrategy === s.id
-                ? "bg-accent/15 ring-1 ring-accent/40"
-                : "bg-surface/30 hover:bg-surface/50"
+                ? "border-indigo-500/40 bg-indigo-500/10 ring-1 ring-indigo-500/20"
+                : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.10] hover:bg-white/[0.04]"
             }`}
           >
-            <div className="text-sm">{s.icon} {s.label}</div>
-            <div className="text-[10px] text-faint mt-0.5">{s.desc}</div>
+            <div className="text-sm">{s.icon}</div>
+            <div className="mt-1 text-[11px] font-medium text-white/70">{s.label}</div>
+            <div className="mt-0.5 text-[9px] text-white/30 leading-tight">{s.desc}</div>
           </button>
         ))}
       </div>
 
-      {/* Route plan display */}
+      {/* Route plan */}
       {routePlan ? (
         <div className="space-y-3">
-          {/* Summary stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               { label: "Est. Cost", value: `$${routePlan.total_estimated_cost.toFixed(2)}` },
               { label: "Duration", value: `${(routePlan.total_estimated_duration_ms / 1000).toFixed(1)}s` },
               { label: "Avg Score", value: routePlan.average_composite_score.toFixed(3) },
               { label: "Providers", value: Object.keys(routePlan.provider_usage).length.toString() },
             ].map((s) => (
-              <div key={s.label} className="glass rounded-xl px-2.5 py-2 text-center">
-                <div className="text-[9px] uppercase tracking-wider text-faint">{s.label}</div>
-                <div className="mt-0.5 text-sm font-medium tabular-nums">{s.value}</div>
+              <div key={s.label} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-center">
+                <div className="text-[9px] uppercase tracking-widest text-white/25">{s.label}</div>
+                <div className="mt-1 text-sm font-semibold tabular-nums text-white/80">{s.value}</div>
               </div>
             ))}
           </div>
 
-          {/* Provider usage breakdown */}
           {Object.keys(routePlan.provider_usage).length > 0 && (
             <div>
-              <div className="text-[11px] font-medium text-faint mb-1.5">Provider Usage</div>
+              <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">Provider Usage</div>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(routePlan.provider_usage).map(([provider, count]) => (
-                  <Badge key={provider}>
+                  <span key={provider} className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] text-white/60">
                     {provider} ×{count}
-                  </Badge>
+                  </span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Task assignments */}
           <div>
-            <div className="text-[11px] font-medium text-faint mb-1.5">Task Assignments ({routePlan.assignments.length})</div>
-            <div className="space-y-1 max-h-48 overflow-y-auto">
+            <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-white/25">
+              Task Assignments ({routePlan.assignments.length})
+            </div>
+            <div className="space-y-1.5 max-h-52 overflow-y-auto">
               {routePlan.assignments.map((a) => (
-                <div key={a.task_id}
-                  className="flex items-center gap-2 rounded-lg bg-surface/20 px-2.5 py-1.5 text-xs"
+                <div
+                  key={a.task_id}
+                  className="flex items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[11px]"
                 >
                   <StatusDot status={a.status as any} />
-                  <span className="flex-1 truncate">{a.task_title}</span>
-                  <span className="text-faint text-[10px] tabular-nums">
-                    {a.assigned_agent_name}
-                  </span>
-                  <span className="text-faint text-[10px] tabular-nums">
-                    ${a.estimated_cost.toFixed(2)}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate text-white/70">{a.task_title}</span>
+                  <span className="shrink-0 text-[9px] text-white/35">{a.assigned_agent_name}</span>
+                  <span className="shrink-0 font-mono text-[9px] text-white/35">${a.estimated_cost.toFixed(2)}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
       ) : (
-        <Empty
-          title="No route plan"
+        <FuturisticEmpty
+          icon="🗺️"
+          title="No Route Plan"
           hint="Select a strategy above and click Compare to generate a route plan."
         />
       )}
-    </Panel>
+    </div>
   );
 }

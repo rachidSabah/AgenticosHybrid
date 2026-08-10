@@ -548,11 +548,25 @@ export interface MissionType {
   tags: string[];
   attachments: MissionAttachment[];
   status: string;
+  /** Origin channel: "WEB" | "LOCAL" | "TELEGRAM" | "WHATSAPP" | "API". */
+  channel?: string;
+  /** Remote identity metadata for channel-originated missions. */
+  remote?: RemoteIdentityType | null;
   plan?: MissionPlanType | null;
   created_at: string;
   updated_at?: string | null;
   completed_at?: string | null;
   error?: string | null;
+}
+
+export interface RemoteIdentityType {
+  channel: string;
+  external_account_id: string;
+  session_id?: string;
+  workspace_id?: string;
+  display_name?: string;
+  created_at?: string;
+  last_seen?: string;
 }
 
 export interface MissionAttachment {
