@@ -324,7 +324,6 @@ class TestSwarmCoordinator:
     @pytest.mark.asyncio
     async def test_execute_swarm_pending_reported_honestly(self, bus):
         """A task left PENDING after dispatch means no provider matched."""
-        from agentic_os.domain.agent import TaskStatus
 
         class _NoopOrchestrator:
             async def dispatch_task(self, task) -> None:  # noqa: ANN001

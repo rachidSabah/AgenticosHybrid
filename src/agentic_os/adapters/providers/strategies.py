@@ -118,8 +118,14 @@ class ProviderExecutionStrategy(ABC):
             "",
             "=" * 50,
             "CRITICAL INSTRUCTION FOR FILE CREATION",
-            "You MUST create real source code files (such as .html, .css, .js, .py, etc.) directly in the current working directory.",
-            "Do NOT merely explain or wrap code in markdown chat text. Write actual files to disk in the current working directory.",
+            (
+                "You MUST create real source code files (such as .html, .css, .js, .py, etc.) "
+                "directly in the current working directory."
+            ),
+            (
+                "Do NOT merely explain or wrap code in markdown chat text. Write actual files "
+                "to disk in the current working directory."
+            ),
             "=" * 50,
         ]
         return "\n".join(sections)

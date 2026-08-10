@@ -15,6 +15,7 @@ test-runner stream rotation.
 
 from __future__ import annotations
 
+import io
 import logging
 import sys
 
@@ -23,7 +24,7 @@ import structlog
 _CONFIGURED = False
 
 
-class _LiveStream:
+class _LiveStream(io.TextIOBase):
     """Adapter that always resolves to the *current* sys.stdout.
 
     Avoids caching a stream object that pytest may close/rotate during
@@ -77,7 +78,9 @@ def configure_logging(level: str = "INFO") -> None:
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, level.upper(), logging.INFO)
         ),
-        logger_factory=structlog.PrintLoggerFactory(file=_LiveStream()),
+        logger_factory=structlog.PrintLoggerFactory(
+            file=_LiveStream()  # ty: ignore[invalid-argument-type]
+        ),
     )
     _CONFIGURED = True
 

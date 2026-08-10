@@ -56,6 +56,7 @@ class HermesProvider:
             )
 
         from agentic_os.adapters.providers.strategies import HermesExecutionStrategy
+
         strategy = HermesExecutionStrategy()
         prompt = strategy.build_prompt(task)
         # Build env — inject HERMES_CONFIG only if set, never log it

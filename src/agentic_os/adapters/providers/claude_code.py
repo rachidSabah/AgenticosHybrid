@@ -42,6 +42,7 @@ class ClaudeCodeProvider:
             raise RuntimeError(f"claude CLI not found at '{self._bin}'")
 
         from agentic_os.adapters.providers.strategies import ClaudeExecutionStrategy
+
         strategy = ClaudeExecutionStrategy()
         prompt = strategy.build_prompt(task)
         # Build env — inject API key only if configured, never log it

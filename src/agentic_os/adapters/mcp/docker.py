@@ -55,7 +55,7 @@ class DockerAdapter(BaseMCPAdapter):
             try:
                 import docker  # type: ignore[import-untyped]
 
-                self._client = docker.DockerClient(base_url=self._docker_host)
+                self._client = docker.DockerClient(base_url=self._docker_host)  # ty: ignore[unresolved-attribute]
             except ImportError:
                 self._log.warning("docker-py not installed, using mock implementation")
                 return None

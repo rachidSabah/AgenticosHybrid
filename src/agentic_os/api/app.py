@@ -1590,6 +1590,7 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/providers/{name}/api-key/status")
     async def api_key_status(name: str) -> dict:
         import os
+
         key = await vault.get_key(name)
         if not key:
             env_vars = {
@@ -1977,11 +1978,14 @@ def create_app(platform: Platform) -> FastAPI:
                         mission_id,
                         exc_info=True,
                     )
+
         # Background task: watch for mission completion
         async def _watch_mission_completion(mission_id: str, task_count: int) -> None:
             """Mark mission COMPLETED when all its tasks are done."""
             import asyncio as _asyncio
+
             from agentic_os.domain.mission import MissionStatus as _MS
+
             deadline = _asyncio.get_event_loop().time() + 7200  # 2h timeout
             while _asyncio.get_event_loop().time() < deadline:
                 await _asyncio.sleep(3)
@@ -1995,8 +1999,7 @@ def create_app(platform: Platform) -> FastAPI:
                 if not mission_tasks:
                     continue
                 all_done = all(
-                    t.status.value in ("completed", "failed", "cancelled")
-                    for t in mission_tasks
+                    t.status.value in ("completed", "failed", "cancelled") for t in mission_tasks
                 )
                 if all_done:
                     any_failed = any(t.status.value == "failed" for t in mission_tasks)
@@ -2006,7 +2009,11 @@ def create_app(platform: Platform) -> FastAPI:
                         EventEnvelope(
                             type="mission.completed",
                             source="api",
-                            topic=Topic.MISSION_COMPLETED.value if any_failed is False else Topic.MISSION_FAILED.value,
+                            topic=(
+                                Topic.MISSION_COMPLETED.value
+                                if any_failed is False
+                                else Topic.MISSION_FAILED.value
+                            ),
                             payload=m.to_dict(),
                         )
                     )
@@ -2019,6 +2026,7 @@ def create_app(platform: Platform) -> FastAPI:
                     return
 
         import asyncio as _asyncio
+
         task_count = len(m.plan.tasks) if m.plan and m.plan.tasks else 0
         _asyncio.create_task(_watch_mission_completion(m.id, task_count))
         # Logically trigger the mission in swarm orchestration: register it as
@@ -3275,8 +3283,7 @@ def create_app(platform: Platform) -> FastAPI:
             return []
 
         return [
-            i.model_dump(mode="json")
-            for i in await memory.store.list_scope(mem_scope, agent_id)
+            i.model_dump(mode="json") for i in await memory.store.list_scope(mem_scope, agent_id)
         ]
 
     @app.get("/api/memory/{scope}/recall")

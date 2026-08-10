@@ -821,7 +821,8 @@ async def run_container_serve(host: str | None = None, port: int | None = None) 
         try:
             print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
         except UnicodeEncodeError:
-            print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}".encode("ascii", errors="replace").decode("ascii"), flush=True)
+            _tb_text = f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}"
+            print(_tb_text.encode("ascii", errors="replace").decode("ascii"), flush=True)
         return
 
     try:
@@ -836,7 +837,8 @@ async def run_container_serve(host: str | None = None, port: int | None = None) 
         try:
             print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
         except UnicodeEncodeError:
-            print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}".encode("ascii", errors="replace").decode("ascii"), flush=True)
+            _tb_text = f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}"
+            print(_tb_text.encode("ascii", errors="replace").decode("ascii"), flush=True)
         return
 
     # Container-backed phased startup (Critical + Infrastructure, then background subsystems)

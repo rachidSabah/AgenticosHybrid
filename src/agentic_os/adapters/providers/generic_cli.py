@@ -66,6 +66,7 @@ class GenericCLIProvider:
             )
 
         from agentic_os.adapters.providers.strategies import GenericExecutionStrategy
+
         strategy = GenericExecutionStrategy()
         prompt = strategy.build_prompt(task)
         env = dict(os.environ)

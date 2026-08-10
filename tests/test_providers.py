@@ -71,7 +71,9 @@ async def test_hermes_provider_passes_prompt_as_argv(monkeypatch):
 
     captured: dict[str, object] = {}
 
-    async def fake_run_cli(args, *, input_data=None, env=None, cwd=None, timeout=120.0, on_output=None):
+    async def fake_run_cli(
+        args, *, input_data=None, env=None, cwd=None, timeout=120.0, on_output=None
+    ):
         captured["args"] = list(args)
         captured["input_data"] = input_data
         return 0, "All files written", ""

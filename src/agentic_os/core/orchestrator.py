@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import os as _os
 import time as _time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agentic_os.config import Settings
 from agentic_os.core.registry import AgentRegistry, ProviderRegistry
@@ -178,7 +178,8 @@ class Orchestrator:
             # a real provider name or vice versa (handles 'claude-code' -> 'claude_code')
             normalized = {s.replace("-", "_").replace(" ", "_") for s in selected}
             filtered = [
-                p for p in real_candidates
+                p
+                for p in real_candidates
                 if p.name.lower() in selected
                 or p.name.lower().replace("-", "_") in normalized
                 or any(p.name.lower() in s or s in p.name.lower() for s in selected)
@@ -188,7 +189,10 @@ class Orchestrator:
                     "dispatcher.preferred_provider_not_found_falling_through",
                     task_role=role,
                     preferred_agents=sorted(selected),
-                    note="No preferred provider found among real candidates; using any available provider",
+                    note=(
+                        "No preferred provider found among real candidates; "
+                        "using any available provider"
+                    ),
                 )
                 # Fall through to use whatever provider is available
             else:
@@ -384,13 +388,17 @@ class Orchestrator:
         # Write execution memory into working memory scope for live tracking
         try:
             from agentic_os.domain.memory import MemoryItem, MemoryScope
+
             memory_mgr = getattr(self, "memory", None)
             if memory_mgr is not None:
                 await memory_mgr.write(
                     MemoryItem(
                         scope=MemoryScope.WORKING,
                         key=f"task:{task.id}",
-                        value=f"Agent {agent.id} executing '{task.title}' via provider {agent.provider}",
+                        value=(
+                            f"Agent {agent.id} executing '{task.title}' "
+                            f"via provider {agent.provider}"
+                        ),
                         agent_id=agent.id,
                     )
                 )
@@ -425,7 +433,9 @@ class Orchestrator:
             # Persist generated output files and extract any code blocks into target workspace root
             try:
                 import re as _re
+
                 from agentic_os.domain.workspace import get_workspace_root
+
                 ws_root = get_workspace_root()
                 if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
                     # 1. Save execution summary report
@@ -445,7 +455,7 @@ class Orchestrator:
 
                         # Determine target filename
                         target_filename = None
-                        if filename_meta and "." in filename_meta and not " " in filename_meta:
+                        if filename_meta and "." in filename_meta and " " not in filename_meta:
                             target_filename = filename_meta.strip()
                         elif lang:
                             ext_map = {
@@ -465,7 +475,11 @@ class Orchestrator:
                             code_file_path = _os.path.join(ws_root, target_filename)
                             with open(code_file_path, "w", encoding="utf-8") as f:
                                 f.write(code + "\n")
-                            log.info("task.code_file_extracted", path=code_file_path, bytes=len(code))
+                            log.info(
+                                "task.code_file_extracted",
+                                path=code_file_path,
+                                bytes=len(code),
+                            )
             except Exception as e:
                 log.warning("task.persist_output_failed", error=str(e))
 
@@ -521,6 +535,7 @@ class Orchestrator:
                 # Persist generated output files into workspace root
                 try:
                     from agentic_os.domain.workspace import get_workspace_root
+
                     ws_root = get_workspace_root()
                     if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
                         filename = f"task_{task.id[:8]}_{task.role}.md"
@@ -595,6 +610,7 @@ class Orchestrator:
                 # Persist generated output files into workspace root
                 try:
                     from agentic_os.domain.workspace import get_workspace_root
+
                     ws_root = get_workspace_root()
                     if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
                         filename = f"task_{task.id[:8]}_{task.role}.md"

@@ -333,12 +333,16 @@ class ImprovementEngine:
             except Exception:
                 log.exception("Failed to generate proposals from performance metrics")
 
-        # Baseline proposal when system has zero active proposals so Evolution Dashboard is populated
+        # Baseline proposal when system has zero active proposals so
+        # Evolution Dashboard is populated
         if not proposals and len(self._proposals) == 0:
             baseline = ImprovementProposal(
                 type=ImprovementType.PERFORMANCE_OPTIMIZATION,
                 title="System Routing & Latency Optimization",
-                description="Automated baseline optimization check for provider dispatch queues and response latency.",
+                description=(
+                    "Automated baseline optimization check for provider dispatch "
+                    "queues and response latency."
+                ),
                 rationale="System baseline health inspection initialized.",
                 priority=ImprovementPriority.MEDIUM,
                 status=ImprovementStatus.PROPOSED,

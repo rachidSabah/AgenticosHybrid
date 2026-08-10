@@ -101,7 +101,8 @@ class MCPClient:
         env.update(self.config.env)
 
         cmd = [self.config.command, *self.config.args]
-        use_shell = sys.platform == "win32" and self.config.command.lower() in ("npx", "npm", "cmd", "npx.cmd")
+        _shell_cmds = ("npx", "npm", "cmd", "npx.cmd")
+        use_shell = sys.platform == "win32" and self.config.command.lower() in _shell_cmds
 
         self._process = subprocess.Popen(
             cmd,
