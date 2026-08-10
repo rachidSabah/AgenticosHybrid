@@ -37,6 +37,14 @@ export interface BoundAgent {
   user_labels?: string[];
   notes?: string;
   logs?: string[];
+  /** Last real result from POST /binding/validate — never fabricated. */
+  validation?: {
+    healthy: boolean;
+    kind: string;
+    streaming: boolean;
+    tools: boolean;
+    at: string;
+  };
 }
 
 export interface ValidationCheck {
@@ -64,6 +72,10 @@ export function AgentBindingCenter() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [scanningMode, setScanningMode] = useState<"idle" | "surface" | "deep">("idle");
   const [showManualWizard, setShowManualWizard] = useState(false);
+  const [manualName, setManualName] = useState("");
+  const [manualPath, setManualPath] = useState("");
+  const [manualError, setManualError] = useState("");
+  const [manualBinding, setManualBinding] = useState(false);
   const [logs, setLogs] = useState<DiscoveryLogEntry[]>([
     { id: "l1", timestamp: new Date().toLocaleTimeString(), source: "Discovery Engine", type: "info", message: "AI Agent Binding Center initialized" },
   ]);
@@ -174,82 +186,178 @@ export function AgentBindingCenter() {
     setScanningMode(mode);
     addLog("Scan Engine", "info", `Starting ${mode.toUpperCase()} scan across system PATH, Registry, and Package Managers...`);
     try {
-      if (mode === "surface") {
-        await api.bindingDiscover("surface");
-      } else {
-        await api.bindingDeepScan();
-      }
+      const res =
+        mode === "surface" ? await api.bindingDiscover("surface") : await api.bindingDeepScan();
       try { await api.post("/api/brains/rescan"); } catch { /* ignore if offline */ }
       try { await useStore.getState().hydrate(); } catch { /* ignore */ }
-      setTimeout(() => {
-        setScanningMode("idle");
-        addLog("Scan Engine", "success", `${mode === "deep" ? "Deep" : "Surface"} scan complete: 6 agents validated and bound.`);
-      }, 1500);
-    } catch {
+      await refreshAgents();
+      setScanningMode("idle");
+      const found = typeof res?.total_found === "number" ? res.total_found : 0;
+      addLog(
+        "Scan Engine",
+        found > 0 ? "success" : "info",
+        `${mode === "deep" ? "Deep" : "Surface"} scan complete: ${found} agent(s) registered on host.`,
+      );
+    } catch (err) {
       try { await useStore.getState().hydrate(); } catch { /* ignore */ }
-      setTimeout(() => {
-        setScanningMode("idle");
-        addLog("Scan Engine", "info", `Local scan verified active installed executables on host machine.`);
-      }, 1500);
+      setScanningMode("idle");
+      addLog(
+        "Scan Engine",
+        "error",
+        `${mode.toUpperCase()} scan failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
   // ── Actions ──
   const handleValidate = async (id: string) => {
-    addLog("Validation Subsystem", "info", `Executing full health validation suite for provider [${id}]...`);
+    addLog("Validation Subsystem", "info", `Executing validation suite for provider [${id}]...`);
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: "validating" } : a)));
     try {
-      await api.bindingValidate(id);
-    } catch { /* fallback */ }
-    setTimeout(() => {
+      const res = await api.bindingValidate(id);
+      const healthy = Boolean(res?.healthy);
       setAgents((prev) =>
         prev.map((a) =>
           a.id === id
             ? {
                 ...a,
-                status: "healthy",
+                status: healthy ? "healthy" : "degraded",
                 last_validation: new Date().toISOString(),
-                logs: [...(a.logs || []), `[VALIDATION PASS] ${new Date().toLocaleTimeString()} -- version, ping, help check succeeded`],
+                validation: {
+                  healthy,
+                  kind: String(res?.details?.kind ?? "unknown"),
+                  streaming: Boolean(res?.details?.streaming),
+                  tools: Boolean(res?.details?.tools),
+                  at: new Date().toISOString(),
+                },
+                logs: [
+                  ...(a.logs || []),
+                  `[VALIDATION ${healthy ? "PASS" : "FAIL"}] ${new Date().toLocaleTimeString()} -- kind=${res?.details?.kind ?? "unknown"} streaming=${res?.details?.streaming} tools=${res?.details?.tools}`,
+                ],
               }
             : a
         )
       );
-      addLog("Validation Subsystem", "success", `Provider [${id}] validated successfully (exit code 0).`);
-    }, 1500);
+      addLog(
+        "Validation Subsystem",
+        healthy ? "success" : "warning",
+        `Provider [${id}] validation ${healthy ? "passed" : "failed"} (streaming=${res?.details?.streaming}, tools=${res?.details?.tools}).`,
+      );
+    } catch (err) {
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === id
+            ? {
+                ...a,
+                status: "degraded",
+                logs: [...(a.logs || []), `[VALIDATION ERROR] ${new Date().toLocaleTimeString()} -- ${err instanceof Error ? err.message : String(err)}`],
+              }
+            : a
+        )
+      );
+      addLog(
+        "Validation Subsystem",
+        "error",
+        `Provider [${id}] validation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   };
 
   const handleRepair = async (id: string) => {
     addLog("Repair Engine", "info", `Initiating auto-repair sequence for provider [${id}]...`);
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: "repairing" } : a)));
     try {
-      await api.bindingRepair(id);
-    } catch { /* fallback */ }
-    setTimeout(() => {
+      const res = await api.bindingRepair(id);
+      const repaired = Boolean(res?.repaired);
       setAgents((prev) =>
         prev.map((a) =>
           a.id === id
             ? {
                 ...a,
-                status: "healthy",
-                last_validation: new Date().toISOString(),
-                logs: [...(a.logs || []), `[REPAIR SUCCESS] ${new Date().toLocaleTimeString()} -- Path environment variable verified, executable permissions restored.`],
+                status: repaired ? "healthy" : "degraded",
+                logs: [
+                  ...(a.logs || []),
+                  `[REPAIR ${repaired ? "SUCCESS" : "FAILED"}] ${new Date().toLocaleTimeString()} -- ${res?.action_taken ?? "no action"}`,
+                ],
               }
             : a
         )
       );
-      addLog("Repair Engine", "success", `Provider [${id}] repaired and re-bound.`);
-    }, 2000);
+      addLog(
+        "Repair Engine",
+        repaired ? "success" : "warning",
+        `Provider [${id}] ${repaired ? "repaired" : "not repaired"}: ${res?.action_taken ?? "no action taken"}`,
+      );
+    } catch (err) {
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === id
+            ? {
+                ...a,
+                status: "degraded",
+                logs: [...(a.logs || []), `[REPAIR ERROR] ${new Date().toLocaleTimeString()} -- ${err instanceof Error ? err.message : String(err)}`],
+              }
+            : a
+        )
+      );
+      addLog(
+        "Repair Engine",
+        "error",
+        `Provider [${id}] repair failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   };
 
-  const handleUnbind = (id: string) => {
-    addLog("Binding Center", "warning", `Unbinding agent [${id}] from Mission Control database (executable file untouched).`);
-    setAgents((prev) => prev.filter((a) => a.id !== id));
-    if (selectedId === id) setSelectedId(agents[0]?.id || "");
+  const handleUnbind = async (id: string) => {
+    addLog("Binding Center", "warning", `Unbinding agent [${id}] from Mission Control (executable file untouched).`);
+    try {
+      const res = await api.bindingUnbind(id);
+      if (res?.unbound) {
+        setAgents((prev) => prev.filter((a) => a.id !== id));
+        if (selectedId === id) setSelectedId(agents[0]?.id || "");
+        addLog("Binding Center", "success", `Agent [${id}] unbound.`);
+      } else {
+        addLog("Binding Center", "warning", `Unbind reported success but no unbound flag for [${id}].`);
+      }
+    } catch (err) {
+      addLog("Binding Center", "error", `Unbind failed for [${id}]: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   const handleRebindAll = () => {
-    addLog("Binding Center", "info", "Re-validating and rebinding all registered agents...");
+    addLog("Binding Center", "info", "Re-validating all registered agents...");
     agents.forEach((a) => handleValidate(a.id));
+  };
+
+  const handleManualBind = async () => {
+    const provider = manualName.trim();
+    const executable = manualPath.trim();
+    if (!provider || !executable) {
+      setManualError("Both an agent name and an executable path are required.");
+      return;
+    }
+    setManualError("");
+    setManualBinding(true);
+    addLog("Manual Binder", "info", `Binding [${provider}] -> ${executable}...`);
+    try {
+      const res = await api.bindingManual({ provider, executable });
+      if (res?.bound) {
+        addLog("Manual Binder", "success", `Provider [${provider}] bound successfully by the backend.`);
+        setShowManualWizard(false);
+        setManualName("");
+        setManualPath("");
+        await refreshAgents();
+      } else {
+        setManualError("Backend did not confirm the bind (no bound flag).");
+        addLog("Manual Binder", "warning", `Backend did not confirm bind for [${provider}].`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setManualError(msg);
+      addLog("Manual Binder", "error", `Binding [${provider}] failed: ${msg}`);
+    } finally {
+      setManualBinding(false);
+    }
   };
 
   return (
@@ -518,29 +626,43 @@ export function AgentBindingCenter() {
 
                 {activeTab === "validation" && (
                   <div className="space-y-3 text-xs">
-                    <h3 className="font-semibold text-text">Execution & Integrity Tests</h3>
-                    <div className="space-y-2">
-                      {[
-                        { label: "Executable Path Verification", cmd: `Test-Path "${selectedAgent.executable_path}"`, code: 0, ms: 2 },
-                        { label: "Version Check", cmd: `& "${selectedAgent.executable_path}" --version`, code: 0, ms: 14 },
-                        { label: "Health Handshake", cmd: `& "${selectedAgent.executable_path}" health`, code: 0, ms: 18 },
-                        { label: "MCP Protocol Support", cmd: `& "${selectedAgent.executable_path}" mcp-list`, code: 0, ms: 24 },
-                      ].map((chk, i) => (
-                        <div key={i} className="flex items-center justify-between rounded-xl border border-border/30 bg-surface/20 px-3 py-2">
+                    <h3 className="font-semibold text-text">Provider Capability Report</h3>
+                    {selectedAgent.validation ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between rounded-xl border border-border/30 bg-surface/20 px-3 py-2">
                           <div className="flex items-center gap-2">
-                            <CheckCircle2 size={14} className="text-ok" />
+                            {selectedAgent.validation.healthy ? (
+                              <CheckCircle2 size={14} className="text-ok" />
+                            ) : (
+                              <XCircle size={14} className="text-danger" />
+                            )}
                             <div>
-                              <span className="font-medium text-text">{chk.label}</span>
-                              <span className="block font-mono text-[10px] text-faint">{chk.cmd}</span>
+                              <span className="font-medium text-text">Provider Health</span>
+                              <span className="block text-[10px] text-faint">
+                                Reported by POST /binding/validate at {new Date(selectedAgent.validation.at).toLocaleTimeString()}
+                              </span>
                             </div>
                           </div>
-                          <div className="text-right font-mono text-[10px] text-faint">
-                            <span className="text-ok mr-2">Exit 0</span>
-                            <span>{chk.ms}ms</span>
-                          </div>
+                          <span className={`font-mono text-[10px] ${selectedAgent.validation.healthy ? "text-ok" : "text-danger"}`}>
+                            {selectedAgent.validation.healthy ? "healthy" : "degraded"}
+                          </span>
                         </div>
-                      ))}
-                    </div>
+                        {[
+                          { label: "Provider Kind", value: selectedAgent.validation.kind },
+                          { label: "Streaming Support", value: selectedAgent.validation.streaming ? "yes" : "no" },
+                          { label: "Tool Support", value: selectedAgent.validation.tools ? "yes" : "no" },
+                        ].map((row) => (
+                          <div key={row.label} className="flex items-center justify-between rounded-xl border border-border/30 bg-surface/20 px-3 py-2">
+                            <span className="font-medium text-text">{row.label}</span>
+                            <span className="font-mono text-[10px] text-muted">{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-border/30 bg-surface/20 px-3 py-3 text-[11px] text-faint">
+                        No validation has run yet. Click <span className="text-accent">Validate</span> on this agent to fetch a real capability report from the backend.
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -549,7 +671,9 @@ export function AgentBindingCenter() {
                     {(selectedAgent.logs || []).map((l, i) => (
                       <div key={i} className="py-0.5">{l}</div>
                     ))}
-                    <div className="text-faint mt-2">[ACTIVE BINDING DAEMON READY]</div>
+                    {(selectedAgent.logs || []).length === 0 && (
+                      <div className="text-faint mt-2">No output yet — run Validate or Repair to populate real logs.</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -610,59 +734,46 @@ export function AgentBindingCenter() {
 
               <div className="space-y-3 text-xs">
                 <div>
+                  <label className="text-faint block mb-1">Agent Name (provider id)</label>
+                  <input
+                    type="text"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    placeholder="e.g. custom_coder"
+                    className="w-full rounded-lg border border-border/60 bg-surface/40 px-3 py-2 outline-none focus:border-accent"
+                  />
+                </div>
+                <div>
                   <label className="text-faint block mb-1">Executable Path</label>
                   <input
                     type="text"
+                    value={manualPath}
+                    onChange={(e) => setManualPath(e.target.value)}
                     placeholder="e.g. C:\Users\User\AppData\Local\Programs\OpenCode\opencode.exe"
                     className="w-full rounded-lg border border-border/60 bg-surface/40 px-3 py-2 outline-none focus:border-accent font-mono text-[11px]"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-faint block mb-1">Agent Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Custom Coder"
-                      className="w-full rounded-lg border border-border/60 bg-surface/40 px-3 py-2 outline-none focus:border-accent"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-faint block mb-1">Vendor</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Community"
-                      className="w-full rounded-lg border border-border/60 bg-surface/40 px-3 py-2 outline-none focus:border-accent"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-faint block mb-1">Default Arguments</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. --daemon --port 8000"
-                    className="w-full rounded-lg border border-border/60 bg-surface/40 px-3 py-2 outline-none focus:border-accent font-mono text-[11px]"
-                  />
-                </div>
-
                 <div className="rounded-xl border border-border/30 bg-surface/20 p-3 text-[11px] text-faint">
-                  Mission Control will run validation checks (`--version`, `ping`, `health`) before binding.
+                  Mission Control registers this provider with the backend via POST /binding/manual. The executable path is validated by the backend before binding.
                 </div>
+                {manualError && (
+                  <div className="rounded-xl border border-danger/40 bg-danger/10 p-2.5 text-[11px] text-danger">
+                    {manualError}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 pt-2 border-t border-border/40">
                 <button
-                  onClick={() => {
-                    addLog("Manual Binder", "success", "Custom AI Agent successfully validated and bound.");
-                    setShowManualWizard(false);
-                  }}
-                  className="flex-1 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/80 transition"
+                  onClick={handleManualBind}
+                  disabled={manualBinding}
+                  className="flex-1 rounded-xl bg-accent px-4 py-2 text-xs font-semibold text-white hover:bg-accent/80 transition disabled:opacity-50"
                 >
-                  Validate & Bind Agent
+                  {manualBinding ? "Binding..." : "Validate & Bind Agent"}
                 </button>
                 <button
-                  onClick={() => setShowManualWizard(false)}
+                  onClick={() => { setShowManualWizard(false); setManualError(""); }}
                   className="rounded-xl border border-border/60 px-4 py-2 text-xs font-medium text-muted hover:bg-surface"
                 >
                   Cancel

@@ -281,8 +281,6 @@ function ExecutionGraphView({ missionId }: { missionId: string }) {
           label: task.title || task.id,
           status: task.status,
           type: "task",
-          startedAt: Date.now() - 1000 * 60 * 5,
-          duration: task.status === "completed" ? 60_000 : undefined,
           tags: [task.role],
         },
       });
@@ -428,6 +426,8 @@ export function PromptCenter() {
   // Store — no agent targeting; always broadcast
   const providers = useStore((s) => s.providers);
   const connected = useStore((s) => s.connected);
+  const events = useStore((s) => s.events);
+  const lastEvent = events.length > 0 ? events[0] : null;
 
   const connectedAgentCount = useMemo(
     () => Object.values(providers).filter((p) => p.provider && p.provider.toLowerCase() !== "mock").length,
@@ -467,8 +467,29 @@ export function PromptCenter() {
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
 
   const pushStatus = useCallback((line: string) => {
-    setStatusLog((prev) => [...prev.slice(-4), line]);
+    setStatusLog((prev) => [...prev.slice(-49), line]);
   }, []);
+
+  // Track live task progress for the active mission
+  useEffect(() => {
+    if (!lastEvent || !activeMissionId) return;
+    const p = lastEvent.payload as Record<string, any>;
+    const isMission = p.mission_id === activeMissionId || p.id === activeMissionId || (lastEvent.topic.startsWith("mission.") && p.id === activeMissionId);
+    if (isMission) {
+      if (lastEvent.topic.startsWith("task.")) {
+        const title = p.title || p.task_id || p.id || "Task";
+        const status = lastEvent.topic.replace("task.", "");
+        pushStatus(`Task ${title} → ${status}`);
+      } else if (lastEvent.topic.startsWith("mission.")) {
+        const status = lastEvent.topic.replace("mission.", "");
+        pushStatus(`Mission → ${status}`);
+      } else if (lastEvent.topic.startsWith("execution.")) {
+        const status = lastEvent.topic.replace("execution.", "");
+        const taskTitle = p.task_id || "Task";
+        pushStatus(`Execution ${taskTitle} → ${status}`);
+      }
+    }
+  }, [lastEvent, activeMissionId, pushStatus]);
 
   // Fetch current workspace on mount
   useEffect(() => {
@@ -579,13 +600,17 @@ export function PromptCenter() {
         pushStatus("Mission planned → routing tasks…");
         await api.planMission(mission.id);
         const started = await api.startMission(mission.id);
-        pushStatus("Dispatched → all connected agents");
+        pushStatus(
+          selectedAgents.length > 0
+            ? `Dispatched → ${selectedAgents.length} selected agent${selectedAgents.length === 1 ? "" : "s"}`
+            : "Dispatched → routed via default provider selection",
+        );
 
         // Push into store so Mission Orchestrator + Swarm views pick it up live
         useStore.getState().updateMission(started ?? mission);
         setActiveMissionId(mission.id);
 
-        // ── Auto-create swarm for this mission ──
+        // ── Auto-create swarm for this mission (real backend team) ──
         try {
           pushStatus("Initializing swarm orchestration…");
           const maxAgents = Math.max(3, connectedAgentCount);
@@ -596,14 +621,24 @@ export function PromptCenter() {
             timeout_seconds: 1800,
             tags: ["mission", "auto-generated", mission.id],
           });
-          pushStatus(`Swarm ${swarm?.id?.slice(0, 8) ?? "?"} formed → ${swarm?.agent_count ?? 0} agents`);
+          const agentCount = typeof swarm?.agent_count === "number" ? swarm.agent_count : 0;
+          const swarmId = (swarm?.id as string | undefined) ?? "?";
+          pushStatus(
+            agentCount > 0
+              ? `Swarm ${swarmId.slice(0, 8)} created → ${agentCount} real member(s)`
+              : "Swarm created → no agents available to join",
+          );
 
-          // Analyze goal & create plan in parallel
-          const [, ] = await Promise.allSettled([
+          // Analyze goal & create plan in parallel (report honestly)
+          const [analyze, plan] = await Promise.allSettled([
             api.swarmAnalyzeGoal({ description: prompt }),
-            api.swarmCreatePlan({ goal: prompt }),
+            api.swarmCreatePlan({ description: prompt }),
           ]);
-          pushStatus("Swarm plan generated → dispatching tasks…");
+          if (analyze.status === "fulfilled" && plan.status === "fulfilled") {
+            pushStatus("Swarm plan generated");
+          } else {
+            pushStatus("Swarm planning incomplete — mission dispatch continues");
+          }
         } catch (e) {
           console.warn("Swarm init failed:", e);
           pushStatus("Swarm init skipped — continuing with direct dispatch");
@@ -897,7 +932,11 @@ export function PromptCenter() {
             </span>
             <Radio size={12} />
             <span className="font-mono text-[10px] uppercase tracking-widest">
-              Broadcasting to ALL {connectedAgentCount > 0 ? `${connectedAgentCount} ` : ""}connected agents
+              {selectedAgents.length > 0
+                ? `Targeting ${selectedAgents.length} selected agent${selectedAgents.length === 1 ? "" : "s"}`
+                : connectedAgentCount > 0
+                  ? `Routing through ${connectedAgentCount} discovered agent${connectedAgentCount === 1 ? "" : "s"}`
+                  : "No agents discovered"}
             </span>
           </motion.div>
         </motion.div>
@@ -1094,7 +1133,7 @@ export function PromptCenter() {
                   </span>
                 )}
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
                 {statusLog.map((line, i) => (
                   <div key={i} className="flex items-center gap-2 text-[11px] text-white/70">
                     <Zap size={10} className="text-cyan-400 shrink-0" />

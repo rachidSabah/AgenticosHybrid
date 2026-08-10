@@ -41,7 +41,9 @@ class ClaudeCodeProvider:
         if not shutil.which(self._bin):
             raise RuntimeError(f"claude CLI not found at '{self._bin}'")
 
-        prompt = f"{task.title}\n\n{task.description}".strip()
+        from agentic_os.adapters.providers.strategies import ClaudeExecutionStrategy
+        strategy = ClaudeExecutionStrategy()
+        prompt = strategy.build_prompt(task)
         # Build env — inject API key only if configured, never log it
         env = dict(os.environ)
         if self._api_key:
@@ -49,9 +51,9 @@ class ClaudeCodeProvider:
 
         log.info("claude_code.execute", agent=agent.id, task=task.id, has_stdin=True)
 
-        # claude -p --output-format text  (prompt goes via stdin)
+        # claude -p --output-format text --dangerously-skip-permissions  (prompt goes via stdin)
         rc, stdout_str, stderr_str = await run_cli(
-            [self._bin, "-p", "--output-format", "text"],
+            [self._bin, "-p", "--output-format", "text", "--dangerously-skip-permissions"],
             input_data=prompt.encode("utf-8"),
             env=env,
             cwd=cwd,

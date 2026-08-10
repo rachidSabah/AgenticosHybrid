@@ -1,8 +1,19 @@
 """WhatsApp Gateway — submit missions and receive results via WhatsApp.
 
-Uses @whiskeysockets/bailey (Node.js) via a subprocess bridge to connect
-to WhatsApp Web. Scans a QR code for authentication, then listens for
-incoming messages and creates missions.
+Uses @whiskeysockets/baileys (Node.js) via a standalone bridge script at
+E:/Agenticos/wa_bridge.js to connect to WhatsApp Web.  Scans a QR code for
+authentication, then listens for incoming messages and creates missions.
+
+Architecture
+------------
+* The bridge script (wa_bridge.js) lives at a fixed absolute path so Python
+  never has to write it at runtime — eliminating the cwd/path-resolution bug.
+* Python spawns ``node wa_bridge.js`` with cwd=project_root using
+  ``subprocess.Popen`` (not ``asyncio.create_subprocess_exec``) so it works
+  under both ProactorEventLoop and SelectorEventLoop on Windows.
+* Events flow over stdout as JSON lines; commands (send) arrive on stdin.
+* A background thread reads stdout and dispatches events onto the asyncio loop
+  via ``loop.call_soon_threadsafe``.
 """
 
 from __future__ import annotations
@@ -10,15 +21,25 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import tempfile
+import subprocess
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
+from typing import IO
 
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.event_bus import EventBus
 
 log = get_logger("gateway.whatsapp")
+
+# ── constants ────────────────────────────────────────────────────────────────
+
+# Absolute path to the pre-written bridge script — never computed at runtime.
+# This avoids the cwd / __file__ resolution issue inside ``uv run``.
+_PROJECT_ROOT = Path("E:/Agenticos")
+_BRIDGE_SCRIPT_PATH = _PROJECT_ROOT / "wa_bridge.js"
 
 
 @dataclass
@@ -28,71 +49,18 @@ class WhatsAppMessage:
     timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-# Node.js bridge script for Bailey WhatsApp connection
-_BRIDGE_SCRIPT = """
-const bailey = require('@whiskeysockets/bailey');
-const readline = require('readline');
-
-const SESSION_PATH = process.env.WA_SESSION_PATH || '/tmp/whatsapp_session';
-
-async function main() {
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
-    const sock = makeWASocket({ auth: state, printQRInTerminal: false });
-
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', (update) => {
-        const { connection, qr, lastDisconnect } = update;
-        if (qr) {
-            console.log(JSON.stringify({ type: 'qr', qr }));
-        }
-        if (connection === 'open') {
-            console.log(JSON.stringify({ type: 'connected' }));
-        }
-        if (connection === 'close') {
-            const code = lastDisconnect?.error?.output?.statusCode || 0;
-            if (code !== DisconnectReason.loggedOut) {
-                console.log(JSON.stringify({ type: 'reconnecting' }));
-                main();
-            } else {
-                console.log(JSON.stringify({ type: 'disconnected' }));
-                process.exit(0);
-            }
-        }
-    });
-
-    sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-        const from = msg.key.remoteJid || '';
-        if (text) {
-            console.log(JSON.stringify({ type: 'message', from, text }));
-        }
-    });
-
-    // Read commands from stdin (for sending messages)
-    const rl = readline.createInterface({ input: process.stdin });
-    rl.on('line', async (line) => {
-        try {
-            const cmd = JSON.parse(line);
-            if (cmd.type === 'send' && cmd.to && cmd.text) {
-                await sock.sendMessage(cmd.to, { text: cmd.text });
-                console.log(JSON.stringify({ type: 'sent', to: cmd.to }));
-            }
-        } catch (e) {}
-    });
-}
-
-main().catch(err => console.error(err));
-"""
+# ── gateway ──────────────────────────────────────────────────────────────────
 
 
 class WhatsAppGateway:
-    """WhatsApp gateway using Bailey via Node.js subprocess.
+    """WhatsApp gateway using @whiskeysockets/baileys via Node.js subprocess.
 
     The Node.js bridge connects to WhatsApp Web and communicates via
-    stdin/stdout JSON messages.
+    stdout/stdin JSON messages.
+
+    Uses ``subprocess.Popen`` (not ``asyncio.create_subprocess_exec``) so it
+    works under both ProactorEventLoop and WindowsSelectorEventLoopPolicy on
+    Windows.
     """
 
     def __init__(
@@ -102,13 +70,15 @@ class WhatsAppGateway:
     ) -> None:
         self._bus = bus
         self._session_path = session_path or os.path.expanduser("~/.agentic_os/whatsapp_session")
-        self._process: asyncio.subprocess.Process | None = None
+        self._process: subprocess.Popen | None = None
         self._running = False
         self._qr_code: str = ""
         self._connection_status: str = "disconnected"
         self._recent_messages: list[dict] = []
         self._chat_missions: dict[str, list[str]] = {}
         self._mission_chats: dict[str, str] = {}
+        self._reader_thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     @property
     def is_running(self) -> bool:
@@ -122,47 +92,115 @@ class WhatsAppGateway:
     def connection_status(self) -> str:
         return self._connection_status
 
+    # ── start / stop ─────────────────────────────────────────────────────────
+
     async def start(self) -> None:
         """Start the WhatsApp gateway.
 
-        Raises RuntimeError if Node.js is not installed or the bridge
-        process cannot be spawned. The caller (API endpoint) should catch
-        this and return an HTTP error.
+        Raises
+        ------
+        RuntimeError
+            If Node.js is not on PATH, the bridge script is missing, or the
+            process exits immediately.  The API layer should catch this and
+            return HTTP 502 to the frontend.
         """
-        os.makedirs(self._session_path, exist_ok=True)
+        # Validate the bridge script exists
+        bridge_path = _BRIDGE_SCRIPT_PATH
+        if not bridge_path.exists():
+            raise RuntimeError(
+                f"WhatsApp bridge script not found at {bridge_path}. "
+                "Please ensure wa_bridge.js exists in the project root."
+            )
 
-        # Write the bridge script
-        bridge_path = os.path.join(tempfile.gettempdir(), "wa_bridge.js")
-        with open(bridge_path, "w") as f:
-            f.write(_BRIDGE_SCRIPT)
-
-        env = {**os.environ, "WA_SESSION_PATH": self._session_path}
+        # Ensure session directory exists.  Filesystem errors here must map to
+        # the same 502 contract as other startup failures, not leak as 500.
         try:
-            self._process = await asyncio.create_subprocess_exec(
-                "node",
-                bridge_path,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            os.makedirs(self._session_path, exist_ok=True)
+        except OSError as exc:
+            raise RuntimeError(
+                f"Failed to create WhatsApp session directory {self._session_path}: {exc}"
+            ) from exc
+
+        log.info(
+            "whatsapp.starting",
+            bridge=str(bridge_path),
+            session=self._session_path,
+            cwd=str(_PROJECT_ROOT),
+        )
+
+        # Build environment: propagate current env + session path
+        env = {
+            **os.environ,
+            "WA_SESSION_PATH": self._session_path,
+        }
+
+        # Use subprocess.Popen (not asyncio.create_subprocess_exec) so this
+        # works under WindowsSelectorEventLoopPolicy which doesn't support
+        # asyncio subprocesses on Windows.
+        try:
+            self._process = subprocess.Popen(
+                ["node", str(bridge_path)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 env=env,
+                cwd=str(_PROJECT_ROOT),
+                text=True,
+                encoding="utf-8",
+                errors="replace",
             )
         except FileNotFoundError:
             raise RuntimeError(
                 "Node.js is not installed or not on PATH. "
-                "WhatsApp gateway requires Node.js to run the bridge script."
+                "WhatsApp gateway requires Node.js (v18+) to run the bridge script. "
+                "Install from https://nodejs.org/"
             ) from None
         except Exception as exc:
-            raise RuntimeError(f"Failed to start WhatsApp bridge: {exc}") from exc
+            raise RuntimeError(f"Failed to spawn WhatsApp bridge: {exc}") from exc
+
+        # Give the process 1 s to start up or fail fast
+        await asyncio.sleep(1.0)
+        if self._process.returncode is not None:
+            stderr_snippet = ""
+            stderr = self._process.stderr
+            if stderr is not None:
+                try:
+                    stderr_snippet = (stderr.read(500) or "").strip()
+                except Exception:
+                    pass
+            raise RuntimeError(
+                f"WhatsApp bridge exited immediately (code {self._process.returncode})"
+                + (f": {stderr_snippet}" if stderr_snippet else "")
+            )
 
         self._running = True
         self._connection_status = "connecting"
 
-        # Read stdout for events
-        asyncio.create_task(self._read_stdout())
-        # Read stderr for errors
-        asyncio.create_task(self._read_stderr())
+        # Capture the running event loop so the reader thread can schedule
+        # coroutines back onto it safely.
+        self._loop = asyncio.get_running_loop()
 
-        # Subscribe to mission/task events
+        # Start background threads to drain stdout and stderr
+        self._reader_thread = threading.Thread(
+            target=self._stdout_reader,
+            args=(self._process.stdout,),
+            daemon=True,
+            name="wa_bridge_stdout",
+        )
+        self._reader_thread.start()
+
+        stderr_thread = threading.Thread(
+            target=self._stderr_drainer,
+            args=(self._process.stderr,),
+            daemon=True,
+            name="wa_bridge_stderr",
+        )
+        stderr_thread.start()
+
+        # Monitor the process in background
+        asyncio.create_task(self._monitor_process(), name="wa_bridge_monitor")
+
+        # Subscribe to mission/task completion events so we can reply via WA
         await self._bus.subscribe(Topic.MISSION_COMPLETED.value, self._on_mission_completed)
         await self._bus.subscribe(Topic.MISSION_FAILED.value, self._on_mission_failed)
         await self._bus.subscribe("task.completed", self._on_task_completed)
@@ -170,12 +208,140 @@ class WhatsAppGateway:
 
         log.info("whatsapp.gateway_started")
 
+    # ── stdout / stderr readers (run in daemon threads) ───────────────────────
+
+    def _stdout_reader(self, stdout: IO[str]) -> None:
+        """Read JSON lines from the bridge's stdout and dispatch to the loop."""
+        try:
+            for line in stdout:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    log.debug("whatsapp.bridge_stdout_non_json", line=line[:200])
+                    continue
+                # Schedule the handler back on the asyncio event loop
+                if self._loop and not self._loop.is_closed():
+                    self._loop.call_soon_threadsafe(
+                        lambda e=event: asyncio.ensure_future(self._handle_bridge_event(e))
+                    )
+        except Exception as exc:
+            log.debug("whatsapp.stdout_reader_exit", reason=str(exc))
+
+    def _stderr_drainer(self, stderr: IO[str]) -> None:
+        """Drain stderr so the bridge subprocess never blocks on a full pipe."""
+        try:
+            for line in stderr:
+                line = line.strip()
+                if line:
+                    log.debug("whatsapp.bridge_stderr", line=line[:300])
+        except Exception:
+            pass
+
+    async def _handle_bridge_event(self, event: dict) -> None:
+        """Process a parsed JSON event from the bridge."""
+        etype = event.get("type", "")
+
+        if etype == "qr":
+            self._qr_code = event.get("qr", "")
+            log.info("whatsapp.qr_received")
+            await self._bus.publish(
+                EventEnvelope(
+                    type="gateway.whatsapp.qr",
+                    source="whatsapp_gateway",
+                    topic="gateway.whatsapp.qr",
+                    payload={"qr": self._qr_code},
+                )
+            )
+
+        elif etype == "connected":
+            self._connection_status = "connected"
+            self._qr_code = ""
+            log.info("whatsapp.connected")
+            await self._bus.publish(
+                EventEnvelope(
+                    type="gateway.whatsapp.connected",
+                    source="whatsapp_gateway",
+                    topic="gateway.whatsapp.connected",
+                    payload={},
+                )
+            )
+
+        elif etype == "reconnecting":
+            self._connection_status = "reconnecting"
+            log.info("whatsapp.reconnecting")
+
+        elif etype == "disconnected":
+            self._connection_status = "disconnected"
+            self._running = False
+            log.info("whatsapp.bridge_disconnected")
+            await self._bus.publish(
+                EventEnvelope(
+                    type="gateway.whatsapp.disconnected",
+                    source="whatsapp_gateway",
+                    topic="gateway.whatsapp.disconnected",
+                    payload={},
+                )
+            )
+
+        elif etype == "message":
+            from_number = event.get("from", "")
+            text = event.get("text", "")
+            if from_number and text:
+                msg = {
+                    "from": from_number,
+                    "text": text,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                self._recent_messages.append(msg)
+                # Keep only last 100 messages in memory
+                if len(self._recent_messages) > 100:
+                    self._recent_messages = self._recent_messages[-100:]
+                log.info("whatsapp.message_received", from_number=from_number)
+                await self._bus.publish(
+                    EventEnvelope(
+                        type="gateway.whatsapp.message",
+                        source="whatsapp_gateway",
+                        topic="gateway.whatsapp.message",
+                        payload={"from": from_number, "text": text},
+                    )
+                )
+
+    # ── process monitor ───────────────────────────────────────────────────────
+
+    async def _monitor_process(self) -> None:
+        """Poll the bridge process and handle exit."""
+        while self._running and self._process:
+            await asyncio.sleep(2.0)
+            if self._process.poll() is not None:
+                log.info("whatsapp.bridge_exited", returncode=self._process.returncode)
+                if self._running:
+                    self._running = False
+                    self._connection_status = "disconnected"
+                    await self._bus.publish(
+                        EventEnvelope(
+                            type="gateway.whatsapp.disconnected",
+                            source="whatsapp_gateway",
+                            topic="gateway.whatsapp.disconnected",
+                            payload={},
+                        )
+                    )
+                break
+
+    # ── stop ──────────────────────────────────────────────────────────────────
+
     async def stop(self) -> None:
         """Stop the WhatsApp gateway."""
-        if self._process:
-            self._process.kill()
-            await self._process.wait()
         self._running = False
+        if self._process:
+            try:
+                self._process.kill()
+                await asyncio.to_thread(self._process.wait, 5.0)
+            except Exception:
+                pass
+            self._process = None
         self._connection_status = "disconnected"
         await self._bus.publish(
             EventEnvelope(
@@ -187,131 +353,35 @@ class WhatsAppGateway:
         )
         log.info("whatsapp.disconnected")
 
-    async def _read_stdout(self) -> None:
-        """Read JSON events from the Node.js bridge stdout."""
-        if not self._process or not self._process.stdout:
-            return
-        while self._running and self._process:
-            try:
-                line = await self._process.stdout.readline()
-                if not line:
-                    break
-                data = json.loads(line.decode("utf-8", errors="replace").strip())
-                await self._handle_bridge_event(data)
-            except json.JSONDecodeError:
-                continue
-            except Exception:
-                break
-
-    async def _read_stderr(self) -> None:
-        """Log stderr from the bridge."""
-        if not self._process or not self._process.stderr:
-            return
-        while self._running and self._process:
-            try:
-                line = await self._process.stderr.readline()
-                if not line:
-                    break
-                log.debug(
-                    "whatsapp.bridge_stderr", line=line.decode("utf-8", errors="replace").strip()
-                )
-            except Exception:
-                break
-
-    async def _handle_bridge_event(self, data: dict) -> None:
-        """Handle events from the Node.js bridge."""
-        event_type = data.get("type", "")
-
-        if event_type == "qr":
-            self._qr_code = data.get("qr", "")
-            self._connection_status = "scanning"
-            await self._bus.publish(
-                EventEnvelope(
-                    type="gateway.whatsapp.qr",
-                    source="whatsapp_gateway",
-                    topic="gateway.whatsapp.qr",
-                    payload={"qr": self._qr_code},
-                )
-            )
-            log.info("whatsapp.qr_generated")
-
-        elif event_type == "connected":
-            self._connection_status = "connected"
-            self._qr_code = ""
-            await self._bus.publish(
-                EventEnvelope(
-                    type="gateway.whatsapp.connected",
-                    source="whatsapp_gateway",
-                    topic="gateway.whatsapp.connected",
-                    payload={},
-                )
-            )
-            log.info("whatsapp.connected")
-
-        elif event_type == "disconnected":
-            self._connection_status = "disconnected"
-            await self._bus.publish(
-                EventEnvelope(
-                    type="gateway.whatsapp.disconnected",
-                    source="whatsapp_gateway",
-                    topic="gateway.whatsapp.disconnected",
-                    payload={},
-                )
-            )
-            log.warning("whatsapp.disconnected")
-
-        elif event_type == "message":
-            from_number = data.get("from", "")
-            text = data.get("text", "")
-            self._recent_messages.append(
-                {
-                    "from": from_number,
-                    "text": text,
-                    "direction": "incoming",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-            )
-            await self._bus.publish(
-                EventEnvelope(
-                    type="gateway.whatsapp.message_received",
-                    source="whatsapp_gateway",
-                    topic="gateway.whatsapp.message_received",
-                    payload={"from": from_number, "text": text},
-                )
-            )
-            log.info("whatsapp.message_received", sender=from_number, text=text[:50])
-
-        elif event_type == "sent":
-            await self._bus.publish(
-                EventEnvelope(
-                    type="gateway.whatsapp.message_sent",
-                    source="whatsapp_gateway",
-                    topic="gateway.whatsapp.message_sent",
-                    payload={"to": data.get("to", "")},
-                )
-            )
+    # ── send ─────────────────────────────────────────────────────────────────
 
     async def send_message(self, to: str, text: str) -> bool:
-        """Send a WhatsApp message via the bridge."""
-        if not self._process or not self._process.stdin:
+        """Send a WhatsApp message via the bridge stdin.
+
+        The bridge reads a JSON command ``{"type":"send","to":"...","text":"..."}``
+        on stdin and delivers the message.
+
+        Returns True on success, False if the bridge is not running or an
+        error occurs.
+        """
+        if not self._process or self._process.poll() is not None:
+            log.warning("whatsapp.send_not_running", to=to)
             return False
         try:
-            cmd = json.dumps({"type": "send", "to": to, "text": text}) + "\n"
-            self._process.stdin.write(cmd.encode())
-            await self._process.stdin.drain()
-            self._recent_messages.append(
-                {
-                    "to": to,
-                    "text": text,
-                    "direction": "outgoing",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-            )
-            log.info("whatsapp.message_sent", to=to, text=text[:50])
+            payload = json.dumps({"type": "send", "to": to, "text": text})
+            await asyncio.to_thread(self._write_stdin, payload)
             return True
         except Exception as exc:
-            log.error("whatsapp.send_failed", error=str(exc))
+            log.warning("whatsapp.send_failed", to=to, error=str(exc))
             return False
+
+    def _write_stdin(self, line: str) -> None:
+        """Write a line to the bridge stdin (blocking, run in thread)."""
+        if self._process and self._process.stdin:
+            self._process.stdin.write(line + "\n")
+            self._process.stdin.flush()
+
+    # ── status ────────────────────────────────────────────────────────────────
 
     def get_status(self) -> dict:
         return {
@@ -320,12 +390,18 @@ class WhatsAppGateway:
             "qr_code": self._qr_code,
             "has_qr": bool(self._qr_code),
             "recent_messages": self._recent_messages[-20:],
+            "bridge_script": str(_BRIDGE_SCRIPT_PATH),
+            "bridge_exists": _BRIDGE_SCRIPT_PATH.exists(),
         }
+
+    # ── mission tracking ─────────────────────────────────────────────────────
 
     def register_mission(self, from_number: str, mission_id: str) -> None:
         """Track which phone number a mission belongs to."""
         self._chat_missions.setdefault(from_number, []).append(mission_id)
         self._mission_chats[mission_id] = from_number
+
+    # ── event callbacks ──────────────────────────────────────────────────────
 
     async def _on_mission_completed(self, event: EventEnvelope) -> None:
         mission_id = event.payload.get("id", "")

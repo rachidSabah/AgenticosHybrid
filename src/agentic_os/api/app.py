@@ -60,7 +60,7 @@ from agentic_os.api.runtime_diagnostics import (
 )
 from agentic_os.config import settings
 from agentic_os.core.mcp.manager import MCPManager
-from agentic_os.domain.agent import Role, Task
+from agentic_os.domain.agent import Role, Task, TaskStatus
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
@@ -591,71 +591,54 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/swarm/list")
     async def swarm_list() -> list[dict]:
-        """Return real swarms constructed from platform providers and missions."""
-        swarms_store = getattr(platform, "_swarms_store", None)
-        if swarms_store is None:
-            provs = platform.providers.list_providers()
-            active_count = len(provs) or 1
-            swarms_store = [
-                {
-                    "id": "swarm-main",
-                    "name": "Primary Orchestration Swarm",
-                    "status": "active",
-                    "topology": "hierarchical",
-                    "agent_count": active_count,
-                    "created_at": datetime.now(UTC).isoformat(),
-                },
-                {
-                    "id": "swarm-sec",
-                    "name": "Audit & Code Verification Swarm",
-                    "status": "idle",
-                    "topology": "peer-to-peer",
-                    "agent_count": max(1, active_count - 1),
-                    "created_at": datetime.now(UTC).isoformat(),
-                },
-            ]
-            platform._swarms_store = swarms_store  # ty: ignore[unresolved-attribute]
-        return swarms_store
+        """Return real swarms from the SwarmCoordinator (never fabricated)."""
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            return []
+        return sc.list_swarms()
 
     @app.post("/api/swarm/create")
     async def swarm_create(body: dict) -> dict:
+        """Create a real swarm team through the SwarmCoordinator.
+
+        The response reports the actual number of formed members
+        (``len(team["members"])``) — never the requested ``max_agents``.
+        """
         name = str(body.get("name", "New Swarm"))
         topology = str(body.get("topology", "hierarchical"))
         max_agents = int(body.get("max_agents", 4))
-        swarms_store = getattr(platform, "_swarms_store", [])
-        new_swarm = {
-            "id": f"swarm-{int(time.time())}",
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            raise HTTPException(503, detail="SwarmCoordinator not available")
+        team = await sc.create_team(
+            goal=name,
+            required_capabilities=["chat"],
+            max_members=max_agents,
+        )
+        return {
+            "id": team["swarm_id"],
+            "swarm_id": team["swarm_id"],
             "name": name,
             "status": "active",
             "topology": topology,
-            "agent_count": max_agents,
+            "agent_count": len(team["members"]),
+            "members": team["members"],
+            "roles": team["roles"],
+            "phase": team["phase"],
             "created_at": datetime.now(UTC).isoformat(),
         }
-        swarms_store.append(new_swarm)
-        platform._swarms_store = swarms_store  # ty: ignore[unresolved-attribute]
-        return new_swarm
 
     @app.put("/api/swarm/{swarm_id}")
     async def swarm_update(swarm_id: str, body: dict) -> dict:
-        swarms_store = getattr(platform, "_swarms_store", [])
-        for s in swarms_store:
-            if s["id"] == swarm_id:
-                if "name" in body:
-                    s["name"] = str(body["name"])
-                if "status" in body:
-                    s["status"] = str(body["status"])
-                if "topology" in body:
-                    s["topology"] = str(body["topology"])
-                if "agent_count" in body:
-                    s["agent_count"] = int(body["agent_count"])
-                return s
-        raise HTTPException(404, detail="Swarm not found")
+        # Managed by the SwarmCoordinator; this legacy stub stays only for
+        # route-compat so /api/swarm/{id} does not 404 for literal names.
+        raise HTTPException(501, detail="Swarm updates are not supported")
 
     @app.delete("/api/swarm/{swarm_id}")
     async def swarm_delete(swarm_id: str) -> dict:
-        swarms_store = getattr(platform, "_swarms_store", [])
-        updated = [s for s in swarms_store if s["id"] != swarm_id]
-        platform._swarms_store = updated  # ty: ignore[unresolved-attribute]
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is not None:
+            await sc.disband(swarm_id)
         return {"deleted": swarm_id}
 
     @app.get("/api/swarm/agents")
@@ -696,23 +679,29 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/swarm/tasks")
     async def swarm_tasks() -> list[dict]:
-        """Return real task list from orchestrator / missions."""
+        """Return real task list from orchestrator task registry & active missions."""
         tasks: list[dict] = []
-        missions = (
-            platform.orchestrator.list_missions()  # type: ignore[union-attr,call-non-callable]  # ty: ignore[call-non-callable]
-            if hasattr(platform.orchestrator, "list_missions")
-            else []
-        )
-        for m in missions:
+        for t in orch.registry.tasks():
             tasks.append(
                 {
-                    "id": f"task-{m.id}",
-                    "goal": m.title,
-                    "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+                    "id": t.id,
+                    "goal": t.title,
+                    "status": t.status.value if hasattr(t.status, "value") else str(t.status),
                     "pattern": "hierarchical",
-                    "agent_id": getattr(m, "assigned_agent_id", "Broadcast Target"),
+                    "agent_id": t.assigned_agent_id or "Unassigned",
                 }
             )
+        if not tasks:
+            for m in _missions.values():
+                tasks.append(
+                    {
+                        "id": f"mission-{m.id}",
+                        "goal": m.title,
+                        "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+                        "pattern": "hierarchical",
+                        "agent_id": "Swarm Orchestrator",
+                    }
+                )
         return tasks
 
     @app.get("/api/swarm/plans")
@@ -730,15 +719,32 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/swarm/metrics")
     async def swarm_metrics() -> dict:
-        """Return real compute metrics from platform."""
-        provs = platform.providers.list_providers()
+        """Return real swarm + task metrics from the coordinator and orchestrator."""
+        sc = getattr(platform, "swarm_coordinator", None)
+        swarms = sc.list_swarms() if sc is not None else []
+        total_swarms = len(swarms)
+        active_swarms = sum(1 for s in swarms if s.get("phase") in ("executing", "planning"))
+
+        # Real tasks from the orchestrator registry, not fabricated counts.
+        tasks = list(orch.registry.tasks())
+        total_tasks = len(tasks)
+        completed_tasks = sum(1 for t in tasks if t.status == TaskStatus.COMPLETED)
+        failed_tasks = sum(1 for t in tasks if t.status == TaskStatus.FAILED)
         return {
-            "total_swarms": 2,
-            "active_swarms": 2 if provs else 1,
-            "total_tasks": 5,
-            "completed_tasks": 4,
-            "failed_tasks": 0,
+            "total_swarms": total_swarms,
+            "active_swarms": active_swarms,
+            "total_tasks": total_tasks,
+            "completed_tasks": completed_tasks,
+            "failed_tasks": failed_tasks,
         }
+
+    @app.get("/api/swarm/consensus/history")
+    async def swarm_consensus_history(limit: int = 50) -> list[dict]:
+        """Return real consensus rounds from the SwarmCoordinator's ConsensusManager."""
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is None:
+            return []
+        return sc.consensus_manager.get_history(limit=limit)
 
     @app.get("/omniroute/routes")
     async def omniroute_routes() -> list[dict]:
@@ -1583,8 +1589,19 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/providers/{name}/api-key/status")
     async def api_key_status(name: str) -> dict:
-        exists = await vault.get_key(name) is not None
-        return {"provider": name, "has_key": exists}
+        import os
+        key = await vault.get_key(name)
+        if not key:
+            env_vars = {
+                "claude_code": ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
+                "claude-code": ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY"],
+                "openai": ["OPENAI_API_KEY"],
+                "hermes": ["HERMES_CONFIG", "HERMES_API_KEY"],
+                "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+            }
+            possible_vars = env_vars.get(name.lower(), [f"{name.upper()}_API_KEY"])
+            key = next((os.environ.get(v) for v in possible_vars if os.environ.get(v)), None)
+        return {"provider": name, "has_key": key is not None}
 
     @app.post("/api/providers/{name}/test")
     async def test_provider(name: str) -> dict:
@@ -1937,7 +1954,10 @@ def create_app(platform: Platform) -> FastAPI:
                     #
                     # Inject workspace context into the user_prompt so the
                     # CLI agent can see the user's project files.
-                    base_prompt = task.user_prompt or m.prompt or m.description or ""
+                    base_prompt = (task.user_prompt or m.prompt or m.description or "").strip()
+                    # Sanitize: treat lone dash as empty (common placeholder)
+                    if base_prompt == "-":
+                        base_prompt = ""
                     workspace_ctx = _build_workspace_context()
                     full_prompt = (
                         (workspace_ctx + "\n\n" + base_prompt) if workspace_ctx else base_prompt
@@ -1957,6 +1977,50 @@ def create_app(platform: Platform) -> FastAPI:
                         mission_id,
                         exc_info=True,
                     )
+        # Background task: watch for mission completion
+        async def _watch_mission_completion(mission_id: str, task_count: int) -> None:
+            """Mark mission COMPLETED when all its tasks are done."""
+            import asyncio as _asyncio
+            from agentic_os.domain.mission import MissionStatus as _MS
+            deadline = _asyncio.get_event_loop().time() + 7200  # 2h timeout
+            while _asyncio.get_event_loop().time() < deadline:
+                await _asyncio.sleep(3)
+                m = _missions.get(mission_id)
+                if m is None:
+                    return
+                if m.status in (_MS.COMPLETED, _MS.FAILED, _MS.CANCELLED):
+                    return
+                # Check orchestrator tasks for this mission
+                mission_tasks = [t for t in orch.registry.tasks() if t.mission_id == mission_id]
+                if not mission_tasks:
+                    continue
+                all_done = all(
+                    t.status.value in ("completed", "failed", "cancelled")
+                    for t in mission_tasks
+                )
+                if all_done:
+                    any_failed = any(t.status.value == "failed" for t in mission_tasks)
+                    m.status = _MS.FAILED if any_failed else _MS.COMPLETED
+                    m.updated_at = datetime.now(UTC)
+                    await orch.bus.publish(
+                        EventEnvelope(
+                            type="mission.completed",
+                            source="api",
+                            topic=Topic.MISSION_COMPLETED.value if any_failed is False else Topic.MISSION_FAILED.value,
+                            payload=m.to_dict(),
+                        )
+                    )
+                    log.info(
+                        "mission.auto_completed",
+                        mission_id=mission_id,
+                        status=m.status.value,
+                        task_count=len(mission_tasks),
+                    )
+                    return
+
+        import asyncio as _asyncio
+        task_count = len(m.plan.tasks) if m.plan and m.plan.tasks else 0
+        _asyncio.create_task(_watch_mission_completion(m.id, task_count))
         # Logically trigger the mission in swarm orchestration: register it as
         # a mission-triggered swarm so the Swarm view lists it, its history
         # records the trigger, and EventBus consumers see it.
@@ -3005,15 +3069,25 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/swarm/metrics")
     async def swarm_metrics_alias() -> dict:
+        # NOTE: this route shadows (and never serves) behind the earlier
+        # /api/swarm/metrics registration. Kept as an honest alias that
+        # derives real values rather than fabricated constants.
         sc = getattr(platform, "swarm_coordinator", None)
-        swarms_count = len(sc._swarm_phases) if sc else 0
+        swarms = sc.list_swarms() if sc is not None else []
+        tasks = list(orch.registry.tasks())
+        history = sc.consensus_manager.get_history(limit=50) if sc is not None else []
+        avg_consensus_ms = (
+            round(sum(h.get("duration_ms", 0) for h in history) / len(history), 1)
+            if history
+            else 0.0
+        )
         return {
-            "total_swarms": swarms_count,
-            "active_swarms": swarms_count,
-            "total_agents": 8,
-            "tasks_completed": 42,
-            "avg_consensus_time_ms": 120.0,
-            "health_score": 1.0,
+            "total_swarms": len(swarms),
+            "active_swarms": sum(1 for s in swarms if s.get("phase") in ("executing", "planning")),
+            "total_agents": len(orch.registry.agents()) if hasattr(orch.registry, "agents") else 0,
+            "tasks_completed": sum(1 for t in tasks if t.status == TaskStatus.COMPLETED),
+            "avg_consensus_time_ms": avg_consensus_ms,
+            "health_score": 1.0 if sc is not None else 0.0,
         }
 
     # NOTE: /api/swarm/{swarm_id} must be registered AFTER all static
@@ -3195,9 +3269,14 @@ def create_app(platform: Platform) -> FastAPI:
     async def read_memory_scope(scope: str, agent_id: str = "") -> list[dict]:
         from agentic_os.domain.memory import MemoryScope
 
+        try:
+            mem_scope = MemoryScope(scope)
+        except ValueError:
+            return []
+
         return [
             i.model_dump(mode="json")
-            for i in await memory.store.list_scope(MemoryScope(scope), agent_id)
+            for i in await memory.store.list_scope(mem_scope, agent_id)
         ]
 
     @app.get("/api/memory/{scope}/recall")
@@ -3206,9 +3285,14 @@ def create_app(platform: Platform) -> FastAPI:
     ) -> list[dict]:
         from agentic_os.domain.memory import MemoryScope
 
+        try:
+            mem_scope = MemoryScope(scope)
+        except ValueError:
+            return []
+
         return [
             i.model_dump(mode="json")
-            for i in await memory.recall(MemoryScope(scope), query, limit, agent_id)
+            for i in await memory.recall(mem_scope, query, limit, agent_id)
         ]
 
     @app.delete("/api/memory/{item_id}")
@@ -4342,9 +4426,15 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/swarm/planner/analyze")
     async def analyze_goal(body: dict) -> dict:
-        """Analyze a goal for complexity and capability requirements."""
+        """Analyze a goal for complexity and capability requirements.
+
+        Accepts ``title`` (canonical) or falls back to ``description`` /
+        ``goal`` so clients sending only a description do not 500.
+        """
         goal = OrchestrationGoal(
-            title=body["title"],
+            title=str(
+                body.get("title") or body.get("description") or body.get("goal") or "Untitled"
+            ),
             description=body.get("description", ""),
             context=body.get("context", {}),
             swarm_id=body.get("swarm_id"),
@@ -4355,7 +4445,9 @@ def create_app(platform: Platform) -> FastAPI:
     async def create_plan(body: dict) -> dict:
         """Create a full execution plan from a goal."""
         goal = OrchestrationGoal(
-            title=body["title"],
+            title=str(
+                body.get("title") or body.get("description") or body.get("goal") or "Untitled"
+            ),
             description=body.get("description", ""),
             context=body.get("context", {}),
             swarm_id=body.get("swarm_id"),
@@ -6181,6 +6273,32 @@ def create_app(platform: Platform) -> FastAPI:
                 seen_ids = {r.get("id") for r in result}
                 seen_names = {r.get("name") for r in result}
 
+                # Enrich every runtime with LIVE process status/PID from
+                # LocalDiscoveryService so the dashboard reflects real
+                # running processes (Hermes.exe, node.exe, python.exe…)
+                # instead of stale registry snapshots.
+                live_map: dict[str, dict] = {}
+                local = getattr(platform, "local_discovery", None)
+                if local is not None:
+                    try:
+                        for agent in await local.get_agents():
+                            d = agent.to_dict()
+                            live_map[str(d.get("name", "")).lower()] = d
+                            live_map[str(d.get("tool_type", "")).lower()] = d
+                    except Exception:
+                        pass
+                for r in result:
+                    probe = live_map.get(str(r.get("name", "")).lower()) or live_map.get(
+                        str(r.get("executable", r.get("name", ""))).lower()
+                    )
+                    if probe:
+                        r["status"] = "running" if probe.get("running") else r.get("status")
+                        r["pid"] = probe.get("pid")
+                        r["health"] = probe.get("health_score", r.get("health"))
+                        r["latency_ms"] = probe.get("latency_ms", r.get("latency_ms"))
+                        r["memory_mb"] = probe.get("memory_mb", r.get("memory_mb"))
+                        r["cpu_percent"] = probe.get("cpu_percent", r.get("cpu_percent"))
+
                 # Merge in live discovered brains
                 if platform.brain_registry is not None:
                     try:
@@ -6494,6 +6612,7 @@ def create_app(platform: Platform) -> FastAPI:
             await websocket.accept()
             payload = {
                 "topic": "system.status",
+                "timestamp": datetime.now(UTC).isoformat(),
                 "payload": {"status": "degraded", "message": "DashboardBroadcaster not available"},
             }
             await websocket.send_json(payload)
@@ -6512,6 +6631,7 @@ def create_app(platform: Platform) -> FastAPI:
                 await websocket.send_json(
                     {
                         "topic": "provider.registered",
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "payload": {
                             "name": b.display_name,
                             "provider": b.display_name,
@@ -6526,6 +6646,7 @@ def create_app(platform: Platform) -> FastAPI:
                     await websocket.send_json(
                         {
                             "topic": "agent.started",
+                            "timestamp": datetime.now(UTC).isoformat(),
                             "payload": {
                                 "id": b.id,
                                 "name": b.display_name,

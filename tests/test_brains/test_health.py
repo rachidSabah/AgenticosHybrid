@@ -211,7 +211,7 @@ class TestBrainHealthMonitorCheckAll:
         brain = BrainRecord(
             id="brain-stale",
             display_name="Stale Brain",
-            brain_type=BrainType.LOCAL_CLI,
+            brain_type=BrainType.CLOUD_API,  # not auto-heartbeated — staleness applies
             vendor=BrainVendor.CUSTOM,
             runtime=BrainRuntime.UNKNOWN,
             version="1.0",

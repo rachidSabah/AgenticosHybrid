@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
+import { useTheme, ACCENT_PRESETS, DEFAULT_ACCENT } from "@/components/theme-provider";
 import type { DesktopConfig, HardeningConfig, KeyboardShortcut, CommandPaletteItem } from "@/lib/desktop-types";
 
 function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -30,8 +31,9 @@ export default function DesktopSettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHardening, setShowHardening] = useState(false);
-  const [theme, setTheme] = useState("dark");
   const [autoSaveInterval, setAutoSaveInterval] = useState(60);
+  // Real app theme — wired to the global ThemeProvider so changes apply to the DOM.
+  const { raw: theme, set: setAppTheme, accent, setAccent, resetAccent } = useTheme();
 
   const load = useCallback(async () => {
     try {
@@ -43,7 +45,6 @@ export default function DesktopSettings() {
       ]);
       if (cfg) {
         setConfig(cfg);
-        setTheme(cfg.theme);
         setAutoSaveInterval(cfg.auto_save_interval_seconds);
       }
       setHardening(hc);
@@ -62,12 +63,18 @@ export default function DesktopSettings() {
     try {
       const updated = await api.updateDesktopConfig(partial);
       setConfig(updated);
-      if (partial.theme !== undefined) setTheme(partial.theme);
       if (partial.auto_save_interval_seconds !== undefined) setAutoSaveInterval(partial.auto_save_interval_seconds);
     } catch (err) {
       setError(String(err));
     }
     setSaving(false);
+  };
+
+  const changeTheme = async (mode: "light" | "dark" | "system") => {
+    // Apply instantly to the real app theme (DOM class + localStorage)…
+    setAppTheme(mode);
+    // …and persist to the backend config.
+    await updateConfig({ theme: mode });
   };
 
   const updateHardening = async (partial: Partial<HardeningConfig>) => {
@@ -80,7 +87,7 @@ export default function DesktopSettings() {
   };
 
   return (
-    <div className="scroll-page p-4" role="region" aria-label="Desktop Settings">
+    <div className="scroll-page grid grid-cols-1 gap-4 p-4 md:grid-cols-12" role="region" aria-label="Desktop Settings">
       {error && (
         <div role="alert" className="col-span-12 rounded-lg border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger">{error}</div>
       )}
@@ -99,8 +106,9 @@ export default function DesktopSettings() {
                 {["light", "dark", "system"].map((mode) => (
                   <button
                     key={mode}
-                    onClick={() => updateConfig({ theme: mode })}
+                    onClick={() => changeTheme(mode as "light" | "dark" | "system")}
                     aria-label={`${mode} theme`}
+                    aria-pressed={theme === mode}
                     className={`rounded-lg px-4 py-2 text-xs font-medium transition ${
                       theme === mode
                         ? "bg-accent text-white"
@@ -121,6 +129,61 @@ export default function DesktopSettings() {
         ) : (
           <Empty title="Loading settings…" />
         )}
+      </Panel>
+
+      <Panel title="Accent Color" subtitle="Customize the system accent color" className="col-span-6 row-span-2">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-[11px] uppercase tracking-wide text-faint">Color Palette</label>
+            <div className="flex flex-wrap gap-2">
+              {ACCENT_PRESETS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setAccent(c)}
+                  aria-label={`Set accent color ${c}`}
+                  aria-pressed={accent.toLowerCase() === c.toLowerCase()}
+                  title={c}
+                  className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                    accent.toLowerCase() === c.toLowerCase()
+                      ? "border-text ring-2 ring-accent/40 scale-110"
+                      : "border-border/60"
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              <label
+                className="relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border/60 text-[10px] text-faint transition-colors hover:border-accent hover:text-accent"
+                title="Custom color"
+              >
+                <span>+</span>
+                <input
+                  type="color"
+                  value={accent}
+                  onChange={(e) => setAccent(e.target.value)}
+                  aria-label="Pick a custom accent color"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </label>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-block h-5 w-5 rounded-full border border-border/60"
+              style={{ backgroundColor: accent }}
+              aria-hidden
+            />
+            <span className="font-mono text-xs text-muted">{accent.toUpperCase()}</span>
+            <button
+              onClick={resetAccent}
+              className="ml-auto rounded-lg border border-border/60 px-3 py-1.5 text-xs text-muted transition hover:bg-surface/20"
+            >
+              Reset to Default
+            </button>
+          </div>
+          <p className="text-[10px] leading-relaxed text-faint">
+            The accent color applies instantly across all pages — buttons, highlights, active nav, and the AI Brain glow.
+          </p>
+        </div>
       </Panel>
 
       <Panel title="Auto-Save" subtitle="Interval configuration" className="col-span-6 row-span-2">

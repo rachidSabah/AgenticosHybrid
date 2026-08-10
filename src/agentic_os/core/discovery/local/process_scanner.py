@@ -23,12 +23,23 @@ _TOOL_PROCESS_NAMES: dict[str, list[str]] = {
     "gemini-cli": ["gemini"],
     "opencode": ["opencode"],
     "aider": ["aider"],
+    "continue": ["continue"],
+    "openhands": ["openhands", "open_hands", "all-hands"],
     "ollama": ["ollama"],
     "docker": ["docker"],
     "vllm": ["vllm"],
     "python": ["python"],
     "node": ["node"],
     "lm-studio": ["lm-studio", "lmstudio"],
+    "git": ["git"],
+    "uv": ["uv.exe", "uv-", "\\uv"],
+    "qwen": ["qwen"],
+    "cursor": ["cursor"],
+    "goose": ["goose"],
+    "open-interpreter": ["interpreter"],
+    "openmanus": ["openmanus", "manus"],
+    "autogen": ["autogen"],
+    "crewai": ["crewai"],
 }
 
 

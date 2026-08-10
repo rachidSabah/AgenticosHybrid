@@ -109,7 +109,7 @@ export function EcosystemDashboard() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2">
+      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar border-b border-border/60 px-4 pt-2">
         {(["overview", "capabilities", "collaborations", "evolution", "marketplace"] as const).map((t) => (
           <button
             key={t}
@@ -193,7 +193,7 @@ function OverviewTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Runtimes" value={liveStats?.total_runtimes ?? 0} />
         <Stat label="Healthy" value={liveStats?.healthy_runtimes ?? 0} tone="ok" />
         <Stat label="Capabilities" value={liveStats?.unique_capabilities ?? 0} />
@@ -225,7 +225,7 @@ function OverviewTab() {
               <Badge tone={healthTone as "ok" | "warn" | "danger" | "default"}>{liveHealth.level}</Badge>
               <div className="flex-1">
                 <div className="text-xs text-faint">Overall Health Score</div>
-                <div className="mt-1 h-2 w-full rounded-full bg-surface/40">
+                <div className="beam mt-1 h-2 w-full overflow-hidden rounded-full bg-surface/40">
                   <div
                     className="h-2 rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500"
                     style={{ width: `${safeFixed((safeNum(liveHealth?.health_score) * 100), 0)}%` }}
@@ -362,7 +362,7 @@ function ActionButton({ label, description, endpoint }: { label: string; descrip
     }
   }, [endpoint]);
   return (
-    <div className="rounded-xl border border-border/60 p-3">
+    <div className="panel-glow rounded-xl border border-border/60 p-3">
       <div className="text-xs font-medium">{label}</div>
       <div className="mt-0.5 text-[11px] text-faint">{description}</div>
       <button
@@ -405,7 +405,7 @@ function CapabilitiesTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Nodes" value={stats?.total_nodes ?? 0} />
         <Stat label="Edges" value={stats?.total_edges ?? 0} />
         <Stat label="Brains" value={stats?.nodes_by_type?.brain ?? 0} tone="ok" />
@@ -504,7 +504,7 @@ function CollaborationsTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Links" value={stats?.total_links ?? 0} />
         <Stat label="Runtimes" value={stats?.unique_runtimes ?? 0} />
         <Stat label="Collaborations" value={stats?.total_collaborations ?? 0} />
@@ -599,9 +599,9 @@ function EvolutionTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Recommendations" value={recs.length} />
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
           {typeOptions.map((t) => (
             <button
               key={t}
@@ -697,7 +697,7 @@ function MarketplaceTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Published" value={stats?.published ?? 0} />
         <Stat label="Awarded" value={stats?.awarded ?? 0} tone="ok" />
         <Stat label="Completed" value={stats?.completed ?? 0} tone="ok" />
@@ -709,20 +709,20 @@ function MarketplaceTab() {
       </div>
 
       <Panel title="Publish Task" subtitle="Submit a task to the global marketplace" className="col-span-full">
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             type="text"
             value={publishTitle}
             onChange={(e) => setPublishTitle(e.target.value)}
             placeholder="Task title"
-            className="flex-1 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text placeholder:text-faint"
+            className="w-full sm:flex-1 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text placeholder:text-faint"
           />
           <input
             type="text"
             value={publishCap}
             onChange={(e) => setPublishCap(e.target.value)}
             placeholder="capabilities (comma-separated)"
-            className="w-64 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text placeholder:text-faint"
+            className="w-full sm:w-64 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs text-text placeholder:text-faint"
           />
           <button
             onClick={publish}
@@ -743,13 +743,13 @@ function MarketplaceTab() {
               <div key={task.id} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{task.title || task.id}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium truncate">{task.title || task.id}</span>
                       <Badge tone={task.status === "completed" ? "ok" : task.status === "failed" ? "danger" : task.status === "awarded" ? "warn" : "default"}>
                         {task.status}
                       </Badge>
                     </div>
-                    <div className="mt-1 text-[11px] text-faint">
+                    <div className="mt-1 truncate text-[11px] text-faint">
                       {task.required_capabilities.length > 0 ? task.required_capabilities.join(", ") : "no caps"} · {task.bids.length} bid(s)
                     </div>
                     {task.selected_bid && (

@@ -276,16 +276,21 @@ export interface ThreadReport {
 
 export interface CleanupResult {
   success: boolean;
+  started_at?: string;
   duration_seconds: number;
   items_cleaned: number;
-  actions: Array<{ action: string; status: string }>;
+  space_freed_mb: number;
+  actions: Array<{ action: string; status: string; target?: string; error?: string | null; duration_seconds?: number }>;
+  errors: string[];
 }
 
 export interface RepairResult {
   success: boolean;
   repaired: string[];
   failed: string[];
+  actions: Array<{ action: string; target: string; status: string; error?: string | null }>;
   duration_seconds: number;
+  error: string | null;
 }
 
 export interface ResourceUsageSummary {

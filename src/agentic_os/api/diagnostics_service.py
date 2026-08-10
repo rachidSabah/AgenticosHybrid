@@ -90,6 +90,29 @@ class RuntimeDiagnosticsService:
         except Exception:  # noqa: BLE001
             return "unknown"
 
+    @staticmethod
+    async def _node_version() -> str:
+        """Return the installed Node.js version, or 'unknown' on failure.
+
+        Uses ``asyncio.create_subprocess_exec`` so the event loop is not blocked.
+        """
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "node",
+                "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return "unknown"
+            return stdout.decode().strip() if stdout else "unknown"
+        except Exception:  # noqa: BLE001
+            return "unknown"
+
     # ── Collectors ───────────────────────────────────────────────────────────
 
     async def collect_runtime(self, platform: Any) -> dict:
@@ -100,15 +123,71 @@ class RuntimeDiagnosticsService:
             uptime_s = time.monotonic() - self._start_time
             tasks = asyncio.all_tasks()
 
+            git_commit = await self._git_commit()
+            git_branch = await self._git_branch()
+            node_version = await self._node_version()
+
+            cpu_count = _safe(lambda: psutil.cpu_count(logical=True), 0)
+            machine = _safe(os_platform.machine, "unknown")
+            ram_total = _safe(lambda: psutil.virtual_memory().total, 0)
+            ram_used = _safe(lambda: psutil.virtual_memory().used, 0)
+
+            platform_services = {
+                attr: getattr(platform, attr, None) is not None
+                for attr in [
+                    "bus",
+                    "registry",
+                    "providers",
+                    "orchestrator",
+                    "scheduler",
+                    "health",
+                    "recovery",
+                    "dashboard",
+                    "provider_mgr",
+                    "model_mgr",
+                    "vault",
+                    "provider_health",
+                    "cost",
+                    "rate",
+                    "router",
+                    "memory",
+                    "capability",
+                    "security",
+                    "workflow",
+                    "pipeline",
+                    "runtime",
+                    "discovery_framework",
+                    "orchestration",
+                    "mcp",
+                    "learning",
+                    "desktop",
+                    "mission_planner",
+                    "local_discovery",
+                    "brain_registry",
+                    "brain_manager",
+                    "brain_catalog",
+                    "brain_graph",
+                    "brain_stats",
+                    "brain_health",
+                    "brain_discovery_bridge",
+                    "brain_runtime_bridge",
+                ]
+            }
+            health_score = (
+                round(100 * sum(platform_services.values()) / len(platform_services))
+                if platform_services
+                else 0
+            )
+
             return {
                 "hostname": _safe(os_platform.node, "unknown"),
                 "os": _safe(os_platform.system, "unknown"),
                 "os_version": _safe(os_platform.version, "unknown"),
                 "python_version": _safe(os_platform.python_version, "unknown"),
-                "cpu_count": _safe(lambda: psutil.cpu_count(logical=True), 0),
+                "cpu_count": cpu_count,
                 "cpu_percent": _safe(lambda: psutil.cpu_percent(interval=None), 0.0),
-                "ram_total": _safe(lambda: psutil.virtual_memory().total, 0),
-                "ram_used": _safe(lambda: psutil.virtual_memory().used, 0),
+                "ram_total": ram_total,
+                "ram_used": ram_used,
                 "ram_percent": _safe(lambda: psutil.virtual_memory().percent, 0.0),
                 "uptime_seconds": round(uptime_s, 2),
                 "process_pid": _safe(proc.pid, 0),
@@ -116,52 +195,21 @@ class RuntimeDiagnosticsService:
                 "gc_counts": list(gc.get_count()),
                 "asyncio_tasks_count": len(tasks),
                 "version": "1.0.0-rc2",
-                "git_commit": await self._git_commit(),
-                "git_branch": await self._git_branch(),
+                "git_commit": git_commit,
+                "git_branch": git_branch,
                 "build_timestamp": _utcnow_iso(),
                 "environment": os.getenv("ENVIRONMENT", "development"),
                 "workspace": os.getenv("WORKSPACE_PATH", os.getcwd()),
-                "platform_services": {
-                    attr: getattr(platform, attr, None) is not None
-                    for attr in [
-                        "bus",
-                        "registry",
-                        "providers",
-                        "orchestrator",
-                        "scheduler",
-                        "health",
-                        "recovery",
-                        "dashboard",
-                        "provider_mgr",
-                        "model_mgr",
-                        "vault",
-                        "provider_health",
-                        "cost",
-                        "rate",
-                        "router",
-                        "memory",
-                        "capability",
-                        "security",
-                        "workflow",
-                        "pipeline",
-                        "runtime",
-                        "discovery_framework",
-                        "orchestration",
-                        "mcp",
-                        "learning",
-                        "desktop",
-                        "mission_planner",
-                        "local_discovery",
-                        "brain_registry",
-                        "brain_manager",
-                        "brain_catalog",
-                        "brain_graph",
-                        "brain_stats",
-                        "brain_health",
-                        "brain_discovery_bridge",
-                        "brain_runtime_bridge",
-                    ]
-                },
+                "platform_services": platform_services,
+                # camelCase contract expected by mission-control runtime-diagnostics
+                "pythonVersion": _safe(os_platform.python_version, "unknown"),
+                "nodeVersion": node_version,
+                "cpu": f"{cpu_count} cores ({machine})",
+                "ram": f"{ram_total / (1024**3):.1f} GB",
+                "uptime": round(uptime_s, 2),
+                "gitCommit": git_commit,
+                "gitBranch": git_branch,
+                "healthScore": health_score,
             }
         except Exception as exc:  # noqa: BLE001
             log.error("collect_runtime.failed", error=str(exc))
@@ -226,11 +274,37 @@ class RuntimeDiagnosticsService:
             # Elevate health score based on real checks
             healthy_count = sum(1 for v in health.values() if v.get("healthy"))
             total = len(health)
+            health_score = round(healthy_count / total * 100) if total else 0
             health["_meta"] = {
-                "health_score": round(healthy_count / total * 100),
+                "health_score": health_score,
                 "healthy_count": healthy_count,
                 "total_subsystems": total,
                 "checked_at": _utcnow_iso(),
+            }
+
+            # camelCase contract expected by mission-control runtime-diagnostics:
+            # a top-level `status` plus a `subsystems` map keyed by name.
+            _status_map = {
+                "operational": "healthy",
+                "unavailable": "down",
+                "degraded": "degraded",
+                "healthy": "healthy",
+            }
+            health["status"] = (
+                "healthy" if health_score >= 90 else "degraded" if health_score >= 70 else "down"
+            )
+            health["subsystems"] = {
+                name: {
+                    "status": _status_map.get(
+                        str(subsys.get("status", "")), str(subsys.get("status", "unknown"))
+                    ),
+                    "latency": subsys.get("latency_ms", 0.0),
+                    "errors": subsys.get("errors", 0),
+                    "warnings": subsys.get("warnings", 0),
+                    "restartCount": subsys.get("restart_count", 0),
+                }
+                for name, subsys in health.items()
+                if isinstance(subsys, dict) and name != "_meta"
             }
             return health
         except Exception as exc:  # noqa: BLE001
@@ -253,20 +327,34 @@ class RuntimeDiagnosticsService:
                     agents = await local.get_agents()
                     for a in agents:
                         d = a.to_dict() if hasattr(a, "to_dict") else {}
+                        # `running` is now serialized by LocalAgent.to_dict();
+                        # fall back to status string for robustness.
+                        is_running = bool(
+                            d.get("running")
+                            or d.get("status", "").lower() in ("running", "idle", "busy")
+                        )
+                        health_score = d.get("health_score", 0.0)
+                        health_label = (
+                            "healthy"
+                            if health_score >= 0.8
+                            else "degraded"
+                            if health_score > 0.0
+                            else "unknown"
+                        )
                         providers.append(
                             {
                                 "name": d.get("name", str(a)),
                                 "type": d.get("engine_type", "unknown"),
                                 "vendor": d.get("vendor", "unknown"),
                                 "installed": d.get("installed", True),
-                                "running": d.get("running", False),
+                                "running": is_running,
                                 "version": d.get("version", "unknown"),
                                 "pid": d.get("pid"),
                                 "path": d.get("path", ""),
-                                "executable": d.get("executable", ""),
+                                "executable": d.get("executable_path", ""),
                                 "last_seen": d.get("last_seen", _utcnow_iso()),
                                 "status": d.get("status", "unknown"),
-                                "health": d.get("health", "unknown"),
+                                "health": health_label,
                                 "auto_bound": d.get("auto_bound", False),
                                 "registration_state": d.get("registration_state", "discovered"),
                                 "errors": d.get("errors", []),
@@ -301,6 +389,8 @@ class RuntimeDiagnosticsService:
                 "total_healthy": total_healthy,
                 "discovery_framework_available": df is not None,
                 "local_discovery_available": local is not None,
+                # camelCase contract expected by mission-control runtime-diagnostics
+                "tools": providers,
             }
         except Exception as exc:  # noqa: BLE001
             log.error("collect_discovery.failed", error=str(exc))
@@ -345,6 +435,10 @@ class RuntimeDiagnosticsService:
                                 "errors": 0,
                                 "avg_latency_ms": 0.0,
                                 "payload_size_bytes": 0,
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "name": topic,
+                                "messages": 0,
+                                "subscribers": count,
                             }
                         )
                 # Try published counter
@@ -380,13 +474,15 @@ class RuntimeDiagnosticsService:
                     all_brains = await brain_registry.list_all()
                     for b in all_brains:
                         d = b.to_dict() if hasattr(b, "to_dict") else {}
+                        health_score = float(d.get("health", 0) or 0)
                         brains.append(
                             {
                                 "id": d.get("id", str(b)),
                                 "display_name": d.get("display_name", ""),
                                 "runtime": d.get("runtime", "unknown"),
                                 "capabilities": d.get("capabilities", []),
-                                "health": d.get("health", 0),
+                                "health": "healthy" if health_score >= 50 else "degraded",
+                                "health_score": health_score,
                                 "memory_mb": d.get("memory_mb", 0.0),
                                 "cpu_percent": d.get("cpu_percent", 0.0),
                                 "task_count": d.get("task_count", 0),
@@ -397,12 +493,16 @@ class RuntimeDiagnosticsService:
                                 "registration_source": d.get("registration_source", ""),
                                 "status": d.get("status", "unknown"),
                                 "latency": d.get("latency", 0),
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "memory": d.get("memory_mb", 0.0),
+                                "cpu": d.get("cpu_percent", 0.0),
+                                "tasks": d.get("task_count", 0),
                             }
                         )
                 except Exception:  # noqa: BLE001
                     pass
 
-            healthy_count = sum(1 for b in brains if b.get("health", 0) >= 80)
+            healthy_count = sum(1 for b in brains if b.get("health_score", 0) >= 80)
             return {
                 "brains": brains,
                 "total_count": len(brains),
@@ -440,6 +540,9 @@ class RuntimeDiagnosticsService:
                                 "retries": d.get("retries", 0),
                                 "queue_depth": d.get("queue_depth", 0),
                                 "lifecycle": d.get("lifecycle", "unknown"),
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "tasks": d.get("task_count", 0),
+                                "latency": d.get("latency_ms", 0.0),
                             }
                         )
                 except Exception:  # noqa: BLE001
@@ -470,6 +573,9 @@ class RuntimeDiagnosticsService:
                                     "retries": 0,
                                     "queue_depth": 0,
                                     "lifecycle": d.get("status", "unknown"),
+                                    # camelCase contract for mission-control
+                                    "tasks": d.get("task_count", 0),
+                                    "latency": d.get("latency", 0),
                                 }
                             )
                 except Exception:  # noqa: BLE001
@@ -513,6 +619,8 @@ class RuntimeDiagnosticsService:
                                     "last_updated": d.get("last_updated", _utcnow_iso()),
                                     "consumers": d.get("consumers", 0),
                                     "dependencies": d.get("dependencies", []),
+                                    # camelCase contract for mission-control
+                                    "capability": d.get("name", str(c)),
                                 }
                             )
                 except Exception:  # noqa: BLE001
@@ -529,7 +637,7 @@ class RuntimeDiagnosticsService:
             tasks = asyncio.all_tasks()
             task_list: list[dict] = []
 
-            for t in tasks:
+            for i, t in enumerate(tasks):
                 name = t.get_name()
                 done = t.done()
                 cancelled = t.cancelled()
@@ -546,6 +654,9 @@ class RuntimeDiagnosticsService:
                         "cancelled": cancelled,
                         "waiting": False,
                         "blocked": False,
+                        # camelCase contract expected by mission-control runtime-diagnostics
+                        "id": f"task-{i}",
+                        "duration": "0.00s",
                     }
                 )
 
@@ -590,8 +701,15 @@ class RuntimeDiagnosticsService:
             )
             open_files = _safe(lambda: len(proc.open_files()), 0)
 
+            cpu_percent = _safe(lambda: psutil.cpu_percent(interval=None), 0.0)
+            ram_total_gb = round(mem.total / (1024**3), 2)
+            ram_used_gb = round(mem.used / (1024**3), 2)
+            disk_total_gb = round(disk.total / (1024**3), 2)
+            disk_used_gb = round(disk.used / (1024**3), 2)
+            process_rss_mb = round((proc_mem.rss if proc_mem else 0) / 1024 / 1024, 2)
+
             return {
-                "cpu_percent": _safe(lambda: psutil.cpu_percent(interval=None), 0.0),
+                "cpu_percent": cpu_percent,
                 "cpu_per_core": cpu_per_core or [],
                 "ram_total": mem.total,
                 "ram_used": mem.used,
@@ -607,9 +725,23 @@ class RuntimeDiagnosticsService:
                 "gc_gen0": gc_counts[0] if len(gc_counts) > 0 else 0,
                 "gc_gen1": gc_counts[1] if len(gc_counts) > 1 else 0,
                 "gc_gen2": gc_counts[2] if len(gc_counts) > 2 else 0,
-                "process_rss_mb": round((proc_mem.rss if proc_mem else 0) / 1024 / 1024, 2),
+                "process_rss_mb": process_rss_mb,
                 "process_vms_mb": round((proc_mem.vms if proc_mem else 0) / 1024 / 1024, 2),
                 "snapshot_at": _utcnow_iso(),
+                # camelCase contract expected by mission-control runtime-diagnostics
+                "cpuPercent": cpu_percent,
+                "ramUsed": ram_used_gb,
+                "ramTotal": ram_total_gb,
+                "diskUsed": disk_used_gb,
+                "diskTotal": disk_total_gb,
+                "netIo": (
+                    f"{net.bytes_sent / 1024 / 1024:.1f} MB ↑ / "
+                    f"{net.bytes_recv / 1024 / 1024:.1f} MB ↓"
+                    if net
+                    else "n/a"
+                ),
+                "threadCount": thread_count,
+                "processMemory": f"{process_rss_mb:.0f} MB",
             }
         except Exception as exc:  # noqa: BLE001
             log.error("collect_resources.failed", error=str(exc))
@@ -638,6 +770,8 @@ class RuntimeDiagnosticsService:
                                 "wait_time_seconds": 0.0,
                                 "blocked": False,
                                 "dead_letter_count": 0,
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "capacity": 1000,
                             }
                         )
                         break
@@ -660,6 +794,8 @@ class RuntimeDiagnosticsService:
                                 "wait_time_seconds": 0.0,
                                 "blocked": False,
                                 "dead_letter_count": 0,
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "capacity": 1000,
                             }
                         )
                         break
@@ -710,6 +846,8 @@ class RuntimeDiagnosticsService:
                                             "last_request": d.get("last_request", ""),
                                             "version": d.get("version", "unknown"),
                                             "health": d.get("health", "unknown"),
+                                            # camelCase contract for mission-control
+                                            "ping": d.get("ping_ms", 0.0),
                                         }
                                     )
                             break
@@ -763,6 +901,9 @@ class RuntimeDiagnosticsService:
                                 "streaming": d.get("supports_streaming", False),
                                 "connections": 0,
                                 "kind": d.get("kind", "unknown"),
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "rateLimits": "0",
+                                "circuitBreaker": "CLOSED",
                             }
                         )
                 except Exception:  # noqa: BLE001
@@ -798,6 +939,9 @@ class RuntimeDiagnosticsService:
                                     "active_requests": 0,
                                     "total_requests": int(sample.value),
                                     "status": sample.labels.get("status", ""),
+                                    # camelCase contract for mission-control
+                                    "latency": 0.0,
+                                    "calls": int(sample.value),
                                 }
                             )
                     break
@@ -833,6 +977,10 @@ class RuntimeDiagnosticsService:
                                 "heartbeat": "",
                                 "last_message": "",
                                 "queue_size": 0,
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "id": str(cid),
+                                "connectedAt": "",
+                                "ip": "",
                             }
                         )
                 elif isinstance(raw, (list, set)):
@@ -848,6 +996,10 @@ class RuntimeDiagnosticsService:
                                 "heartbeat": "",
                                 "last_message": "",
                                 "queue_size": 0,
+                                # camelCase contract expected by mission-control runtime-diagnostics
+                                "id": str(i),
+                                "connectedAt": "",
+                                "ip": "",
                             }
                         )
 

@@ -61,7 +61,6 @@ export default function DesktopDiagnostics() {
   const [scanProgress, setScanProgress] = useState<DiagnosticProgress>({ phase: "Idle", progress: 0, active: false });
   const [logs, setLogs] = useState<LogEntry[]>([
     { id: "1", timestamp: new Date().toLocaleTimeString(), level: "INFO", module: "Diagnostic Engine", message: "Desktop Health Center ready" },
-    { id: "2", timestamp: new Date().toLocaleTimeString(), level: "PASS", module: "Runtime Discovery", message: "6 local AI agents bound and verified" },
   ]);
   const [activeErrors, setActiveErrors] = useState<RealErrorItem[]>([]);
 
@@ -94,126 +93,93 @@ export default function DesktopDiagnostics() {
 
   useEffect(() => { load(); }, [load, connected]);
 
-  // ── Mode 1: Quick Health Check (<10s) ──
+  // ── Mode 1: Quick Health Check ──
   const runQuickCheck = async () => {
     setScanProgress({ phase: "Quick Health Check", progress: 10, active: true });
-    addLog("INFO", "Quick Check", "Starting 10-point system health handshake...");
-
-    const steps = [
-      { label: "Checking Application Kernel", weight: 30 },
-      { label: "Validating API Gateway & REST endpoints", weight: 50 },
-      { label: "Ping WebSocket & EventBus channels", weight: 80 },
-      { label: "Verifying Runtime Discovery & Local Agents", weight: 100 },
-    ];
-
-    for (const step of steps) {
-      await new Promise((r) => setTimeout(r, 600));
-      setScanProgress({ phase: step.label, progress: step.weight, active: true });
-      addLog("PASS", step.label, "Handshake verified with exit 0");
-    }
-
+    addLog("INFO", "Quick Check", "Requesting startup hardening validation from backend...");
     try {
       const res = await api.validateStartup();
-      if (res) addLog("PASS", "Startup Hardening", "Hardening validation passed");
-    } catch { /* fallback */ }
-
+      const checks = Array.isArray(res?.checks) ? res.checks : [];
+      const passed = checks.filter((c) => c?.status === "ok" || c?.ok === true).length;
+      addLog(
+        passed === checks.length && checks.length > 0 ? "PASS" : "WARNING",
+        "Startup Hardening",
+        `Backend validated ${checks.length} startup check(s), ${passed} passed.`,
+      );
+    } catch (err) {
+      addLog("ERROR", "Quick Check", `Startup validation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
     setScanProgress({ phase: "Quick Check Complete", progress: 100, active: false });
-    addLog("PASS", "Quick Check", "Quick health check completed successfully in 2.4s.");
   };
 
   // ── Mode 2: Surface Scan ──
   const runSurfaceScan = async () => {
-    setScanProgress({ phase: "Surface Scan", progress: 5, active: true });
-    addLog("INFO", "Surface Scan", "Initiating logical surface scan of all 27 views, pipelines, & routes...");
-
+    setScanProgress({ phase: "Surface Scan", progress: 20, active: true });
+    addLog("INFO", "Surface Scan", "Requesting surface provider discovery from backend...");
     try {
-      await api.bindingDiscover("surface");
-    } catch { /* fallback */ }
-
-    const modules = [
-      "Frontend Views & Components",
-      "API Routes & Gateways",
-      "WebSocket & IPC Channels",
-      "Pipeline Builder Engine",
-      "Mission Orchestrator & Prompt Center",
-      "Provider Discovery & Runtime Bindings",
-      "Memory Explorer & MCP Servers",
-      "Swarm Orchestration & EventBus",
-    ];
-
-    for (let i = 0; i < modules.length; i++) {
-      await new Promise((r) => setTimeout(r, 450));
-      const pct = Math.round(((i + 1) / modules.length) * 100);
-      setScanProgress({ phase: `Scanning ${modules[i]}`, progress: pct, active: true });
-      addLog("PASS", modules[i], `Validated route, bindings, and components.`);
+      const res = await api.bindingDiscover("surface");
+      const found = typeof res?.total_found === "number" ? res.total_found : 0;
+      addLog(
+        found > 0 ? "PASS" : "INFO",
+        "Surface Scan",
+        `Backend discovery returned ${found} provider(s).`,
+      );
+    } catch (err) {
+      addLog("ERROR", "Surface Scan", `Discovery failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
+    await load();
     setScanProgress({ phase: "Surface Scan Complete", progress: 100, active: false });
-    addLog("PASS", "Surface Scan", "Surface scan verified all services and pipelines clean.");
   };
 
   // ── Mode 3: Deep Scan ──
   const runDeepScan = async () => {
-    setScanProgress({ phase: "Deep Scan", progress: 5, active: true });
-    addLog("INFO", "Deep Scan Engine", "Launching exhaustive deep diagnostics suite...");
-
+    setScanProgress({ phase: "Deep Scan", progress: 20, active: true });
+    addLog("INFO", "Deep Scan Engine", "Requesting deep discovery + integrity + self-diagnostics from backend...");
     try {
-      await api.bindingDeepScan();
+      const deep = await api.bindingDeepScan();
+      addLog("PASS", "Deep Scan", `Backend deep scan returned ${typeof deep?.total_found === "number" ? deep.total_found : 0} provider(s) across ${typeof deep?.sources_scanned === "number" ? deep.sources_scanned : 0} sources.`);
+    } catch (err) {
+      addLog("ERROR", "Deep Scan", `Deep discovery failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
       const integ = await api.integrityCheck();
       setIntegrity(integ);
+      addLog("INFO", "Integrity", `Integrity check returned status=${integ?.status ?? "n/a"}.`);
+    } catch (err) {
+      addLog("ERROR", "Integrity", `Integrity check failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
       const diag = await api.runDiagnostics();
       setSelfReport(diag);
-    } catch { /* fallback */ }
-
-    const deepPhases = [
-      "Dependency Graph & Circular Imports",
-      "Pipeline & Route Contract Validation",
-      "WebSocket Heartbeat & Reconnect Protocol",
-      "Runtime Discovery & AI Agent Bindings",
-      "Database Schema & Migration Status",
-      "Memory Leak & Garbage Collection Audit",
-      "GPU Acceleration & Render Frame Times",
-    ];
-
-    for (let i = 0; i < deepPhases.length; i++) {
-      await new Promise((r) => setTimeout(r, 700));
-      const pct = Math.round(((i + 1) / deepPhases.length) * 100);
-      setScanProgress({ phase: deepPhases[i], progress: pct, active: true });
-      addLog("PASS", deepPhases[i], "Zero corruption or broken imports detected.");
+      addLog("INFO", "Self-Diagnostics", `Backend diagnostics report received (status=${diag?.status ?? "n/a"}).`);
+    } catch (err) {
+      addLog("ERROR", "Self-Diagnostics", `Diagnostics failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
     setScanProgress({ phase: "Deep Scan Complete", progress: 100, active: false });
-    addLog("PASS", "Deep Scan Engine", "Exhaustive deep scan complete: System operational.");
   };
 
-  // ── Real Auto-Repair Engine ──
+  // ── Auto-Repair Engine ──
   const runRepairAll = async () => {
-    setScanProgress({ phase: "Auto-Repairing", progress: 10, active: true });
-    addLog("AUTO FIX", "Repair Engine", "Executing full auto-repair sequence...");
-
+    setScanProgress({ phase: "Auto-Repairing", progress: 30, active: true });
+    addLog("AUTO FIX", "Repair Engine", "Requesting backend repair + cleanup...");
     try {
-      await api.repairSystem();
-      await api.cleanupResources();
-    } catch { /* fallback */ }
-
-    const repairPhases = [
-      "Reconnecting WebSockets & EventBus",
-      "Refreshing Provider Registry & Local Agents",
-      "Rebinding Pipelines & Route Handlers",
-      "Clearing Stale Caches & Memory Locks",
-      "Restoring Service Subscriptions",
-    ];
-
-    for (let i = 0; i < repairPhases.length; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      const pct = Math.round(((i + 1) / repairPhases.length) * 100);
-      setScanProgress({ phase: repairPhases[i], progress: pct, active: true });
-      addLog("AUTO FIX", repairPhases[i], "Repaired and synchronized.");
+      const res = await api.repairSystem();
+      addLog(
+        res?.success ? "PASS" : "WARNING",
+        "Repair Engine",
+        `Backend repair ${res?.success ? "completed" : "did not report success"} — repaired: ${res?.repaired?.length ?? 0}, failed: ${res?.failed?.length ?? 0}${res?.error ? ` (${res.error})` : ""}.`,
+      );
+    } catch (err) {
+      addLog("ERROR", "Repair Engine", `Repair failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    setActiveErrors([]);
-    setScanProgress({ phase: "System Fully Repaired", progress: 100, active: false });
-    addLog("PASS", "Repair Engine", "All platform subsystems repaired and online.");
+    try {
+      const res = await api.cleanupResources();
+      addLog("INFO", "Cleanup", `Backend cleanup returned space_freed_mb=${res?.space_freed_mb ?? "n/a"}, items_cleaned=${res?.items_cleaned ?? "n/a"}.`);
+    } catch (err) {
+      addLog("ERROR", "Cleanup", `Cleanup failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    await load();
+    setScanProgress({ phase: "Auto-Repair Complete", progress: 100, active: false });
   };
 
   return (
@@ -282,12 +248,28 @@ export default function DesktopDiagnostics() {
         </motion.div>
       )}
 
-      {/* ── System Resource Usage Overview ── */}
+      {/* ── System Resource Usage Overview (real backend values, "—" when unavailable) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="CPU Load" value={`${(resources?.cpu_percent ?? 1.2).toFixed(1)}%`} tone="accent" />
-        <Stat label="Memory Usage" value={`${(resources?.memory_mb ?? 142).toFixed(0)} MB`} tone="default" />
-        <Stat label="Active Threads" value={resources?.thread_count ?? 18} tone="default" />
-        <Stat label="WebSocket Latency" value={connected ? "12ms" : "Local Bus"} tone="ok" />
+        <Stat
+          label="CPU Load"
+          value={resources?.cpu_percent != null ? `${resources.cpu_percent.toFixed(1)}%` : "—"}
+          tone={resources?.cpu_percent != null ? "accent" : "default"}
+        />
+        <Stat
+          label="Memory Usage"
+          value={resources?.memory_mb != null ? `${resources.memory_mb.toFixed(0)} MB` : "—"}
+          tone="default"
+        />
+        <Stat
+          label="Active Threads"
+          value={resources?.thread_count != null ? String(resources.thread_count) : "—"}
+          tone="default"
+        />
+        <Stat
+          label="EventBus Channel"
+          value={connected ? "Connected" : "Local Bus"}
+          tone={connected ? "ok" : "default"}
+        />
       </div>
 
       {/* ── 2 Columns: Live Log Stream & Actionable Error Panel ── */}
@@ -313,8 +295,18 @@ export default function DesktopDiagnostics() {
           {activeErrors.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-center glass rounded-xl space-y-2">
               <CheckCircle2 size={32} className="text-ok" />
-              <div className="text-xs font-semibold text-text">All Platform Subsystems Healthy</div>
-              <div className="text-[11px] text-faint max-w-xs">Pipelines, routes, WebSockets, and AI agent bindings are operational.</div>
+              <div className="text-xs font-semibold text-text">
+                {selfReport == null && integrity == null
+                  ? "No diagnostics run yet"
+                  : (selfReport?.status ?? integrity?.status) === "healthy"
+                    ? "Backend reports healthy"
+                    : `Backend reports "${selfReport?.status ?? integrity?.status ?? "unknown"}"`}
+              </div>
+              <div className="text-[11px] text-faint max-w-xs">
+                {selfReport == null && integrity == null
+                  ? "Run Quick Check, Surface Scan, or Deep Scan to assess system health."
+                  : "No unresolved issues are recorded in this session."}
+              </div>
             </div>
           ) : (
             activeErrors.map((err) => (

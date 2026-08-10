@@ -91,3 +91,7 @@ _fix_*.py
 _tmp/
 .aider*
 .worktrees/
+
+# ── Local artifacts ──
+.hermes/
+--version.txt

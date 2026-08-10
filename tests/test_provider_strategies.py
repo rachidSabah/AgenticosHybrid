@@ -53,10 +53,11 @@ class TestStrategyCommands:
         cmd = s.build_command(make_task(), "hermes")
         assert cmd[0] == "hermes"
         assert "-z" in cmd
-        # hermes has NO --output-format flag (exit 2 if passed)
+        assert "--yolo" in cmd
         assert "--output-format" not in cmd
-        # Prompt is passed as -z argument (not stdin)
-        assert any("Write hello world" in c for c in cmd)
+        # Prompt is the -z argument value (hermes oneshot reads no stdin)
+        assert "Write hello world" in cmd[cmd.index("-z") + 1]
+        assert s.build_stdin(make_task()) is None
 
     def test_opencode_uses_run_subcommand(self):
         s = OpenCodeExecutionStrategy()
@@ -69,11 +70,13 @@ class TestStrategyCommands:
         assert stdin is not None
         assert b"Write hello world" in stdin
 
-    def test_codex_uses_prompt_flag(self):
+    def test_codex_uses_exec_subcommand(self):
         s = CodexExecutionStrategy()
         cmd = s.build_command(make_task(), "codex")
         assert cmd[0] == "codex"
-        assert "--prompt" in cmd
+        assert "exec" in cmd
+        # Prompt is the exec positional argument (codex exec [PROMPT])
+        assert "Write hello world" in cmd[-1]
 
     def test_aider_uses_message_flag(self):
         s = AiderExecutionStrategy()
@@ -143,7 +146,12 @@ class TestStrategyProperties:
         assert OllamaExecutionStrategy().timeout_s == 300.0
 
     def test_default_timeout_is_120(self):
-        assert ClaudeExecutionStrategy().timeout_s == 120.0
+        assert ClaudeExecutionStrategy().timeout_s == 300.0
+
+    def test_claude_has_extended_timeout(self):
+        """Claude Code real runs (full mission prompts + tool calls)
+        routinely exceed 120s; 300s mirrors the AGY/hermes long-run cap."""
+        assert ClaudeExecutionStrategy().timeout_s == 300.0
 
     def test_hermes_has_extended_timeout(self):
         """Hermes runs with workspace context + tool calls routinely exceed 120s."""

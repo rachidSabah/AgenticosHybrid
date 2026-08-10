@@ -354,85 +354,73 @@ export function PipelineBuilder() {
   }, [nodes, selectedId, setNodesRF, getNode, setCenter, setNodes, setEdges]);
 
   return (
-    <div className="scroll-page p-4">
+    <div className="flex h-full flex-col gap-3 p-4 bg-background text-text overflow-hidden">
       <Panel
         title="Pipeline Builder"
-        subtitle="Provider-aware routing pipeline"
-        className="flex-1 min-h-0"
-        contentClassName="p-0"
+        subtitle="Visual routing & execution pipeline composer"
+        className="flex-1 flex flex-col min-h-0 border-indigo-500/20 bg-surface/30 backdrop-blur-xl shadow-2xl"
+        contentClassName="p-0 flex-1 flex flex-col min-h-0 overflow-hidden"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <select
               value={stage}
               onChange={(e) => setStage(e.target.value as Stage)}
-              className="rounded-lg border border-border/60 bg-surface/50 px-2 py-1 text-xs outline-none"
+              className="rounded-lg border border-indigo-500/40 bg-black/60 px-2.5 py-1 text-xs text-text outline-none focus:border-indigo-400 font-mono"
               aria-label="Pipeline stage type"
             >
               {STAGES.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  + {s}
                 </option>
               ))}
             </select>
-            <button className="pill bg-accent/20 text-accent hover:bg-accent/30" onClick={addNode} aria-label="Add stage">
-              + Add
+            <button className="rounded-lg bg-indigo-500/20 border border-indigo-500/40 px-3 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/30 transition-all shadow-[0_0_12px_rgba(99,102,241,0.2)]" onClick={addNode} aria-label="Add node">
+              + Add Stage
             </button>
-            <button className="pill bg-surface/60 text-muted hover:bg-surface" onClick={exportJson} aria-label="Export to clipboard">
-              Export
+            <button className="rounded-lg bg-surface/60 border border-border/60 px-3 py-1 text-xs text-muted hover:bg-surface hover:text-text transition-all" onClick={exportJson} aria-label="Export to clipboard">
+              Export JSON
             </button>
-            <button
-              className={`pill ${hasErrors ? "bg-danger/20 text-danger" : "bg-surface/60 text-muted"} hover:bg-surface`}
-              onClick={runValidation}
-              aria-label="Validate pipeline"
-            >
-              Validate
+            <button className="rounded-lg bg-surface/60 border border-border/60 px-3 py-1 text-xs text-faint hover:text-danger hover:border-danger/40 transition-all" onClick={runValidation} aria-label="Clear canvas">
+              Clear
             </button>
             <button
-              className={`pill ${showCode ? "bg-accent/20 text-accent" : "bg-surface/60 text-muted"} hover:bg-surface`}
+              className={`rounded-lg border px-3 py-1 text-xs font-medium transition-all ${showCode ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.3)]" : "bg-surface/60 border-border/60 text-muted hover:text-text"}`}
               onClick={() => setShowCode(!showCode)}
               aria-label={showCode ? "Switch to graph view" : "Switch to code view"}
               aria-pressed={showCode}
             >
-              {showCode ? "Graph" : "Code"}
+              {showCode ? "Graph View" : "Code View"}
             </button>
-            {providers.length > 0 ? (
-              <span className="rounded bg-ok/12 px-2 py-0.5 text-[10px] text-ok whitespace-nowrap">
-                {providers.length} provider{providers.length !== 1 ? "s" : ""}
-              </span>
-            ) : error ? (
-              <span className="rounded bg-danger/12 px-2 py-0.5 text-[10px] text-danger whitespace-nowrap">
-                API error
-              </span>
-            ) : (
-              <span className="text-[10px] text-faint whitespace-nowrap px-1">Loading providers…</span>
-            )}
           </div>
         }
       >
-        <div className="h-full flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {!showCode && (
-            <div className="flex gap-2 px-4 py-2 overflow-x-auto border-b border-border/30 shrink-0">
+            <div className="flex gap-2 px-4 py-2.5 overflow-x-auto border-b border-border/40 bg-surface/20 shrink-0 no-scrollbar">
               {PIPELINE_TEMPLATES.map((t) => (
                 <button
                   key={t.name}
                   onClick={() => applyTemplate(t)}
-                  className="flex flex-col items-start gap-0.5 rounded-lg border border-border/40 bg-surface/30 px-3 py-1.5 text-left hover:bg-surface/60 hover:border-accent/40 transition-colors shrink-0 min-w-[130px]"
+                  className="flex flex-col items-start gap-1 rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/20 to-purple-950/20 px-3.5 py-2 text-left hover:border-indigo-400/70 hover:from-indigo-950/40 hover:to-purple-950/40 transition-all shrink-0 min-w-[150px] shadow-sm group"
                 >
-                  <span className="text-xs font-medium text-foreground">{t.name}</span>
-                  <span className="text-[10px] text-faint leading-tight">{t.description}</span>
+                  <div className="flex items-center gap-1.5 w-full">
+                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 group-hover:animate-ping" />
+                    <span className="text-xs font-bold text-indigo-200 truncate">{t.name}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-faint leading-tight group-hover:text-muted truncate max-w-[200px]">{t.description}</span>
                 </button>
               ))}
             </div>
           )}
           {nodes.length === 0 && !showCode ? (
-            <Empty title="Empty pipeline" hint="Choose a template above, or add stages to build your pipeline." />
+            <Empty title="Empty pipeline canvas" hint="Choose a pipeline template above or click '+ Add Stage' to build a execution topology." />
           ) : showCode ? (
-            <div className="h-full" role="region" aria-label="Pipeline JSON code">
+            <div className="flex-1 h-full min-h-0" role="region" aria-label="Pipeline JSON code">
               <MonacoEditor value={JSON.stringify(spec, null, 2)} language="json" readOnly={false} onChange={handleCodeChange} />
             </div>
           ) : (
             <>
-              <div ref={containerRef} className="flex-1 min-h-0" role="application" aria-label="Pipeline graph editor" tabIndex={0}>
+              <div ref={containerRef} className="flex-1 h-full w-full relative min-h-[350px]" role="application" aria-label="Pipeline graph editor" tabIndex={0}>
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}
@@ -447,37 +435,37 @@ export function PipelineBuilder() {
                   onPaneClick={() => setSelectedId(null)}
                   aria-live="polite"
                 >
-                  <Background color="#1f2633" gap={24} />
-                  <Controls showInteractive={false} />
-                  <MiniMap maskColor="rgba(8,10,16,0.7)" style={{ background: "#0b0e16" }} />
+                  <Background color="#1e1b4b" gap={20} size={1} />
+                  <Controls showInteractive={false} className="bg-black/60 border border-border/40 rounded-xl overflow-hidden text-white" />
+                  <MiniMap maskColor="rgba(8,10,16,0.85)" style={{ background: "#090d16", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" }} />
                 </ReactFlow>
               </div>
               {showValidation && validationIssues.length > 0 && (
-                <div className="fixed bottom-4 right-4 z-40 w-full md:w-[360px] max-w-[90vw] glass-strong rounded-2xl shadow-depth p-4 animate-in slide-in-from-bottom-4 duration-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold flex items-center gap-2">
+                <div className="fixed bottom-6 right-6 z-50 w-full md:w-[380px] max-w-[92vw] glass-strong rounded-2xl border border-border/80 shadow-2xl p-4 backdrop-blur-2xl animate-in slide-in-from-bottom-4 duration-300">
+                  <div className="flex items-center justify-between mb-3 border-b border-border/40 pb-2">
+                    <h3 className="font-semibold text-xs uppercase tracking-wider flex items-center gap-2">
                       {hasErrors ? (
                         <>
-                          <span className="text-danger">●</span> Validation Failed
+                          <span className="h-2 w-2 rounded-full bg-danger animate-pulse" /> Validation Failed
                         </>
                       ) : (
                         <>
-                          <span className="text-warn">●</span> Validation Passed
+                          <span className="h-2 w-2 rounded-full bg-warn animate-pulse" /> Validation Warnings
                         </>
                       )}
                     </h3>
-                    <button onClick={() => setShowValidation(false)} className="p-1 rounded hover:bg-surface/50" aria-label="Dismiss">
-                      <X size={16} className="text-muted" />
+                    <button onClick={() => setShowValidation(false)} className="p-1 rounded-lg hover:bg-surface/50 transition" aria-label="Dismiss">
+                      <X size={16} className="text-faint hover:text-text" />
                     </button>
                   </div>
-                  <ul className="space-y-2 max-h-60 overflow-y-auto">
+                  <ul className="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
                     {validationIssues.map((issue, i) => (
                       <li
                         key={i}
-                        className={`flex items-start gap-2 p-2 rounded-lg ${issue.type === "error" ? "bg-danger/10 text-danger" : "bg-warn/10 text-warn"}`}
+                        className={`flex items-start gap-2 p-2.5 rounded-xl border text-xs ${issue.type === "error" ? "border-danger/30 bg-danger/10 text-danger" : "border-warn/30 bg-warn/10 text-warn"}`}
                       >
-                        <span className="text-xs font-mono">{issue.type === "error" ? "!" : "⚠"}</span>
-                        <span className="text-sm flex-1">{issue.message}</span>
+                        <span className="font-mono font-bold shrink-0">{issue.type === "error" ? "[ERR]" : "[WARN]"}</span>
+                        <span className="flex-1 leading-relaxed">{issue.message}</span>
                       </li>
                     ))}
                   </ul>

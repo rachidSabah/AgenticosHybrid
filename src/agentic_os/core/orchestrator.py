@@ -61,6 +61,7 @@ class Orchestrator:
         settings: Settings,
         execution_log: "ExecutionLog | None" = None,
         worktree_manager: "WorktreeManager | None" = None,
+        memory: "Any | None" = None,
     ) -> None:
         self.bus = bus
         self.registry = registry
@@ -68,6 +69,7 @@ class Orchestrator:
         self.settings = settings
         self.execution_log = execution_log
         self.worktree_manager = worktree_manager
+        self.memory = memory
         self._provider_rr_idx = 0
         self._failed_providers: dict[str, float] = {}
 
@@ -172,14 +174,25 @@ class Orchestrator:
         # planned instead of leaking to unselected agents.
         if preferred_agents:
             selected = {name.strip().lower() for name in preferred_agents if name}
-            real_candidates = [p for p in real_candidates if p.name.lower() in selected]
-            if not real_candidates:
+            # Also try fuzzy matching: check if any preferred name is a substring of
+            # a real provider name or vice versa (handles 'claude-code' -> 'claude_code')
+            normalized = {s.replace("-", "_").replace(" ", "_") for s in selected}
+            filtered = [
+                p for p in real_candidates
+                if p.name.lower() in selected
+                or p.name.lower().replace("-", "_") in normalized
+                or any(p.name.lower() in s or s in p.name.lower() for s in selected)
+            ]
+            if not filtered:
                 log.info(
-                    "dispatcher.no_preferred_provider",
+                    "dispatcher.preferred_provider_not_found_falling_through",
                     task_role=role,
                     preferred_agents=sorted(selected),
+                    note="No preferred provider found among real candidates; using any available provider",
                 )
-                return None
+                # Fall through to use whatever provider is available
+            else:
+                real_candidates = filtered
         if real_candidates:
             idx = self._provider_rr_idx % len(real_candidates)
             self._provider_rr_idx += 1
@@ -368,6 +381,22 @@ class Orchestrator:
             title=task.title,
         )
 
+        # Write execution memory into working memory scope for live tracking
+        try:
+            from agentic_os.domain.memory import MemoryItem, MemoryScope
+            memory_mgr = getattr(self, "memory", None)
+            if memory_mgr is not None:
+                await memory_mgr.write(
+                    MemoryItem(
+                        scope=MemoryScope.WORKING,
+                        key=f"task:{task.id}",
+                        value=f"Agent {agent.id} executing '{task.title}' via provider {agent.provider}",
+                        agent_id=agent.id,
+                    )
+                )
+        except Exception:
+            pass
+
         # Attempt 1
         exec_rec = self._start_execution(agent, task, provider, retry_count=0)
         wt_path = await self._create_worktree_for_agent(agent, task)
@@ -393,6 +422,53 @@ class Orchestrator:
                 elapsed_s=round(elapsed, 3),
                 result_len=len(result) if result else 0,
             )
+            # Persist generated output files and extract any code blocks into target workspace root
+            try:
+                import re as _re
+                from agentic_os.domain.workspace import get_workspace_root
+                ws_root = get_workspace_root()
+                if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
+                    # 1. Save execution summary report
+                    filename = f"task_{task.id[:8]}_{task.role}.md"
+                    out_path = _os.path.join(ws_root, filename)
+                    with open(out_path, "w", encoding="utf-8") as f:
+                        f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+                    log.info("task.output_persisted", path=out_path, bytes=len(result))
+
+                    # 2. Extract code blocks with target filenames or language extensions
+                    pattern = _re.compile(r"```(?:\w+[:\s]+([^\n]+)|(\w+))\n(.*?)```", _re.DOTALL)
+                    for match in pattern.finditer(result):
+                        filename_meta, lang, code_content = match.groups()
+                        code = code_content.strip()
+                        if not code:
+                            continue
+
+                        # Determine target filename
+                        target_filename = None
+                        if filename_meta and "." in filename_meta and not " " in filename_meta:
+                            target_filename = filename_meta.strip()
+                        elif lang:
+                            ext_map = {
+                                "html": "index.html",
+                                "css": "styles.css",
+                                "javascript": "script.js",
+                                "js": "script.js",
+                                "python": "app.py",
+                                "py": "app.py",
+                                "json": "config.json",
+                            }
+                            ext = ext_map.get(lang.lower())
+                            if ext:
+                                target_filename = f"{task.role}_{ext}"
+
+                        if target_filename:
+                            code_file_path = _os.path.join(ws_root, target_filename)
+                            with open(code_file_path, "w", encoding="utf-8") as f:
+                                f.write(code + "\n")
+                            log.info("task.code_file_extracted", path=code_file_path, bytes=len(code))
+            except Exception as e:
+                log.warning("task.persist_output_failed", error=str(e))
+
             await self._publish_completed(agent, task, result, elapsed)
             return
         except Exception as exc:
@@ -442,6 +518,18 @@ class Orchestrator:
                     attempt=2,
                     elapsed_s=round(elapsed, 3),
                 )
+                # Persist generated output files into workspace root
+                try:
+                    from agentic_os.domain.workspace import get_workspace_root
+                    ws_root = get_workspace_root()
+                    if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
+                        filename = f"task_{task.id[:8]}_{task.role}.md"
+                        out_path = _os.path.join(ws_root, filename)
+                        with open(out_path, "w", encoding="utf-8") as f:
+                            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+                except Exception:
+                    pass
+
                 await self._publish_completed(agent, task, result, elapsed, recovered=True)
                 return
             except Exception as exc2:
@@ -504,6 +592,18 @@ class Orchestrator:
                     attempt=3,
                     elapsed_s=round(elapsed, 3),
                 )
+                # Persist generated output files into workspace root
+                try:
+                    from agentic_os.domain.workspace import get_workspace_root
+                    ws_root = get_workspace_root()
+                    if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
+                        filename = f"task_{task.id[:8]}_{task.role}.md"
+                        out_path = _os.path.join(ws_root, filename)
+                        with open(out_path, "w", encoding="utf-8") as f:
+                            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+                except Exception:
+                    pass
+
                 await self._publish_completed(
                     fallback_agent, task, result, elapsed, recovered=True, fallback=True
                 )

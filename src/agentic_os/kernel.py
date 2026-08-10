@@ -296,6 +296,7 @@ class Kernel:
             settings,
             execution_log=self.execution_log,
             worktree_manager=self.worktree_manager,
+            memory=self.memory,
         )
         self.health = HealthMonitorImpl(self.bus, self.registry, self.scheduler, settings)
         self.recovery = RecoveryManagerImpl(self.bus, self.orchestrator, settings)
@@ -753,6 +754,7 @@ class Kernel:
                 self.swarm_coordinator = SwarmCoordinator(
                     bus=self.bus,
                     brain_registry=self.brain_registry,
+                    orchestrator=self.orchestrator,
                 )
                 await self.swarm_coordinator.start()
                 if self._platform_instance is not None:
@@ -1136,17 +1138,21 @@ class Kernel:
         return manager
 
     def _seed_default_models(self) -> None:
-        """Register the mock model so routing/cost have at least one candidate.
+        """Register the mock model only when a mock provider is registered.
 
-        Only the mock model is seeded — it is the only guaranteed-present
-        provider (registered by the MockProviderPlugin). Real provider models
-        are populated from their /models endpoint at runtime, and discovered
-        local CLI brains surface their models via the BrainRegistry →
-        /v1/models gateway path. The previous ``claude-code`` placeholder
-        seed was removed because it injected a model for a runtime that may
-        not be installed on the host.
+        The mock provider is registered explicitly by tests and by
+        ``ProviderFactory.create(kind=\"mock\")`` — never auto-registered in
+        production. Real provider models are populated from their /models
+        endpoint at runtime, and discovered local CLI brains surface their
+        models via the BrainRegistry → /v1/models gateway path. The previous
+        unconditional seed was removed because it injected a model for a
+        provider that is not present in production.
         """
         from agentic_os.ports.provider_management import ModelInfo
+
+        # Only seed when the provider actually exists (tests / explicit mock).
+        if self.provider_mgr.get("mock") is None:
+            return
 
         seeds = [
             ModelInfo(

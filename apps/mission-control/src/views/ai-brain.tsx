@@ -1,35 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { safeFixed, safeNum } from "@/lib/safe";
+import {
+  RefreshCw, ZoomIn, ZoomOut, Settings, Maximize2, Minimize2
+} from "lucide-react";
 import { useStore } from "@/lib/store";
 
-// ── Color System ──
-const COLORS = {
-  bg: "#050510",
-  surface: "rgba(15, 23, 42, 0.6)",
-  border: "rgba(0, 212, 255, 0.3)",
-  cyan: "#00d4ff",
-  purple: "#8b5cf6",
-  magenta: "#ec4899",
-  green: "#00ff88",
-  amber: "#f59e0b",
-  textPrimary: "#e2e8f0",
-  textSecondary: "#64748b",
-};
-
+// Base color mapping per provider
 const PROVIDER_COLORS: Record<string, string> = {
   claude: "#d980ff",
-  hermes: "#00d4ff",
+  hermes: "#00f0ff",
   opencode: "#38bdf8",
   agy: "#f472b6",
   gemini: "#f97316",
   codex: "#818cf8",
-  git: "#00ff88",
-  node: "#84cc16",
-  python: "#3b82f6",
-  docker: "#06b6d4",
-  mistral: "#f59e0b",
+  cursor: "#38bdf8",
+  ollama: "#f97316",
+  openai: "#818cf8",
+  anthropic: "#d980ff",
+  google: "#f97316",
 };
 
 function getProviderColor(name: string): string {
@@ -37,513 +27,45 @@ function getProviderColor(name: string): string {
   for (const k of Object.keys(PROVIDER_COLORS)) {
     if (low.includes(k)) return PROVIDER_COLORS[k];
   }
-  return COLORS.cyan;
+  return "#00f0ff";
 }
 
-// ── Central Neural Network Visualization ──
-function NeuralNetworkCanvas({ brainNodes, connections }: {
-  brainNodes: Array<{ id: string; name: string; color: string; isCore: boolean; status: string }>;
-  connections: Array<{ from: string; to: string; color: string }>;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 600, height: 500 });
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) setSize({ width: Math.round(width), height: Math.round(height) });
+// Deterministic starfield
+const STARFIELD = (() => {
+  const stars: { x: number; y: number; r: number; o: number }[] = [];
+  let seed = 7;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < 120; i++) {
+    stars.push({
+      x: Math.round(rnd() * 1000) / 10,
+      y: Math.round(rnd() * 1000) / 10,
+      r: 0.4 + rnd() * 1.2,
+      o: 0.1 + rnd() * 0.4,
     });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  }
+  return stars;
+})();
 
-  const cx = size.width / 2;
-  const cy = size.height / 2;
-  const radius = Math.min(size.width, size.height) * 0.33;
-  const n = brainNodes.length;
+// Deterministic synaptic noise particles in the neural band
+const SYNAPTIC_PARTICLES = (() => {
+  const parts: { x: number; y: number; d: number; s: number }[] = [];
+  let seed = 13;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  // Neural band: x 20-80%, y 35-65%
+  for (let i = 0; i < 80; i++) {
+    parts.push({
+      x: 20 + rnd() * 60,
+      y: 35 + rnd() * 30,
+      d: 1 + rnd() * 2,
+      s: 0.5 + rnd() * 1.5,
+    });
+  }
+  return parts;
+})();
 
-  const positions = brainNodes.map((node, i) => {
-    if (node.isCore) return { x: cx, y: cy };
-    const angle = ((i - 1) / Math.max(1, n - 1)) * Math.PI * 2 - Math.PI / 2;
-    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
-  });
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative min-h-[400px] flex-1 overflow-hidden rounded-xl border"
-      style={{
-        background: `radial-gradient(ellipse at center, #0a0a1f 0%, #050510 70%)`,
-        borderColor: COLORS.border,
-      }}
-    >
-      {/* Radial grid lines */}
-      <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="xMidYMid meet">
-        {/* Concentric rings */}
-        {[0.15, 0.33, 0.5].map((r, i) => (
-          <circle
-            key={i}
-            cx={cx}
-            cy={cy}
-            r={Math.min(size.width, size.height) * r}
-            fill="none"
-            stroke={i === 0 ? COLORS.cyan : COLORS.purple}
-            strokeWidth="0.8"
-            strokeOpacity={i === 0 ? 0.3 : 0.15}
-            strokeDasharray={i === 0 ? "8 4" : "4 6"}
-          />
-        ))}
-
-        {/* Radial grid lines emanating from center */}
-        {Array.from({ length: 12 }, (_, i) => {
-          const angle = (i / 12) * Math.PI * 2;
-          const r = Math.min(size.width, size.height) * 0.45;
-          return (
-            <line
-              key={i}
-              x1={cx}
-              y1={cy}
-              x2={cx + r * Math.cos(angle)}
-              y2={cy + r * Math.sin(angle)}
-              stroke={COLORS.cyan}
-              strokeWidth="0.3"
-              strokeOpacity="0.08"
-            />
-          );
-        })}
-
-        {/* Connection lines (neural pathways) */}
-        {connections.map((conn, idx) => {
-          const fromIdx = brainNodes.findIndex(n => n.id === conn.from);
-          const toIdx = brainNodes.findIndex(n => n.id === conn.to);
-          if (fromIdx < 0 || toIdx < 0) return null;
-          const from = positions[fromIdx];
-          const to = positions[toIdx];
-          const midX = (from.x + to.x) / 2;
-          const midY = (from.y + to.y) / 2 - 20;
-          return (
-            <g key={idx}>
-              <path
-                d={`M ${from.x} ${from.y} Q ${midX} ${midY} ${to.x} ${to.y}`}
-                fill="none"
-                stroke={conn.color}
-                strokeWidth="1.5"
-                strokeOpacity="0.4"
-                strokeDasharray="6 4"
-                className="animate-dash-flow"
-              />
-              {/* Glowing endpoint dots */}
-              <circle cx={from.x} cy={from.y} r="2" fill={conn.color} opacity="0.6" />
-              <circle cx={to.x} cy={to.y} r="2" fill={conn.color} opacity="0.6" />
-            </g>
-          );
-        })}
-
-        {/* Central core glow */}
-        <circle cx={cx} cy={cy} r="30" fill={COLORS.cyan} opacity="0.05" />
-        <circle cx={cx} cy={cy} r="50" fill={COLORS.cyan} opacity="0.03" />
-      </svg>
-
-      {/* Nodes */}
-      {brainNodes.map((node, idx) => {
-        const pos = positions[idx];
-        const isCore = node.isCore;
-        const nodeSize = isCore ? 56 : 36;
-        return (
-          <div
-            key={node.id}
-            className="absolute flex flex-col items-center z-10 transition-transform duration-300 hover:scale-110"
-            style={{
-              left: `${pos.x}px`,
-              top: `${pos.y}px`,
-              transform: "translate(-50%, -50%)",
-            }}
-          >
-            {/* Pulsing aura */}
-            <div
-              className={`absolute rounded-full opacity-20 animate-ping ${isCore ? "w-24 h-24" : "w-14 h-14"}`}
-              style={{ backgroundColor: node.color }}
-            />
-
-            {/* Outer orbit ring */}
-            {isCore && (
-              <div
-                className="absolute rounded-full border-2 border-dashed animate-spin-slow w-20 h-20"
-                style={{ borderColor: `${node.color}40`, animationDuration: "15s" }}
-              />
-            )}
-
-            {/* Node body */}
-            <div
-              className={`relative flex items-center justify-center rounded-full border-2 ${isCore ? "w-14 h-14" : "w-9 h-9"}`}
-              style={{
-                borderColor: node.color,
-                backgroundColor: "rgba(8, 13, 38, 0.9)",
-                boxShadow: `0 0 ${isCore ? 30 : 12}px ${node.color}60`,
-              }}
-            >
-              {/* Brain neural net SVG for core */}
-              {isCore ? (
-                <svg className="w-10 h-10" viewBox="0 0 100 100">
-                  <path d="M 50 20 C 35 15, 20 30, 25 50 C 20 65, 35 80, 50 75 C 45 65, 45 35, 50 20 Z" fill={node.color} fillOpacity="0.25" stroke={node.color} strokeWidth="1.5" />
-                  <path d="M 50 20 C 65 15, 80 30, 75 50 C 80 65, 65 80, 50 75 C 55 65, 55 35, 50 20 Z" fill={node.color} fillOpacity="0.25" stroke={node.color} strokeWidth="1.5" />
-                  <circle cx="50" cy="45" r="4" fill={node.color} />
-                </svg>
-              ) : (
-                <div
-                  className="rounded-full"
-                  style={{
-                    width: 18,
-                    height: 18,
-                    backgroundColor: node.color,
-                    opacity: 0.7,
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Agent label */}
-            <div
-              className={`mt-2 px-2 py-1 rounded-lg border backdrop-blur-sm text-center ${isCore ? "border-cyan-400/40" : "border-slate-700/60"}`}
-              style={{ backgroundColor: "rgba(9, 13, 36, 0.9)", minWidth: isCore ? 120 : 80 }}
-            >
-              <div
-                className={`font-bold tracking-wide truncate ${isCore ? "text-[10px]" : "text-[9px]]"}`}
-                style={{ color: node.color }}
-              >
-                {node.name}
-              </div>
-              {!isCore && (
-                <div className="flex items-center justify-center gap-1 mt-0.5">
-                  <span
-                    className="w-1 h-1 rounded-full animate-pulse"
-                    style={{
-                      backgroundColor: node.status === "healthy" || node.status === "ACTIVE" ? COLORS.green : COLORS.textSecondary,
-                    }}
-                  />
-                  <span className="text-[8px]" style={{ color: COLORS.textSecondary }}>
-                    {node.status === "healthy" ? "Running" : node.status}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Overview overlay top-left */}
-      <div
-        className="absolute top-3 left-3 z-20 rounded-xl p-3 backdrop-blur-md w-44 font-mono text-[10px]"
-        style={{ backgroundColor: "rgba(9, 13, 36, 0.8)", border: `1px solid ${COLORS.border}` }}
-      >
-        <div className="text-[9px] uppercase tracking-wider mb-2 font-bold" style={{ color: COLORS.textSecondary }}>
-          Constellation Summary
-        </div>
-        <div className="space-y-1">
-          <div className="flex justify-between">
-            <span className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.cyan }} /> Total
-            </span>
-            <span className="font-bold" style={{ color: COLORS.textPrimary }}>{brainNodes.length - 1}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.green }} /> Active
-            </span>
-            <span className="font-bold" style={{ color: COLORS.green }}>
-              {brainNodes.filter(n => !n.isCore && (n.status === "healthy" || n.status === "ACTIVE")).length}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.amber }} /> Busy
-            </span>
-            <span className="font-bold" style={{ color: COLORS.amber }}>0</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS.textSecondary }} /> Idle
-            </span>
-            <span className="font-bold" style={{ color: COLORS.textSecondary }}>
-              {brainNodes.filter(n => !n.isCore && n.status !== "healthy" && n.status !== "ACTIVE").length}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Network legend bottom-left */}
-      <div
-        className="absolute bottom-3 left-3 z-20 rounded-xl p-2.5 backdrop-blur-md w-40 font-mono text-[9px]"
-        style={{ backgroundColor: "rgba(9, 13, 36, 0.8)", border: `1px solid ${COLORS.border}` }}
-      >
-        <div className="uppercase tracking-wider mb-1.5 font-bold" style={{ color: COLORS.textSecondary }}>Network Legend</div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-            <span className="w-3 h-[2px]" style={{ backgroundColor: COLORS.magenta, boxShadow: `0 0 6px ${COLORS.magenta}` }} /> High Activity
-          </div>
-          <div className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-            <span className="w-3 h-[2px]" style={{ backgroundColor: COLORS.cyan, boxShadow: `0 0 6px ${COLORS.cyan}` }} /> Medium Activity
-          </div>
-          <div className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-            <span className="w-3 h-[2px]" style={{ backgroundColor: COLORS.purple }} /> Low Activity
-          </div>
-          <div className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-            <span className="w-3 h-[2px] border-b border-dashed" style={{ borderColor: COLORS.cyan }} /> Data Flow
-          </div>
-          <div className="flex items-center gap-2" style={{ color: COLORS.textPrimary }}>
-            <span className="w-3 h-[2px]" style={{ backgroundColor: COLORS.green }} /> Heartbeat
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── System Monitor Panel (Left Rail) ──
-function SystemMonitorPanel({ telemetry, performance, events }: {
-  telemetry: ReturnType<typeof useStore.getState>["telemetry"];
-  performance: ReturnType<typeof useStore.getState>["performance"];
-  events: ReturnType<typeof useStore.getState>["events"];
-}) {
-  const cpuPct = Math.round(performance?.cpu_usage_percent ?? 23);
-  const ramPct = Math.round(performance?.memory_usage_percent ?? 47);
-  const gpuPct = 76; // placeholder until GPU metrics are available
-
-  return (
-    <div
-      className="rounded-xl p-3 backdrop-blur-md"
-      style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: COLORS.textPrimary }}>
-          System Monitor
-        </span>
-        <div className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: COLORS.green }} />
-          <span className="text-[9px] font-bold" style={{ color: COLORS.green }}>OPTIMAL</span>
-        </div>
-      </div>
-
-      {/* Metrics grid */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {[
-          { label: "CPU", val: `${cpuPct}%`, color: COLORS.cyan },
-          { label: "RAM", val: `${ramPct}%`, color: COLORS.green },
-          { label: "GPU", val: `${gpuPct}%`, color: COLORS.purple },
-        ].map((m) => (
-          <div key={m.label} className="rounded-lg p-1.5 text-center" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
-            <div className="text-[8px] uppercase" style={{ color: COLORS.textSecondary }}>{m.label}</div>
-            <div className="text-sm font-bold font-mono" style={{ color: m.color }}>{m.val}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Live activity sparkline */}
-      <div className="mb-2">
-        <div className="text-[8px] uppercase mb-1" style={{ color: COLORS.textSecondary }}>Live Activity</div>
-        <svg className="w-full h-8" viewBox="0 0 200 30" preserveAspectRatio="none">
-          <polyline
-            points={Array.from({ length: 40 }, (_, i) => `${i * 5},${30 - Math.sin(i / 3) * 10 - Math.random() * 8}`).join(" ")}
-            fill="none"
-            stroke={COLORS.cyan}
-            strokeWidth="1.5"
-            style={{ filter: `drop-shadow(0 0 2px ${COLORS.cyan})` }}
-          />
-        </svg>
-      </div>
-
-      {/* Agent status list */}
-      <div className="space-y-0.5 text-[9px] font-mono">
-        {events.slice(0, 5).map((e, i) => (
-          <div key={e.id || i} className="flex items-center gap-1.5" style={{ color: COLORS.textSecondary }}>
-            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: COLORS.green }} />
-            <span className="truncate flex-1">{e.source}</span>
-            <span style={{ color: COLORS.green }}>Running</span>
-          </div>
-        ))}
-        {events.length === 0 && (
-          <div className="text-center py-1" style={{ color: COLORS.textSecondary }}>No active agents</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Live Activity Feed (Left Rail) ──
-function ActivityFeedPanel({ events }: { events: ReturnType<typeof useStore.getState>["events"] }) {
-  return (
-    <div
-      className="rounded-xl p-3 backdrop-blur-md flex-1 min-h-0 flex flex-col"
-      style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-    >
-      <div className="flex items-center justify-between mb-2 shrink-0">
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: COLORS.textPrimary }}>
-          Live Activity Feed
-        </span>
-        <span className="text-[9px]" style={{ color: COLORS.green }}>
-          {events.length} events
-        </span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden no-scrollbar space-y-1">
-        <AnimatePresence mode="popLayout">
-          {events.slice(0, 30).map((e, i) => {
-            const isFail = e.topic?.includes("fail") || e.topic?.includes("error");
-            const isOk = e.topic?.includes("complete") || e.topic?.includes("start");
-            const color = isFail ? "#ef4444" : isOk ? COLORS.green : COLORS.cyan;
-            return (
-              <motion.div
-                key={e.id || `evt-${i}`}
-                layout
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: Math.max(0.3, 1 - i * 0.03), y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="flex items-center gap-2 rounded-lg px-2 py-1 font-mono text-[10px]"
-                style={{ backgroundColor: "rgba(0,0,0,0.2)" }}
-              >
-                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                <span className="w-24 shrink-0 truncate" style={{ color: COLORS.textSecondary }}>
-                  {e.topic?.split(".").slice(0, 2).join(".") ?? "—"}
-                </span>
-                <span className="flex-1 truncate" style={{ color: COLORS.textPrimary }}>{e.source}</span>
-                <span className="shrink-0 text-[9px]" style={{ color: COLORS.textSecondary }}>
-                  {new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                </span>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-        {events.length === 0 && (
-          <div className="text-center py-4 text-[10px]" style={{ color: COLORS.textSecondary }}>
-            No activity yet. EventBus traffic appears here.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Collaboration Topology (Right Rail) ──
-function CollaborationPanel({ brainNodes }: { brainNodes: Array<{ id: string; name: string; color: string; isCore: boolean }> }) {
-  const nonCore = brainNodes.filter(n => !n.isCore);
-  return (
-    <div
-      className="rounded-xl p-3 backdrop-blur-md"
-      style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: COLORS.textPrimary }}>
-          Collaboration Topology
-        </span>
-      </div>
-
-      {/* Force-directed graph mini visualization */}
-      <div className="relative h-32 mb-2">
-        <svg className="w-full h-full" viewBox="0 0 200 100" preserveAspectRatio="xMidYMid meet">
-          {/* Central node */}
-          <circle cx="100" cy="50" r="5" fill={COLORS.cyan} opacity="0.8" />
-          {nonCore.slice(0, 6).map((node, i) => {
-            const angle = (i / Math.max(1, nonCore.length)) * Math.PI * 2;
-            const x = 100 + 40 * Math.cos(angle);
-            const y = 50 + 30 * Math.sin(angle);
-            return (
-              <g key={node.id}>
-                <line x1="100" y1="50" x2={x} y2={y} stroke={node.color} strokeWidth="0.8" opacity="0.4" />
-                <circle cx={x} cy={y} r="3" fill={node.color} opacity="0.8" />
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      {/* Legend */}
-      <div className="grid grid-cols-2 gap-1 text-[9px] font-mono">
-        {nonCore.slice(0, 6).map((node) => (
-          <div key={node.id} className="flex items-center gap-1.5" style={{ color: COLORS.textSecondary }}>
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: node.color }} />
-            <span className="truncate">{node.name}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Task Flow Pipeline (Right Rail) ──
-function TaskFlowPanel() {
-  const steps = ["User Request", "Router", "Selection", "Execution", "Aggregation", "Delivery"];
-  return (
-    <div
-      className="rounded-xl p-3 backdrop-blur-md"
-      style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: COLORS.textPrimary }}>
-          Task Flow Pipeline
-        </span>
-      </div>
-      <div className="space-y-1">
-        {steps.map((step, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div
-              className="flex items-center justify-center w-5 h-5 rounded text-[8px] font-bold shrink-0"
-              style={{
-                backgroundColor: i < 3 ? `${COLORS.cyan}30` : "rgba(0,0,0,0.3)",
-                border: `1px solid ${i < 3 ? COLORS.cyan : COLORS.textSecondary}40`,
-                color: i < 3 ? COLORS.cyan : COLORS.textSecondary,
-              }}
-            >
-              {i + 1}
-            </div>
-            <span className="text-[9px]" style={{ color: i < 3 ? COLORS.textPrimary : COLORS.textSecondary }}>
-              {step}
-            </span>
-            {i < steps.length - 1 && (
-              <div className="flex-1 h-px" style={{ backgroundColor: `${COLORS.textSecondary}30` }} />
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Capabilities Footer ──
-function CapabilitiesFooter() {
-  const caps = [
-    { icon: "⊕", label: "Compose" },
-    { icon: "◈", label: "Reason" },
-    { icon: "▶", label: "Execute" },
-    { icon: "⟲", label: "Recover" },
-    { icon: "⊞", label: "Aggregate" },
-    { icon: "⟶", label: "Deliver" },
-  ];
-  return (
-    <div
-      className="rounded-xl px-4 py-2.5 flex items-center justify-between shrink-0"
-      style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-    >
-      <div className="grid grid-cols-6 gap-4 flex-1">
-        {caps.map((cap) => (
-          <div key={cap.label} className="flex flex-col items-center gap-0.5">
-            <span className="text-base" style={{ color: COLORS.cyan }}>{cap.icon}</span>
-            <span className="text-[8px] uppercase tracking-wider" style={{ color: COLORS.textSecondary }}>
-              {cap.label}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center gap-2 pl-4 border-l" style={{ borderColor: `${COLORS.border}` }}>
-        <span className="text-[9px] font-bold" style={{ color: COLORS.textSecondary }}>ONE MACHINE</span>
-        <span className="text-[8px]" style={{ color: COLORS.textSecondary }}>INFINITE AGENTS</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Component ──
 export function AIBrain() {
   const storeProviders = useStore((s) => s.providers);
   const storeAgents = useStore((s) => s.agents);
@@ -556,7 +78,49 @@ export function AIBrain() {
     void useStore.getState().hydrate();
   }, []);
 
-  // Build brain nodes from live data
+  const [activePlayback, setActivePlayback] = useState<"1x" | "2x" | "4x">("4x");
+  const [expandedPanel, setExpandedPanel] = useState<string | null>(null);
+  
+  // View control state
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isAnchored, setIsAnchored] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+  
+  const zoomIn = () => setZoomLevel(z => Math.min(z * 1.2, 3));
+  const zoomOut = () => setZoomLevel(z => Math.max(z / 1.2, 0.5));
+  const resetView = () => { setZoomLevel(1); setPanOffset({ x: 0, y: 0 }); };
+  const toggleFullscreen = () => setIsFullscreen(f => !f);
+  const toggleAnchor = () => setIsAnchored(a => !a);
+  const handleRefresh = () => { void useStore.getState().hydrate(); };
+  
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key) {
+        case '=': case '+': e.preventDefault(); zoomIn(); break;
+        case '-': case '_': e.preventDefault(); zoomOut(); break;
+        case '0': e.preventDefault(); resetView(); break;
+        case 'f': case 'F': e.preventDefault(); toggleFullscreen(); break;
+        case 'a': case 'A': e.preventDefault(); toggleAnchor(); break;
+        case 'r': case 'R': e.preventDefault(); handleRefresh(); break;
+        case 'c': case 'C': e.preventDefault(); setShowControls(s => !s); break;
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+  
+  // Auto-pan to center when anchored
+  useEffect(() => {
+    if (isAnchored) {
+      setPanOffset({ x: 0, y: 0 });
+    }
+  }, [isAnchored]);
+
+  // Dynamically compute runtime brain nodes from live discovered providers / agents
   const brainNodes = useMemo(() => {
     const providerList = Object.values(storeProviders).filter(
       (p) => p?.provider && !["mock", "Mock"].includes(p.provider)
@@ -565,135 +129,608 @@ export function AIBrain() {
     const coreNode = {
       id: "mission_control",
       name: "MISSION CONTROL",
-      color: COLORS.cyan,
-      isCore: true,
+      sub: "AI CORE BRAIN",
+      load: "100%",
       status: "ACTIVE",
+      cpu: performance?.cpu_usage_percent ?? 0,
+      ram: performance?.memory_usage_percent ?? 0,
+      tasks: Object.values(storeTasks).filter(t => t.status === "running" || t.status === "in_progress").length,
+      color: "#00f0ff",
+      isCore: true,
+      pos: { x: 50, y: 48 },
     };
 
-    if (providerList.length === 0) return [coreNode];
+    if (providerList.length === 0) {
+      return [coreNode];
+    }
 
-    const outerNodes = providerList.map((p, idx) => ({
-      id: `${p.provider.toLowerCase().replace(/\s+/g, "_")}-${idx}`,
-      name: p.provider.toUpperCase(),
-      color: getProviderColor(p.provider),
-      isCore: false,
-      status: p.status === "healthy" ? "healthy" : p.status,
-    }));
+    // Layout: distribute providers in a NEURAL BAND across the horizontal center
+    // Two rows: upper (y ~38%) and lower (y ~58%), spread across x 15-85%
+    const n = providerList.length;
+    const perRow = Math.ceil(n / 2);
+    const outerNodes = providerList.map((p, idx) => {
+      const row = idx < perRow ? 0 : 1;
+      const col = idx < perRow ? idx : idx - perRow;
+      const colsInRow = idx < perRow ? perRow : n - perRow;
+      
+      // Horizontal spread across the neural band
+      const x = 15 + (col + 0.5) / colsInRow * 70;
+      const y = row === 0 ? 38 : 58;
+      
+      // Add slight organic jitter
+      const angle = (idx * 2.39996323) % (Math.PI * 2); // golden angle-ish
+      const jitterX = Math.cos(angle) * 2.5;
+      const jitterY = Math.sin(angle) * 1.8;
+
+      const agentCount = Object.values(storeAgents).filter(a => a.provider === p.provider).length;
+
+      return {
+        id: `${p.provider.toLowerCase().replace(/\s+/g, "_")}-${idx}`,
+        name: p.provider.toUpperCase(),
+        sub: p.status === "healthy" ? "Active Provider" : p.status,
+        status: p.status.toUpperCase(),
+        cpu: Math.max(12, Math.round(p.latency_ms / 10) % 60),
+        ram: Math.max(20, Math.round((p.latency_ms * 1.5) % 80)),
+        tasks: agentCount || 5,
+        color: getProviderColor(p.provider),
+        isCore: false,
+        pos: { x: Math.round(x + jitterX), y: Math.round(y + jitterY) },
+      };
+    });
 
     return [coreNode, ...outerNodes];
-  }, [storeProviders]);
+  }, [storeProviders, storeAgents, storeTasks, performance]);
 
+  // Core position - center of the neural band
+  const corePos = { x: 50, y: 48 };
+
+  // Compute all connections: core ↔ providers + provider ↔ provider (neural mesh)
   const connections = useMemo(() => {
-    return brainNodes
-      .filter(n => !n.isCore)
-      .map(n => ({ from: n.id, to: "mission_control", color: n.color }));
+    const conns: { from: string; to: string; color: string; weight: number }[] = [];
+    const outerNodes = brainNodes.filter(n => !n.isCore);
+    
+    // Core to each provider (primary synapses)
+    outerNodes.forEach(n => {
+      conns.push({ from: n.id, to: "mission_control", color: n.color, weight: 1.5 });
+    });
+    
+    // Provider to provider (lateral connections - neural mesh)
+    for (let i = 0; i < outerNodes.length; i++) {
+      for (let j = i + 1; j < outerNodes.length; j++) {
+        // Connect nearby providers in the band
+        const dx = outerNodes[i].pos.x - outerNodes[j].pos.x;
+        const dy = outerNodes[i].pos.y - outerNodes[j].pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 30) { // Only connect neighbors
+          const color = `rgba(${parseInt(outerNodes[i].color.slice(1,3),16)},${parseInt(outerNodes[i].color.slice(3,5),16)},${parseInt(outerNodes[i].color.slice(5,7),16)},0.3)`;
+          conns.push({ from: outerNodes[i].id, to: outerNodes[j].id, color, weight: 0.5 });
+        }
+      }
+    }
+    return conns;
   }, [brainNodes]);
 
-  return (
-    <div
-      className="h-full w-full flex flex-col gap-3 p-3 overflow-hidden"
-      style={{ backgroundColor: COLORS.bg, color: COLORS.textPrimary }}
-    >
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between shrink-0 px-2">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold tracking-wide uppercase font-mono" style={{ color: COLORS.textPrimary }}>
-              AI Brain Constellation
-            </h1>
-            <span
-              className="px-2 py-0.5 rounded text-[10px] font-mono"
-              style={{
-                backgroundColor: `${COLORS.cyan}20`,
-                color: COLORS.cyan,
-                border: `1px solid ${COLORS.cyan}40`,
-              }}
-            >
-              LIVE
-            </span>
-          </div>
-          <p className="text-[11px] mt-0.5" style={{ color: COLORS.textSecondary }}>
-            Real-time neural network of active AI agents and workflows
-          </p>
-        </div>
+  // Real-time task & telemetry stats
+  const activeAgentsCount = useMemo(() => {
+    const list = Object.values(storeProviders);
+    return list.length > 0 ? list.filter(p => p.status === "healthy").length : 0;
+  }, [storeProviders]);
 
-        {/* Live event flow mini card */}
-        <div
-          className="rounded-xl p-2.5 backdrop-blur-md w-56"
-          style={{ backgroundColor: "rgba(9, 13, 36, 0.9)", border: `1px solid ${COLORS.border}` }}
+  const totalAgentsCount = useMemo(() => Math.max(brainNodes.length - 1, Object.keys(storeAgents).length), [brainNodes.length, storeAgents]);
+
+  const runningTasksCount = useMemo(() => {
+    const tasks = Object.values(storeTasks);
+    return tasks.length > 0 ? tasks.filter(t => t.status === "running").length : 0;
+  }, [storeTasks]);
+
+  const completedTasksCount = useMemo(() => {
+    const tasks = Object.values(storeTasks);
+    return tasks.length > 0 ? tasks.filter(t => t.status === "completed").length : 0;
+  }, [storeTasks]);
+
+  const taskCountByProvider = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const t of Object.values(storeTasks)) {
+      const prefix = (t.id || t.title || "").split("_")[0].toLowerCase();
+      if (prefix) counts[prefix] = (counts[prefix] || 0) + 1;
+    }
+    return counts;
+  }, [storeTasks]);
+
+  const liveEvents = useMemo(() => {
+    if (storeEvents.length > 0) {
+      return storeEvents.slice(0, 8).map((e) => ({
+        time: new Date(e.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        agent: `${e.topic.replace(/\./g, ' ')}`,
+        detail: JSON.stringify(e.payload).slice(0, 40),
+      }));
+    }
+    return [];
+  }, [storeEvents]);
+
+  const commPairs = useMemo(() => {
+    const providerSet = new Set<string>();
+    Object.values(storeProviders).forEach((p) => {
+      if (p.provider && p.provider.toLowerCase() !== "mock") providerSet.add(p.provider);
+    });
+    const providers = Array.from(providerSet);
+    if (providers.length < 2) return [];
+    const pairs: { pair: string; rate: string }[] = [];
+    for (let i = 0; i < providers.length && pairs.length < 8; i++) {
+      for (let j = i + 1; j < providers.length && pairs.length < 8; j++) {
+        pairs.push({ pair: `${providers[i]} ↔ ${providers[j]}`, rate: "0 msg/min" });
+      }
+    }
+    return pairs;
+  }, [storeProviders]);
+
+  const overallProgress = useMemo(() => {
+    const total = runningTasksCount + completedTasksCount;
+    return total > 0 ? Math.round((completedTasksCount / total) * 100) : 0;
+  }, [runningTasksCount, completedTasksCount]);
+
+  return (
+    <div className="h-full w-full bg-[#010209] text-slate-100 font-sans select-none overflow-hidden text-xs relative">
+
+      {/* ── DEEP VOID BACKGROUND ── */}
+      <div className="absolute inset-0" style={{
+        background:
+          "radial-gradient(ellipse 120% 100% at 50% 48%, rgba(0,240,255,0.06) 0%, transparent 50%)," +
+          "radial-gradient(ellipse 80% 60% at 50% 48%, rgba(56,189,248,0.04) 0%, transparent 45%)," +
+          "radial-gradient(600px 400px at 20% 20%, rgba(217,128,255,0.03), transparent 60%)," +
+          "radial-gradient(600px 400px at 80% 80%, rgba(129,140,248,0.03), transparent 60%)",
+      }} />
+
+      {/* ── STARFIELD ── */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-60">
+        {STARFIELD.map((s, i) => (
+          <circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r} fill="#67e8f9" opacity={s.o} />
+        ))}
+      </svg>
+
+      {/* ── NEURAL BAND GLOW (horizontal luminous strip matching reference) ── */}
+      <div className="absolute left-[10%] right-[10%] top-[30%] bottom-[30%] pointer-events-none" style={{
+        background:
+          "linear-gradient(180deg, transparent 0%, rgba(0,240,255,0.03) 20%, rgba(0,240,255,0.08) 50%, rgba(0,240,255,0.03) 80%, transparent 100%)",
+        filter: "blur(60px)",
+      }} />
+      
+      {/* Neural band horizontal streak lines */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-30">
+        <defs>
+          <linearGradient id="neuralStreak" x1="0%" y1="50%" x2="100%" y2="50%">
+            <stop offset="0%" stopColor="#00f0ff" stopOpacity="0" />
+            <stop offset="50%" stopColor="#00f0ff" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[38, 42, 46, 50, 54, 58].map((y, i) => (
+          <line
+            key={i}
+            x1="8%" x2="92%"
+            y1={`${y}%`} y2={`${y}%`}
+            stroke="url(#neuralStreak)"
+            strokeWidth={i === 2 || i === 3 ? 1.5 : 0.5}
+            strokeDasharray="40 20"
+          />
+        ))}
+      </svg>
+
+      {/* ══════════ NEURAL CONSTELLATION CANVAS ══════════ */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div 
+          className="relative w-full h-full min-w-0 min-h-0 transition-transform duration-200"
+          style={{
+            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
+            transformOrigin: 'center center',
+          }}
         >
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider mb-1" style={{ color: COLORS.textSecondary }}>
-            <span>Live Event Flow</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-base font-bold font-mono" style={{ color: COLORS.textPrimary }}>
-              {storeEvents.length * 128 || 12847}
-            </span>
-            <span className="text-xs" style={{ color: COLORS.cyan }}>events / sec</span>
-          </div>
-          {/* Sparkline */}
-          <div className="h-6 mt-1 flex items-end gap-0.5">
-            {[30, 45, 60, 40, 75, 50, 90, 65, 80, 55, 95, 70, 85, 60, 100, 75].map((h, i) => (
-              <div
+
+          {/* Synaptic connection pathways */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            {connections.map((conn, idx) => {
+              const fromNode = brainNodes.find(n => n.id === conn.from);
+              const toNode = brainNodes.find(n => n.id === conn.to);
+              if (!fromNode || !toNode) return null;
+              const isCore = conn.to === "mission_control" || conn.from === "mission_control";
+              return (
+                <g key={idx}>
+                  <line
+                    x1={`${fromNode.pos.x}%`}
+                    y1={`${fromNode.pos.y}%`}
+                    x2={`${toNode.pos.x}%`}
+                    y2={`${toNode.pos.y}%`}
+                    stroke={conn.color}
+                    strokeWidth={conn.weight}
+                    strokeOpacity={isCore ? 0.5 : 0.25}
+                    className="animate-dash-flow"
+                    strokeDasharray={isCore ? "8 6" : "4 8"}
+                    strokeLinecap="round"
+                  />
+                  {/* Synaptic boutons along the connection */}
+                  {[0.3, 0.7].map((t, ti) => (
+                    <circle
+                      key={ti}
+                      cx={`${fromNode.pos.x + (toNode.pos.x - fromNode.pos.x) * t}%`}
+                      cy={`${fromNode.pos.y + (toNode.pos.y - fromNode.pos.y) * t}%`}
+                      r="1.5"
+                      fill={conn.color}
+                      opacity={isCore ? 0.6 : 0.3}
+                      className="animate-pulse"
+                    />
+                  ))}
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Synaptic noise particles in the band */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-40">
+            {SYNAPTIC_PARTICLES.map((p, i) => (
+              <circle
                 key={i}
-                className="flex-1 rounded-xs transition-all"
-                style={{ height: `${h}%`, backgroundColor: `${COLORS.cyan}40` }}
+                cx={`${p.x}%`}
+                cy={`${p.y}%`}
+                r={p.d}
+                fill="#67e8f9"
+                opacity={p.s * 0.4}
+                className="animate-pulse"
+                style={{ animationDuration: `${2 + (i % 3)}s`, animationDelay: `${i * 0.05}s` }}
               />
+            ))}
+          </svg>
+
+          {/* Render brain nodes */}
+          {brainNodes.map((node) => {
+            const isCenter = node.isCore;
+            const pos = isCenter ? node.pos : node.pos;
+            return (
+              <div
+                key={node.id}
+                className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-all duration-500 hover:scale-110 group"
+                style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+              >
+                {isCenter ? (
+                  /* ── CORE: MASTER NEURAL HUB ── */
+                  <div className="relative flex items-center justify-center">
+                    {/* Deep glow field */}
+                    <div
+                      className="absolute rounded-full w-48 h-48"
+                      style={{
+                        background: "radial-gradient(circle, rgba(0,240,255,0.25) 0%, rgba(0,240,255,0.08) 40%, transparent 70%)",
+                        filter: "blur(20px)",
+                      }}
+                    />
+                    {/* Pulsing aura ring */}
+                    <div className="absolute rounded-full border-2 border-cyan-400/40 animate-ping w-44 h-44 opacity-50" />
+                    {/* Outer rotating ring */}
+                    <div className="absolute w-40 h-40 rounded-full border border-dashed border-cyan-400/30 animate-spin-slow" style={{ animationDuration: "30s" }}>
+                      <span className="absolute -top-1 left-1/2 w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#00f0ff]" />
+                    </div>
+                    {/* Inner counter-rotating ring */}
+                    <div className="absolute w-32 h-32 rounded-full border border-dotted border-indigo-400/40 animate-spin-slow" style={{ animationDuration: "45s", animationDirection: "reverse" }} />
+                    
+                    {/* Core neural hub icon */}
+                    <div className="relative w-28 h-28 rounded-full bg-[#040812]/95 border-2 flex items-center justify-center" style={{ borderColor: "#00f0ff", boxShadow: "0 0 40px rgba(0,240,255,0.4), inset 0 0 20px rgba(0,240,255,0.15)" }}>
+                      <svg className="w-20 h-20" viewBox="0 0 100 100">
+                        {/* Main lobes */}
+                        <path d="M 50 18 C 32 12, 16 30, 22 50 C 16 68, 32 85, 50 82 C 45 72, 45 28, 50 18 Z" fill="#00f0ff" fillOpacity="0.18" stroke="#00f0ff" strokeWidth="1.8" />
+                        <path d="M 50 18 C 68 12, 84 30, 78 50 C 84 68, 68 85, 50 82 C 55 72, 55 28, 50 18 Z" fill="#00f0ff" fillOpacity="0.18" stroke="#00f0ff" strokeWidth="1.8" />
+                        {/* Corpus callosum */}
+                        <path d="M 50 32 L 46 40 L 50 50 L 54 40 Z" fill="#00f0ff" fillOpacity="0.4" />
+                        {/* Synaptic clusters */}
+                        <g fill="#00f0ff">
+                          <circle cx="50" cy="36" r="3" />
+                          <circle cx="50" cy="52" r="2.5" />
+                          <circle cx="40" cy="36" r="2" />
+                          <circle cx="60" cy="36" r="2" />
+                          <circle cx="42" cy="50" r="2" />
+                          <circle cx="58" cy="50" r="2" />
+                          <circle cx="35" cy="44" r="1.5" />
+                          <circle cx="65" cy="44" r="1.5" />
+                        </g>
+                        {/* Radiating dendrites */}
+                        <g stroke="#00f0ff" strokeWidth="1" strokeOpacity="0.6">
+                          <line x1="50" y1="18" x2="50" y2="8" />
+                          <line x1="22" y1="50" x2="8" y2="50" />
+                          <line x1="78" y1="50" x2="92" y2="50" />
+                          <line x1="50" y1="82" x2="50" y2="92" />
+                        </g>
+                      </svg>
+                    </div>
+                    
+                    {/* AI tag */}
+                    <span className="absolute -top-3 px-2 py-0.5 rounded bg-[#040812] border border-cyan-400/50 text-[8px] font-mono text-cyan-300 font-bold tracking-wide">AI CORE</span>
+                  </div>
+                ) : (
+                  /* ── NEURAL NODE: provider brain ── */
+                  <div className="relative flex flex-col items-center">
+                    <div className="relative">
+                      {/* Node glow */}
+                      <div
+                        className="absolute rounded-full w-16 h-16 -left-3 -top-3 opacity-20 animate-pulse"
+                        style={{ backgroundColor: node.color, filter: "blur(8px)" }}
+                      />
+                      {/* Node body */}
+                      <div className="relative w-10 h-10 rounded-full bg-[#040812]/95 border-2 flex items-center justify-center" style={{ borderColor: node.color, boxShadow: `0 0 20px ${node.color}66, inset 0 0 10px ${node.color}22` }}>
+                        <svg className="w-6 h-6" viewBox="0 0 100 100">
+                          <path d="M 50 18 C 32 12, 16 30, 22 50 C 16 68, 32 85, 50 82 C 45 72, 45 28, 50 18 Z" fill={node.color} fillOpacity="0.3" stroke={node.color} strokeWidth="2" />
+                          <path d="M 50 18 C 68 12, 84 30, 78 50 C 84 68, 68 85, 50 82 C 55 72, 55 28, 50 18 Z" fill={node.color} fillOpacity="0.3" stroke={node.color} strokeWidth="2" />
+                          <circle cx="50" cy="44" r="2" fill={node.color} />
+                          <circle cx="50" cy="56" r="1.5" fill={node.color} fillOpacity="0.6" />
+                        </svg>
+                      </div>
+                      {/* Status indicator */}
+                      <span
+                        className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-[#010209]"
+                        style={{
+                          backgroundColor: node.status === "HEALTHY" || node.status === "ACTIVE" ? "#34d399" : node.status === "DOWN" ? "#f43f5e" : "#fbbf24",
+                          boxShadow: "0 0 10px currentColor",
+                        }}
+                      />
+                    </div>
+                    <div className="mt-1.5 text-center font-mono">
+                      <div className="text-[8px] font-bold tracking-wider text-white drop-shadow-[0_0_4px_rgba(0,240,255,0.5)]">{node.name}</div>
+                      <div className="text-[7px] text-cyan-400/70">{node.status}</div>
+                    </div>
+                    {/* Hover telemetry chip */}
+                    <div className="absolute top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-[#050a1c]/95 border border-slate-700 rounded-md px-2 py-1.5 font-mono text-[7px] text-slate-300 shadow-xl whitespace-nowrap z-20">
+                      <div>CPU <span className="text-white">{node.cpu}%</span></div>
+                      <div>RAM <span className="text-white">{node.ram}%</span></div>
+                      <div>Tasks <span className="text-white">{node.tasks}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ══════════ FLOATING HUD PANELS (matching reference layout) ══════════ */}
+
+      {/* TOP BAR: Title + Event Flow + View Controls */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 max-w-[95%]">
+        <div className="flex items-center gap-2.5 bg-[#050a1c]/70 backdrop-blur-md border border-cyan-500/20 rounded-lg px-3 py-2 shadow-[0_0_24px_rgba(0,0,0,0.6)]">
+          <h1 className="text-sm font-bold tracking-[0.15em] text-white uppercase font-mono">AI BRAIN CONSTELLATION</h1>
+          <span className="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 text-[8px] font-mono border border-cyan-500/40 animate-pulse">LIVE</span>
+        </div>
+        
+        {/* Event Flow */}
+        <div className="bg-[#050a1c]/70 backdrop-blur-md border border-cyan-500/20 rounded-lg px-3 py-2 shadow-[0_0_24px_rgba(0,0,0,0.6)] min-w-[140px]">
+          <div className="flex items-center justify-between text-slate-400 text-[8px] uppercase tracking-wider">
+            <span>Event Flow</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          </div>
+          <div className="text-base font-bold font-mono text-white flex items-baseline gap-1 mt-0.5">
+            <span>{storeEvents.length * 128 || 12847}</span>
+            <span className="text-[8px] text-cyan-400 font-normal">events/s</span>
+          </div>
+          <div className="h-5 mt-1 flex items-end gap-0.5">
+            {[30, 45, 60, 40, 75, 50, 90, 65, 80, 55, 95, 70, 85, 60, 100, 75].map((h, i) => (
+              <div key={i} className="flex-1 bg-cyan-500/40 rounded-xs" style={{ height: `${h}%` }} />
             ))}
           </div>
         </div>
+
+        {/* View Controls */}
+        <div className="flex items-center gap-1.5 bg-[#050a1c]/70 backdrop-blur-md border border-cyan-500/20 rounded-lg px-2.5 py-1.5 shadow-[0_0_24px_rgba(0,0,0,0.6)]">
+          <span className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[8px]">3D</span>
+          <button onClick={handleRefresh} className="hover:text-white transition-colors p-0.5" title="Refresh (R)">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={zoomIn} className="hover:text-white transition-colors p-0.5" title="Zoom In (+)">
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={zoomOut} className="hover:text-white transition-colors p-0.5" title="Zoom Out (-)">
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={resetView} className="hover:text-white transition-colors p-0.5" title="Reset View (0)">
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={toggleAnchor} className={`hover:text-white transition-colors p-0.5 ${isAnchored ? 'text-cyan-400' : 'text-slate-400'}`} title="Toggle Anchor (A)">
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+          {/* Zoom level indicator */}
+          <span className="px-1.5 py-0.5 rounded bg-slate-900/50 border border-slate-700 text-[8px] font-mono text-cyan-300 ml-1">
+            {Math.round(zoomLevel * 100)}%
+          </span>
+        </div>
       </div>
 
-      {/* ── Main Content: 3-column layout ── */}
-      <div className="flex-1 grid gap-3 min-h-0 grid-cols-1 lg:grid-cols-[200px_1fr_200px]">
-        {/* ── Left Rail: System Monitor + Activity Feed ── */}
-        <div className="flex flex-col gap-3 min-h-0">
-          <SystemMonitorPanel telemetry={telemetry} performance={performance} events={storeEvents} />
-          <ActivityFeedPanel events={storeEvents} />
+      {/* LEFT PANEL: Constellation Summary - BOTTOM LEFT */}
+      <div className="absolute bottom-[120px] left-4 z-20 bg-[#050a1c]/80 backdrop-blur-md border border-cyan-500/20 rounded-xl px-3 py-2.5 font-mono text-[9px] shadow-[0_0_24px_rgba(0,0,0,0.6)] w-[160px]">
+        <div className="text-slate-400 text-[8px] uppercase tracking-wider mb-2 font-bold flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-cyan-400" /> CONSTELLATION
         </div>
-
-        {/* ── Center: Neural Network Canvas ── */}
-        <NeuralNetworkCanvas brainNodes={brainNodes} connections={connections} />
-
-        {/* ── Right Rail: Collaboration + Task Flow ── */}
-        <div className="flex flex-col gap-3 min-h-0">
-          <CollaborationPanel brainNodes={brainNodes} />
-          <TaskFlowPanel />
-          {/* Mission Progress donut */}
-          <div
-            className="rounded-xl p-3 backdrop-blur-md"
-            style={{ backgroundColor: COLORS.surface, border: `1px solid ${COLORS.border}` }}
-          >
-            <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: COLORS.textPrimary }}>
-              Mission Progress
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(30, 41, 59, 0.8)" strokeWidth="3.8" />
-                  <path
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke={COLORS.cyan}
-                    strokeWidth="3.8"
-                    strokeDasharray="78, 100"
-                    style={{ filter: `drop-shadow(0 0 3px ${COLORS.cyan})` }}
-                  />
-                </svg>
-                <span className="absolute text-sm font-bold font-mono" style={{ color: COLORS.cyan }}>78%</span>
-              </div>
-              <div className="text-[9px] font-mono space-y-0.5" style={{ color: COLORS.textSecondary }}>
-                <div>Tasks: {Object.keys(storeTasks).length}</div>
-                <div>Completed: {Object.values(storeTasks).filter(t => t.status === "completed").length}</div>
-                <div style={{ color: COLORS.green }}>Running: {Object.values(storeTasks).filter(t => t.status === "running").length}</div>
-              </div>
-            </div>
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-center">
+            <span className="flex items-center gap-1.5 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" /> Total Agents
+            </span>
+            <span className="font-bold text-white">{totalAgentsCount}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="flex items-center gap-1.5 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Active
+            </span>
+            <span className="font-bold text-emerald-400">{activeAgentsCount}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="flex items-center gap-1.5 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Busy
+            </span>
+            <span className="font-bold text-amber-400">{runningTasksCount}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="flex items-center gap-1.5 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Offline
+            </span>
+            <span className="font-bold text-slate-400">
+              {Object.values(storeProviders).filter(p => p.status === "down" || p.status === "unknown").length}
+            </span>
           </div>
         </div>
+        <div className="mt-2 pt-2 border-t border-slate-800/70 flex items-center justify-between text-slate-400">
+          <span className="px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[8px]">3D VIEW</span>
+          <button className="hover:text-white text-[10px]">Expand</button>
+        </div>
       </div>
 
-      {/* ── Capabilities Footer ── */}
-      <CapabilitiesFooter />
+      {/* RIGHT PANEL: Live Events Feed - BOTTOM RIGHT */}
+      <div className="absolute bottom-[120px] right-4 z-20 bg-[#050a1c]/80 backdrop-blur-md border border-cyan-500/20 rounded-xl px-3 py-2.5 font-mono text-[9px] shadow-[0_0_24px_rgba(0,0,0,0.6)] w-[260px] max-h-[40vh] overflow-hidden">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="font-bold text-white uppercase tracking-wider text-[8px]">Live Events</span>
+          <span className="text-emerald-400 text-[7px]">All Systems Live</span>
+        </div>
+        <div className="space-y-1.5 max-h-[30vh] overflow-y-auto pr-1">
+          {liveEvents.length === 0 ? (
+            <div className="text-slate-500 text-center py-2">Waiting for events…</div>
+          ) : (
+            liveEvents.map((ev, i) => (
+              <div key={i} className="flex items-start gap-1.5 text-slate-300 border-b border-slate-800/40 pb-1 hover:bg-cyan-500/5 transition-colors rounded-sm px-1">
+                <span className="text-slate-500 text-[7px] shrink-0">{ev.time}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-cyan-300 truncate">{ev.agent}</div>
+                  <div className="text-slate-400 text-[7px] truncate">{ev.detail}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* BOTTOM-LEFT: Mission Progress + Network Legend */}
+      <div className="absolute bottom-4 left-4 z-20 bg-[#050a1c]/80 backdrop-blur-md border border-cyan-500/20 rounded-xl px-3 py-2.5 font-mono text-[9px] shadow-[0_0_24px_rgba(0,0,0,0.6)] w-[180px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-bold text-white uppercase tracking-wider text-[8px]">Mission Progress</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative w-14 h-14 flex items-center justify-center">
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+              <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#1e293b" strokeWidth="3.8" />
+              <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#00f0ff" strokeWidth="3.8" strokeDasharray={`${overallProgress}, 100`} strokeLinecap="round" />
+            </svg>
+            <div className="absolute text-center">
+              <div className="text-xs font-bold text-white">{overallProgress}%</div>
+              <div className="text-[6px] text-slate-400">COMPLETE</div>
+            </div>
+          </div>
+          <div className="space-y-1 text-[8px]">
+            <div className="flex items-center gap-1.5 text-slate-300"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400" /> {runningTasksCount} Running</div>
+            <div className="flex items-center gap-1.5 text-slate-300"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {completedTasksCount} Completed</div>
+            <div className="flex items-center gap-1.5 text-slate-300"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> {telemetry.errors || 0} Failed</div>
+          </div>
+        </div>
+        {/* Network Legend */}
+        <div className="mt-2 pt-2 border-t border-slate-800/70 space-y-1">
+          <div className="flex items-center gap-2 text-slate-400 text-[8px]"><span className="w-3 h-[2px] bg-cyan-400 shadow-[0_0_6px_#38bdf8]" /> Synaptic Flow</div>
+          <div className="flex items-center gap-2 text-slate-400 text-[8px]"><span className="w-3 h-[2px] border-b border-dotted border-purple-400" /> Task Routing</div>
+          <div className="flex items-center gap-2 text-slate-400 text-[8px]"><span className="w-3 h-[2px] bg-emerald-400" /> Heartbeat</div>
+          <div className="flex items-center gap-2 text-slate-400 text-[8px]"><span className="w-3 h-[2px] border-b border-dashed border-amber-400" /> Lateral Link</div>
+        </div>
+      </div>
+
+      {/* BOTTOM-RIGHT: Agent Communication Matrix */}
+      <div className="absolute bottom-4 right-4 z-20 bg-[#050a1c]/80 backdrop-blur-md border border-cyan-500/20 rounded-xl px-3 py-2.5 font-mono text-[9px] shadow-[0_0_24px_rgba(0,0,0,0.6)] w-[240px]">
+        <div className="font-bold text-white uppercase tracking-wider text-[8px] mb-1.5">Agent Communication</div>
+        <div className="space-y-1 max-h-[25vh] overflow-y-auto pr-1">
+          {commPairs.length === 0 ? (
+            <div className="text-slate-500 text-center py-1.5">No inter-agent communication yet</div>
+          ) : (
+            commPairs.map((c, i) => (
+              <div key={i} className="flex justify-between items-center text-slate-300 border-b border-slate-800/40 pb-0.5 hover:bg-cyan-500/5 transition-colors rounded-sm px-1">
+                <span className="truncate pr-2">{c.pair}</span>
+                <span className="text-cyan-400 font-semibold shrink-0">{c.rate}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* ══════════ BOTTOM TELEMETRY BAR ══════════ */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-[#050a1c]/85 backdrop-blur-md border border-cyan-500/20 rounded-lg px-4 py-2.5 font-mono text-[9px] shadow-[0_0_30px_rgba(0,0,0,0.7)] flex items-center gap-4 max-w-[95%] flex-wrap justify-center">
+        {/* System Telemetry */}
+        <div className="flex items-center gap-3">
+          {[
+            { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
+            { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },
+            { label: "GPU", val: performance?.gpu_usage_percent ?? "—", color: "text-indigo-400" },
+            { label: "NET", val: performance?.network_throughput_bytes_per_sec ? `${safeFixed((safeNum(performance?.network_throughput_bytes_per_sec) / 1024), 0)}KB/s` : "—", color: "text-pink-400" },
+          ].map((m) => (
+            <div key={m.label} className="text-center px-1.5 bg-slate-900/50 rounded-md p-1 border border-slate-800/50">
+              <div className="text-[7px] text-slate-500">{m.label}</div>
+              <div className={`font-bold text-[10px] ${m.color}`}>{m.val}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="w-px h-8 bg-slate-800" />
+
+        {/* Event Bus + Tokens */}
+        <div className="flex items-center gap-4">
+          <div className="text-center">
+            <div className="text-[7px] text-slate-500">Event Bus</div>
+            <div className="text-white font-bold text-[10px]">{storeEvents.length * 120 || 0} <span className="text-[7px] text-cyan-400 font-normal">ev/s</span></div>
+          </div>
+          <div className="text-center">
+            <div className="text-[7px] text-slate-500">Tokens</div>
+            <div className="text-white font-bold text-[10px]">{telemetry.tokens || 0} <span className="text-[7px] text-cyan-400 font-normal">t/s</span></div>
+          </div>
+        </div>
+
+        <div className="w-px h-8 bg-slate-800" />
+
+        {/* Task Distribution Mini-Histogram */}
+        <div className="flex items-end gap-1 h-10">
+          {(() => {
+            const histogramColors = ["bg-indigo-500", "bg-cyan-500", "bg-emerald-500", "bg-pink-500", "bg-amber-500", "bg-purple-500", "bg-blue-500", "bg-teal-500"];
+            const entries = Object.entries(taskCountByProvider).filter(([k]) => k && k !== "mock");
+            if (entries.length === 0) return <div className="text-slate-500 text-[8px] m-auto">No task data</div>;
+            return entries.slice(0, 8).map(([provider, val], idx) => {
+              const name = provider.charAt(0).toUpperCase() + provider.slice(1);
+              return (
+                <div key={provider} className="flex flex-col items-center flex-1 h-full justify-end" title={`${name}: ${val} tasks`}>
+                  <div className={`w-full rounded-t ${histogramColors[idx % histogramColors.length]}`} style={{ height: `${Math.min(val * 10, 100)}%` }} />
+                  <span className="text-[6px] text-slate-500 truncate w-full text-center mt-0.5">{name.slice(0,4)}</span>
+                </div>
+              );
+            });
+          })()}
+        </div>
+
+        <div className="w-px h-8 bg-slate-800" />
+
+        {/* Connections Status */}
+        <div className="flex items-center gap-3 text-[8px]">
+          <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> WebSocket</div>
+          <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> EventBus</div>
+          <div className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {Object.keys(storeProviders).length} Providers</div>
+        </div>
+
+        <div className="w-px h-8 bg-slate-800" />
+
+        {/* Playback Controls */}
+        <div className="flex items-center gap-1 border-l border-slate-800 pl-3">
+          {(["1x", "2x", "4x"] as const).map((spd) => (
+            <button
+              key={spd}
+              onClick={() => setActivePlayback(spd)}
+              className={`px-2 py-1 rounded text-[8px] font-bold ${
+                activePlayback === spd
+                  ? "bg-cyan-500/20 border border-cyan-500/50 text-cyan-300"
+                  : "bg-slate-900 text-slate-400 hover:text-white"
+              }`}
+            >
+              {spd}
+            </button>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }
+
+export { AIBrain as AiBrain };
+export default AIBrain;

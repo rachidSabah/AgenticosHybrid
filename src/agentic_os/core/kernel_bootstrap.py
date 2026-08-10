@@ -42,7 +42,10 @@ def _diag(stage: str, status: str, detail: str = "") -> None:
     msg = f"{_STARTUP_LOG_PREFIX} {stage}: {status}"
     if detail:
         msg += f" — {detail}"
-    print(msg, file=sys.stderr, flush=True)
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except UnicodeEncodeError:
+        print(msg.encode("ascii", errors="replace").decode("ascii"), file=sys.stderr, flush=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -815,7 +818,10 @@ async def run_container_serve(host: str | None = None, port: int | None = None) 
         import traceback as _tb
 
         _diag("Kernel", "CONSTRUCTION_FAILED", f"{type(exc).__name__}: {exc}")
-        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        try:
+            print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        except UnicodeEncodeError:
+            print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}".encode("ascii", errors="replace").decode("ascii"), flush=True)
         return
 
     try:
@@ -827,7 +833,10 @@ async def run_container_serve(host: str | None = None, port: int | None = None) 
         import traceback as _tb
 
         _diag("API", "BUILD_FAILED", f"{type(exc).__name__}: {exc}")
-        print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        try:
+            print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}", flush=True)
+        except UnicodeEncodeError:
+            print(f"{_STARTUP_LOG_PREFIX} Traceback:\n{_tb.format_exc()}".encode("ascii", errors="replace").decode("ascii"), flush=True)
         return
 
     # Container-backed phased startup (Critical + Infrastructure, then background subsystems)

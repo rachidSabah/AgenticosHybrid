@@ -91,9 +91,25 @@ export function SwarmDashboard() {
   );
 }
 
+type ConsensusRound = {
+  id: string;
+  swarm_id: string;
+  consensus_type: string;
+  proposal: string;
+  votes: Record<string, string>;
+  result: string;
+  confidence: number;
+  created_at: string;
+};
+
 function SwarmDashboardTab() {
   const [metrics, setMetrics] = useState<SwarmMetricsSummary | null>(null);
   const [swarms, setSwarms] = useState<SwarmSummary[]>([]);
+  const [busy, setBusy] = useState<"monitor" | "consensus" | null>(null);
+  const [actionMsg, setActionMsg] = useState<{ tone: "ok" | "warn" | "danger" | "default"; text: string } | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+  const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
 
   const storeMissions = useStore((s) => s.missions);
   const storeProviders = useStore((s) => s.providers);
@@ -112,14 +128,76 @@ function SwarmDashboardTab() {
     load();
   }, [load]);
 
-  const activeMissionsCount = Object.keys(storeMissions).length;
-  const agentsOnlineCount = Object.keys(storeProviders).length || 3;
+  // All derived values come from real metrics / real swarms — no fabricated fallbacks.
+  const agentsOnlineCount = metrics?.agents_online ?? Object.keys(storeProviders).length;
   const totalSwarms = metrics?.total_swarms ?? swarms.length;
-  const activeSwarms = metrics?.active_swarms ?? activeMissionsCount;
+  const activeSwarms = metrics?.active_swarms ?? swarms.filter((s) => s.status === "active").length;
   const totalTasks = metrics?.total_tasks ?? 0;
   const completedTasks = metrics?.completed_tasks ?? 0;
   const failedTasks = metrics?.failed_tasks ?? 0;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const activeSwarm = swarms.find((s) => s.status === "active");
+
+  const runAnalyze = async () => {
+    const desc = goalInput.trim();
+    if (!desc) return;
+    setAnalyzing(true);
+    try {
+      const res = await api.swarmAnalyzeGoal({ description: desc });
+      setAnalysis(res.analysis);
+    } catch {
+      setAnalysis(null);
+    }
+    setAnalyzing(false);
+  };
+
+  const runMonitor = async () => {
+    setBusy("monitor");
+    try {
+      const plans = (await api.swarmPlans()) as SwarmPlanSummary | SwarmPlanSummary[];
+      const list = Array.isArray(plans) ? plans : [plans];
+      const active = list.find((p) => p.status === "running" || p.status === "pending" || p.status === "planned");
+      if (!active) {
+        setActionMsg({ tone: "warn", text: "No active plan to monitor — dispatch a goal first." });
+        return;
+      }
+      const res = await api.swarmSupervisorMonitor(active.id);
+      setActionMsg({ tone: res.status === "active" ? "ok" : "warn", text: `Monitoring plan "${active.id}": ${res.status}` });
+    } catch {
+      setActionMsg({ tone: "danger", text: "Monitor execution failed — backend unavailable." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runConsensus = async () => {
+    setBusy("consensus");
+    try {
+      const res = (await api.swarmConsensus()) as unknown;
+      if (Array.isArray(res)) {
+        const rounds = res as ConsensusRound[];
+        setActionMsg(
+          rounds.length > 0
+            ? { tone: "ok", text: `${rounds.length} consensus round(s) · ${rounds.filter((r) => r.result === "approved").length} approved` }
+            : { tone: "warn", text: "No consensus rounds recorded yet." }
+        );
+      } else {
+        const r = res as { status?: string; message?: string };
+        setActionMsg({ tone: r.status ? "ok" : "default", text: r.message ?? "Consensus endpoint returned a response." });
+      }
+    } catch {
+      setActionMsg({ tone: "danger", text: "Consensus lookup failed — backend unavailable." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const actionToneClass = {
+    ok: "border-ok/40 bg-ok/10 text-ok",
+    warn: "border-warn/40 bg-warn/10 text-warn",
+    danger: "border-danger/40 bg-danger/10 text-danger",
+    default: "border-border/40 bg-surface/10 text-muted",
+  };
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -128,86 +206,129 @@ function SwarmDashboardTab() {
         <KpiCard label="Total Swarms" value={totalSwarms} delta="all time" tone="accent" />
         <KpiCard label="Active" value={activeSwarms} delta="executing" tone="ok" />
         <KpiCard label="Agents Online" value={agentsOnlineCount} delta="connected" tone="ok" />
-        <KpiCard label="Failed Tasks" value={failedTasks} delta="last 24h" tone={failedTasks ? "danger" : "default"} />
+        <KpiCard label="Failed Tasks" value={failedTasks} delta="cumulative" tone={failedTasks ? "danger" : "default"} />
       </div>
 
-      {/* ── Active Swarm Card (full width with gradient progress) ── */}
-      <div className="glass rounded-xl border border-border/50 p-4 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-sm font-semibold">Active Swarm</h3>
-            <div className="text-[10px] text-faint mt-0.5">
-              Pattern: hierarchical · Status: executing
+      {/* ── Active Swarm Card (real swarm + real progress) ── */}
+      <div className="glass rounded-xl border border-border/50 p-4 shrink-0 panel-glow">
+        {swarms.length === 0 ? (
+          <Empty title="No swarms yet" hint="Create a swarm in the Swarms tab or dispatch a goal." />
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold truncate">{activeSwarm?.name ?? "Swarms"}</h3>
+                <div className="text-[10px] text-faint mt-0.5 truncate">
+                  {activeSwarm
+                    ? `Topology: ${activeSwarm.topology} · Status: ${activeSwarm.status}`
+                    : `${swarms.length} swarm(s) · ${activeSwarms} active`}
+                </div>
+              </div>
+              <Badge tone={activeSwarm ? "ok" : "default"}>{activeSwarm ? activeSwarm.status : "idle"}</Badge>
             </div>
-          </div>
-          <Badge tone="ok">Active swarm</Badge>
-        </div>
-        {/* Gradient progress bar — magenta → cyan → green */}
-        <div className="h-2 w-full rounded-full bg-border/30 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-[#d980ff] via-[#00f0ff] to-[#10b981] transition-all duration-500"
-            style={{ width: `${Math.min(100, Math.max(0, progressPercent || 67))}%` }}
-          />
-        </div>
-        <div className="mt-2 flex items-center justify-between text-[10px] text-faint">
-          <span>Progress: {progressPercent || 67}%</span>
-          <span>{completedTasks}/{totalTasks || 9} tasks completed</span>
-        </div>
+            {/* Gradient progress bar — magenta → cyan → green */}
+            <div className="beam h-2 w-full overflow-hidden rounded-full bg-border/30">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#d980ff] via-[#00f0ff] to-[#10b981] transition-all duration-500"
+                style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px] text-faint">
+              <span>{totalTasks > 0 ? `Progress: ${progressPercent}%` : "No tasks tracked"}</span>
+              <span>{totalTasks > 0 ? `${completedTasks}/${totalTasks} tasks completed` : "—"}</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Two-column content ── */}
       <div className="grid flex-1 gap-3 min-h-0 grid-cols-1 lg:grid-cols-[2fr_1fr]">
-        {/* Left: Active Swarms list */}
+        {/* Left: Swarms list — real data, real empty state */}
         <Panel title="Active Swarms" subtitle={`${swarms.length} total`} className="min-h-0">
           <div className="min-h-0 max-h-[400px] overflow-y-auto overflow-x-hidden no-scrollbar space-y-2">
             {swarms.length === 0 ? (
-              [
-                { id: "sw-1", name: "Primary Code Architecture Swarm", status: "active", topology: "hierarchical", agent_count: 3 },
-                { id: "sw-2", name: "Security Audit & Linting Swarm", status: "idle", topology: "peer-to-peer", agent_count: 2 },
-              ].map((s, idx) => (
-                <div key={s.id || `sw-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5 hover:bg-cyan-400/10 transition">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-cyan-200 truncate">{s.name}</span>
-                      <Badge tone={s.status === "active" ? "ok" : "default"}>{s.status}</Badge>
-                    </div>
-                    <span className="text-[10px] font-mono text-cyan-300">{s.agent_count} agents</span>
-                  </div>
-                  <div className="mt-1 text-[10px] font-mono text-white/50">{s.topology} topology</div>
-                </div>
-              ))
+              <Empty title="No swarms active" hint="Swarms appear here when created or when a goal is dispatched." />
             ) : (
               swarms.map((s, idx) => (
                 <div key={s.id || `swarm-${idx}`} className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2.5 hover:bg-cyan-400/10 transition">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="text-xs font-semibold text-cyan-200 truncate">{s.name}</span>
                       <Badge tone={s.status === "active" ? "ok" : "default"}>{s.status}</Badge>
                     </div>
-                    <span className="text-[10px] font-mono text-cyan-300">{s.agent_count} agents</span>
+                    <span className="text-[10px] font-mono text-cyan-300 shrink-0">{s.agent_count} agents</span>
                   </div>
-                  <div className="mt-1 text-[10px] font-mono text-white/50">{s.topology}</div>
+                  <div className="mt-1 text-[10px] font-mono text-white/50 truncate">{s.topology}</div>
                 </div>
               ))
             )}
           </div>
         </Panel>
 
-        {/* Right: Quick Actions */}
+        {/* Right: Quick Actions — real orchestration calls */}
         <Panel title="Quick Actions" subtitle="Orchestration controls" className="min-h-0">
           <div className="space-y-2">
-            <div className="rounded-xl border border-border/60 p-3 hover:bg-surface/30 transition cursor-pointer">
+            {/* Analyze Goal — real /api/swarm/planner/analyze */}
+            <div className="rounded-xl border border-border/60 p-3">
               <div className="text-xs font-medium">Analyze Goal</div>
               <div className="mt-0.5 text-[11px] text-faint">Decompose a goal into tasks</div>
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  type="text"
+                  value={goalInput}
+                  onChange={(e) => setGoalInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && runAnalyze()}
+                  placeholder="Describe a goal…"
+                  className="min-w-0 w-full rounded-lg border border-border/40 bg-surface/10 px-2 py-1 text-[11px] focus:border-accent/50 focus:outline-none"
+                />
+                <button
+                  onClick={runAnalyze}
+                  disabled={analyzing || !goalInput.trim()}
+                  className="shrink-0 rounded-lg bg-accent/20 px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent/30 disabled:opacity-40 transition"
+                >
+                  {analyzing ? "…" : "Run"}
+                </button>
+              </div>
+              {analysis && (
+                <pre className="mt-2 max-h-32 overflow-y-auto no-scrollbar whitespace-pre-wrap rounded-lg bg-surface/20 p-2 text-[10px] font-mono text-muted">
+                  {JSON.stringify(analysis, null, 2)}
+                </pre>
+              )}
             </div>
-            <div className="rounded-xl border border-border/60 p-3 hover:bg-surface/30 transition cursor-pointer">
-              <div className="text-xs font-medium">Monitor Execution</div>
-              <div className="mt-0.5 text-[11px] text-faint">Supervise active tasks</div>
-            </div>
-            <div className="rounded-xl border border-border/60 p-3 hover:bg-surface/30 transition cursor-pointer">
-              <div className="text-xs font-medium">View Consensus</div>
+
+            {/* Monitor Execution — real /api/swarm/supervisor/monitor */}
+            <button
+              onClick={runMonitor}
+              disabled={busy === "monitor"}
+              className="w-full rounded-xl border border-border/60 p-3 text-left hover:bg-surface/30 disabled:opacity-40 transition"
+            >
+              <div className="flex items-center gap-2 text-xs font-medium">
+                Monitor Execution
+                {busy === "monitor" && <span className="h-3 w-3 animate-spin rounded-full border border-accent/40 border-t-accent" />}
+              </div>
+              <div className="mt-0.5 text-[11px] text-faint">Supervise active plans</div>
+            </button>
+
+            {/* View Consensus — real /api/consensus */}
+            <button
+              onClick={runConsensus}
+              disabled={busy === "consensus"}
+              className="w-full rounded-xl border border-border/60 p-3 text-left hover:bg-surface/30 disabled:opacity-40 transition"
+            >
+              <div className="flex items-center gap-2 text-xs font-medium">
+                View Consensus
+                {busy === "consensus" && <span className="h-3 w-3 animate-spin rounded-full border border-accent/40 border-t-accent" />}
+              </div>
               <div className="mt-0.5 text-[11px] text-faint">Inspect voting rounds</div>
-            </div>
+            </button>
+
+            {/* Real result of the last orchestration action */}
+            {actionMsg && (
+              <div className={`rounded-lg border px-2.5 py-1.5 text-[11px] ${actionToneClass[actionMsg.tone]}`}>
+                {actionMsg.text}
+              </div>
+            )}
+
             <button
               onClick={load}
               className="w-full rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/30"

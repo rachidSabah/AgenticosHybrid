@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from agentic_os.core.brains.registry import BrainRegistry
     from agentic_os.core.orchestration.communication import CommunicationBus
     from agentic_os.core.orchestration.swarm import SwarmManager
+    from agentic_os.core.orchestrator import Orchestrator
     from agentic_os.ports.event_bus import EventBus
 
 log = get_logger("swarm.phase14")
@@ -69,6 +70,21 @@ class SwarmPhase(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     DISBANDED = "disbanded"
+
+
+# Map swarm roles to orchestrator roles understood by the dispatcher.
+# "executor"/"leader"/"observer" intentionally fall through to keys absent
+# from _ROLE_CAPABILITY_MAP (no required capabilities → any real provider).
+_SWARM_ROLE_TO_ORCHESTRATOR_ROLE: dict[str, str] = {
+    SwarmRole.CODER.value: "coding",
+    SwarmRole.PLANNER.value: "planner",
+    SwarmRole.RESEARCHER.value: "research",
+    SwarmRole.REVIEWER.value: "reviewer",
+    SwarmRole.VALIDATOR.value: "coding",
+    SwarmRole.LEADER.value: "planner",
+    SwarmRole.EXECUTOR.value: "executor",
+    SwarmRole.OBSERVER.value: "executor",
+}
 
 
 # ── Consensus Result ───────────────────────────────────────────────────
@@ -341,11 +357,13 @@ class SwarmCoordinator:
         swarm_manager: SwarmManager | None = None,
         brain_registry: BrainRegistry | None = None,
         comm_bus: CommunicationBus | None = None,
+        orchestrator: Orchestrator | None = None,
     ) -> None:
         self._bus = bus
         self._swarm_mgr = swarm_manager
         self._registry = brain_registry
         self._comm = comm_bus
+        self._orchestrator = orchestrator
         self._started = False
         self._subs: list[str] = []
 
@@ -523,20 +541,72 @@ class SwarmCoordinator:
                 }
             )
 
-        # Simulate execution completion (real execution would use
-        # the OrchestrationFramework's dispatch_task)
-        completed_assignments = [
-            {**a, "status": "completed", "output": f"Output from {a['assigned_name']}"}
-            for a in task_assignments
-        ]
+        # Execute each assignment through the real Orchestrator.  The domain
+        # Task object is mutated in place — status/result/error reflect the
+        # real provider execution.  Never fabricate success: a task left in
+        # PENDING means no executable provider matched, which we report
+        # honestly instead of marking it completed.
+        executed_assignments: list[dict[str, Any]] = []
+        if self._orchestrator is None:
+            # No orchestrator wired — never invent results.
+            for a in task_assignments:
+                a["status"] = "unexecuted"
+                a["error"] = "SwarmCoordinator has no orchestrator wired"
+                executed_assignments.append(a)
+        else:
+            from agentic_os.domain.agent import Task, TaskStatus
 
-        self._swarm_phases[swarm_id] = SwarmPhase.COMPLETED
+            for a in task_assignments:
+                domain_task = Task(
+                    title=a["title"] or "Swarm task",
+                    role=_SWARM_ROLE_TO_ORCHESTRATOR_ROLE.get(a.get("role", ""), "executor"),
+                    description=a.get("description", ""),
+                    user_prompt=a.get("user_prompt", "") or a["title"] or "",
+                    mission_id=swarm_id,
+                )
+                try:
+                    await self._orchestrator.dispatch_task(domain_task)
+                except Exception as exc:  # provider raised outside dispatch
+                    domain_task.status = TaskStatus.FAILED
+                    domain_task.error = str(exc)
+
+                if domain_task.status == TaskStatus.COMPLETED:
+                    a["status"] = "completed"
+                    a["output"] = domain_task.result or ""
+                elif domain_task.status == TaskStatus.FAILED:
+                    a["status"] = "failed"
+                    a["error"] = domain_task.error or "Execution failed"
+                else:
+                    # PENDING after dispatch → no executable provider matched.
+                    a["status"] = "pending"
+                    a["error"] = "No executable provider matched this role"
+                a["task_id"] = domain_task.id
+                executed_assignments.append(a)
+
+        completed = sum(1 for a in executed_assignments if a["status"] == "completed")
+        failed = sum(1 for a in executed_assignments if a["status"] == "failed")
+        total = len(executed_assignments)
+        pending = total - completed - failed
+
+        if total == 0:
+            phase = SwarmPhase.COMPLETED
+        elif failed > 0:
+            phase = SwarmPhase.FAILED
+        elif pending > 0:
+            # No hard failures but some tasks could not execute — honest
+            # per-assignment status carries the reason.
+            phase = SwarmPhase.COMPLETED
+        else:
+            phase = SwarmPhase.COMPLETED
+        self._swarm_phases[swarm_id] = phase
+
         await self._publish(
-            "swarm.execution.completed",
+            "swarm.execution.failed" if failed > 0 else "swarm.execution.completed",
             {
                 "swarm_id": swarm_id,
-                "completed": len(completed_assignments),
-                "failed": 0,
+                "completed": completed,
+                "failed": failed,
+                "pending": pending,
             },
         )
 
@@ -547,18 +617,21 @@ class SwarmCoordinator:
                 {
                     "type": "execution_complete",
                     "swarm_id": swarm_id,
-                    "task_count": len(completed_assignments),
+                    "task_count": total,
+                    "completed": completed,
+                    "failed": failed,
                 }
             )
 
         return {
             "swarm_id": swarm_id,
-            "phase": SwarmPhase.COMPLETED.value,
-            "assignments": completed_assignments,
+            "phase": phase.value,
+            "assignments": executed_assignments,
             "merged_result": {
-                "total_tasks": len(completed_assignments),
-                "completed": len(completed_assignments),
-                "failed": 0,
+                "total_tasks": total,
+                "completed": completed,
+                "failed": failed,
+                "pending": pending,
             },
         }
 

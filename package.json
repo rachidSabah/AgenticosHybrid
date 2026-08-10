@@ -1,0 +1,26 @@
+{
+  "name": "agenticos",
+  "version": "1.0.0",
+  "description": "A **local-first, event-bus-driven AI Agent Operating System** that orchestrates autonomous agents, swarms, and distributed runtimes across a single node or an entire cluster — with a polished desktop runtime, an immersive Mission Control dashboard, and a fully autonomous self-improving ecosystem.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rachidSabah/AgenticosHybrid.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rachidSabah/AgenticosHybrid/issues"
+  },
+  "homepage": "https://github.com/rachidSabah/AgenticosHybrid#readme",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.24"
+  }
+}

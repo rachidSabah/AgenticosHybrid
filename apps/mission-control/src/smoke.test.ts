@@ -31,10 +31,15 @@ describe("Mission Control — E2E Smoke", () => {
 
   it("all views export a matching component", async () => {
     const viewModules = [
+      // Refactored views (futuristic mission-control set)
       { path: "@/views/mission-overview", name: "MissionOverview" },
-      { path: "@/views/ai-brain", name: "AIBrain" },
-      { path: "@/views/agent-constellation", name: "AgentConstellation" },
+      { path: "@/views/execution-graph", name: "ExecutionGraph" },
+      { path: "@/views/swarm-dashboard", name: "SwarmDashboard" },
       { path: "@/views/mission-orchestrator", name: "MissionOrchestrator" },
+      { path: "@/views/ecosystem-dashboard", name: "EcosystemDashboard" },
+      // Remaining mission-control views
+      { path: "@/views/ai-brain", name: "AiBrain" },
+      { path: "@/views/agent-constellation", name: "AgentConstellation" },
       { path: "@/views/discovery-dashboard", name: "DiscoveryDashboard" },
       { path: "@/views/self-healing", name: "SelfHealingPanel" },
       { path: "@/views/provider-control-center", name: "ProviderControlCenter" },

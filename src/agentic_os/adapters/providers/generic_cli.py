@@ -65,7 +65,9 @@ class GenericCLIProvider:
                 f"CLI binary '{self._bin}' not found on PATH. Resolved: {resolved_bin}"
             )
 
-        prompt = f"{task.title}\n\n{task.description}".strip()
+        from agentic_os.adapters.providers.strategies import GenericExecutionStrategy
+        strategy = GenericExecutionStrategy()
+        prompt = strategy.build_prompt(task)
         env = dict(os.environ)
 
         log.info(

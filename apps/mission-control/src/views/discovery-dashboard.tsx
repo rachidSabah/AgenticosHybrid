@@ -84,8 +84,14 @@ function DiscoveryDashboardTab() {
     try {
       const result = await api.runDiscoveryScan();
       const found = result?.engines_found ?? 0;
-      const registered = result?.engines_registered ?? 0;
-      setScanResult(`Found ${found} engines, registered ${registered}`);
+      // The backend scan returns the registered engines in `engines` (there is
+      // no separate `engines_registered` field), so count them directly.
+      const registered = Array.isArray(result?.engines) ? result.engines.length : 0;
+      setScanResult(
+        found > 0
+          ? `Found ${found} engine(s); ${registered} returned in this scan.`
+          : `Scan completed with 0 engines found.`,
+      );
       load();
     } catch (err) {
       setScanResult(`Scan failed: ${err}`);
@@ -394,60 +400,64 @@ function DiscoveryProfilesTab() {
   );
 }
 
-// ── Sub-tab: Validation ──
+// ── Sub-tab: Recent Scans (honest view of discovery history) ──
 
 function DiscoveryValidationTab() {
-  const [validations, setValidations] = useState<DiscoveryValidationEntry[]>([]);
+  const [history, setHistory] = useState<DiscoveryHistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    api.discoveryHistory(50).then(async (history) => {
-      const results: DiscoveryValidationEntry[] = [];
-      // Get engines found in recent scans and validate them
-      // For now show the scan history as validation proxy
-      for (const h of history.slice(0, 10)) {
-        if (h.engines_found > 0) {
-          results.push({
-            engine_id: h.id,
-            engine_name: `scan-${h.profile_name}`,
-            valid: h.providers_failed === 0,
-            errors: h.errors,
-            warnings: [],
-            validated_at: h.completed_at || h.started_at,
-          });
-        }
-      }
-      setValidations(results);
-    }).catch((err) => { console.error("API error:", err); setError(String(err)); });
+  const load = useCallback(() => {
+    setLoading(true);
+    api.discoveryHistory(50)
+      .then((res) => setHistory(Array.isArray(res) ? res : []))
+      .catch((err) => { console.error("API error:", err); setError(String(err)); })
+      .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Real engine validation is a per-engine operation (POST
+  // /api/discovery/engines/{id}/validate) that requires an engine ID from
+  // the runtime registry. There is no list endpoint, so we do not invent
+  // results here — we show the real scan history instead.
   return (
-    <Panel title="Validation Results" subtitle={`${validations.length} engines validated`}>
-      {validations.length === 0 ? (
-        <Empty title="No validation data" hint="Run a discovery scan to trigger validation." />
+    <Panel title="Recent Discovery Scans" subtitle={`${history.length} recorded scans`}>
+      {loading && history.length === 0 ? (
+        <Empty title="Loading scan history…" />
+      ) : history.length === 0 ? (
+        <Empty title="No scans recorded" hint="Run a discovery scan on the Dashboard tab." />
       ) : (
         <div className="space-y-2">
-          {validations.map((v) => (
-            <div key={v.engine_id} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
-              <StatusDot status={v.valid ? "healthy" : "failed"} />
+          {history.slice(0, 20).map((h) => (
+            <div key={h.id} className="flex items-center gap-3 rounded-xl border border-border/60 px-3 py-2.5">
+              <StatusDot status={h.providers_failed > 0 ? "degraded" : "healthy"} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{v.engine_name}</span>
-                  <Badge tone={v.valid ? "ok" : "danger"}>{v.valid ? "Pass" : "Fail"}</Badge>
+                  <span className="text-sm font-medium">{h.profile_name}</span>
+                  <Badge tone={h.providers_failed > 0 ? "warn" : "ok"}>
+                    {h.providers_failed > 0 ? `${h.providers_failed} failed` : "ok"}
+                  </Badge>
                 </div>
-                {v.errors.length > 0 && (
-                  <div className="mt-0.5 text-[11px] text-danger">{v.errors.join("; ")}</div>
-                )}
-                {v.warnings.length > 0 && (
-                  <div className="mt-0.5 text-[11px] text-faint">{v.warnings.join("; ")}</div>
+                <div className="mt-0.5 text-[11px] text-faint">
+                  {h.engines_found} engine(s) found · {h.providers_run} provider(s) run
+                  {h.duration_ms ? ` · ${h.duration_ms}ms` : ""}
+                </div>
+                {h.errors.length > 0 && (
+                  <div className="mt-0.5 text-[11px] text-danger">{h.errors.join("; ")}</div>
                 )}
               </div>
               <span className="text-[11px] text-faint">
-                {new Date(v.validated_at).toLocaleTimeString()}
+                {h.completed_at ? new Date(h.completed_at).toLocaleTimeString() : new Date(h.started_at).toLocaleTimeString()}
               </span>
             </div>
           ))}
         </div>
+      )}
+      {error && (
+        <div className="mt-2 text-[11px] text-danger/80">{error}</div>
       )}
     </Panel>
   );

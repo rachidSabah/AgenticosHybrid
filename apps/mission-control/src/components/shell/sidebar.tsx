@@ -124,7 +124,7 @@ export function Sidebar({
       </a>
 
       {/* Navigation groups */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-2">
+      <div className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden py-2">
         {NAV_GROUPS.map((group) => {
           const items = NAV.filter((n) => n.group === group.id);
           if (items.length === 0) return null;

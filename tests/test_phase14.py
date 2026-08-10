@@ -245,6 +245,110 @@ class TestSwarmCoordinator:
         assert "merged_result" in result
 
     @pytest.mark.asyncio
+    async def test_execute_swarm_no_orchestrator_is_honest(self, coordinator):
+        """Without an orchestrator, assignments must never be fabricated."""
+        team = await coordinator.create_team(goal="Test", required_capabilities=["chat"])
+        swarm_id = team["swarm_id"]
+        result = await coordinator.execute_swarm(
+            swarm_id,
+            [{"id": "t1", "title": "Task 1"}],
+        )
+        assignments = result["assignments"]
+        assert len(assignments) == 1
+        a = assignments[0]
+        # Honest contract: NOT "completed" with a canned output line.
+        assert a["status"] == "unexecuted"
+        assert "no orchestrator" in (a.get("error") or "").lower()
+        assert "output" not in a
+        assert result["merged_result"]["completed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_execute_swarm_real_dispatch(self, bus):
+        """A wired orchestrator is actually invoked per assignment."""
+        from agentic_os.domain.agent import TaskStatus
+
+        class _FakeOrchestrator:
+            def __init__(self) -> None:
+                self.dispatched: list[str] = []
+
+            async def dispatch_task(self, task) -> None:  # noqa: ANN001
+                self.dispatched.append(task.title)
+                task.status = TaskStatus.COMPLETED
+                task.result = f"real result for {task.title}"
+
+        fake = _FakeOrchestrator()
+        c = SwarmCoordinator(bus=bus, orchestrator=fake)  # type: ignore[arg-type]
+        await c.start()
+        try:
+            team = await c.create_team(goal="Test", required_capabilities=["chat"])
+            swarm_id = team["swarm_id"]
+            result = await c.execute_swarm(
+                swarm_id,
+                [{"id": "t1", "title": "Task A"}, {"id": "t2", "title": "Task B"}],
+            )
+            assert fake.dispatched == ["Task A", "Task B"]
+            assert all(a["status"] == "completed" for a in result["assignments"])
+            assert result["assignments"][0]["output"] == "real result for Task A"
+            assert result["merged_result"]["completed"] == 2
+            assert result["merged_result"]["failed"] == 0
+        finally:
+            await c.stop()
+
+    @pytest.mark.asyncio
+    async def test_execute_swarm_real_failure_reported(self, bus):
+        """A failing orchestrator task surfaces as failed, not completed."""
+        from agentic_os.domain.agent import TaskStatus
+
+        class _FailingOrchestrator:
+            async def dispatch_task(self, task) -> None:  # noqa: ANN001
+                task.status = TaskStatus.FAILED
+                task.error = "provider auth failed"
+
+        fake = _FailingOrchestrator()
+        c = SwarmCoordinator(bus=bus, orchestrator=fake)  # type: ignore[arg-type]
+        await c.start()
+        try:
+            team = await c.create_team(goal="Test", required_capabilities=["chat"])
+            swarm_id = team["swarm_id"]
+            result = await c.execute_swarm(
+                swarm_id,
+                [{"id": "t1", "title": "Task A"}],
+            )
+            assert result["assignments"][0]["status"] == "failed"
+            assert result["assignments"][0]["error"] == "provider auth failed"
+            assert result["phase"] == "failed"
+            assert result["merged_result"]["failed"] == 1
+        finally:
+            await c.stop()
+
+    @pytest.mark.asyncio
+    async def test_execute_swarm_pending_reported_honestly(self, bus):
+        """A task left PENDING after dispatch means no provider matched."""
+        from agentic_os.domain.agent import TaskStatus
+
+        class _NoopOrchestrator:
+            async def dispatch_task(self, task) -> None:  # noqa: ANN001
+                # Leaves task.status PENDING → no executable provider
+                pass
+
+        fake = _NoopOrchestrator()
+        c = SwarmCoordinator(bus=bus, orchestrator=fake)  # type: ignore[arg-type]
+        await c.start()
+        try:
+            team = await c.create_team(goal="Test", required_capabilities=["chat"])
+            swarm_id = team["swarm_id"]
+            result = await c.execute_swarm(
+                swarm_id,
+                [{"id": "t1", "title": "Task A"}],
+            )
+            a = result["assignments"][0]
+            assert a["status"] == "pending"
+            assert "no executable provider" in (a.get("error") or "").lower()
+            assert result["merged_result"]["completed"] == 0
+        finally:
+            await c.stop()
+
+    @pytest.mark.asyncio
     async def test_execute_not_found(self, coordinator):
         result = await coordinator.execute_swarm("nonexistent")
         assert "error" in result

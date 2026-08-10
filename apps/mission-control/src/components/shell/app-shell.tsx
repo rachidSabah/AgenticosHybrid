@@ -124,8 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </div>
 
-            {/* Scrollable menu items — only this region scrolls */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 no-scrollbar">
+            {/* Scrollable menu items — only this region scrolls.
+                The Sidebar component owns its internal overflow-y-auto;
+                this wrapper only bounds its height (min-h-0) so the
+                inner scroll region actually gets a constrained height. */}
+            <div className="min-h-0 flex-1">
               <Sidebar active={active} onSelect={open} />
             </div>
 

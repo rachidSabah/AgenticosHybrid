@@ -172,18 +172,41 @@ class WorktreeManager:
         )
 
         if rc != 0:
-            # Try without -b (branch may already exist)
+            # Try without base_branch (create from HEAD)
             stdout, stderr, rc = await self._run_git(
                 [
                     "worktree",
                     "add",
-                    wt_path,
+                    "-b",
                     branch_name,
+                    wt_path,
                 ]
             )
             if rc != 0:
-                log.error("worktree.create_failed", branch=branch_name, error=stderr)
-                raise RuntimeError(f"Failed to create worktree: {stderr}")
+                # Try without -b (branch may already exist)
+                stdout, stderr, rc = await self._run_git(
+                    [
+                        "worktree",
+                        "add",
+                        wt_path,
+                        branch_name,
+                    ]
+                )
+                if rc != 0:
+                    log.warning(
+                        "worktree.create_failed_fallback_workspace",
+                        branch=branch_name,
+                        error=stderr,
+                    )
+                    wt = Worktree(
+                        branch=branch_name,
+                        path=self._workspace_root,
+                        agent_id=agent_id,
+                        task_id=task_id,
+                        base_branch=base_branch,
+                    )
+                    self._worktrees[branch_name] = wt
+                    return wt
 
         wt = Worktree(
             branch=branch_name,

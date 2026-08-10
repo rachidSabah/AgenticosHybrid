@@ -559,6 +559,7 @@ class LocalAgent:
             "configuration": dict(self.configuration),
             "tags": list(self.tags),
             "error": self.error,
+            "running": self.running(),
         }
 
 

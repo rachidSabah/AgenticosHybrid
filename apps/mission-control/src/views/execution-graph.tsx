@@ -18,7 +18,7 @@ import ReactFlow, {
   Position,
 } from "reactflow";
 import { ThreeDGraph } from "@/components/graphs/three-d-graph";
-import { Play, Pause, StopCircle, CheckCircle2, XCircle, Clock, Search, Filter, ChevronDown, ChevronRight, GitBranch, GitCommit, GitPullRequest, AlertCircle, Zap, Bot, FileText, FileCode, File, Folder, Database, Server, Network, Wifi, Shield, Settings, RefreshCw, ListFilter, ListChecks, ListTodo, ListEnd, ListStart, List, Calendar, History, Tag, User, Users, Cpu, MemoryStick, HardDrive, Thermometer } from "lucide-react";
+import { Play, Pause, StopCircle, CheckCircle2, XCircle, Search, GitBranch, Bot, Server } from "lucide-react";
 
 // ── Types ──
 
@@ -138,8 +138,8 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
               {data.status}
             </span>
           </div>
-          {data.tags?.map((tag: string) => (
-            <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
+          {data.tags?.map((tag: string, idx: number) => (
+            <div key={idx} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
               {tag}
             </div>
           ))}
@@ -229,8 +229,8 @@ function AgentNode({ data }: { data: ExecutionNode["data"] }) {
               {data.status}
             </span>
           </div>
-          {data.tags?.map((tag: string) => (
-            <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
+          {data.tags?.map((tag: string, idx: number) => (
+            <div key={idx} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
               {tag}
             </div>
           ))}
@@ -320,8 +320,8 @@ function SystemNode({ data }: { data: ExecutionNode["data"] }) {
               {data.status}
             </span>
           </div>
-          {data.tags?.map((tag: string) => (
-            <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
+          {data.tags?.map((tag: string, idx: number) => (
+            <div key={idx} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint mt-1">
               {tag}
             </div>
           ))}
@@ -382,123 +382,66 @@ export function ExecutionGraph() {
     dimension: "2d",
   });
 
-  const { nodes, edges } = useMemo(() => {
+  const { nodes, edges, hasActivity } = useMemo(() => {
     const executionNodes: ExecutionNode[] = [];
     const executionEdges: ExecutionEdge[] = [];
 
-    // Task nodes
     const taskList = Object.values(tasks);
-    if (taskList.length === 0) {
-      executionNodes.push({
-        id: "task-demo-1",
-        type: "task",
-        position: { x: 300, y: 120 },
-        data: {
-          label: "Decompose Microservice Architecture",
-          status: "completed",
-          type: "task",
-          startedAt: Date.now() - 1000 * 60 * 12,
-          duration: 45000,
-          tags: ["architecture"],
-        },
-      });
-      executionNodes.push({
-        id: "task-demo-2",
-        type: "task",
-        position: { x: 580, y: 220 },
-        data: {
-          label: "Synthesize API Routes & Contracts",
-          status: "running",
-          type: "task",
-          startedAt: Date.now() - 1000 * 60 * 2,
-          tags: ["api-gen"],
-        },
-      });
-    } else {
-      taskList.forEach((task, i) => {
-        executionNodes.push({
-          id: `task-${task.id}`,
-          type: "task",
-          position: { x: 280 + (i % 3) * 260, y: 100 + Math.floor(i / 3) * 140 },
-          data: {
-            label: task.title || task.id,
-            status: task.status,
-            type: "task",
-            startedAt: Date.now() - 1000 * 60 * 5,
-            duration: task.status === "completed" ? 60 * 1000 : undefined,
-            tags: [task.role],
-          },
-        });
-      });
-    }
-
-    // Agent nodes
     const agentList = Object.values(agents);
-    if (agentList.length === 0) {
+    const anyRunning =
+      taskList.some(
+        (t) => t.status === "running" || t.status === "in_progress" || t.status === "assigned" || t.status === "dispatched"
+      ) || agentList.some((a) => a.status === "running");
+
+    // Task nodes — real store data only (TaskNode carries no timestamps, so none are fabricated)
+    taskList.forEach((task, i) => {
       executionNodes.push({
-        id: "agent-demo-1",
-        type: "agent",
-        position: { x: 60, y: 120 },
+        id: `task-${task.id}`,
+        type: "task",
+        position: { x: 280 + (i % 3) * 260, y: 100 + Math.floor(i / 3) * 140 },
         data: {
-          label: "Claude Code CLI",
-          status: "running",
-          type: "agent",
-          startedAt: Date.now() - 1000 * 60 * 20,
-          tags: ["claude"],
+          label: task.title || task.id,
+          status: task.status,
+          type: "task",
+          tags: [task.role],
         },
       });
-      executionEdges.push({
-        id: "edge-demo-1",
-        source: "agent-demo-1",
-        target: "task-demo-1",
-        animated: true,
-        style: { stroke: "#22d3ee", strokeOpacity: 0.8, strokeWidth: 2 },
-      });
-      executionEdges.push({
-        id: "edge-demo-2",
-        source: "task-demo-1",
-        target: "task-demo-2",
-        animated: true,
-        style: { stroke: "#8b5cf6", strokeOpacity: 0.8, strokeWidth: 2 },
-      });
-    } else {
-      agentList.forEach((agent, i) => {
-        executionNodes.push({
-          id: `agent-${agent.id}`,
+    });
+
+    // Agent nodes — real store data only
+    agentList.forEach((agent, i) => {
+      executionNodes.push({
+        id: `agent-${agent.id}`,
+        type: "agent",
+        position: { x: 50, y: 100 + i * 140 },
+        data: {
+          label: agent.role,
+          status: agent.status,
           type: "agent",
-          position: { x: 50, y: 100 + i * 140 },
-          data: {
-            label: agent.role,
-            status: agent.status,
-            type: "agent",
-            startedAt: Date.now() - 1000 * 60 * 5,
-            duration: agent.status === "completed" ? 60 * 1000 : undefined,
-            tags: [agent.provider],
-          },
-        });
-
-        if (agent.current_task) {
-          executionEdges.push({
-            id: `edge-${agent.id}-${agent.current_task}`,
-            source: `agent-${agent.id}`,
-            target: `task-${agent.current_task}`,
-            animated: agent.status === "running",
-            style: { stroke: "#22d3ee", strokeOpacity: 0.8, strokeWidth: 2 },
-          });
-        }
+          tags: [agent.provider],
+        },
       });
-    }
 
-    // System nodes
+      if (agent.current_task && taskList.some((t) => t.id === agent.current_task)) {
+        executionEdges.push({
+          id: `edge-${agent.id}-${agent.current_task}`,
+          source: `agent-${agent.id}`,
+          target: `task-${agent.current_task}`,
+          animated: agent.status === "running",
+          style: { stroke: "#22d3ee", strokeOpacity: 0.8, strokeWidth: 2 },
+        });
+      }
+    });
+
+    // System nodes — deterministic layout, status derived from real telemetry
     executionNodes.push({
       id: `system-health`,
       type: "system",
-      position: { x: Math.random() * 800, y: Math.random() * 600 },
+      position: { x: 300, y: 40 },
       data: {
         label: "System Health",
-        status: "running",
+        status: telemetry.errors > 0 ? "failed" : anyRunning ? "running" : "idle",
         type: "system",
-        startedAt: Date.now() - 1000 * 10,
         tags: ["health"],
       },
     });
@@ -507,18 +450,20 @@ export function ExecutionGraph() {
       executionNodes.push({
         id: `system-error`,
         type: "system",
-        position: { x: Math.random() * 800, y: Math.random() * 600 },
+        position: { x: 300, y: 480 },
         data: {
-          label: "System Error",
+          label: `System Error (${telemetry.errors})`,
           status: "failed",
           type: "system",
-          startedAt: Date.now() - 1000 * 5,
           tags: ["error"],
         },
       });
     }
 
-    return { nodes: executionNodes, edges: executionEdges };
+    // No demo/mock content: an empty state is rendered by the caller when nothing is real.
+    const hasActivity = taskList.length > 0 || agentList.length > 0 || telemetry.errors > 0;
+
+    return { nodes: executionNodes, edges: executionEdges, hasActivity };
   }, [tasks, agents, telemetry]);
 
   const filteredNodes = useMemo(() => {
@@ -582,7 +527,7 @@ export function ExecutionGraph() {
       style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" }}
     >
       {/* Left: Filters */}
-      <div className="min-w-[280px] flex flex-col gap-4">
+      <div className="min-w-0 flex flex-col gap-4">
         <Panel title="Filters" className="flex-shrink-0">
           <div className="space-y-3">
             <div>
@@ -692,14 +637,21 @@ export function ExecutionGraph() {
       </div>
 
       {/* Right: Graph */}
-      <div className="min-w-[400px] flex flex-col gap-4 h-full min-h-0">
+      <div className="min-w-0 flex flex-col gap-4 h-full min-h-0">
         <Panel
           title="Execution Graph"
-          subtitle="Live execution DAG"
+          subtitle={`Live execution DAG · ${nodes.length} nodes`}
           className="flex-1 min-h-0"
           contentClassName="p-0"
         >
-          {filters.dimension === "2d" ? (
+          {!hasActivity ? (
+            <div className="flex h-full min-h-[400px] items-center justify-center">
+              <Empty
+                title="No execution activity"
+                hint="Tasks and agents appear here when a mission is dispatched."
+              />
+            </div>
+          ) : filters.dimension === "2d" ? (
             <div className="h-full w-full min-h-[400px]">
               <ReactFlow
                 nodes={filteredNodes}

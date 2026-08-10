@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -99,14 +100,18 @@ class MCPClient:
         env = os.environ.copy()
         env.update(self.config.env)
 
+        cmd = [self.config.command, *self.config.args]
+        use_shell = sys.platform == "win32" and self.config.command.lower() in ("npx", "npm", "cmd", "npx.cmd")
+
         self._process = subprocess.Popen(
-            [self.config.command, *self.config.args],
+            cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
             text=True,
             bufsize=0,
+            shell=use_shell,
         )
         self.process_id = self._process.pid
 

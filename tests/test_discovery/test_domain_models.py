@@ -183,6 +183,7 @@ class TestLocalAgentToDict:
             "configuration",
             "tags",
             "error",
+            "running",
         }
         assert set(d.keys()) == expected_keys
 

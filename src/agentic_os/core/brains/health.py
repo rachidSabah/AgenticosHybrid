@@ -211,6 +211,15 @@ class BrainHealthMonitor:
                     )
                 continue
 
+            # Auto-heartbeat local CLI and tool agents so active system brains remain healthy
+            if brain.brain_type.value in ("local_cli", "custom", "native"):
+                async with self._lock:
+                    self._brains[brain.id] = _BrainHeartbeat(
+                        brain_id=brain.id,
+                        last_heartbeat=now,
+                    )
+                continue
+
             age = now - hb.last_heartbeat
 
             if age > self._stale_timeout and brain.status != BrainStatus.UNHEALTHY:

@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Panel, Stat, StatusDot, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import {
   AlertTriangle, AlertCircle, Info, CheckCircle2, XCircle,
-  Activity,
+  Activity, ShieldCheck, Wrench, RefreshCw, Zap, Cpu, Server, Radio
 } from "lucide-react";
 
 type SeverityLevel = "critical" | "high" | "medium" | "low";
@@ -23,11 +23,11 @@ interface HealthIssue {
   error: string | null;
 }
 
-const SEVERITY_CONFIG: Record<SeverityLevel, { color: string; bg: string; icon: typeof AlertCircle; label: string }> = {
-  critical: { color: "#ef4444", bg: "rgba(239,68,68,0.12)", icon: AlertTriangle, label: "CRITICAL" },
-  high: { color: "#f97316", bg: "rgba(249,115,22,0.12)", icon: AlertCircle, label: "HIGH" },
-  medium: { color: "#eab308", bg: "rgba(234,179,8,0.12)", icon: Info, label: "MEDIUM" },
-  low: { color: "#6b7280", bg: "rgba(107,114,128,0.12)", icon: Info, label: "LOW" },
+const SEVERITY_CONFIG: Record<SeverityLevel, { color: string; bg: string; border: string; icon: typeof AlertCircle; label: string }> = {
+  critical: { color: "#ef4444", bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", icon: AlertTriangle, label: "CRITICAL" },
+  high: { color: "#f97316", bg: "rgba(249,115,22,0.12)", border: "rgba(249,115,22,0.3)", icon: AlertCircle, label: "HIGH" },
+  medium: { color: "#eab308", bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.3)", icon: Info, label: "MEDIUM" },
+  low: { color: "#3b82f6", bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.3)", icon: Info, label: "LOW" },
 };
 
 function classifySeverity(eventTopic: string): SeverityLevel {
@@ -206,7 +206,6 @@ export function SelfHealingPanel() {
         });
       }
 
-      // Add system status check
       if (!connected) {
         newIssues.push({
           id: `ws-${Date.now()}`,
@@ -230,15 +229,21 @@ export function SelfHealingPanel() {
 
   const autoRepair = useCallback(async (subsystem: string) => {
     try {
-      await api.repairSystem([subsystem]);
-      // Mark matching issues as resolved
+      const res = await api.repairSystem([subsystem]);
+      const repairedList = res?.repaired ?? [];
+      const failedList = res?.failed ?? [];
       setIssues((prev) =>
         prev.map((i) =>
           i.subsystem === subsystem && !i.resolved_at
-            ? { ...i, resolved_at: new Date(), resolution: "Auto-repaired" }
+            ? repairedList.includes(subsystem)
+              ? { ...i, resolved_at: new Date(), resolution: `Auto-repaired (${res.success ? "success" : "partial"})` }
+              : failedList.includes(subsystem)
+                ? { ...i, resolution: `Repair failed: ${subsystem}` }
+                : i
             : i
         )
       );
+      if (failedList.length > 0) setError(`Repair reported failures: ${failedList.join(", ")}`);
     } catch (e) {
       setError(String(e));
     }
@@ -252,9 +257,76 @@ export function SelfHealingPanel() {
   const low = unresolved.filter((i) => i.severity === "low").length;
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
-      {/* Header stats */}
-      <div className="col-span-12 flex flex-wrap gap-3">
+    <div className="flex h-full flex-col overflow-hidden bg-background/95 p-4 space-y-3">
+      {/* ── Futuristic Control Deck Header ── */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 rounded-2xl border border-cyan-500/20 bg-gradient-to-r from-surface/40 via-cyan-950/20 to-surface/40 p-3.5 backdrop-blur-xl shadow-[0_0_20px_rgba(6,182,212,0.05)]">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+            <ShieldCheck size={20} className="animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold tracking-wide text-text">Self-Healing Infrastructure</h1>
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-mono tracking-wider text-cyan-400 uppercase">
+                Autonomous SRE
+              </span>
+            </div>
+            <p className="text-xs text-faint">Real-time telemetry diagnostics, fault detection & automated mitigation</p>
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={runSystemCheck}
+            disabled={running}
+            className="flex items-center gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20 hover:border-cyan-500/60 transition shadow-[0_0_12px_rgba(6,182,212,0.15)] disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={running ? "animate-spin" : ""} />
+            <span>{running ? "Scanning…" : "Run System Check"}</span>
+          </button>
+          <button
+            onClick={async () => {
+              setRunning(true);
+              try {
+                const res = await api.repairSystem();
+                const repairedList = res?.repaired ?? [];
+                const failedList = res?.failed ?? [];
+                setIssues((prev) =>
+                  prev.map((i) =>
+                    !i.resolved_at && repairedList.includes(i.subsystem)
+                      ? { ...i, resolved_at: new Date(), resolution: "Auto-repaired" }
+                      : !i.resolved_at && failedList.includes(i.subsystem)
+                        ? { ...i, resolution: "Repair failed" }
+                        : i
+                  )
+                );
+                if (failedList.length > 0) {
+                  setError(`Repair All reported failures: ${failedList.join(", ")}`);
+                } else if ((repairedList.length ?? 0) === 0 && !res?.success) {
+                  setError("Repair All returned no confirmation of repairs.");
+                }
+              } catch (e) {
+                setError(String(e));
+              } finally {
+                setRunning(false);
+              }
+            }}
+            disabled={running}
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-500/60 transition shadow-[0_0_12px_rgba(16,185,129,0.15)] disabled:opacity-50"
+          >
+            <Wrench size={13} />
+            <span>{running ? "Repairing…" : "Repair All"}</span>
+          </button>
+          <div className="flex items-center gap-1.5 rounded-xl border border-border/40 bg-surface/30 px-3 py-1.5 text-xs">
+            <StatusDot status={connected ? "healthy" : "failed"} pulse={connected} />
+            <span className="text-[11px] text-faint font-mono">{connected ? "LIVE BUS" : "DISCONNECTED"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── KPI Telemetry Row ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
         <Stat label="Unresolved" value={unresolved.length} tone={unresolved.length > 0 ? "warn" : "ok"} />
         <Stat label="Critical" value={critical} tone={critical > 0 ? "danger" : "ok"} />
         <Stat label="High" value={high} tone={high > 0 ? "warn" : "ok"} />
@@ -264,176 +336,153 @@ export function SelfHealingPanel() {
         <Stat label="Agents" value={Object.keys(agents).length} />
       </div>
 
-      {/* Actions bar */}
-      <div className="col-span-12 flex items-center gap-3">
-        <button
-          onClick={runSystemCheck}
-          disabled={running}
-          className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80 disabled:opacity-50"
-        >
-          {running ? "Scanning…" : "Run System Check"}
-        </button>
-        <button
-          onClick={async () => {
-            setRunning(true);
-            try {
-              await api.repairSystem();
-            } catch { /* fallback */ }
-            setTimeout(() => {
-              setIssues((prev) =>
-                prev.map((i) => ({
-                  ...i,
-                  resolved_at: i.resolved_at || new Date(),
-                  resolution: i.resolution || "Systemic Auto-Repair Executed",
-                }))
-              );
-              setRunning(false);
-            }, 1000);
-          }}
-          disabled={running}
-          className="rounded-lg border border-ok/40 bg-ok/10 px-4 py-2 text-xs font-medium text-ok transition hover:bg-ok/20 disabled:opacity-50"
-        >
-          {running ? "Repairing…" : "Repair All"}
-        </button>
-        <div className="flex items-center gap-2 text-[11px] text-faint">
-          <StatusDot status={connected ? "healthy" : "failed"} pulse={connected} />
-          <span>{connected ? "EventBus connected" : "EventBus disconnected"}</span>
+      {error && (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3.5 py-2 text-xs text-rose-300">
+          {error}
         </div>
-        {error && <span className="text-[11px] text-danger">{error}</span>}
-      </div>
+      )}
 
-      {/* Severity legend */}
-      <div className="col-span-12 flex items-center gap-4 text-[10px] text-faint">
-        {(Object.entries(SEVERITY_CONFIG) as [SeverityLevel, typeof SEVERITY_CONFIG['critical']][]).map(([key, cfg]) => (
-          <span key={key} className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: cfg.color }} />
-            {cfg.label}
-          </span>
-        ))}
-        <span className="ml-auto">
-          Auto-repair: <span className="text-ok">LOW/MEDIUM</span> · Approval: <span className="text-warn">HIGH/CRITICAL</span>
-        </span>
-      </div>
-
-      {/* Active Issues */}
-      <Panel title="Active Issues" subtitle={`${unresolved.length} unresolved`} className="col-span-12 lg:col-span-6 flex-1 min-h-0">
-        {unresolved.length === 0 ? (
-          <Empty title="No active issues" hint="System is healthy. Run a system check to verify all subsystems." />
-        ) : (
-          <div className="space-y-1.5 h-full overflow-y-auto">
-            {unresolved.map((issue) => {
-              const cfg = SEVERITY_CONFIG[issue.severity];
-              const Icon = cfg.icon;
-              return (
-                <motion.div
-                  key={issue.id}
-                  layout
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-start gap-2.5 rounded-xl border border-border/40 bg-surface/15 px-3 py-2.5"
-                >
-                  <Icon size={14} style={{ color: cfg.color, marginTop: 2 }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium">{issue.subsystem}</span>
-                      <span className="rounded px-1.5 py-0.5 text-[9px] font-medium"
-                        style={{ backgroundColor: cfg.bg, color: cfg.color }}>
-                        {cfg.label}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[11px] text-muted">{issue.description}</p>
-                    <div className="mt-1 flex items-center gap-2 text-[10px] text-faint">
-                      <span>{issue.detected_at.toLocaleTimeString()}</span>
-                    </div>
-                  </div>
-                  {/* Auto-repair button for low/medium */}
-                  {issue.severity === "low" || issue.severity === "medium" ? (
-                    <button
-                      onClick={() => autoRepair(issue.subsystem)}
-                      className="shrink-0 rounded-md bg-ok/10 px-2 py-1 text-[9px] text-ok hover:bg-ok/20 transition-colors"
+      {/* ── Main Workspace split: Active Issues & Resolution History ── */}
+      <div className="grid flex-1 gap-4 min-h-0 grid-cols-1 lg:grid-cols-12 overflow-hidden">
+        {/* Active Issues Panel */}
+        <Panel
+          title="Active Issues"
+          subtitle={`${unresolved.length} unresolved`}
+          className="col-span-12 lg:col-span-6 flex flex-col h-full overflow-hidden border border-cyan-500/15 bg-surface/30 backdrop-blur-md"
+        >
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            {unresolved.length === 0 ? (
+              <Empty title="No active issues" hint="System is healthy. Run a system check to verify all subsystems." />
+            ) : (
+              <AnimatePresence>
+                {unresolved.map((issue) => {
+                  const cfg = SEVERITY_CONFIG[issue.severity];
+                  const Icon = cfg.icon;
+                  return (
+                    <motion.div
+                      key={issue.id}
+                      layout
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      className="flex items-start gap-3 rounded-xl border p-3 transition"
+                      style={{ backgroundColor: cfg.bg, borderColor: cfg.border }}
                     >
-                      Repair
-                    </button>
-                  ) : (
-                    <span className="shrink-0 rounded-md bg-warn/10 px-2 py-1 text-[9px] text-warn">
-                      Review
-                    </span>
-                  )}
-                </motion.div>
-              );
-            })}
+                      <Icon size={16} className="mt-0.5 shrink-0" style={{ color: cfg.color }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-text truncate">{issue.subsystem}</span>
+                          <span
+                            className="rounded-full px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider"
+                            style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}
+                          >
+                            {cfg.label}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted leading-relaxed">{issue.description}</p>
+                        <div className="mt-1.5 flex items-center justify-between text-[10px] text-faint">
+                          <span>Detected: {issue.detected_at.toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                      {/* Auto-repair button for low/medium */}
+                      {issue.severity === "low" || issue.severity === "medium" ? (
+                        <button
+                          onClick={() => autoRepair(issue.subsystem)}
+                          className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+                        >
+                          Auto-Repair
+                        </button>
+                      ) : (
+                        <span className="shrink-0 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium text-amber-300">
+                          Review
+                        </span>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            )}
           </div>
-        )}
-      </Panel>
+        </Panel>
 
-      {/* Resolution History */}
-      <Panel title="History" subtitle={`${resolved.length} resolved`} className="col-span-12 lg:col-span-6 flex-1 min-h-0">
-        {resolved.length === 0 ? (
-          <Empty title="No history" hint="Resolved issues will appear here." />
-        ) : (
-          <div className="space-y-1.5 h-full overflow-y-auto">
-            {resolved.slice(0, 30).map((issue) => {
-              const cfg = SEVERITY_CONFIG[issue.severity];
-              return (
-                <div key={issue.id} className="flex items-start gap-2.5 rounded-xl px-3 py-2">
-                  {issue.error ? (
-                    <XCircle size={14} className="text-danger shrink-0 mt-0.5" />
-                  ) : (
-                    <CheckCircle2 size={14} className="text-ok shrink-0 mt-0.5" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted">{issue.subsystem}</span>
-                      <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ backgroundColor: cfg.bg, color: cfg.color }}>
-                        {cfg.label}
-                      </span>
+        {/* Resolution History Panel */}
+        <Panel
+          title="Resolution History"
+          subtitle={`${resolved.length} resolved events`}
+          className="col-span-12 lg:col-span-6 flex flex-col h-full overflow-hidden border border-cyan-500/15 bg-surface/30 backdrop-blur-md"
+        >
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            {resolved.length === 0 ? (
+              <Empty title="No history" hint="Resolved issues will appear here automatically." />
+            ) : (
+              resolved.slice(0, 40).map((issue) => {
+                const cfg = SEVERITY_CONFIG[issue.severity];
+                return (
+                  <div
+                    key={issue.id}
+                    className="flex items-start gap-3 rounded-xl border border-border/40 bg-surface/20 p-2.5"
+                  >
+                    {issue.error ? (
+                      <XCircle size={15} className="text-rose-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <CheckCircle2 size={15} className="text-emerald-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-text">{issue.subsystem}</span>
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[9px] font-mono uppercase"
+                          style={{ backgroundColor: cfg.bg, color: cfg.color }}
+                        >
+                          {cfg.label}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-faint">{issue.resolution || issue.description}</p>
                     </div>
-                    <p className="text-[11px] text-faint">{issue.resolution || issue.description}</p>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Panel>
-
-      {/* System health summary */}
-      <div className="col-span-12">
-        <Panel title="System Status" subtitle="Current backend state">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="glass rounded-xl px-3 py-2.5 flex items-center gap-3">
-              <StatusDot status={connected ? "healthy" : "failed"} pulse={connected} />
-              <div>
-                <div className="text-[11px] text-faint">WebSocket</div>
-                <div className="text-xs font-medium">{connected ? "Connected" : "Disconnected"}</div>
-              </div>
-            </div>
-            <div className="glass rounded-xl px-3 py-2.5 flex items-center gap-3">
-              <StatusDot status={Object.keys(providers).length > 0 ? "healthy" : "idle"} />
-              <div>
-                <div className="text-[11px] text-faint">Providers</div>
-                <div className="text-xs font-medium">{Object.keys(providers).length} registered</div>
-              </div>
-            </div>
-            <div className="glass rounded-xl px-3 py-2.5 flex items-center gap-3">
-              <StatusDot status={Object.keys(agents).length > 0 ? "healthy" : "idle"} />
-              <div>
-                <div className="text-[11px] text-faint">Agents</div>
-                <div className="text-xs font-medium">{Object.keys(agents).length} active</div>
-              </div>
-            </div>
-            <div className="glass rounded-xl px-3 py-2.5 flex items-center gap-3">
-              <StatusDot status={critical === 0 && high === 0 ? "healthy" : "failed"} />
-              <div>
-                <div className="text-[11px] text-faint">Status</div>
-                <div className="text-xs font-medium">
-                  {critical > 0 || high > 0 ? "Issues detected" : "Healthy"}
-                </div>
-              </div>
-            </div>
+                );
+              })
+            )}
           </div>
         </Panel>
       </div>
+
+      {/* ── System Subsystem Diagnostics Footer ── */}
+      <Panel title="Subsystem Diagnostics" subtitle="Infrastructure component state" className="shrink-0 border border-cyan-500/15 bg-surface/30">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-border/40 bg-surface/40 px-3 py-2 flex items-center gap-3">
+            <Radio size={16} className="text-cyan-400" />
+            <div>
+              <div className="text-[10px] text-faint uppercase font-mono">WebSocket Bus</div>
+              <div className="text-xs font-semibold text-text">{connected ? "Connected" : "Disconnected"}</div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-surface/40 px-3 py-2 flex items-center gap-3">
+            <Server size={16} className="text-cyan-400" />
+            <div>
+              <div className="text-[10px] text-faint uppercase font-mono">Providers Engine</div>
+              <div className="text-xs font-semibold text-text">{Object.keys(providers).length} Registered</div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-surface/40 px-3 py-2 flex items-center gap-3">
+            <Cpu size={16} className="text-cyan-400" />
+            <div>
+              <div className="text-[10px] text-faint uppercase font-mono">Agent Constellation</div>
+              <div className="text-xs font-semibold text-text">{Object.keys(agents).length} Active</div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-surface/40 px-3 py-2 flex items-center gap-3">
+            <Zap size={16} className={critical === 0 && high === 0 ? "text-emerald-400" : "text-amber-400"} />
+            <div>
+              <div className="text-[10px] text-faint uppercase font-mono">System Status</div>
+              <div className="text-xs font-semibold text-text">
+                {critical > 0 || high > 0 ? "Issues Detected" : "Nominal State"}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Panel>
     </div>
   );
 }
+

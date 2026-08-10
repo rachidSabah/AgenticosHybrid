@@ -406,7 +406,7 @@ class MCPRegistryImpl(MCPRegistryPort):
                 )
 
                 log.error(f"Failed to start MCP server {server_id}: {e}")
-                raise
+                return error_detail
 
     async def stop_server(self, server_id: str) -> MCPServerDetail:
         """Stop an MCP server."""

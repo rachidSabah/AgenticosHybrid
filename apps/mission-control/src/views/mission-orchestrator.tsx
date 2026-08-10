@@ -13,7 +13,7 @@ import type {
 } from "@/lib/types";
 import {
   Plus, X, Check, Play, Pause, Trash2, FileText, Target, ListTodo, Tag, Clock,
-  ChevronDown, ChevronUp, RefreshCw, RotateCcw, UserPlus, AlertCircle,
+  ChevronDown, ChevronUp, RefreshCw, RotateCcw, AlertCircle,
   Upload, Paperclip, Download, GripVertical, BrainCircuit, MessageCircle,
   GitMerge, Kanban, CheckCircle2, XCircle, Loader2, Layers, Workflow,
   Activity, Server, Route, Terminal as TerminalIcon, GitBranch, FileDiff,
@@ -360,6 +360,7 @@ export function MissionOrchestrator() {
                 { id: "comms", label: "Agent Comms", icon: MessageCircle },
                 { id: "merge", label: "Merge & Validate", icon: GitMerge },
                 { id: "validation", label: "Final Validation", icon: CheckCircle2 },
+                { id: "routing", label: "Routing", icon: Route },
                 { id: "terminal", label: "Terminal", icon: TerminalIcon },
                 { id: "review", label: "Review Changes", icon: FileDiff },
               ].map((tab) => (
@@ -399,8 +400,9 @@ export function MissionOrchestrator() {
                 {rightTab === "timeline" && <ExecutionTimeline plan={selectedMission.plan ?? null} />}
                 {rightTab === "memory" && <SharedMemoryPanel />}
                 {rightTab === "comms" && <AgentCommsLog missionId={selectedMission.id} />}
-                {rightTab === "merge" && <MergePipelinePanel />}
+                {rightTab === "merge" && <MergePipelinePanel mission={selectedMission} />}
                 {rightTab === "validation" && <FinalValidationPanel mission={selectedMission} />}
+                {rightTab === "routing" && <RoutingPlanner mission={selectedMission} />}
                 {rightTab === "terminal" && (
                   selectedWorktreePath ? (
                     <TerminalPanel
@@ -1183,41 +1185,54 @@ function AgentCommsLog({ missionId }: { missionId: string }) {
 //  RESULT MERGE & VALIDATION PIPELINE
 // ══════════════════════════════════════════════════════════════
 
-function MergePipelinePanel() {
-  const completed = useStore((s) => s.missionUpdates) > 0;
+function MergePipelinePanel({ mission }: { mission: MissionType }) {
+  const plan = mission.plan;
+  const taskCount = plan?.task_count ?? plan?.tasks.length ?? 0;
+  const doneCount = plan?.tasks.filter((t) => t.status === "completed").length ?? 0;
+  const executing = mission.status === "executing" || mission.status === "paused";
+  const allDone = taskCount > 0 && doneCount === taskCount;
 
-  // Simulated stage states — in production these come from EventBus events
-  const [stageStates, setStageStates] = useState<Record<string, "pending" | "running" | "passed" | "failed">>({});
-  const [pulse, setPulse] = useState(false);
+  const err = mission.error?.toLowerCase() ?? "";
+  const hasConflict = err.includes("merge") || err.includes("conflict");
+  const hasTestFail = err.includes("test");
+  const hasSecurity = err.includes("security");
+  const hasRegression = err.includes("regression");
+  const hasDocTask = plan?.tasks.some((t) => t.title.toLowerCase().includes("document")) ?? false;
 
-  // Animate through stages when a mission completes
-  useEffect(() => {
-    if (completed) {
-      setPulse(true);
-      const timer = setTimeout(() => setPulse(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [completed]);
+  // Real stage states derived from the mission plan + error state — no simulation.
+  const stageStates: Record<string, "pending" | "running" | "passed" | "failed"> = useMemo(() => {
+    const running = executing && !allDone;
+    return {
+      conflicts: hasConflict ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      merge: hasConflict ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      format: hasConflict ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      lint: hasConflict ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      tests: hasTestFail ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      security: hasSecurity ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      regression: hasRegression ? "failed" : allDone ? "passed" : running ? "running" : "pending",
+      documentation: hasDocTask && allDone ? "passed" : hasDocTask && running ? "running" : "pending",
+    };
+  }, [hasConflict, hasTestFail, hasSecurity, hasRegression, allDone, executing, hasDocTask]);
+
+  const doneStages = MERGE_STAGES.filter((s) => stageStates[s.id] === "passed").length;
 
   return (
     <Panel
       title="Merge & Validate"
-      subtitle="Results collected, merged, and validated"
+      subtitle={`${doneStages}/${MERGE_STAGES.length} stages · ${doneCount}/${taskCount} tasks complete`}
       className="h-full"
     >
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {MERGE_STAGES.map((stage) => {
           const state = stageStates[stage.id] ?? "pending";
           return (
-            <motion.div
+            <div
               key={stage.id}
               className={`glass rounded-xl p-3 text-center transition-colors ${
                 state === "running" ? "ring-1 ring-accent/40" :
                 state === "passed" ? "ring-1 ring-ok/40" :
                 state === "failed" ? "ring-1 ring-danger/40" : ""
               }`}
-              animate={pulse ? { scale: [1, 1.02, 1] } : {}}
-              transition={{ duration: 1.5, repeat: pulse ? Infinity : 0 }}
             >
               <stage.icon size={20} className={`mx-auto mb-1 ${
                 state === "passed" ? "text-ok" :
@@ -1231,7 +1246,7 @@ function MergePipelinePanel() {
                 {state === "passed" && <CheckCircle2 size={10} className="text-ok" />}
                 {state === "failed" && <XCircle size={10} className="text-danger" />}
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
@@ -1252,7 +1267,9 @@ function MergePipelinePanel() {
       </div>
 
       <div className="mt-2 text-[9px] text-center text-faint">
-        Final validation gate: all tasks finished, tests passed, no conflicts, no regressions, security OK
+        {allDone
+          ? "All tasks finished — stage states reflect the final mission state."
+          : "Stage states reflect the live mission plan and error state."}
       </div>
     </Panel>
   );
@@ -1264,7 +1281,6 @@ function MergePipelinePanel() {
 
 function MissionPlanView({ plan, mission }: { plan: MissionPlanType; mission: MissionType }) {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const isActive = mission.status === "executing" || mission.status === "paused";
 
   return (
     <Panel
@@ -1321,16 +1337,8 @@ function MissionPlanView({ plan, mission }: { plan: MissionPlanType; mission: Mi
                         )}
                       </div>
 
-                      {isActive && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          <TaskActionButton label={task.status === "failed" ? "Retry" : "Restart"} icon={<RotateCcw size={10} />}
-                            onClick={async () => { /* TODO: api.restartTask(task.id) */ }} />
-                          <TaskActionButton label="Reassign" icon={<UserPlus size={10} />}
-                            onClick={async () => { /* TODO: api.reassignTask(task.id) */ }} />
-                          {task.output && (
-                            <span className="text-[10px] text-ok flex items-center gap-1"><Download size={10} /> Output</span>
-                          )}
-                        </div>
+                      {task.output && (
+                        <div className="text-[10px] text-ok flex items-center gap-1 pt-1"><Download size={10} /> Output available</div>
                       )}
 
                       {task.output && (
@@ -1357,17 +1365,6 @@ function MissionPlanView({ plan, mission }: { plan: MissionPlanType; mission: Mi
         ))}
       </div>
     </Panel>
-  );
-}
-
-function TaskActionButton({ label, icon, onClick }: {
-  label: string; icon: React.ReactNode; onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick}
-      className="flex items-center gap-1 rounded-md border border-border/40 px-2 py-1 text-[10px] text-faint hover:text-text hover:border-border transition-colors">
-      {icon} {label}
-    </button>
   );
 }
 

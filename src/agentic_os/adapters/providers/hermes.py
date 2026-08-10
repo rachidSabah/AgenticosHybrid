@@ -55,7 +55,9 @@ class HermesProvider:
                 f"Hermes CLI not found at '{self._bin}'. Install with: pip install hermes-cli"
             )
 
-        prompt = f"{task.title}\n\n{task.description}".strip()
+        from agentic_os.adapters.providers.strategies import HermesExecutionStrategy
+        strategy = HermesExecutionStrategy()
+        prompt = strategy.build_prompt(task)
         # Build env — inject HERMES_CONFIG only if set, never log it
         env = dict(os.environ)
         if self._api_key:
@@ -63,9 +65,10 @@ class HermesProvider:
 
         log.info("hermes.execute", agent=agent.id, task=task.id)
 
-        # hermes -z "{prompt}"  (no --output-format flag)
+        # hermes -z "<prompt>" --yolo  (prompt is the -z argument value —
+        # hermes oneshot reads no stdin, so piping it would send "-" instead)
         rc, stdout_str, stderr_str = await run_cli(
-            [self._bin, "-z", prompt],
+            [self._bin, "-z", prompt, "--yolo"],
             input_data=None,
             env=env,
             cwd=cwd,

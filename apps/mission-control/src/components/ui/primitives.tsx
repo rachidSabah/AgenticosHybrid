@@ -11,7 +11,7 @@ export function Panel({
   className,
   contentClassName,
 }: {
-  title?: string;
+  title?: ReactNode;
   subtitle?: string;
   actions?: ReactNode;
   children: ReactNode;

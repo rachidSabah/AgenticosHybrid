@@ -15,26 +15,12 @@ from __future__ import annotations
 import shutil
 
 from agentic_os.adapters.providers.auto_bind import auto_discover_and_bind
-from agentic_os.adapters.providers.mock import MockProvider
 from agentic_os.adapters.providers.strategies import ProviderFactory
 from agentic_os.config import settings
 from agentic_os.infrastructure.logging import get_logger
 from agentic_os.ports.plugin import Plugin, PluginContext
 
 log = get_logger("plugins.builtins")
-
-
-class MockProviderPlugin:
-    """Always available — zero-infrastructure fallback provider."""
-
-    name = "mock-provider"
-
-    def load(self, ctx: PluginContext) -> None:
-        ctx.providers.register(MockProvider())
-        log.info("plugin.loaded", name=self.name)
-
-    def unload(self) -> None:
-        pass
 
 
 class ClaudeCodeProviderPlugin:
@@ -135,9 +121,8 @@ class AutoBindPlugin:
         pass
 
 
-# Order matters: mock first (always available), then named plugins, then auto-bind.
+# Order matters: named plugins first, then auto-bind (scans PATH for agents).
 PLUGINS: list[Plugin] = [
-    MockProviderPlugin(),
     ClaudeCodeProviderPlugin(),
     HermesProviderPlugin(),
     AutoBindPlugin(),

@@ -767,39 +767,37 @@ function MetricsTab({ runtimeId }: { runtimeId: string }) {
         </div>
       </div>
 
-      {/* Latency */}
+      {/* Latency (only the value the backend actually reports — no invented percentiles) */}
       <div>
         <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">
           Latency (ms)
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[
-            { label: "p50", value: metrics.latency_ms, max: 1000 },
-            { label: "p95", value: safeNum(metrics.latency_ms) * 1.5, max: 5000 },
-            { label: "p99", value: safeNum(metrics.latency_ms) * 2, max: 10000 },
-          ].map(({ label, value, max }) => {
-            const v = safeNum(value);
-            return (
-              <div
-                key={label}
-                className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center"
-              >
-                <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
-                <div className="text-base font-semibold tabular-nums text-gray-100">
-                  {v.toFixed(0)}
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-700">
-                  <div
-                    className={clsx(
-                      "h-full rounded-full transition-all duration-500",
-                      v > 1000 ? "bg-red-500" : v > 500 ? "bg-yellow-500" : "bg-green-500",
-                    )}
-                    style={{ width: `${Math.min((v / max) * 100, 100)}%` }}
-                  />
-                </div>
+          <div className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center">
+            <div className="text-[10px] uppercase tracking-wide text-gray-500">reported</div>
+            <div className="text-base font-semibold tabular-nums text-gray-100">
+              {safeNum(metrics.latency_ms).toFixed(0)}
             </div>
-            );
-          })}
+            <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-700">
+              <div
+                className={clsx(
+                  "h-full rounded-full transition-all duration-500",
+                  metrics.latency_ms > 1000 ? "bg-red-500" : metrics.latency_ms > 500 ? "bg-yellow-500" : "bg-green-500",
+                )}
+                style={{ width: `${Math.min((safeNum(metrics.latency_ms) / 1000) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center">
+            <div className="text-[10px] uppercase tracking-wide text-gray-500">p50</div>
+            <div className="text-base font-semibold tabular-nums text-gray-100">—</div>
+            <div className="mt-1.5 text-[10px] text-gray-500">not measured by backend</div>
+          </div>
+          <div className="rounded-lg border border-gray-700/50 bg-gray-800/40 p-2.5 text-center">
+            <div className="text-[10px] uppercase tracking-wide text-gray-500">p99</div>
+            <div className="text-base font-semibold tabular-nums text-gray-100">—</div>
+            <div className="mt-1.5 text-[10px] text-gray-500">not measured by backend</div>
+          </div>
         </div>
       </div>
 

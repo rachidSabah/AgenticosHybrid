@@ -22,39 +22,24 @@ export function McpManager() {
   const [tab, setTab] = useState<McpTab>("servers");
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-12 gap-4 overflow-auto p-4">
-      <div className="col-span-12 flex items-center gap-1 border-b border-border/60 px-0 pt-0">
+    <div className="flex h-full flex-col overflow-hidden bg-background/95 p-4 space-y-3">
+      {/* ── Futuristic Sub-navigation Bar ── */}
+      <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto no-scrollbar rounded-2xl border border-cyan-500/20 bg-surface/40 p-1.5 backdrop-blur-xl shadow-[0_0_15px_rgba(6,182,212,0.05)]">
         {(["servers", "tools", "permissions", "health", "sessions", "resources", "prompts", "telemetry", "versions"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-t-lg px-4 py-2 text-xs font-medium transition ${
+            className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold capitalize tracking-wide transition ${
               tab === t
-                ? "bg-surface/40 text-text"
-                : "text-faint hover:text-muted hover:bg-surface/20"
+                ? "border border-cyan-500/40 bg-cyan-500/15 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                : "border border-transparent text-faint hover:text-muted hover:bg-surface/30"
             }`}
           >
-            {t === "servers"
-              ? "Servers"
-              : t === "tools"
-                ? "Tools"
-                : t === "permissions"
-                  ? "Permissions"
-                  : t === "health"
-                    ? "Health"
-                    : t === "sessions"
-                      ? "Sessions"
-                      : t === "resources"
-                        ? "Resources"
-                        : t === "prompts"
-                          ? "Prompts"
-                          : t === "versions"
-          ? "Versions"
-          : "Telemetry"}
+            {t}
           </button>
         ))}
       </div>
-      <div className="col-span-12 min-h-0 flex-1 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {tab === "servers" && <McpServersTab />}
         {tab === "tools" && <McpToolsTab />}
         {tab === "permissions" && <McpPermissionsTab />}
@@ -104,10 +89,38 @@ function McpServersTab() {
     setTimeout(() => setActionMsg(null), 4000);
   };
 
+  // GitHub integration state
+  const [ghToken, setGhToken] = useState("");
+  const [ghRepo, setGhRepo] = useState("");
+  const [ghRepos, setGhRepos] = useState<Array<{ name: string; full_name: string; private: boolean }>>([]);
+  const [fetchingRepos, setFetchingRepos] = useState(false);
+
+  const fetchGhRepos = async () => {
+    if (!ghToken.trim()) return;
+    setFetchingRepos(true);
+    try {
+      const res = await fetch("https://api.github.com/user/repos?per_page=100&sort=updated", {
+        headers: { Authorization: `token ${ghToken.trim()}`, Accept: "application/vnd.github.v3+json" },
+      });
+      if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
+      const data = await res.json();
+      setGhRepos(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setActionMsg(`GitHub connect failed: ${err}`);
+      setTimeout(() => setActionMsg(null), 4000);
+    } finally {
+      setFetchingRepos(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!newName.trim()) return;
-    const body: Record<string, unknown> = { name: newName.trim(), transport: newTransport };
-    if (newTransport === "stdio") {
+    const body: Record<string, unknown> = { name: newName.trim(), transport: newTransport === "github" ? "stdio" : newTransport };
+    if (newTransport === "github") {
+      body.command = "npx";
+      body.args = ["-y", "@modelcontextprotocol/server-github"];
+      body.env = { GITHUB_PERSONAL_ACCESS_TOKEN: ghToken, GITHUB_REPOSITORY: ghRepo };
+    } else if (newTransport === "stdio") {
       body.command = newCommand || "node";
       body.args = newArgs ? newArgs.split(" ").filter(Boolean) : [];
     } else {
@@ -122,6 +135,7 @@ function McpServersTab() {
       setNewArgs("");
       setNewUrl("");
       setNewDesc("");
+      setGhRepo("");
       load();
     } catch (err) {
       setActionMsg(`Create failed: ${err}`);
@@ -134,23 +148,23 @@ function McpServersTab() {
   const failed = servers.filter((s) => s.status === "failed").length;
 
   return (
-    <div className="col-span-1 md:col-span-12 grid h-full grid-cols-1 md:grid-cols-12 gap-4">
-      <div className="col-span-12 flex flex-wrap gap-3">
+    <div className="flex h-full flex-col min-h-0 overflow-hidden space-y-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         <Stat label="Total Servers" value={servers.length} />
         <Stat label="Running" value={running} tone={running ? "ok" : "default"} />
         <Stat label="Failed" value={failed} tone={failed ? "danger" : "default"} />
         <Stat label="Discovered Tools" value={totalTools} tone="accent" />
-        <div className="ml-auto flex items-start gap-2">
+        <div className="ml-auto flex items-center gap-2">
           {actionMsg && <span className="rounded-md bg-surface/40 px-3 py-1.5 text-xs text-muted">{actionMsg}</span>}
           <button
             onClick={() => load()}
-            className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20"
+            className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1.5 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
           >
             Refresh
           </button>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-accent/80"
+            className="rounded-xl bg-accent px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-accent/80 shadow-[0_0_12px_rgba(6,182,212,0.2)]"
           >
             {showCreate ? "Cancel" : "Add Server"}
           </button>
@@ -172,16 +186,60 @@ function McpServersTab() {
               onChange={(e) => setNewTransport(e.target.value)}
               className="rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs"
             >
-              <option value="stdio">STDIO</option>
+              <option value="stdio">STDIO (Local Node / CLI)</option>
+              <option value="github">GitHub Repo MCP (npx npx-mcp-github)</option>
               <option value="sse">SSE</option>
               <option value="streamable_http">Streamable HTTP</option>
             </select>
-            {newTransport === "stdio" ? (
+            {newTransport === "github" ? (
+              <div className="col-span-2 space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={ghToken}
+                    onChange={(e) => setGhToken(e.target.value)}
+                    placeholder="GitHub Personal Access Token (PAT)"
+                    className="flex-1 rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs placeholder:text-faint"
+                  />
+                  <button
+                    onClick={fetchGhRepos}
+                    disabled={fetchingRepos || !ghToken.trim()}
+                    className="rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold hover:bg-cyan-500/30 disabled:opacity-50"
+                  >
+                    {fetchingRepos ? "Connecting…" : "Fetch Repos"}
+                  </button>
+                </div>
+                {ghRepos.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-cyan-500/30 bg-background/80 p-2 custom-scrollbar">
+                    <div className="text-[10px] font-mono text-faint uppercase">Select Repository:</div>
+                    {ghRepos.map((r) => (
+                      <button
+                        key={r.full_name}
+                        onClick={() => {
+                          setGhRepo(r.full_name);
+                          if (!newName) setNewName(r.name);
+                        }}
+                        className={`w-full text-left rounded px-2 py-1 text-xs font-mono transition ${
+                          ghRepo === r.full_name
+                            ? "bg-cyan-500/30 text-cyan-200 border border-cyan-500/40"
+                            : "hover:bg-surface/40 text-faint"
+                        }`}
+                      >
+                        {r.full_name} {r.private ? "🔒" : "🌐"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {ghRepo && (
+                  <div className="text-[11px] font-mono text-cyan-300">Selected: {ghRepo}</div>
+                )}
+              </div>
+            ) : newTransport === "stdio" ? (
               <>
                 <input
                   value={newCommand}
                   onChange={(e) => setNewCommand(e.target.value)}
-                  placeholder="Command (default: node)"
+                  placeholder="Command (default: npx)"
                   className="rounded-lg border border-border/60 bg-surface/20 px-3 py-2 text-xs placeholder:text-faint"
                 />
                 <input
@@ -218,14 +276,14 @@ function McpServersTab() {
         </div>
       )}
 
-      <div className="col-span-12">
-        <Panel title="MCP Servers" subtitle={`${servers.length} registered`}>
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <Panel title="MCP Servers" subtitle={`${servers.length} registered`} className="h-full flex flex-col min-h-0 border border-cyan-500/15 bg-surface/30 backdrop-blur-md">
           {loading ? (
             <div className="flex items-center justify-center py-12 text-xs text-faint">Loading…</div>
           ) : servers.length === 0 ? (
             <Empty title="No MCP servers" hint="Register an MCP server to get started." />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
               {servers.map((sv) => {
                 const healthMap: Record<string, string> = {
                   healthy: "healthy",
@@ -931,7 +989,7 @@ function McpTelemetryTab() {
       ]);
       setSummary(sum);
       setLatency(lat);
-      setErrors(errs.errors);
+      setErrors(Array.isArray(errs?.errors) ? errs.errors : []);
     } catch (e) {
       // Telemetry may not be available
     }
@@ -969,7 +1027,7 @@ function McpTelemetryTab() {
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between">
                 <span className="text-xs text-faint">{label}</span>
-                <span className="font-mono text-xs">{value.toFixed(2)}ms</span>
+                <span className="font-mono text-xs">{safeFixed(value, 2)}ms</span>
               </div>
             ))}
           </div>
@@ -979,7 +1037,7 @@ function McpTelemetryTab() {
       </Panel>
 
       <Panel title="Recent Errors" subtitle="Last 20 errors" className="col-span-6">
-        {errors.length === 0 ? (
+        {(errors?.length ?? 0) === 0 ? (
           <Empty title="No errors" hint="No errors have been recorded." />
         ) : (
           <div className="space-y-1.5">
@@ -1046,7 +1104,7 @@ function McpVersionsTab() {
               </div>
               <div className="border-t border-border/40 pt-2">
                 <div className="mb-1 text-[11px] font-medium text-faint">Supported</div>
-                {matrix.supported_versions.map((v) => (
+                {(matrix?.supported_versions ?? []).map((v) => (
                   <div key={v} className="flex items-center gap-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-ok" />
                     <span className="text-xs text-muted">{v}</span>

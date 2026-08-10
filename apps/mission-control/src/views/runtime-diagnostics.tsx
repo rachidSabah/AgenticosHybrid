@@ -21,7 +21,6 @@ import {
   Terminal,
   FileJson,
   PlayCircle,
-  PauseCircle,
   Clock,
   CheckCircle,
   XCircle,
@@ -248,6 +247,24 @@ function useDiagnosticsData<T>(
   return { data, loading, error, refresh, lastRefreshed };
 }
 
+// Helper formatters
+function formatBytes(bytes: number): string {
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`;
+}
+
+function formatUptime(seconds: number): string {
+  if (!seconds) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
 // -----------------------------------------------------------------------------
 // TABS IMPLEMENTATION
 // -----------------------------------------------------------------------------
@@ -259,6 +276,10 @@ function TabRuntimeOverview({ autoRefresh }: { autoRefresh: boolean }) {
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   if (!data) return null;
 
+  const healthyServices = Object.values(data.platform_services ?? {}).filter(Boolean).length;
+  const totalServices = Object.keys(data.platform_services ?? {}).length;
+  const healthScore = totalServices > 0 ? Math.round((healthyServices / totalServices) * 100) : 0;
+
   return (
     <Panel 
       title="Runtime Overview" 
@@ -268,9 +289,9 @@ function TabRuntimeOverview({ autoRefresh }: { autoRefresh: boolean }) {
     >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Stat label="Hostname" value={data.hostname} />
-        <Stat label="OS" value={data.os} />
-        <Stat label="Uptime" value={`${Math.floor(data.uptime / 3600)}h ${Math.floor((data.uptime % 3600) / 60)}m`} />
-        <Stat label="Health Score" value={`${data.healthScore}%`} tone={data.healthScore > 90 ? "ok" : data.healthScore > 70 ? "warn" : "danger"} />
+        <Stat label="OS" value={`${data.os} ${data.os_version ?? ""}`} />
+        <Stat label="Uptime" value={formatUptime(data.uptime_seconds)} />
+        <Stat label="Health Score" value={`${healthScore}%`} tone={healthScore > 90 ? "ok" : healthScore > 70 ? "warn" : "danger"} />
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -278,17 +299,33 @@ function TabRuntimeOverview({ autoRefresh }: { autoRefresh: boolean }) {
           <h3 className="text-sm font-semibold mb-3">Versions & Runtimes</h3>
           <div className="space-y-2">
             <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">System Version</span><span className="text-sm font-mono">{data.version}</span></div>
-            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Python</span><span className="text-sm font-mono">{data.pythonVersion}</span></div>
-            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Node.js</span><span className="text-sm font-mono">{data.nodeVersion}</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Python</span><span className="text-sm font-mono">{data.python_version}</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Environment</span><span className="text-sm font-mono">{data.environment}</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Workspace</span><span className="text-sm font-mono truncate max-w-[200px]">{data.workspace}</span></div>
           </div>
         </div>
         <div className="glass rounded-xl p-4">
           <h3 className="text-sm font-semibold mb-3">Hardware & Build</h3>
           <div className="space-y-2">
-            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">CPU Architecture</span><span className="text-sm font-mono">{data.cpu}</span></div>
-            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Total RAM</span><span className="text-sm font-mono">{data.ram}</span></div>
-            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Git Branch / Commit</span><span className="text-sm font-mono">{data.gitBranch ?? "—"} ({data.gitCommit?.substring(0, 7) ?? "—"})</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">CPU Cores</span><span className="text-sm font-mono">{data.cpu_count} ({data.cpu_percent}%)</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Total RAM</span><span className="text-sm font-mono">{formatBytes(data.ram_total)}</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">RAM Used</span><span className="text-sm font-mono">{formatBytes(data.ram_used)} ({data.ram_percent}%)</span></div>
+            <div className="flex justify-between border-b border-border/40 pb-2"><span className="text-muted text-sm">Git Branch / Commit</span><span className="text-sm font-mono">{data.git_branch ?? "—"} ({data.git_commit?.substring(0, 7) ?? "—"})</span></div>
           </div>
+        </div>
+      </div>
+      
+      <div className="mt-4">
+        <h3 className="text-sm font-semibold mb-3">Platform Services ({healthyServices}/{totalServices} operational)</h3>
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(data.platform_services ?? {}).map(([name, ok]) => (
+            <span key={name} className={clsx(
+              "px-2 py-0.5 rounded-full border text-[10px] font-medium",
+              ok ? "bg-ok/10 border-ok/30 text-ok" : "bg-danger/10 border-danger/30 text-danger"
+            )}>
+              {name}
+            </span>
+          ))}
         </div>
       </div>
     </Panel>
@@ -301,10 +338,15 @@ function TabRuntimeDiscovery({ autoRefresh, search }: { autoRefresh: boolean; se
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const tools = (data?.tools || []).filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.type.toLowerCase().includes(search.toLowerCase()));
+  const tools = (data?.providers || []).filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.type.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Panel title="Discovered Runtimes & Tools">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Stat label="Total Discovered" value={data?.total_discovered ?? 0} />
+        <Stat label="Running" value={data?.total_running ?? 0} tone="ok" />
+        <Stat label="Healthy" value={data?.total_healthy ?? 0} tone="ok" />
+      </div>
       <div className="border border-border/60 rounded-xl overflow-hidden">
         <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
@@ -321,12 +363,12 @@ function TabRuntimeDiscovery({ autoRefresh, search }: { autoRefresh: boolean; se
             {tools.map((t, i) => (
               <tr key={i} className="hover:bg-surface/20">
                 <td className="px-4 py-3 font-medium flex items-center gap-2">
-                  <StatusDot status={t.health} /> {t.name}
+                  <StatusDot status={t.health === "healthy" || t.health === "ok" ? "healthy" : t.running ? "running" : "down"} pulse={t.running} /> {t.name}
                 </td>
                 <td className="px-4 py-3 text-muted">{t.type}</td>
                 <td className="px-4 py-3 text-muted">{t.vendor}</td>
                 <td className="px-4 py-3 font-mono">{t.version || 'N/A'}</td>
-                <td className="px-4 py-3 font-mono">{t.pid || '-'}</td>
+                <td className="px-4 py-3 font-mono">{t.pid ?? '-'}</td>
                 <td className="px-4 py-3">
                   <Badge tone={t.running ? "ok" : t.installed ? "info" : "default"}>
                     {t.status}
@@ -350,32 +392,38 @@ function TabBrainRegistry({ autoRefresh, search }: { autoRefresh: boolean; searc
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const brains = data?.brains.filter(b => b.id.toLowerCase().includes(search.toLowerCase())) || [];
+  const brains = data?.brains.filter(b => b.display_name.toLowerCase().includes(search.toLowerCase()) || b.id.toLowerCase().includes(search.toLowerCase())) || [];
 
   return (
     <Panel title="Brain Registry">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <Stat label="Total Brains" value={data?.total_count ?? 0} />
+        <Stat label="Healthy (≥80)" value={data?.healthy_count ?? 0} tone="ok" />
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {brains.map((brain) => (
           <div key={brain.id} className="glass rounded-xl p-4 border border-border/40">
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-2">
                 <Brain className="h-5 w-5 text-accent" />
-                <h3 className="font-semibold text-lg">{brain.id}</h3>
+                <h3 className="font-semibold text-lg">{brain.display_name}</h3>
               </div>
-              <Badge tone={brain.health === "healthy" ? "ok" : "warn"}>{brain.health}</Badge>
+              <Badge tone={brain.health >= 80 ? "ok" : "warn"}>{brain.status}</Badge>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 text-sm mb-4">
               <div className="text-muted">Runtime</div>
               <div className="font-medium text-right">{brain.runtime}</div>
+              <div className="text-muted">Health</div>
+              <div className="font-medium text-right">{brain.health}%</div>
               <div className="text-muted">Memory Usage</div>
-              <div className="font-medium text-right">{brain.memory}</div>
+              <div className="font-medium text-right">{brain.memory_mb} MB</div>
               <div className="text-muted">CPU Load</div>
-              <div className="font-medium text-right">{brain.cpu}</div>
+              <div className="font-medium text-right">{brain.cpu_percent}%</div>
               <div className="text-muted">Active Tasks</div>
-              <div className="font-medium text-right">{brain.tasks}</div>
-              <div className="text-muted">Last Heartbeat</div>
-              <div className="font-medium text-right text-xs mt-1">{brain.heartbeat}</div>
+              <div className="font-medium text-right">{brain.task_count}</div>
+              <div className="text-muted">Latency</div>
+              <div className="font-medium text-right">{brain.latency}ms</div>
             </div>
             
             <div className="pt-3 border-t border-border/40">
@@ -400,7 +448,7 @@ function TabAgentRegistry({ autoRefresh, search }: { autoRefresh: boolean; searc
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const agents = data?.agents.filter(a => a.id.toLowerCase().includes(search.toLowerCase()) || a.mission.toLowerCase().includes(search.toLowerCase())) || [];
+  const agents = data?.agents.filter(a => a.id.toLowerCase().includes(search.toLowerCase()) || (a.mission || "").toLowerCase().includes(search.toLowerCase())) || [];
 
   return (
     <Panel title="Agent Registry">
@@ -422,14 +470,14 @@ function TabAgentRegistry({ autoRefresh, search }: { autoRefresh: boolean; searc
               <tr key={i} className="hover:bg-surface/20">
                 <td className="px-4 py-3 font-medium text-accent">{a.id}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={a.status === "active" ? "ok" : a.status === "idle" ? "info" : "danger"}>
+                  <Badge tone={a.status === "active" || a.status === "healthy" ? "ok" : a.status === "idle" ? "info" : "warn"}>
                     {a.status}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-muted truncate max-w-xs">{a.mission}</td>
+                <td className="px-4 py-3 text-muted truncate max-w-xs">{a.mission || "—"}</td>
                 <td className="px-4 py-3 text-muted">{a.provider}</td>
-                <td className="px-4 py-3 text-right font-mono">{a.tasks}</td>
-                <td className="px-4 py-3 text-right font-mono">{a.latency}ms</td>
+                <td className="px-4 py-3 text-right font-mono">{a.task_count}</td>
+                <td className="px-4 py-3 text-right font-mono">{a.latency_ms}ms</td>
                 <td className="px-4 py-3 text-right font-mono text-danger">{a.failures}/{a.retries}</td>
               </tr>
             ))}
@@ -446,7 +494,7 @@ function TabCapabilityRegistry({ autoRefresh, search }: { autoRefresh: boolean; 
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const caps = data?.capabilities.filter(c => c.capability.toLowerCase().includes(search.toLowerCase())) || [];
+  const caps = data?.capabilities.filter(c => (c.name || "").toLowerCase().includes(search.toLowerCase()) || (c.provider || "").toLowerCase().includes(search.toLowerCase())) || [];
 
   return (
     <Panel title="Capability Registry">
@@ -465,7 +513,7 @@ function TabCapabilityRegistry({ autoRefresh, search }: { autoRefresh: boolean; 
           <tbody className="divide-y divide-border/40">
             {caps.map((c, i) => (
               <tr key={i} className="hover:bg-surface/20">
-                <td className="px-4 py-3 font-mono text-accent">{c.capability}</td>
+                <td className="px-4 py-3 font-mono text-accent">{c.name}</td>
                 <td className="px-4 py-3 text-muted">{c.provider}</td>
                 <td className="px-4 py-3 text-muted">{c.brain || '-'}</td>
                 <td className="px-4 py-3 font-mono">{c.priority}</td>
@@ -475,6 +523,7 @@ function TabCapabilityRegistry({ autoRefresh, search }: { autoRefresh: boolean; 
                 </td>
               </tr>
             ))}
+            {caps.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No capabilities registered.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -483,43 +532,35 @@ function TabCapabilityRegistry({ autoRefresh, search }: { autoRefresh: boolean; 
 }
 
 function TabDiscoveryPipeline({ autoRefresh }: { autoRefresh: boolean }) {
+  const { data, loading, error } = useDiagnosticsData(api.fetchDiscovery, autoRefresh);
+  if (loading && !data) return <LoadingScreen />;
+  if (error) return <Empty title="Error fetching data" hint={error.message} />;
+  
+  const providers = data?.providers ?? [];
+  const installed = providers.filter(p => p.installed).length;
+  const running = providers.filter(p => p.running).length;
+
   return (
     <Panel title="Discovery Pipeline Status">
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between p-6 glass rounded-xl border border-border/40">
-           <div className="text-center w-32">
-             <div className="mx-auto w-12 h-12 bg-ok/20 rounded-full flex items-center justify-center mb-2 border border-ok/50"><Search className="w-5 h-5 text-ok" /></div>
-             <div className="text-sm font-semibold">Scan FS</div>
-             <div className="text-xs text-muted mt-1">100% OK</div>
-           </div>
-           <div className="flex-1 h-px bg-border/60 mx-4 relative">
-             <motion.div className="absolute top-0 left-0 h-full bg-accent" animate={{ width: ["0%", "100%"] }} transition={{ duration: 2, repeat: Infinity }} />
-           </div>
-           
-           <div className="text-center w-32">
-             <div className="mx-auto w-12 h-12 bg-warn/20 rounded-full flex items-center justify-center mb-2 border border-warn/50"><Cpu className="w-5 h-5 text-warn" /></div>
-             <div className="text-sm font-semibold">Analyze Binaries</div>
-             <div className="text-xs text-muted mt-1">Warning: 2 Unsigned</div>
-           </div>
-           <div className="flex-1 h-px bg-border/60 mx-4 relative">
-             <motion.div className="absolute top-0 left-0 h-full bg-accent" animate={{ width: ["0%", "100%"] }} transition={{ duration: 2, delay: 0.5, repeat: Infinity }} />
-           </div>
-           
-           <div className="text-center w-32">
-             <div className="mx-auto w-12 h-12 bg-ok/20 rounded-full flex items-center justify-center mb-2 border border-ok/50"><Zap className="w-5 h-5 text-ok" /></div>
-             <div className="text-sm font-semibold">Extract Capabilities</div>
-             <div className="text-xs text-muted mt-1">45 capabilities</div>
-           </div>
-           <div className="flex-1 h-px bg-border/60 mx-4 relative">
-             <motion.div className="absolute top-0 left-0 h-full bg-accent" animate={{ width: ["0%", "100%"] }} transition={{ duration: 2, delay: 1, repeat: Infinity }} />
-           </div>
-           
-           <div className="text-center w-32">
-             <div className="mx-auto w-12 h-12 bg-ok/20 rounded-full flex items-center justify-center mb-2 border border-ok/50"><Database className="w-5 h-5 text-ok" /></div>
-             <div className="text-sm font-semibold">Registry Update</div>
-             <div className="text-xs text-muted mt-1">Synced</div>
-           </div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Stat label="Discovered" value={providers.length} />
+        <Stat label="Installed" value={installed} />
+        <Stat label="Running" value={running} tone="ok" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {providers.map((p, i) => (
+          <div key={i} className="glass rounded-xl p-4 border border-border/40">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-semibold">{p.name}</span>
+              <Badge tone={p.running ? "ok" : p.installed ? "info" : "default"}>{p.running ? "Running" : p.installed ? "Installed" : "Missing"}</Badge>
+            </div>
+            <div className="text-xs text-muted">
+              {p.version || "unknown version"} · {p.registration_state ?? "discovered"}
+              {p.pid ? ` · PID ${p.pid}` : ""}
+            </div>
+          </div>
+        ))}
+        {providers.length === 0 && <div className="col-span-full"><Empty title="No providers discovered" hint="Run discovery to scan for runtimes." /></div>}
       </div>
     </Panel>
   );
@@ -530,28 +571,37 @@ function TabEventBusInspector({ autoRefresh, search }: { autoRefresh: boolean; s
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const topics = data?.topics.filter(t => t.name.toLowerCase().includes(search.toLowerCase())) || [];
+  const topics = data?.topics.filter(t => t.topic.toLowerCase().includes(search.toLowerCase())) || [];
 
   return (
     <Panel title="EventBus Topics">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Stat label="Total Topics" value={data?.total_topics ?? 0} />
+        <Stat label="Total Messages" value={data?.total_messages ?? 0} />
+        <Stat label="Bus Type" value={data?.bus_type ?? "unknown"} />
+      </div>
       <div className="border border-border/60 rounded-xl overflow-hidden">
         <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Topic Name</th>
-              <th className="px-4 py-3 text-right">Messages Processed</th>
-              <th className="px-4 py-3 text-right">Active Subscribers</th>
+              <th className="px-4 py-3 text-right">Subscribers</th>
+              <th className="px-4 py-3 text-right">Msgs/sec</th>
+              <th className="px-4 py-3 text-right">Dropped</th>
+              <th className="px-4 py-3 text-right">Errors</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
             {topics.map((t, i) => (
               <tr key={i} className="hover:bg-surface/20">
-                <td className="px-4 py-3 font-mono text-accent">{t.name}</td>
-                <td className="px-4 py-3 text-right font-mono">{t.messages.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right font-mono">{t.subscribers}</td>
+                <td className="px-4 py-3 font-mono text-accent">{t.topic}</td>
+                <td className="px-4 py-3 text-right font-mono">{t.subscriber_count}</td>
+                <td className="px-4 py-3 text-right font-mono">{t.messages_per_sec.toFixed(2)}</td>
+                <td className="px-4 py-3 text-right font-mono">{t.dropped}</td>
+                <td className="px-4 py-3 text-right font-mono text-danger">{t.errors}</td>
               </tr>
             ))}
-            {topics.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-muted">No topics found.</td></tr>}
+            {topics.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No topics found.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -564,7 +614,11 @@ function TabSSEInspector({ autoRefresh, search }: { autoRefresh: boolean; search
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const clients = data?.clients.filter(c => c.id.toLowerCase().includes(search.toLowerCase()) || c.ip.includes(search)) || [];
+  const q = search.toLowerCase();
+  const clients = (data?.clients ?? []).filter(c =>
+    ((c.client_id ?? "") as string).toLowerCase().includes(q) ||
+    ((c.heartbeat ?? "") as string).toLowerCase().includes(q)
+  );
 
   return (
     <Panel title="SSE Connected Clients">
@@ -576,19 +630,23 @@ function TabSSEInspector({ autoRefresh, search }: { autoRefresh: boolean; search
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
               <th className="px-4 py-3">Client ID</th>
-              <th className="px-4 py-3">IP Address</th>
               <th className="px-4 py-3">Connected At</th>
+              <th className="px-4 py-3 text-right">Reconnects</th>
+              <th className="px-4 py-3 text-right">Msgs/sec</th>
+              <th className="px-4 py-3 text-right">Dropped</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/40">
             {clients.map((c, i) => (
               <tr key={i} className="hover:bg-surface/20">
-                <td className="px-4 py-3 font-mono text-muted">{c.id}</td>
-                <td className="px-4 py-3 font-mono">{c.ip}</td>
-                <td className="px-4 py-3 text-muted">{c.connectedAt}</td>
+                <td className="px-4 py-3 font-mono text-muted">{c.client_id}</td>
+                <td className="px-4 py-3 text-muted">{c.connected_at || "—"}</td>
+                <td className="px-4 py-3 text-right font-mono">{c.reconnects}</td>
+                <td className="px-4 py-3 text-right font-mono">{c.messages_per_sec.toFixed(2)}</td>
+                <td className="px-4 py-3 text-right font-mono">{c.dropped_frames}</td>
               </tr>
             ))}
-            {clients.length === 0 && <tr><td colSpan={3} className="px-4 py-8 text-center text-muted">No connected clients.</td></tr>}
+            {clients.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No connected clients.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -628,6 +686,7 @@ function TabAPIMonitor({ autoRefresh, search }: { autoRefresh: boolean; search: 
                 <td className="px-4 py-3 text-right font-mono text-danger">{a.errors}</td>
               </tr>
             ))}
+            {apis.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No API telemetry recorded.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -649,15 +708,18 @@ function TabProviderRuntime({ autoRefresh, search }: { autoRefresh: boolean; sea
           <div key={i} className="glass rounded-xl p-4 border border-border/40">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold">{p.name}</h3>
-              <StatusDot status={p.health} />
+              <StatusDot status={p.health >= 80 ? "healthy" : p.health >= 50 ? "degraded" : "down"} />
             </div>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted">Status</span><Badge>{p.status}</Badge></div>
-              <div className="flex justify-between"><span className="text-muted">Rate Limits</span><span className="font-mono text-xs">{p.rateLimits}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Circuit Breaker</span><span className={clsx("font-mono text-xs", p.circuitBreaker === "CLOSED" ? "text-ok" : "text-danger")}>{p.circuitBreaker}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Health</span><span className="font-mono text-xs">{p.health}%</span></div>
+              <div className="flex justify-between"><span className="text-muted">Latency</span><span className="font-mono text-xs">{p.latency_ms}ms</span></div>
+              <div className="flex justify-between"><span className="text-muted">Brain ID</span><span className="font-mono text-xs truncate max-w-[120px]">{p.brain_id}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Bound</span><span className={clsx("font-mono text-xs", p.bound ? "text-ok" : "text-danger")}>{p.bound ? "YES" : "NO"}</span></div>
             </div>
           </div>
         ))}
+        {providers.length === 0 && <div className="col-span-full"><Empty title="No providers registered" /></div>}
       </div>
     </Panel>
   );
@@ -699,6 +761,7 @@ function TabMCPMonitor({ autoRefresh, search }: { autoRefresh: boolean; search: 
                 <td className="px-4 py-3 text-right font-mono text-danger">{s.errors}</td>
               </tr>
             ))}
+            {servers.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted">No MCP servers registered.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -715,12 +778,12 @@ function TabQueueInspector({ autoRefresh }: { autoRefresh: boolean }) {
     <Panel title="Internal Message Queues">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {data?.queues.map((q, i) => {
-          const percent = Math.min(100, Math.round((q.depth / q.capacity) * 100));
+          const percent = Math.min(100, q.depth * 5);
           return (
             <div key={i} className="glass rounded-xl p-4 border border-border/40">
               <div className="flex justify-between items-center mb-2">
                 <h3 className="font-mono text-sm">{q.name}</h3>
-                <span className="text-xs font-mono">{q.depth} / {q.capacity}</span>
+                <span className="text-xs font-mono">depth {q.depth}</span>
               </div>
               <div className="h-2 bg-surface/60 rounded-full overflow-hidden">
                 <div 
@@ -731,6 +794,7 @@ function TabQueueInspector({ autoRefresh }: { autoRefresh: boolean }) {
             </div>
           );
         })}
+        {(data?.queues?.length ?? 0) === 0 && <Empty title="No queues" hint="Scheduler and orchestrator queues are empty." />}
       </div>
     </Panel>
   );
@@ -741,16 +805,25 @@ function TabThreadMonitor({ autoRefresh, search }: { autoRefresh: boolean; searc
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  const tasks = data?.tasks.filter(t => t.name.toLowerCase().includes(search.toLowerCase()) || t.id.includes(search)) || [];
+  const q = search.toLowerCase();
+  const tasks = (data?.tasks ?? []).filter(t =>
+    ((t.name ?? "") as string).toLowerCase().includes(q) ||
+    ((t.coroutine ?? "") as string).toLowerCase().includes(q)
+  );
 
   return (
     <Panel title="Asyncio Task Monitor">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Stat label="Total Tasks" value={data?.total_count ?? 0} />
+        <Stat label="Running" value={data?.running_count ?? 0} tone="ok" />
+        <Stat label="Cancelled" value={data?.cancelled_count ?? 0} tone="warn" />
+      </div>
       <div className="border border-border/60 rounded-xl overflow-hidden">
         <table className="w-full text-sm text-left block overflow-x-auto">
           <thead className="bg-surface/40 text-muted uppercase text-[11px] font-semibold">
             <tr>
-              <th className="px-4 py-3">Task ID</th>
-              <th className="px-4 py-3">Coroutine Name</th>
+              <th className="px-4 py-3">Task Name</th>
+              <th className="px-4 py-3">Coroutine</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Duration</th>
             </tr>
@@ -758,14 +831,15 @@ function TabThreadMonitor({ autoRefresh, search }: { autoRefresh: boolean; searc
           <tbody className="divide-y divide-border/40">
             {tasks.map((t, i) => (
               <tr key={i} className="hover:bg-surface/20">
-                <td className="px-4 py-3 font-mono text-muted">{t.id}</td>
-                <td className="px-4 py-3 font-mono text-accent">{t.name}</td>
+                <td className="px-4 py-3 font-mono text-muted">{t.name}</td>
+                <td className="px-4 py-3 font-mono text-accent break-all">{t.coroutine || "—"}</td>
                 <td className="px-4 py-3">
                   <Badge tone={t.status === "running" ? "ok" : t.status === "pending" ? "warn" : "default"}>{t.status}</Badge>
                 </td>
-                <td className="px-4 py-3 text-right font-mono">{t.duration}</td>
+                <td className="px-4 py-3 text-right font-mono">{t.duration_seconds.toFixed(1)}s</td>
               </tr>
             ))}
+            {(data?.tasks?.length ?? 0) === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted">No tasks tracked.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -779,17 +853,23 @@ function TabResourceMonitor({ autoRefresh }: { autoRefresh: boolean }) {
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   if (!data) return null;
 
+  const cpu = data.cpu_percent ?? 0;
+  const ramPct = data.ram_percent ?? 0;
+  const diskPct = data.disk_percent ?? 0;
+
   return (
     <Panel title="System Resources">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Stat label="CPU Usage" value={`${data.cpuPercent}%`} tone={data.cpuPercent > 80 ? "danger" : "ok"} />
-        <Stat label="Memory Usage" value={`${Math.round((data.ramUsed / data.ramTotal) * 100)}%`} delta={`${data.ramUsed} / ${data.ramTotal} GB`} tone={(data.ramUsed / data.ramTotal) > 0.8 ? "danger" : "ok"} />
-        <Stat label="Disk Usage" value={`${Math.round((data.diskUsed / data.diskTotal) * 100)}%`} delta={`${data.diskUsed} / ${data.diskTotal} GB`} />
-        <Stat label="Process Memory" value={data.processMemory} tone="accent" />
+        <Stat label="CPU Usage" value={`${cpu.toFixed(1)}%`} tone={cpu > 80 ? "danger" : "ok"} />
+        <Stat label="Memory Usage" value={`${ramPct.toFixed(1)}%`} delta={`${formatBytes(data.ram_used ?? 0)} / ${formatBytes(data.ram_total ?? 0)}`} tone={ramPct > 80 ? "danger" : "ok"} />
+        <Stat label="Disk Usage" value={`${diskPct.toFixed(1)}%`} delta={`${formatBytes(data.disk_used ?? 0)} / ${formatBytes(data.disk_total ?? 0)}`} />
+        <Stat label="Process Memory" value={`${data.process_rss_mb ?? 0} MB`} tone="accent" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Stat label="Network I/O" value={data.netIo} />
-        <Stat label="Active Threads" value={data.threadCount} />
+        <Stat label="Network Sent" value={formatBytes(data.net_bytes_sent ?? 0)} />
+        <Stat label="Network Received" value={formatBytes(data.net_bytes_recv ?? 0)} />
+        <Stat label="Threads" value={data.thread_count ?? 0} />
+        <Stat label="Open Files" value={data.open_files_count ?? 0} />
       </div>
     </Panel>
   );
@@ -800,7 +880,6 @@ function TabEventTimeline({ autoRefresh, search }: { autoRefresh: boolean; searc
   if (loading && !data) return <LoadingScreen />;
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   
-  // Repurposing logs API slightly as an event timeline for demonstration
   const events = data?.logs.filter(l => l.message.toLowerCase().includes(search.toLowerCase())) || [];
 
   return (
@@ -818,7 +897,7 @@ function TabEventTimeline({ autoRefresh, search }: { autoRefresh: boolean; searc
             </div>
           </div>
         ))}
-        {events.length === 0 && <Empty title="No events found" />}
+        {events.length === 0 && <Empty title="No events found" hint="No structured logs captured yet." />}
       </div>
     </Panel>
   );
@@ -895,33 +974,45 @@ function TabHealthDashboard({ autoRefresh }: { autoRefresh: boolean }) {
   if (error) return <Empty title="Error fetching data" hint={error.message} />;
   if (!data) return null;
 
+  const meta = data._meta;
+  const subsystems = Object.entries(data).filter(([k]) => k !== "_meta");
+  const overall = meta?.health_score ?? 0;
+
   return (
     <Panel title="Subsystem Health Grid">
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="inline-flex items-center gap-3 px-4 py-2 glass rounded-lg border border-border/40">
-          <span className="text-sm font-semibold text-muted">Global Status:</span>
-          <Badge tone={data.status === "healthy" ? "ok" : "warn"}>{(data.status || "UNKNOWN").toUpperCase()}</Badge>
+          <span className="text-sm font-semibold text-muted">Health Score:</span>
+          <Badge tone={overall > 90 ? "ok" : overall > 70 ? "warn" : "danger"}>{overall}%</Badge>
+        </div>
+        <div className="text-xs text-faint">
+          {meta?.healthy_count ?? 0}/{meta?.total_subsystems ?? 0} subsystems operational · checked {meta?.checked_at ? new Date(meta.checked_at).toLocaleTimeString() : "—"}
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {Object.entries(data.subsystems || {}).map(([name, stat]) => (
-          <div key={name} className="glass rounded-xl p-4 border border-border/40">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-semibold text-sm capitalize">{name}</h3>
-              <StatusDot status={stat.status} />
+        {subsystems.map(([name, stat]) => {
+          const s = stat as api.DiagnosticsHealthSubsystem;
+          return (
+            <div key={name} className="glass rounded-xl p-4 border border-border/40">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-semibold text-sm capitalize">{name.replace(/_/g, " ")}</h3>
+                <StatusDot status={s.healthy ? "healthy" : "down"} pulse={s.healthy} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="text-muted">Status</div>
+                <div className="text-right font-mono">{s.status}</div>
+                <div className="text-muted">Latency</div>
+                <div className="text-right font-mono">{s.latency_ms}ms</div>
+                <div className="text-muted">Errors</div>
+                <div className="text-right font-mono text-danger">{s.errors}</div>
+                <div className="text-muted">Warnings</div>
+                <div className="text-right font-mono text-warn">{s.warnings}</div>
+                <div className="text-muted">Restarts</div>
+                <div className="text-right font-mono">{s.restart_count}</div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              <div className="text-muted">Latency</div>
-              <div className="text-right font-mono">{stat.latency}ms</div>
-              <div className="text-muted">Errors</div>
-              <div className="text-right font-mono text-danger">{stat.errors}</div>
-              <div className="text-muted">Warnings</div>
-              <div className="text-right font-mono text-warn">{stat.warnings}</div>
-              <div className="text-muted">Restarts</div>
-              <div className="text-right font-mono">{stat.restartCount}</div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Panel>
   );
@@ -1017,16 +1108,7 @@ function TabSelfTest() {
       setResults(res);
     } catch (e) {
       console.error(e);
-      // Fallback stub for UI demo if API fails
-      setResults({
-        results: [
-          { name: "Control Plane Reachability", status: "PASS", message: "Successfully connected to control plane on port 8000" },
-          { name: "Database Connectivity", status: "PASS", message: "SQLite vector store ready" },
-          { name: "Provider Credentials", status: "WARNING", message: "Anthropic API key is configured but rejected ping" },
-          { name: "Discovery Engine", status: "PASS", message: "FS permissions validated" },
-          { name: "SSE Broadcast", status: "PASS", message: "Event delivery latency < 5ms" },
-        ]
-      });
+      setResults(null);
     } finally {
       setRunning(false);
     }

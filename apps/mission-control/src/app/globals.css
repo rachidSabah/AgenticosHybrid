@@ -202,11 +202,37 @@ body {
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--border));
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--faint));
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Ultra-thin scrollbars for the sidebar navigation — slim vertical rail
+   that doesn't eat into the menu width. */
+.sidebar-scroll {
+  scrollbar-width: thin;
+}
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--faint) / 0.45);
+  border-radius: 999px;
+  border: none;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--accent) / 0.6);
+  border: none;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -444,4 +470,166 @@ body {
     min-height: 40px;
     min-width: 40px;
   }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   AI COMMAND CENTER — futuristic mission-control accents
+   All of these are token-driven and respect prefers-reduced-motion
+   (the global reduced-motion override zeroes animation durations).
+   No new dependencies — pure CSS built on the existing design tokens.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Command strip — top-of-view telemetry bar (mission overview header) */
+.cmd-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid rgb(var(--border) / 0.55);
+  border-radius: 1rem;
+  background: linear-gradient(
+    180deg,
+    rgb(var(--surface) / 0.55),
+    rgb(var(--bg) / 0.45)
+  );
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 8px 32px -12px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+/* Thin top accent hairline scanning across the strip */
+.cmd-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--accent) / 0.6) 30%,
+    rgb(var(--info) / 0.5) 60%,
+    transparent
+  );
+  opacity: 0.7;
+}
+
+/* Live beam — animated progress/sheen on real data bars */
+.beam {
+  position: relative;
+  overflow: hidden;
+}
+.beam::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  animation: beam-sheen 2.6s ease-in-out infinite;
+}
+@keyframes beam-sheen {
+  to { transform: translateX(100%); }
+}
+
+/* Scan sweep — subtle vertical scanline across data canvases */
+.scan-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.scan-sweep::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgb(var(--accent) / 0.06),
+    transparent
+  );
+  animation: scan-drift 7s linear infinite;
+  pointer-events: none;
+}
+@keyframes scan-drift {
+  0% { top: -60px; }
+  100% { top: 110%; }
+}
+
+/* Hover glow for interactive panels/cards */
+.panel-glow {
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+.panel-glow:hover {
+  border-color: rgb(var(--accent) / 0.4);
+  box-shadow:
+    0 0 0 1px rgb(var(--accent) / 0.18),
+    0 8px 40px -12px rgb(var(--accent) / 0.35);
+}
+
+/* Sci-fi corner brackets for canvases / graph viewports */
+.corner-brackets {
+  position: relative;
+}
+.corner-brackets::before,
+.corner-brackets::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  opacity: 0.65;
+  transition: opacity 0.2s ease;
+}
+.corner-brackets::before {
+  top: 8px;
+  left: 8px;
+  border-top: 1.5px solid rgb(var(--accent) / 0.7);
+  border-left: 1.5px solid rgb(var(--accent) / 0.7);
+  border-top-left-radius: 4px;
+}
+.corner-brackets::after {
+  bottom: 8px;
+  right: 8px;
+  border-bottom: 1.5px solid rgb(var(--accent) / 0.7);
+  border-right: 1.5px solid rgb(var(--accent) / 0.7);
+  border-bottom-right-radius: 4px;
+}
+
+/* Compact metric tick — label + mono value in one line */
+.metric-tick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+.metric-tick .metric-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgb(var(--faint) / 0.75);
+}
+.metric-tick .metric-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(var(--text));
+}
+
+/* Soft focus glow for selected command tiles */
+.tile-active {
+  background: rgb(var(--accent) / 0.12);
+  border-color: rgb(var(--accent) / 0.45);
+  box-shadow:
+    inset 0 0 18px rgb(var(--accent) / 0.08),
+    0 0 24px -8px rgb(var(--accent) / 0.5);
 }

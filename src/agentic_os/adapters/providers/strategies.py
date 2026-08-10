@@ -94,6 +94,9 @@ class ProviderExecutionStrategy(ABC):
         the planner-generated task description (task.description).
         """
         user_prompt = (task.user_prompt or "").strip()
+        # Treat lone dash as empty prompt (common placeholder)
+        if not user_prompt or user_prompt == "-":
+            user_prompt = ""
         description = (task.description or "").strip()
         title = (task.title or "").strip()
 
@@ -112,6 +115,11 @@ class ProviderExecutionStrategy(ABC):
             "=" * 50,
             "Task Title",
             title,
+            "",
+            "=" * 50,
+            "CRITICAL INSTRUCTION FOR FILE CREATION",
+            "You MUST create real source code files (such as .html, .css, .js, .py, etc.) directly in the current working directory.",
+            "Do NOT merely explain or wrap code in markdown chat text. Write actual files to disk in the current working directory.",
             "=" * 50,
         ]
         return "\n".join(sections)
@@ -142,8 +150,14 @@ class ClaudeExecutionStrategy(ProviderExecutionStrategy):
     def kind(self) -> str:
         return "claude_code"
 
+    @property
+    def timeout_s(self) -> float:
+        # Claude Code real runs (full mission prompts + tool calls) routinely
+        # exceed the 120s default; 300s mirrors the AGY/hermes long-run cap.
+        return 300.0
+
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", "--output-format", "text"]
+        return [bin_path, "-p", "--output-format", "text", "--dangerously-skip-permissions"]
 
     def build_stdin(self, task: Task) -> bytes | None:
         return self.build_prompt(task).encode("utf-8")
@@ -156,12 +170,15 @@ class ClaudeExecutionStrategy(ProviderExecutionStrategy):
 
 
 class HermesExecutionStrategy(ProviderExecutionStrategy):
-    """Hermes CLI: ``hermes -z "{prompt}"``.
+    """Hermes CLI: ``hermes -z "{prompt}" --yolo``.
 
-    The real hermes CLI contract is ``-z PROMPT``. It has **no**
-    ``--output-format`` flag; passing one makes it exit 2 with a usage
-    error. Timeout is 600s — real agent runs with workspace context +
-    tool calls routinely exceed 120s.
+    The real hermes CLI contract is ``-z PROMPT`` — the prompt is passed
+    as the **argument value**, never via stdin (oneshot mode reads no
+    stdin; ``-z -`` would literally send ``-`` as the prompt). ``--yolo``
+    auto-approves tool approvals so non-interactive runs don't hang.
+    Hermes has **no** ``--output-format`` flag; passing one makes it exit
+    2 with a usage error. Timeout is 600s — real agent runs with workspace
+    context + tool calls routinely exceed 120s.
     """
 
     @property
@@ -173,7 +190,11 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
         return 600.0
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-z", self.build_prompt(task)]
+        return [bin_path, "-z", self.build_prompt(task), "--yolo"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        # Prompt goes via the -z argument value, not stdin.
+        return None
 
     def health_command(self, bin_path: str) -> list[str] | None:
         # Use --help instead of --version: hermes --version performs a network
@@ -207,14 +228,14 @@ class OpenCodeExecutionStrategy(ProviderExecutionStrategy):
 
 
 class CodexExecutionStrategy(ProviderExecutionStrategy):
-    """Codex CLI: `codex --prompt "{prompt}"`"""
+    """Codex CLI: `codex exec "{prompt}"`"""
 
     @property
     def kind(self) -> str:
         return "codex"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "--prompt", self.build_prompt(task)]
+        return [bin_path, "exec", self.build_prompt(task)]
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -266,14 +287,21 @@ class GeminiExecutionStrategy(ProviderExecutionStrategy):
 
 
 class AGYExecutionStrategy(ProviderExecutionStrategy):
-    """AGY CLI: `agy run "{prompt}"`"""
+    """AGY CLI: ``agy run -`` (prompt via stdin).
+
+    The prompt is sent via **stdin** to avoid the Windows ``cmd.exe``
+    8191-char command line length limit ([WinError 206]).
+    """
 
     @property
     def kind(self) -> str:
         return "antigravity"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "run", self.build_prompt(task)]
+        return [bin_path, "run", "-"]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]

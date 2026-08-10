@@ -12,14 +12,14 @@ import {
 
 export function GatewayDashboard() {
   return (
-    <div className="flex h-full w-full flex-col gap-4 overflow-auto p-4 bg-[#0a0b10] text-[#e2e8f0]">
+    <div className="flex h-full w-full flex-col gap-4 overflow-auto p-4 bg-bg text-text">
       <div className="flex items-center gap-2">
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-1.5 text-amber-400">
           <MessageCircle size={16} />
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-white">Messaging Gateways</h2>
-          <p className="text-[10px] text-white/40">Submit missions and receive results via chat apps</p>
+          <h2 className="text-sm font-semibold text-text">Messaging Gateways</h2>
+          <p className="text-[10px] text-faint">Submit missions and receive results via chat apps</p>
         </div>
       </div>
 
@@ -87,11 +87,11 @@ function TelegramPanel() {
   const telegramEvents = events.filter((e) => e.topic?.startsWith("gateway.telegram")).slice(0, 10);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#12131a] p-4">
+    <div className="rounded-xl border border-border/60 bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Bot size={16} className={connected ? "text-sky-400" : "text-white/30"} />
-          <span className="text-xs font-semibold text-white">Telegram Bot</span>
+          <Bot size={16} className={connected ? "text-sky-400" : "text-faint/60"} />
+          <span className="text-xs font-semibold text-text">Telegram Bot</span>
           {connected && status?.username && (
             <span className="font-mono text-[10px] text-sky-300">{status.username}</span>
           )}
@@ -107,7 +107,7 @@ function TelegramPanel() {
               </button>
             </>
           ) : (
-            <span className="flex items-center gap-1 text-[10px] text-white/30">
+            <span className="flex items-center gap-1 text-[10px] text-faint/60">
               <WifiOff size={11} /> Disconnected
             </span>
           )}
@@ -121,7 +121,7 @@ function TelegramPanel() {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="Bot token from @BotFather"
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white placeholder-white/30 outline-none focus:border-sky-500/40"
+            className="w-full rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-xs text-text placeholder:text-faint outline-none focus:border-sky-500/40"
           />
           <button
             onClick={handleConnect}
@@ -141,13 +141,13 @@ function TelegramPanel() {
             value={sendChatId}
             onChange={(e) => setSendChatId(e.target.value)}
             placeholder="Chat ID"
-            className="w-24 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/30 outline-none"
+            className="w-24 rounded-lg border border-border/60 bg-surface/60 px-2 py-1.5 text-xs text-text placeholder:text-faint outline-none"
           />
           <input
             value={sendText}
             onChange={(e) => setSendText(e.target.value)}
             placeholder="Message text"
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/30 outline-none"
+            className="flex-1 rounded-lg border border-border/60 bg-surface/60 px-2 py-1.5 text-xs text-text placeholder:text-faint outline-none"
           />
           <button onClick={handleSend} className="rounded-lg bg-sky-500/20 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/30">
             <Send size={11} />
@@ -156,12 +156,12 @@ function TelegramPanel() {
       )}
 
       <div className="space-y-1">
-        <div className="text-[9px] uppercase tracking-wider text-white/30">Recent Activity</div>
+        <div className="text-[9px] uppercase tracking-wider text-faint/60">Recent Activity</div>
         {safeArr(telegramEvents).length === 0 ? (
-          <div className="text-[10px] text-white/20">No activity yet</div>
+          <div className="text-[10px] text-faint/40">No activity yet</div>
         ) : (
           telegramEvents.map((e, i) => (
-            <div key={i} className="flex items-center gap-2 text-[10px] text-white/50">
+            <div key={i} className="flex items-center gap-2 text-[10px] text-faint/80">
               {e.topic.includes("received") ? <MessageCircle size={10} className="text-sky-400" /> : <Send size={10} className="text-emerald-400" />}
               <span className="truncate">{e.topic.replace("gateway.telegram.", "")}</span>
             </div>
@@ -226,17 +226,18 @@ function WhatsAppPanel() {
   };
 
   const connected = status?.running && status?.connection_status === "connected";
-  const scanning = status?.connection_status === "scanning";
+  const scanning = !!(status?.has_qr && status?.qr_code);
+  const isConnecting = status?.connection_status === "connecting" || status?.connection_status === "reconnecting";
   const whatsappEvents = events.filter((e) => e.topic?.startsWith("gateway.whatsapp")).slice(0, 10);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#12131a] p-4">
+    <div className="rounded-xl border border-border/60 bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Smartphone size={16} className={connected ? "text-emerald-400" : scanning ? "text-amber-400" : "text-white/30"} />
-          <span className="text-xs font-semibold text-white">WhatsApp</span>
+          <Smartphone size={16} className={connected ? "text-emerald-400" : (scanning || isConnecting) ? "text-amber-400" : "text-faint/60"} />
+          <span className="text-xs font-semibold text-text">WhatsApp</span>
           {status?.connection_status && (
-            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-white/50 capitalize">{status.connection_status}</span>
+            <span className="rounded bg-surface/80 px-1.5 py-0.5 text-[9px] text-faint/80 capitalize">{status.connection_status}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -257,15 +258,29 @@ function WhatsAppPanel() {
         </div>
       </div>
 
-      {scanning && status?.qr_code && (
+      {scanning && status?.qr_code ? (
         <div className="mb-3 flex flex-col items-center gap-2">
-          <div className="text-[10px] text-white/40">Scan QR code with WhatsApp</div>
-          <div className="rounded-lg border border-white/10 bg-white p-3">
-            <pre className="text-[8px] leading-tight text-black whitespace-pre">{status.qr_code}</pre>
+          <div className="text-[10px] text-faint">Scan with WhatsApp → Linked Devices → Link a Device</div>
+          <div className="rounded-xl border-2 border-emerald-500/40 bg-white p-3 shadow-lg shadow-emerald-500/10">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(status.qr_code)}`}
+              alt="WhatsApp QR Code"
+              width={200}
+              height={200}
+              className="block"
+            />
           </div>
-          <Loader2 size={16} className="animate-spin text-amber-400" />
+          <div className="flex items-center gap-1.5 text-[10px] text-amber-400">
+            <Loader2 size={11} className="animate-spin" />
+            Waiting for scan…
+          </div>
         </div>
-      )}
+      ) : isConnecting ? (
+        <div className="mb-3 flex items-center justify-center gap-2 text-[10px] text-amber-400">
+          <Loader2 size={11} className="animate-spin" />
+          Connecting to WhatsApp…
+        </div>
+      ) : null}
 
       {error && <div className="mb-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] text-red-300">{error}</div>}
 
@@ -275,13 +290,13 @@ function WhatsAppPanel() {
             value={sendTo}
             onChange={(e) => setSendTo(e.target.value)}
             placeholder="Phone (e.g. 1234567890)"
-            className="w-36 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/30 outline-none"
+            className="w-36 rounded-lg border border-border/60 bg-surface/60 px-2 py-1.5 text-xs text-text placeholder:text-faint outline-none"
           />
           <input
             value={sendText}
             onChange={(e) => setSendText(e.target.value)}
             placeholder="Message text"
-            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white placeholder-white/30 outline-none"
+            className="flex-1 rounded-lg border border-border/60 bg-surface/60 px-2 py-1.5 text-xs text-text placeholder:text-faint outline-none"
           />
           <button onClick={handleSend} className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/30">
             <Send size={11} />
@@ -290,12 +305,12 @@ function WhatsAppPanel() {
       )}
 
       <div className="space-y-1">
-        <div className="text-[9px] uppercase tracking-wider text-white/30">Recent Activity</div>
+        <div className="text-[9px] uppercase tracking-wider text-faint/60">Recent Activity</div>
         {safeArr(whatsappEvents).length === 0 ? (
-          <div className="text-[10px] text-white/20">No activity yet</div>
+          <div className="text-[10px] text-faint/40">No activity yet</div>
         ) : (
           whatsappEvents.map((e, i) => (
-            <div key={i} className="flex items-center gap-2 text-[10px] text-white/50">
+            <div key={i} className="flex items-center gap-2 text-[10px] text-faint/80">
               {e.topic.includes("received") ? <MessageCircle size={10} className="text-emerald-400" /> : <Send size={10} className="text-sky-400" />}
               <span className="truncate">{e.topic.replace("gateway.whatsapp.", "")}</span>
             </div>

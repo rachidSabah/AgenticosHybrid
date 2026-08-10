@@ -163,6 +163,8 @@ export const api = {
 
 
   providers: () => get<ProviderInfo[]>("/api/providers"),
+  plugins: () =>
+    get<Array<{ name: string; loaded: boolean; order: number }>>("/api/plugins"),
   providerConfigs: () => get<ProviderConfig[]>("/api/provider-configs"),
   providerHealth: () => get<ProviderHealthRecord[]>("/api/provider-health"),
   upsertProvider: (cfg: ProviderConfig) => post<ProviderConfig>("/api/provider-configs", cfg),
@@ -227,13 +229,33 @@ export const api = {
   workspaceFor: (agentId: string) =>
     get<{ agent_id: string; workspace: string }>(`/api/security/workspace/${agentId}`),
 
+  // ── Governance / Executive (Phase 11, 13) ──
+
+  executivePolicies: () =>
+    get<{ policy: { type: string; params: Record<string, unknown>; updated_at: string }; history: Array<Record<string, unknown>> }>("/api/executive/policies"),
+  toolPermissions: () =>
+    get<{ permissions: Record<string, unknown>; auto_approved: string[]; requires_approval: string[] }>("/api/security/tool-permissions"),
+  securityAuditTrail: (limit = 100) =>
+    get<Array<{ timestamp: string; topic: string; source: string; payload: Record<string, unknown> }>>(`/api/security/audit-trail?limit=${limit}`),
+  securityAuditLog: (principal?: string) =>
+    get<AuditEntry[]>(`/api/security/audit${principal ? `?principal=${encodeURIComponent(principal)}` : ""}`),
+
+  // ── Collaboration API (agent delegation / review / vote) ──
+
+  collaborationDelegate: (body: { from_agent: string; to_agent: string; task_id: string; reason?: string }) =>
+    post<{ delegated: boolean; from: string; to: string; task_id: string }>("/api/collaboration/delegate", body),
+  collaborationReview: (body: { reviewer: string; author: string; artifact_id: string; verdict: string; comments?: string }) =>
+    post<{ reviewed: boolean; verdict: string; reviewer: string }>("/api/collaboration/review", body),
+  collaborationVote: (body: { voter: string; proposal_id: string; vote: "yes" | "no" | "abstain" }) =>
+    post<{ vote_recorded: boolean; voter: string; vote: string }>("/api/collaboration/vote", body),
+
   // ── Discovery API (Phase 4, M2) ──
 
   discoveryProviders: () => get<import("./types").DiscoveryProviderInfo[]>("/api/discovery/providers"),
   enableProvider: (name: string, body: { enabled: boolean }) =>
     put<import("./types").DiscoveryProviderInfo>(`/api/discovery/providers/${name}`, body),
   runDiscoveryScan: (profile?: string) =>
-    post<{ profile: string; engines_found: number; engines_registered: number }>("/api/discovery/scan", profile ? { profile } : undefined),
+    post<{ profile: string; engines_found: number; engines: Array<Record<string, unknown>> }>("/api/discovery/scan", profile ? { profile } : undefined),
   discoveryCache: () => get<import("./types").DiscoveryCacheEntry[]>("/api/discovery/cache"),
   clearDiscoveryCache: () => del<{ cleared: number }>("/api/discovery/cache"),
   discoveryHistory: (limit = 50) =>
@@ -417,7 +439,10 @@ export const api = {
     get<import("./types").SwarmTaskSummary[]>("/api/swarm/tasks"),
 
   swarmConsensus: (roundId?: string) => {
-    const path = roundId ? `/api/consensus/${encodeURIComponent(roundId)}` : "/api/consensus";
+    // Real consensus history is served by the SwarmCoordinator's ConsensusManager.
+    const path = roundId
+      ? `/api/swarm/consensus/history?limit=50&round_id=${encodeURIComponent(roundId)}`
+      : "/api/swarm/consensus/history";
     return get(path);
   },
 
@@ -432,7 +457,7 @@ export const api = {
 
   swarmAnalyzeGoal: (body: { description: string }) =>
     post<{ analysis: Record<string, unknown> }>("/api/swarm/planner/analyze", body),
-  swarmCreatePlan: (body: { goal: string }) =>
+  swarmCreatePlan: (body: { goal?: string; description?: string; title?: string }) =>
     post<{ plan: Record<string, unknown> }>("/api/swarm/planner/plan", body),
 
   swarmSupervisorMonitor: (planId: string) =>
