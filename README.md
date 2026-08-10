@@ -22,7 +22,21 @@ Pre-built installers are available on the [GitHub Releases page](https://github.
 > **Note:** MSI installer was removed in rc10 because WiX requires numeric-only
 > pre-release identifiers. The NSIS `.exe` installer works on all Windows versions.
 
-### Quick Start
+### Windows Installation
+
+#### Option A — NSIS Installer (recommended)
+
+1. Download `AgenticOS-Setup-x64.exe` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases/latest).
+2. Run the installer — it installs Python runtime, backend, frontend, and registers file associations.
+3. **AgenticOS launches automatically after installation.**
+
+#### Option B — Portable ZIP (no installation)
+
+1. Download `AgenticOS-Portable-x64.zip` from the [Releases page](https://github.com/rachidSabah/AgenticosHybrid/releases/latest).
+2. Extract to any folder (e.g. a USB drive).
+3. Run `start.bat` or `start.ps1` to launch AgenticOS — **no admin rights required**.
+
+### Quick Start (from source)
 
 ```bash
 # Clone and run from source (development)
@@ -47,6 +61,16 @@ npm run tauri dev
 All screenshots below are captured from the **live running system** — backend serving real data, frontend rendering actual views.
 
 ### Mission Control Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/live/mission-overview-real.png" alt="Mission Control — Mission Overview (live)" width="90%">
+</p>
+
+### Prompt Center — Mission Uplink
+
+<p align="center">
+  <img src="docs/screenshots/live/prompt-center-real.png" alt="Prompt Center — live mission dispatch" width="90%">
+</p>
 
 <p align="center">
   <img src="docs/screenshots/live/overview-light.png" alt="Mission Control — Light theme" width="45%">
