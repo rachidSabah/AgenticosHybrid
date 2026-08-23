@@ -39,19 +39,26 @@ test.describe("OmniRoute Universal AI Networking Engine E2E Suite", () => {
     await expect(page.locator("text=Live AI Routing Pipeline Graph")).toBeVisible();
     await expect(page.locator("text=Test Route Decision")).toBeVisible();
 
-    // 2. Routing Policies tab
+    // 2. Route Composer tab
+    const composerTab = page.locator("button:has-text('Route Composer')");
+    await expect(composerTab).toBeVisible();
+    await composerTab.click();
+    await expect(page.locator("text=Route Policy Composer")).toBeVisible();
+    await expect(page.locator("button:has-text('Add Route Policy')")).toBeVisible();
+
+    // 3. Routing Policies tab
     const policiesTab = page.locator("button:has-text('Routing Policies')");
     await expect(policiesTab).toBeVisible();
     await policiesTab.click();
     await expect(page.locator("text=Configurable Routing Policies")).toBeVisible();
 
-    // 3. Token Compression tab
+    // 4. Token Compression tab
     const compressionTab = page.locator("button:has-text('Token Compression')");
     await expect(compressionTab).toBeVisible();
     await compressionTab.click();
     await expect(page.locator("text=Token Compression Engine")).toBeVisible();
 
-    // 4. Budget & Failover tab
+    // 5. Budget & Failover tab
     const budgetTab = page.locator("button:has-text('Budget & Failover')");
     await expect(budgetTab).toBeVisible();
     await budgetTab.click();
