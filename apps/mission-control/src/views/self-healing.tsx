@@ -40,6 +40,7 @@ function classifySeverity(eventTopic: string): SeverityLevel {
 
 export function SelfHealingPanel() {
   const [issues, setIssues] = useState<HealthIssue[]>([]);
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,13 +82,17 @@ export function SelfHealingPanel() {
     setIssues((prev) => {
       const merged = [...prev];
       for (const h of eventsHealth) {
-        if (!merged.find((m) => m.id === h.id)) {
+        const existing = merged.findIndex((m) => m.id === h.id);
+        if (existing >= 0) {
+          if (merged[existing].resolved_at || resolvedIds.has(h.id)) continue;
+          merged[existing] = h;
+        } else if (!resolvedIds.has(h.id)) {
           merged.unshift(h);
         }
       }
       return merged.slice(0, 200);
     });
-  }, [eventsHealth]);
+  }, [eventsHealth, resolvedIds]);
 
   // Check provider health for auto-detected issues
   const providerIssues = useMemo(() => {
@@ -109,13 +114,15 @@ export function SelfHealingPanel() {
     return result;
   }, [providers]);
 
-  // Add provider issues to state
+  // Add provider issues to state without clobbering resolved state
   useEffect(() => {
     setIssues((prev) => {
       const merged = [...prev];
       for (const h of providerIssues) {
+        if (resolvedIds.has(h.id) || resolvedIds.has(h.subsystem)) continue;
         const existing = merged.findIndex((m) => m.id === h.id);
         if (existing >= 0) {
+          if (merged[existing].resolved_at) continue;
           merged[existing] = h;
         } else {
           merged.unshift(h);
@@ -123,7 +130,7 @@ export function SelfHealingPanel() {
       }
       return merged.slice(0, 200);
     });
-  }, [providerIssues]);
+  }, [providerIssues, resolvedIds]);
 
   const runSystemCheck = useCallback(async () => {
     setRunning(true);
@@ -231,10 +238,11 @@ export function SelfHealingPanel() {
     try {
       const res = await api.repairSystem([subsystem]);
       const failedList = res?.failed ?? [];
-      void useStore.getState().hydrate();
+      const cleanSub = subsystem.replace("provider:", "");
+      setResolvedIds((prev) => new Set([...prev, subsystem, cleanSub, `provider:${cleanSub}`, `provider-${cleanSub}`]));
       setIssues((prev) =>
         prev.map((i) => {
-          if (i.subsystem !== subsystem || i.resolved_at) return i;
+          if (i.subsystem !== subsystem && !i.subsystem.includes(cleanSub) && i.id !== `provider-${cleanSub}`) return i;
           if (failedList.includes(subsystem)) {
             return { ...i, resolution: `Repair failed: ${subsystem}` };
           }
@@ -289,7 +297,15 @@ export function SelfHealingPanel() {
               try {
                 const res = await api.repairSystem();
                 const failedList = res?.failed ?? [];
-                void useStore.getState().hydrate();
+                setResolvedIds((prev) => {
+                  const next = new Set(prev);
+                  issues.forEach((i) => {
+                    next.add(i.id);
+                    next.add(i.subsystem);
+                    next.add(i.subsystem.replace("provider:", ""));
+                  });
+                  return next;
+                });
                 setIssues((prev) =>
                   prev.map((i) => {
                     if (i.resolved_at) return i;
@@ -301,6 +317,8 @@ export function SelfHealingPanel() {
                 );
                 if (failedList.length > 0) {
                   setError(`Repair All reported failures: ${failedList.join(", ")}`);
+                } else {
+                  setError(null);
                 }
               } catch (e) {
                 setError(String(e));

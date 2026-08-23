@@ -5,27 +5,26 @@ test.describe("OmniRoute Universal AI Networking Engine E2E Suite", () => {
     await page.goto("http://localhost:3000");
     await page.waitForSelector("main, [data-layout='main']", { timeout: 15000 });
     
-    // Navigate to OmniRoute via sidebar or command palette
+    // Direct navigation via sidebar item or shortcut
     const omniBtn = page.locator("button:has-text('OmniRoute')").first();
     if (await omniBtn.isVisible()) {
       await omniBtn.click();
     } else {
       await page.keyboard.press("Control+k");
-      await page.waitForSelector("input[placeholder*='Search commands']");
+      await page.waitForSelector("input[placeholder*='Search commands']", { timeout: 5000 });
       await page.keyboard.type("OmniRoute");
       await page.keyboard.press("Enter");
     }
-    await page.waitForTimeout(500);
+    await page.waitForSelector("h1:has-text('OMNIROUTE UNIVERSAL AI NETWORKING ENGINE')", { timeout: 10000 });
   });
 
   test("1. validates OmniRoute status bar and live telemetry", async ({ page }) => {
     const heading = page.locator("h1:has-text('OMNIROUTE UNIVERSAL AI NETWORKING ENGINE')");
-    await expect(heading).toBeVisible({ timeout: 10000 });
+    await expect(heading).toBeVisible();
     
     const subtitle = page.locator("text=Smart Model Routing, Token Compression & Provider Failover Subsystem");
     await expect(subtitle).toBeVisible();
 
-    // Verify stats
     await expect(page.locator("text=Requests Processed")).toBeVisible();
     await expect(page.locator("text=Avg Latency")).toBeVisible();
     await expect(page.locator("text=Compression Savings")).toBeVisible();
@@ -71,7 +70,6 @@ test.describe("OmniRoute Universal AI Networking Engine E2E Suite", () => {
     const evalBtn = page.locator("button:has-text('Evaluate Route')");
     await evalBtn.click();
 
-    // Wait for route decision result
     await page.waitForTimeout(2000);
     await expect(page.locator("text=[ROUTING DECISION]")).toBeVisible({ timeout: 5000 });
     await expect(page.locator("main")).toContainText("Target:");
@@ -88,7 +86,6 @@ test.describe("OmniRoute Universal AI Networking Engine E2E Suite", () => {
     const compressBtn = page.locator("button:has-text('Compress Prompt')");
     await compressBtn.click();
 
-    // Wait for compression result
     await page.waitForTimeout(2000);
     await expect(page.locator("main")).toContainText("Original:");
     await expect(page.locator("main")).toContainText("Compressed:");
