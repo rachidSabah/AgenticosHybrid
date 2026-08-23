@@ -376,7 +376,23 @@ export function MissionOrchestrator() {
           {selectedMission ? (
             <>
               {/* Mission Detail Header */}
-              <MissionDetail mission={selectedMission} onRefresh={loadMissions} />
+              <MissionDetail
+                mission={selectedMission}
+                onRefresh={loadMissions}
+                onStart={async () => { await api.startMission(selectedMission.id); loadMissions(); }}
+                onPause={async () => { await api.pauseMission(selectedMission.id); loadMissions(); }}
+                onPlan={async () => {
+                  setPlanning(selectedMission.id);
+                  try { await api.planMission(selectedMission.id); await loadMissions(); }
+                  finally { setPlanning(null); }
+                }}
+                onDelete={async () => {
+                  await api.deleteMission(selectedMission.id);
+                  setSelectedMission(null);
+                  loadMissions();
+                }}
+                planning={planning === selectedMission.id}
+              />
 
               {/* Futuristic Tab Bar */}
               <div className="shrink-0 border-b border-white/[0.06] bg-[#0a0c16]/80 px-4 backdrop-blur-md">
@@ -793,6 +809,14 @@ function MissionCard({
                 <Pause size={10} />
               </button>
             )}
+            {mission.status === "failed" && (
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition"
+                onClick={onStart} title="Retry Mission"
+              >
+                <RotateCcw size={10} />
+              </button>
+            )}
             {mission.status === "draft" && (
               <button
                 className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400 hover:bg-indigo-500/25 transition disabled:opacity-40"
@@ -801,7 +825,7 @@ function MissionCard({
                 {planning ? <Loader2 size={10} className="animate-spin" /> : <FileText size={10} />}
               </button>
             )}
-            {(mission.status === "draft" || mission.status === "planned" || mission.status === "paused") && (
+            {(mission.status === "draft" || mission.status === "planned" || mission.status === "paused" || mission.status === "failed" || mission.status === "completed") && (
               <button
                 className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/[0.04] text-white/30 hover:bg-red-500/15 hover:text-red-400 transition"
                 onClick={onDelete} title="Delete"
@@ -963,7 +987,23 @@ function ArrayInput({ label, values, onChange, placeholder, icon }: {
 //  MISSION DETAIL (top header of right panel)
 // ══════════════════════════════════════════════════════════════
 
-function MissionDetail({ mission, onRefresh }: { mission: MissionType; onRefresh: () => void }) {
+function MissionDetail({
+  mission,
+  onRefresh,
+  onStart,
+  onPause,
+  onPlan,
+  onDelete,
+  planning,
+}: {
+  mission: MissionType;
+  onRefresh: () => void;
+  onStart?: () => void;
+  onPause?: () => void;
+  onPlan?: () => void;
+  onDelete?: () => void;
+  planning?: boolean;
+}) {
   const statusColor = STATUS_COLORS[mission.status] ?? "#6b7280";
   const taskCount = mission.plan?.task_count ?? 0;
   const completed = mission.plan?.tasks?.filter((t) => t.status === "completed").length ?? 0;
@@ -1023,12 +1063,64 @@ function MissionDetail({ mission, onRefresh }: { mission: MissionType; onRefresh
           )}
         </div>
 
-        <button
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/[0.08] hover:text-white/70 transition"
-          onClick={onRefresh} title="Refresh"
-        >
-          <RefreshCw size={12} />
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {mission.status === "failed" && onStart && (
+            <button
+              onClick={onStart}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/25 transition"
+            >
+              <RotateCcw size={12} /> Retry Failed Mission
+            </button>
+          )}
+          {mission.status === "planned" && onStart && (
+            <button
+              onClick={onStart}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/25 transition"
+            >
+              <Play size={12} /> Start Mission
+            </button>
+          )}
+          {mission.status === "executing" && onPause && (
+            <button
+              onClick={onPause}
+              className="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-semibold text-amber-400 hover:bg-amber-500/25 transition"
+            >
+              <Pause size={12} /> Pause
+            </button>
+          )}
+          {mission.status === "paused" && onStart && (
+            <button
+              onClick={onStart}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/25 transition"
+            >
+              <Play size={12} /> Resume
+            </button>
+          )}
+          {mission.status === "draft" && onPlan && (
+            <button
+              onClick={onPlan}
+              disabled={planning}
+              className="flex items-center gap-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/15 px-3 py-1.5 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/25 transition disabled:opacity-40"
+            >
+              {planning ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Plan Mission
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/30 hover:bg-red-500/15 hover:text-red-400 transition"
+              title="Delete Mission"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+          <button
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/40 hover:bg-white/[0.08] hover:text-white/70 transition"
+            onClick={onRefresh} title="Refresh"
+          >
+            <RefreshCw size={12} />
+          </button>
+        </div>
       </div>
 
       {/* Meta stat chips */}

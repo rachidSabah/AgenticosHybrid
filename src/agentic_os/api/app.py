@@ -1961,7 +1961,13 @@ def create_app(platform: Platform) -> FastAPI:
         if not m.plan:
             raise HTTPException(400, "Mission has no plan — call /plan first")
         m.status = MissionStatus.EXECUTING
+        m.error = None
         m.updated_at = datetime.now(UTC)
+        if m.plan and m.plan.tasks:
+            from agentic_os.domain.mission import TaskStatus
+            for t in m.plan.tasks:
+                if t.status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
+                    t.status = TaskStatus.PLANNED
         await orch.bus.publish(
             EventEnvelope(
                 type="mission.started",
