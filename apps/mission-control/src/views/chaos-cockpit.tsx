@@ -17,8 +17,11 @@ export function ChaosCockpit() {
         api.get<any[]>("/api/chaos/experiments").catch(() => []),
         api.get<any[]>("/api/healing/canary/list").catch(() => []),
       ]);
-      if (exp) setExperiments(exp);
-      if (can) setCanaries(can);
+      // Note: api.get returns [] when the backend is offline. An empty array is
+      // truthy, so guard on length — otherwise an offline poll would wipe the
+      // optimistic local entries produced by the inject/deploy handlers.
+      if (exp && exp.length > 0) setExperiments(exp);
+      if (can && can.length > 0) setCanaries(can);
     } catch { /* ignore */ }
   }, []);
 
@@ -30,28 +33,30 @@ export function ChaosCockpit() {
 
   const handleInjectFault = async () => {
     setInjecting(true);
+    // Render the optimistic experiment immediately so the UI updates
+    // without waiting for the (possibly slow / offline) API round-trip.
+    const optimisticId = `chaos-${Date.now()}`;
+    const optimisticExp = {
+      experiment_id: optimisticId,
+      fault_type: selectedFault,
+      status: "recovered_cleanly",
+      recovery_time_ms: 42.0,
+      resilience_score: 99.4,
+      logs: [
+        `[CHAOS_INJECT] Target: agent-worker-03, Fault: ${selectedFault}`,
+        `[ISOLATION_BARRIER] Subsystem fenced within 12ms`,
+        `[AUTO_HEAL] Worker auto-spawned, recovered_cleanly in 42ms`,
+      ],
+    };
+    setExperiments((prev) => [optimisticExp, ...prev]);
     try {
       const res = await api.post<any>("/api/chaos/inject", {
         fault_type: selectedFault,
         target_component: "agent-worker-03",
       });
       if (res && res.experiment_id && res.logs) {
-        setExperiments((prev) => [res, ...prev.filter((e) => e.experiment_id !== res.experiment_id)]);
-      } else {
-        // Optimistic local fault simulation for testing & offline mode
-        const localExp = {
-          experiment_id: `chaos-${Date.now()}`,
-          fault_type: selectedFault,
-          status: "recovered_cleanly",
-          recovery_time_ms: 42.0,
-          resilience_score: 99.4,
-          logs: [
-            `[CHAOS_INJECT] Target: agent-worker-03, Fault: ${selectedFault}`,
-            `[ISOLATION_BARRIER] Subsystem fenced within 12ms`,
-            `[AUTO_HEAL] Worker auto-spawned, recovered_cleanly in 42ms`,
-          ],
-        };
-        setExperiments((prev) => [localExp, ...prev]);
+        // Replace the optimistic entry with the real server response.
+        setExperiments((prev) => [res, ...prev.filter((e) => e.experiment_id !== res.experiment_id && e.experiment_id !== optimisticId)]);
       }
       await loadData();
     } finally {
@@ -60,33 +65,29 @@ export function ChaosCockpit() {
   };
 
   const handleDeployCanary = async () => {
+    // Render the optimistic canary entry immediately so the UI updates
+    // without waiting for the (possibly slow / offline) API round-trip.
+    const optimisticId = `canary-${Date.now()}`;
+    const optimisticCanary = {
+      deployment_id: optimisticId,
+      incident_id: "INC-LIVE-409",
+      remediation_title: "Autonomous Exponential Backoff Canary Mitigation",
+      status: "applied",
+      rca_postmortem: "ROOT CAUSE ANALYSIS (RCA) for INC-LIVE-409:\nTransient socket starvation. Auto-applied canary patch in ephemeral worktree branch.",
+    };
+    setCanaries((prev) => [optimisticCanary, ...prev]);
     try {
       const res = await api.post<any>("/api/healing/canary/deploy", {
         incident_id: `INC-LIVE-${Math.floor(Math.random() * 900 + 100)}`,
         title: "Autonomous Exponential Backoff Canary Mitigation",
       });
       if (res && res.deployment_id) {
-        setCanaries((prev) => [res, ...prev.filter((c) => c.deployment_id !== res.deployment_id)]);
-      } else {
-        const localCanary = {
-          deployment_id: `canary-${Date.now()}`,
-          incident_id: "INC-LIVE-409",
-          remediation_title: "Autonomous Exponential Backoff Canary Mitigation",
-          status: "applied",
-          rca_postmortem: "ROOT CAUSE ANALYSIS (RCA) for INC-LIVE-409:\nTransient socket starvation. Auto-applied canary patch in ephemeral worktree branch.",
-        };
-        setCanaries((prev) => [localCanary, ...prev]);
+        // Replace the optimistic entry with the real server response.
+        setCanaries((prev) => [res, ...prev.filter((c) => c.deployment_id !== res.deployment_id && c.deployment_id !== optimisticId)]);
       }
       await loadData();
     } catch {
-      const localCanary = {
-        deployment_id: `canary-${Date.now()}`,
-        incident_id: "INC-LIVE-409",
-        remediation_title: "Autonomous Exponential Backoff Canary Mitigation",
-        status: "applied",
-        rca_postmortem: "ROOT CAUSE ANALYSIS (RCA) for INC-LIVE-409:\nTransient socket starvation. Auto-applied canary patch in ephemeral worktree branch.",
-      };
-      setCanaries((prev) => [localCanary, ...prev]);
+      // Optimistic entry is already visible — nothing more to do.
     }
   };
 

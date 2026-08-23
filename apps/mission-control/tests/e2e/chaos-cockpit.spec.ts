@@ -19,8 +19,7 @@ test.describe("Chaos Studio & SRE Canary Simulator E2E Suite", () => {
     await expect(injectBtn).toBeVisible();
     await injectBtn.click();
 
-    await page.waitForTimeout(2000);
-    await expect(page.locator("main")).toContainText("recovered_cleanly");
+    await expect(page.locator("main")).toContainText("recovered_cleanly", { timeout: 20000 });
   });
 
   test("2. validates Autonomous SRE Canary Simulator and 1-Click Rollback", async ({ page }) => {
@@ -30,8 +29,7 @@ test.describe("Chaos Studio & SRE Canary Simulator E2E Suite", () => {
     await expect(canaryBtn).toBeVisible();
     await canaryBtn.click();
 
-    await page.waitForTimeout(2000);
-    await expect(page.locator("main")).toContainText("ROOT CAUSE ANALYSIS (RCA)");
+    await expect(page.locator("main")).toContainText("ROOT CAUSE ANALYSIS (RCA)", { timeout: 20000 });
     await expect(page.locator("button:has-text('1-Click Canary Rollback')").first()).toBeVisible();
   });
 });

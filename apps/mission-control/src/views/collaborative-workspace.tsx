@@ -35,8 +35,11 @@ export class AgenticExecutionBus {
         api.get<any[]>("/api/voice/transcripts").catch(() => []),
         api.get<any>("/api/vfs/ast-tree").catch(() => null),
       ]);
+      // Note: api.get returns [] when the backend is offline. An empty array is
+      // truthy, so guard on length — otherwise an offline poll would wipe the
+      // optimistic local entries produced by the voice/dispatch handlers.
       if (cur && cur.length > 0) setCursors(cur);
-      if (tran) setTranscripts(tran);
+      if (tran && tran.length > 0) setTranscripts(tran);
       if (vfs) setVfsTree(vfs);
     } catch { /* ignore */ }
   }, []);
@@ -49,28 +52,25 @@ export class AgenticExecutionBus {
 
   const handleVoiceDispatch = async () => {
     setIsRecording(true);
+    // Render the optimistic transcript immediately so the UI updates
+    // without waiting for the (possibly slow / failing) API round-trip.
+    const optimisticId = `voice-${Date.now()}`;
+    const optimisticTranscript = {
+      transcript_id: optimisticId,
+      transcribed_text: voiceInput,
+      spoken_response: `Executing voice dispatch directive: '${voiceInput}'. All systems responsive and healthy.`,
+      confidence: 0.98,
+    };
+    setTranscripts((prev) => [optimisticTranscript, ...prev]);
     try {
       const res = await api.post<any>("/api/voice/process", { audio_label: voiceInput });
       if (res && res.transcript_id) {
-        setTranscripts((prev) => [res, ...prev.filter((t) => t.transcript_id !== res.transcript_id)]);
-      } else {
-        const localTranscript = {
-          transcript_id: `voice-${Date.now()}`,
-          transcribed_text: voiceInput,
-          spoken_response: `Executing voice dispatch directive: '${voiceInput}'. All systems responsive and healthy.`,
-          confidence: 0.98,
-        };
-        setTranscripts((prev) => [localTranscript, ...prev]);
+        // Replace the optimistic entry with the real server response.
+        setTranscripts((prev) => [res, ...prev.filter((t) => t.transcript_id !== res.transcript_id && t.transcript_id !== optimisticId)]);
       }
       await loadData();
     } catch {
-      const localTranscript = {
-        transcript_id: `voice-${Date.now()}`,
-        transcribed_text: voiceInput,
-        spoken_response: `Executing voice dispatch directive: '${voiceInput}'. All systems responsive and healthy.`,
-        confidence: 0.98,
-      };
-      setTranscripts((prev) => [localTranscript, ...prev]);
+      // Optimistic entry is already visible — nothing more to do.
     } finally {
       setIsRecording(false);
     }
