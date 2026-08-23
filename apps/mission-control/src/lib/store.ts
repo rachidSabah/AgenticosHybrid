@@ -764,13 +764,23 @@ export const useStore = create<StoreState>((set, get) => ({
         for (const a of rawAgents.value) {
           const id = String(a.id ?? a.name ?? "");
           if (!id) continue;
+          const rawStatus = String(a.status ?? "idle");
+          const isHealthy = a.health === "healthy" || rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "idle" || rawStatus === "running";
+          const status =
+            rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "busy" ? "running"
+            : rawStatus === "unhealthy" || rawStatus === "error" || rawStatus === "failed" ? "failed"
+            : (rawStatus as AgentNode["status"]) || "idle";
+          const aName = a.name ? String(a.name) : "";
+          const aRole = a.role ? String(a.role) : "";
+          const displayName = aName || aRole || id;
+          const roleStr = (aRole === "assistant" || aRole === "agent") && aName ? aName : displayName;
           agentsMap[id] = {
             id,
-            role: String(a.role ?? "agent"),
+            role: roleStr,
             capabilities: (a.capabilities as string[]) ?? [],
-            status: (a.status as AgentNode["status"]) ?? "idle",
-            health: (a.health as AgentNode["health"]) ?? "unknown",
-            provider: a.provider as string | undefined,
+            status,
+            health: isHealthy ? "healthy" : (a.health as AgentNode["health"]) ?? "healthy",
+            provider: a.provider ? String(a.provider) : displayName,
           };
         }
       }
@@ -809,10 +819,10 @@ export const useStore = create<StoreState>((set, get) => ({
           if (id && !agentsMap[id]) {
             agentsMap[id] = {
               id,
-              role: "assistant",
+              role: name,
               capabilities: (b.capabilities as string[]) ?? [],
               status: providersMap[name].status === "healthy" ? "running" : "idle",
-              health: providersMap[name].status as AgentNode["health"] ?? "unknown",
+              health: providersMap[name].status as AgentNode["health"] ?? "healthy",
               provider: name,
             };
           }
@@ -822,15 +832,10 @@ export const useStore = create<StoreState>((set, get) => ({
       // ── Local Agents → surface as providers + agents ──────────────────────
       if (rawLocalAgents.status === "fulfilled" && Array.isArray(rawLocalAgents.value)) {
         for (const a of rawLocalAgents.value) {
-          // LocalAgent.to_dict() exposes `status` (not `running`). Include
-          // every discovered agent — "discovered" means "installed on this
-          // machine", which is exactly what the Fleet/Constellation/Binding
-          // views need to display. The previous `!a.running` check was always
-          // false (no such field) so local agents never appeared in the store.
           const name = String(a.name ?? "");
           if (!name) continue;
           const status = String(a.status ?? "unknown");
-          const isHealthy = status === "running" || status === "idle" || status === "busy";
+          const isHealthy = status === "running" || status === "idle" || status === "busy" || status === "discovered" || status === "connected";
           if (!providersMap[name]) {
             providersMap[name] = {
               provider: name,
@@ -842,10 +847,10 @@ export const useStore = create<StoreState>((set, get) => ({
           if (id && !agentsMap[id]) {
             agentsMap[id] = {
               id,
-              role: String(a.engine_type ?? "agent"),
+              role: name,
               capabilities: (a.capabilities as string[]) ?? [],
-              status: a.running ? "running" : "idle",
-              health: a.health === "healthy" ? "healthy" : "degraded",
+              status: isHealthy ? "running" : "idle",
+              health: isHealthy ? "healthy" : "degraded",
               provider: name,
             };
           }

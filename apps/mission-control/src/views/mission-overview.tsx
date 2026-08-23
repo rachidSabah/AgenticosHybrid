@@ -378,15 +378,28 @@ export function MissionOverview() {
               <MissionCardItem key={ms.id || idx} mission={ms} index={idx} />
             ))
           ) : Object.keys(agentsMap).length > 0 ? (
-            Object.values(agentsMap).slice(0, 4).map((agent, idx) => (
-              <DefaultAgentCard
-                key={agent.id || idx}
-                title={agent.role || `Agent ${idx + 1}`}
-                desc={`Status: ${agent.status} · Health: ${agent.health} · Capabilities: ${(agent.capabilities || []).join(", ") || "General Execution"}`}
-                badge={agent.health === "healthy" ? "Active" : agent.status}
-                tone={agent.health === "down" || agent.status === "failed" ? "error" : "active"}
-              />
-            ))
+            Object.values(agentsMap)
+              .sort((a, b) => {
+                const aHost = a.role.includes("CLI") || a.role.includes("Agent") || a.role.includes("Code") || a.role.includes("Open") ? 1 : 0;
+                const bHost = b.role.includes("CLI") || b.role.includes("Agent") || b.role.includes("Code") || b.role.includes("Open") ? 1 : 0;
+                return bHost - aHost;
+              })
+              .slice(0, 4)
+              .map((agent, idx) => {
+                const isHealthy = agent.health === "healthy" || agent.status === "running" || agent.status === "idle" || agent.status === "recovered";
+                const displayStatus = isHealthy ? (agent.status === "running" ? "active" : "idle") : agent.status;
+                const cleanCaps = (agent.capabilities || []).filter((c) => !c.startsWith("cli:")).slice(0, 3).join(", ");
+                return (
+                  <DefaultAgentCard
+                    key={agent.id || idx}
+                    title={agent.role || `Agent ${idx + 1}`}
+                    desc={`Status: ${displayStatus} · Health: ${agent.health} · Capabilities: ${cleanCaps || "General Execution"}`}
+                    badge={isHealthy ? "Active" : agent.status}
+                    tone={isHealthy ? "active" : "error"}
+                    dots={isHealthy ? ["emerald", "emerald", "emerald", "emerald"] : ["amber", "amber", "amber", "red"]}
+                  />
+                );
+              })
           ) : (
             <>
               <MissionCardItem
