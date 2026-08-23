@@ -81,6 +81,11 @@ export const NAV: NavItem[] = [
   { id: "cluster", label: "Cluster Federation", hint: "F", icon: Cloud, group: "core" },
   // Phase 17 — Autonomous Agent Evolution
   { id: "evolution", label: "Evolution", hint: "V", icon: GitPullRequestArrow, group: "core" },
+  // Advanced Pillars: Swarm Studio, Chaos Cockpit, GPU Hub, Collaborative VFS
+  { id: "swarm-studio", label: "Swarm Studio", hint: "S", icon: Orbit, group: "core" },
+  { id: "chaos-cockpit", label: "Chaos Studio", hint: "K", icon: Shield, group: "observe" },
+  { id: "gpu-acceleration", label: "Local AI / GPU", hint: "8", icon: Monitor, group: "desktop" },
+  { id: "collab-workspace", label: "Collaborative VFS", hint: "L", icon: FolderTree, group: "build" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

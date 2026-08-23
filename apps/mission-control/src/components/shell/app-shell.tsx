@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useContext, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { CommandPalette } from "./command-palette";
+import { GlobalHUDOverlay } from "./global-hud";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
 import { useStore } from "@/lib/store";
@@ -258,6 +259,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             setPaletteOpen(false);
           }}
         />
+        <GlobalHUDOverlay />
       </ActiveViewCtx.Provider>
     </LayoutProvider>
   );

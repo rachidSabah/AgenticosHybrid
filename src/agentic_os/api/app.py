@@ -8830,6 +8830,152 @@ def create_app(platform: Platform) -> FastAPI:
         pc = _persistent_controller()
         return await pc.backup.list_backups()
 
+    # ── Advanced Autonomous Intelligence & Mission Control Evolution ─────
+    from agentic_os.core.swarm.debugger import debugger_manager, team_composer
+    from agentic_os.core.routing.predictive_arbiter import predictive_arbiter
+    from agentic_os.core.routing.ast_cache import ast_cache
+    from agentic_os.core.healing.canary_patcher import canary_patcher
+    from agentic_os.core.healing.chaos_engine import chaos_engine
+    from agentic_os.core.desktop.gpu_hub import gpu_hub
+    from agentic_os.core.desktop.hud_daemon import hud_daemon
+    from agentic_os.core.collab.crdt_sync import crdt_sync
+    from agentic_os.core.voice.dispatch import voice_engine
+    from agentic_os.core.vfs.ast_tree import monorepo_vfs
+
+    # 1. Swarm Step-Debugger, Time-Travel & Team Composer
+    @app.post("/api/missions/{mission_id}/step")
+    async def swarm_step_debugger(mission_id: str) -> dict:
+        return await debugger_manager.step(mission_id)
+
+    @app.post("/api/missions/{mission_id}/pause")
+    async def swarm_pause_debugger(mission_id: str) -> dict:
+        return await debugger_manager.pause(mission_id)
+
+    @app.post("/api/missions/{mission_id}/resume")
+    async def swarm_resume_debugger(mission_id: str) -> dict:
+        return await debugger_manager.resume(mission_id)
+
+    @app.post("/api/missions/{mission_id}/rewind")
+    async def swarm_rewind_debugger(mission_id: str, body: dict) -> dict:
+        target_step = int(body.get("target_step", 1))
+        return await debugger_manager.rewind(mission_id, target_step)
+
+    @app.post("/api/missions/{mission_id}/fork")
+    async def swarm_fork_debugger(mission_id: str, body: dict) -> dict:
+        target_step = int(body.get("target_step", 1))
+        adjusted_prompt = str(body.get("adjusted_prompt", ""))
+        return await debugger_manager.fork(mission_id, target_step, adjusted_prompt)
+
+    @app.post("/api/swarm/team/compose")
+    async def swarm_compose_team(body: dict) -> dict:
+        task_desc = str(body.get("task_description", "General execution"))
+        roles = team_composer.decompose_task(task_desc)
+        return {"roles": [r.__dict__ for r in roles]}
+
+    @app.post("/api/swarm/team/debate")
+    async def swarm_conduct_debate(body: dict) -> dict:
+        topic = str(body.get("topic", "Architectural Review"))
+        proposed_change = str(body.get("proposed_change", "Merge candidate"))
+        roles = team_composer.decompose_task(topic)
+        return team_composer.conduct_debate(topic, proposed_change, roles)
+
+    # 2. Predictive OmniRoute & Vectorized AST Cache
+    @app.get("/api/omniroute/predictive/metrics")
+    async def omniroute_predictive_metrics() -> dict:
+        return {
+            "ranked_providers": predictive_arbiter.get_ranked_providers(),
+            "budget_threshold_usd": predictive_arbiter.budget_threshold_usd,
+            "current_spend_usd": predictive_arbiter.current_spend_usd,
+        }
+
+    @app.post("/api/omniroute/cache/compress")
+    async def omniroute_cache_compress(body: dict) -> dict:
+        text = str(body.get("text", ""))
+        return ast_cache.compress_and_cache(text)
+
+    @app.get("/api/omniroute/cache/stats")
+    async def omniroute_cache_stats() -> dict:
+        return ast_cache.get_stats()
+
+    # 3. Autonomous Canary Patcher & Chaos Engine
+    @app.post("/api/healing/canary/deploy")
+    async def healing_canary_deploy(body: dict) -> dict:
+        incident_id = str(body.get("incident_id", "INC-AUTO-01"))
+        title = str(body.get("title", "Autonomous Transient Failover Mitigation"))
+        patch_diff = str(body.get("patch_diff", "+ retry_with_exponential_jitter()"))
+        dep = canary_patcher.simulate_and_deploy_patch(incident_id, title, patch_diff)
+        return dep.__dict__
+
+    @app.post("/api/healing/canary/rollback")
+    async def healing_canary_rollback(body: dict) -> dict:
+        deployment_id = str(body.get("deployment_id", ""))
+        return canary_patcher.rollback_canary(deployment_id)
+
+    @app.get("/api/healing/canary/list")
+    async def healing_canary_list() -> list:
+        return canary_patcher.list_canaries()
+
+    @app.post("/api/chaos/inject")
+    async def chaos_inject(body: dict) -> dict:
+        fault_type = str(body.get("fault_type", "kill_agent_worker"))
+        target = str(body.get("target_component", "agent-worker-03"))
+        exp = chaos_engine.inject_fault(fault_type, target)
+        return exp.__dict__
+
+    @app.get("/api/chaos/experiments")
+    async def chaos_list_experiments() -> list:
+        return chaos_engine.list_experiments()
+
+    # 4. Desktop Local GPU Hub & Global HUD
+    @app.get("/api/desktop/gpu/telemetry")
+    async def desktop_gpu_telemetry() -> dict:
+        return gpu_hub.get_gpu_telemetry()
+
+    @app.post("/api/desktop/gpu/offline")
+    async def desktop_gpu_toggle_offline(body: dict) -> dict:
+        offline = bool(body.get("offline", False))
+        return gpu_hub.toggle_offline(offline)
+
+    @app.post("/api/desktop/hud/query")
+    async def desktop_hud_query(body: dict) -> dict:
+        query = str(body.get("query", ""))
+        res = hud_daemon.execute_hud_query(query)
+        return res.__dict__
+
+    @app.get("/api/desktop/hud/history")
+    async def desktop_hud_history() -> list:
+        return hud_daemon.get_history()
+
+    # 5. Real-Time CRDT Sync, Voice Dispatch & Monorepo VFS
+    @app.get("/api/collab/cursors")
+    async def collab_get_cursors() -> list:
+        return crdt_sync.get_active_cursors()
+
+    @app.post("/api/collab/cursor/update")
+    async def collab_update_cursor(body: dict) -> dict:
+        cid = str(body.get("client_id", "operator"))
+        user = str(body.get("username", "Operator"))
+        color = str(body.get("color", "#6366f1"))
+        file_path = str(body.get("file_path", "src/main.py"))
+        line = int(body.get("line", 1))
+        col = int(body.get("col", 1))
+        cur = crdt_sync.update_cursor(cid, user, color, file_path, line, col)
+        return cur.__dict__
+
+    @app.post("/api/voice/process")
+    async def voice_process(body: dict | None = None) -> dict:
+        label = str((body or {}).get("audio_label", "Mic Input"))
+        res = voice_engine.process_voice_audio(label)
+        return res.__dict__
+
+    @app.get("/api/voice/transcripts")
+    async def voice_list_transcripts() -> list:
+        return voice_engine.get_transcripts()
+
+    @app.get("/api/vfs/ast-tree")
+    async def vfs_ast_tree() -> dict:
+        return monorepo_vfs.get_quick_ast_tree()
+
     return app
 
 

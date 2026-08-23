@@ -143,6 +143,7 @@ export function Sidebar({
                   <button
                     key={item.id}
                     onClick={() => onSelect(item.id)}
+                    data-nav-id={item.id}
                     className={`group/sidebar-item relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-all mx-2 ${
                       isActive
                         ? "bg-accent/15 text-accent font-medium"

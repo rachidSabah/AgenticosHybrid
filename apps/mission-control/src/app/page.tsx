@@ -151,6 +151,20 @@ const EvolutionDashboard = lazyWithRetry(() =>
   import("@/views/evolution-dashboard").then((m) => ({ default: m.EvolutionDashboard }))
 );
 
+// Advanced Swarm & Intelligence Pillars
+const SwarmStudio = lazyWithRetry(() =>
+  import("@/views/swarm-studio").then((m) => ({ default: m.SwarmStudio }))
+);
+const ChaosCockpit = lazyWithRetry(() =>
+  import("@/views/chaos-cockpit").then((m) => ({ default: m.ChaosCockpit }))
+);
+const GPUAcceleration = lazyWithRetry(() =>
+  import("@/views/gpu-acceleration").then((m) => ({ default: m.GPUAcceleration }))
+);
+const CollaborativeWorkspace = lazyWithRetry(() =>
+  import("@/views/collaborative-workspace").then((m) => ({ default: m.CollaborativeWorkspace }))
+);
+
 const VIEWS: Record<string, () => ReactNode> = {
   governance: () => (
     <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
@@ -442,6 +456,35 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Evolution Dashboard" fallback={<ViewSkeleton title="Evolution Dashboard" />}>
       <Suspense fallback={<ViewSkeleton title="Evolution Dashboard" />}>
         <EvolutionDashboard />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  // Advanced Pillars
+  "swarm-studio": () => (
+    <ErrorBoundary viewName="Swarm Studio" fallback={<ViewSkeleton title="Swarm Studio" />}>
+      <Suspense fallback={<ViewSkeleton title="Swarm Studio" />}>
+        <SwarmStudio />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "chaos-cockpit": () => (
+    <ErrorBoundary viewName="Chaos Studio" fallback={<ViewSkeleton title="Chaos Studio" />}>
+      <Suspense fallback={<ViewSkeleton title="Chaos Studio" />}>
+        <ChaosCockpit />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "gpu-acceleration": () => (
+    <ErrorBoundary viewName="Local AI / GPU" fallback={<ViewSkeleton title="Local AI / GPU" />}>
+      <Suspense fallback={<ViewSkeleton title="Local AI / GPU" />}>
+        <GPUAcceleration />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "collab-workspace": () => (
+    <ErrorBoundary viewName="Collaborative VFS" fallback={<ViewSkeleton title="Collaborative VFS" />}>
+      <Suspense fallback={<ViewSkeleton title="Collaborative VFS" />}>
+        <CollaborativeWorkspace />
       </Suspense>
     </ErrorBoundary>
   ),
