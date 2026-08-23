@@ -543,11 +543,12 @@ export function AgentConstellation() {
 
   // ── Live Events with Clickable Agent Highlighting ──
   const liveEvents = useMemo(() => {
-    return storeEvents.slice(0, 8).map((e) => {
+    return storeEvents.slice(0, 8).map((e, idx) => {
       const p = e.payload as Record<string, any>;
       const agentName = String(p.provider || p.agent_id || p.agent || p.source || e.topic.split(".")[0]);
+      const uniqueId = e.id ? `ev-${e.id}-${idx}` : `ev-${e.topic}-${e.timestamp}-${idx}`;
       return {
-        id: e.id,
+        id: uniqueId,
         rawEvent: e,
         time: new Date(e.timestamp).toLocaleTimeString([], {
           hour12: false,
