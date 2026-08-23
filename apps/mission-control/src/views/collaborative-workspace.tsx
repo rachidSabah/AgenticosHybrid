@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import { Mic, MicOff, Volume2, FolderTree, Code, Users, Play, Send } from "lucide-react";
+import { Mic, MicOff, Volume2, FolderTree, Code, Users, Play, Send, CheckCircle2 } from "lucide-react";
 
 export function CollaborativeWorkspace() {
   const [cursors, setCursors] = useState<any[]>([
@@ -13,6 +13,9 @@ export function CollaborativeWorkspace() {
   const [transcripts, setTranscripts] = useState<any[]>([]);
   const [vfsTree, setVfsTree] = useState<any | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [voiceInput, setVoiceInput] = useState("AgenticOS, run full regression check on all subsystems and report readiness score.");
+  const [executionResult, setExecutionResult] = useState<string | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [activeCode, setActiveCode] = useState(
 `// Live Hexagonal Kernel Synchronization
 export class AgenticExecutionBus {
@@ -47,11 +50,27 @@ export class AgenticExecutionBus {
   const handleVoiceDispatch = async () => {
     setIsRecording(true);
     try {
-      await api.post("/api/voice/process", { audio_label: "Live Operator Mic" });
+      await api.post("/api/voice/process", { audio_label: voiceInput });
       await loadData();
     } finally {
       setIsRecording(false);
     }
+  };
+
+  const handleExecuteCode = async () => {
+    setIsExecuting(true);
+    try {
+      const res = await api.post<any>("/api/collab/execute", { code: activeCode });
+      if (res && res.stdout) {
+        setExecutionResult(res.stdout);
+      }
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleSelectModule = (symbolCode: string) => {
+    setActiveCode(symbolCode);
   };
 
   return (
@@ -64,6 +83,13 @@ export class AgenticExecutionBus {
           <Stat label="Monorepo Modules" value={vfsTree?.total_modules ?? 48} />
         </div>
         <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={voiceInput}
+            onChange={(e) => setVoiceInput(e.target.value)}
+            className="w-80 rounded-lg border border-border/60 bg-surface/30 px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+            placeholder="Voice command prompt..."
+          />
           <button
             onClick={handleVoiceDispatch}
             disabled={isRecording}
@@ -84,11 +110,41 @@ export class AgenticExecutionBus {
               <div className="flex items-center gap-1.5 text-accent font-semibold">
                 <FolderTree size={14} /> Root: E:\Agenticos
               </div>
-              <div className="pl-3 space-y-1 text-faint text-[11px]">
-                <div>📁 src/agentic_os (6 Core Engines)</div>
-                <div className="pl-3 text-emerald-400">└─ ★ SwarmDebuggerManager, PredictiveRoutingArbiter, CanaryPatcher</div>
-                <div>📁 src/agentic_os/api (FastAPI HTTP + WebSocket Bus)</div>
-                <div>📁 apps/mission-control (Next.js 15 + WebGL Canvas)</div>
+              <div className="pl-3 space-y-1.5 text-faint text-[11px]">
+                <button
+                  onClick={() => handleSelectModule(
+`// SwarmDebuggerManager Engine
+export class SwarmDebuggerManager {
+  private activeStep = 1;
+  public step(): number { return ++this.activeStep; }
+}`
+                  )}
+                  className="block text-left hover:text-accent transition"
+                >
+                  📁 src/agentic_os/core/swarm (SwarmDebuggerManager)
+                </button>
+                <button
+                  onClick={() => handleSelectModule(
+`// PredictiveRoutingArbiter EWMA Engine
+export class PredictiveRoutingArbiter {
+  public rankProviders(latencyMs: number[]): string { return "claude_code"; }
+}`
+                  )}
+                  className="block text-left hover:text-emerald-400 transition"
+                >
+                  📁 src/agentic_os/core/routing (PredictiveRoutingArbiter)
+                </button>
+                <button
+                  onClick={() => handleSelectModule(
+`// CanaryPatcher Autonomous SRE Engine
+export class CanaryPatcher {
+  public deployEphemeralWorktree(incidentId: string): boolean { return true; }
+}`
+                  )}
+                  className="block text-left hover:text-indigo-400 transition"
+                >
+                  📁 src/agentic_os/core/healing (CanaryPatcher)
+                </button>
               </div>
             </div>
 
@@ -114,26 +170,43 @@ export class AgenticExecutionBus {
         {/* Live Multi-Cursor Code Editor */}
         <Panel title="Multiplayer Collaborative Code Editor" subtitle="CRDT-backed real-time cursor presence & inline agent reviews">
           <div className="space-y-3">
-            {/* Active Multi-User Presence Pills */}
-            <div className="flex items-center gap-2">
-              {cursors.map((c) => (
-                <span
-                  key={c.client_id}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium border"
-                  style={{ borderColor: c.color, backgroundColor: `${c.color}20`, color: c.color }}
-                >
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
-                  {c.username} (L{c.cursor_line}:C{c.cursor_column})
-                </span>
-              ))}
+            {/* Active Multi-User Presence Pills & Run Button */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {cursors.map((c) => (
+                  <span
+                    key={c.client_id}
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium border"
+                    style={{ borderColor: c.color, backgroundColor: `${c.color}20`, color: c.color }}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                    {c.username} (L{c.cursor_line}:C{c.cursor_column})
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={handleExecuteCode}
+                disabled={isExecuting}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500 transition disabled:opacity-50"
+              >
+                <Play size={12} className={isExecuting ? "animate-spin" : ""} />
+                {isExecuting ? "Executing…" : "Execute Code"}
+              </button>
             </div>
 
             <textarea
               value={activeCode}
               onChange={(e) => setActiveCode(e.target.value)}
-              rows={12}
+              rows={10}
               className="w-full rounded-xl border border-border/60 bg-surface/30 p-4 font-mono text-xs text-text outline-none focus:border-accent leading-relaxed"
             />
+
+            {executionResult && (
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-mono text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 size={14} className="shrink-0" />
+                <span>{executionResult}</span>
+              </div>
+            )}
           </div>
         </Panel>
       </div>

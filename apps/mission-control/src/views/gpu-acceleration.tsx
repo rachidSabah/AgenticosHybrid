@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import { Cpu, WifiOff, HardDrive, Zap, Download } from "lucide-react";
+import { Cpu, WifiOff, HardDrive, Zap, Download, RefreshCw, CheckCircle2 } from "lucide-react";
 
 export function GPUAcceleration() {
   const [telemetry, setTelemetry] = useState<any | null>(null);
   const [offline, setOffline] = useState(false);
+  const [loadingModel, setLoadingModel] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -21,7 +22,7 @@ export function GPUAcceleration() {
 
   useEffect(() => {
     void loadData();
-    const id = setInterval(loadData, 5000);
+    const id = setInterval(loadData, 4000);
     return () => clearInterval(id);
   }, [loadData]);
 
@@ -29,14 +30,51 @@ export function GPUAcceleration() {
     const next = !offline;
     setOffline(next);
     await api.post("/api/desktop/gpu/offline", { offline: next });
+    await loadData();
   };
+
+  const handleLoadModel = async (modelId: string) => {
+    setLoadingModel(modelId);
+    try {
+      await api.post("/api/desktop/gpu/load", { model_id: modelId });
+      await loadData();
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
+  const handleUnloadModel = async (modelId: string) => {
+    setLoadingModel(modelId);
+    try {
+      await api.post("/api/desktop/gpu/unload", { model_id: modelId });
+      await loadData();
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
+  const handleDownloadModel = async (modelId: string) => {
+    setLoadingModel(modelId);
+    try {
+      await api.post("/api/desktop/gpu/download", { model_id: modelId });
+      await loadData();
+    } finally {
+      setLoadingModel(null);
+    }
+  };
+
+  const models = telemetry?.models ?? [
+    { model_id: "deepseek-coder:6.7b", name: "DeepSeek Coder 6.7B", size_gb: 4.1, vram_required_gb: 5.2, tokens_per_sec: 88.5, is_downloaded: true, is_active: true },
+    { model_id: "qwen2.5-coder:7b", name: "Qwen 2.5 Coder 7B", size_gb: 4.7, vram_required_gb: 5.8, tokens_per_sec: 74.2, is_downloaded: true, is_active: false },
+    { model_id: "llama3.3:70b-q4", name: "Llama 3.3 70B (Q4_K_M)", size_gb: 40.2, vram_required_gb: 22.0, tokens_per_sec: 32.0, is_downloaded: false, is_active: false },
+  ];
 
   return (
     <div className="flex h-full flex-col bg-background text-text p-4 space-y-4 overflow-auto">
       {/* Telemetry Header */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <Stat label="Hardware Acceleration" value="RTX 4090 (CUDA 12.4)" tone="ok" />
-        <Stat label="VRAM Allocated" value={`${telemetry?.allocated_vram_gb ?? 6.4} / ${telemetry?.total_vram_gb ?? 24.0} GB`} />
+        <Stat label="VRAM Allocated" value={`${telemetry?.allocated_vram_gb ?? 5.2} / ${telemetry?.total_vram_gb ?? 24.0} GB`} />
         <Stat label="GPU Temperature" value={`${telemetry?.gpu_temp_c ?? 48.0}°C`} tone="ok" />
         <div className="rounded-xl border border-border/60 bg-surface/20 p-3 flex items-center justify-between">
           <div>
@@ -57,11 +95,7 @@ export function GPUAcceleration() {
       {/* Local Model Discovery Matrix */}
       <Panel title="Zero-Config Local Model Hub (Ollama / vLLM / llama.cpp)" subtitle="Auto-discovered weights with DirectML / CUDA tensor acceleration">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(telemetry?.models ?? [
-            { model_id: "deepseek-coder:6.7b", name: "DeepSeek Coder 6.7B", size_gb: 4.1, vram_required_gb: 5.2, tokens_per_sec: 88.5, is_downloaded: true, is_active: true },
-            { model_id: "qwen2.5-coder:7b", name: "Qwen 2.5 Coder 7B", size_gb: 4.7, vram_required_gb: 5.8, tokens_per_sec: 74.2, is_downloaded: true, is_active: false },
-            { model_id: "llama3.3:70b-q4", name: "Llama 3.3 70B (Q4_K_M)", size_gb: 40.2, vram_required_gb: 22.0, tokens_per_sec: 32.0, is_downloaded: false, is_active: false },
-          ]).map((m: any) => (
+          {models.map((m: any) => (
             <div key={m.model_id} className="rounded-xl border border-border/60 bg-surface/20 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-xs">{m.name}</span>
@@ -75,12 +109,29 @@ export function GPUAcceleration() {
                 <div className="col-span-2 text-emerald-400 font-semibold">Speed: {m.tokens_per_sec} tokens/sec</div>
               </div>
               {m.is_downloaded ? (
-                <button className="w-full rounded-lg bg-indigo-500/20 py-1.5 text-xs text-indigo-300 font-medium hover:bg-indigo-500/30 transition">
-                  {m.is_active ? "Model Loaded in VRAM" : "Load into VRAM"}
+                <button
+                  onClick={() => (m.is_active ? handleUnloadModel(m.model_id) : handleLoadModel(m.model_id))}
+                  disabled={loadingModel === m.model_id}
+                  className={`w-full rounded-lg py-1.5 text-xs font-medium transition ${
+                    m.is_active
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30"
+                      : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30"
+                  }`}
+                >
+                  {loadingModel === m.model_id
+                    ? "Updating VRAM…"
+                    : m.is_active
+                    ? "Model Loaded in VRAM (Click to Unload)"
+                    : "Load into VRAM"}
                 </button>
               ) : (
-                <button className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-accent py-1.5 text-xs text-white font-medium hover:bg-accent/80 transition">
-                  <Download size={14} /> Download Weights
+                <button
+                  onClick={() => handleDownloadModel(m.model_id)}
+                  disabled={loadingModel === m.model_id}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-accent py-1.5 text-xs text-white font-medium hover:bg-accent/80 transition disabled:opacity-50"
+                >
+                  <Download size={14} />
+                  {loadingModel === m.model_id ? "Downloading Weights…" : "Download Weights"}
                 </button>
               )}
             </div>

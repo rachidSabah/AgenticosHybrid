@@ -26,7 +26,7 @@ class LocalGPUHub:
     def __init__(self) -> None:
         self.device_name = "NVIDIA GeForce RTX 4090 (DirectML / CUDA 12.4)"
         self.total_vram_gb = 24.0
-        self.allocated_vram_gb = 6.4
+        self.allocated_vram_gb = 5.2
         self.gpu_temp_c = 48.0
         self.is_offline_mode = False
         self._models: List[LocalModelProfile] = [
@@ -39,7 +39,7 @@ class LocalGPUHub:
         return {
             "device_name": self.device_name,
             "total_vram_gb": self.total_vram_gb,
-            "allocated_vram_gb": self.allocated_vram_gb,
+            "allocated_vram_gb": round(self.allocated_vram_gb, 1),
             "vram_utilization_pct": round((self.allocated_vram_gb / self.total_vram_gb) * 100, 1),
             "gpu_temp_c": self.gpu_temp_c,
             "is_offline_mode": self.is_offline_mode,
@@ -49,6 +49,30 @@ class LocalGPUHub:
     def toggle_offline(self, offline: bool) -> Dict[str, Any]:
         self.is_offline_mode = offline
         return {"is_offline_mode": self.is_offline_mode}
+
+    def load_model(self, model_id: str) -> Dict[str, Any]:
+        for m in self._models:
+            if m.model_id == model_id:
+                m.is_downloaded = True
+                m.is_active = True
+                self.allocated_vram_gb = min(self.total_vram_gb, self.allocated_vram_gb + m.vram_required_gb)
+                return {"model_id": model_id, "status": "loaded", "allocated_vram_gb": self.allocated_vram_gb}
+        return {"model_id": model_id, "status": "not_found"}
+
+    def unload_model(self, model_id: str) -> Dict[str, Any]:
+        for m in self._models:
+            if m.model_id == model_id:
+                m.is_active = False
+                self.allocated_vram_gb = max(0.0, self.allocated_vram_gb - m.vram_required_gb)
+                return {"model_id": model_id, "status": "unloaded", "allocated_vram_gb": self.allocated_vram_gb}
+        return {"model_id": model_id, "status": "not_found"}
+
+    def download_model(self, model_id: str) -> Dict[str, Any]:
+        for m in self._models:
+            if m.model_id == model_id:
+                m.is_downloaded = True
+                return {"model_id": model_id, "status": "downloaded", "size_gb": m.size_gb}
+        return {"model_id": model_id, "status": "not_found"}
 
 
 gpu_hub = LocalGPUHub()
