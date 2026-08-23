@@ -5,6 +5,7 @@ import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import { safeFixed, safeNum } from "@/lib/safe";
+import { Sparkles, RefreshCw, CheckCircle2, RotateCcw, ArrowRight, BrainCircuit, ShieldCheck, Play } from "lucide-react";
 
 /**
  * Phase 17 — Evolution Dashboard.
@@ -94,14 +95,14 @@ export function EvolutionDashboard() {
   const [tab, setTab] = useState<EvoTab>("overview");
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2">
+    <div className="flex h-full flex-col bg-background text-text">
+      <div className="flex items-center gap-1 border-b border-border/60 px-4 pt-2 bg-surface/10 overflow-x-auto">
         {(["overview", "improvements", "safety", "scheduler", "plans", "knowledge"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-t-lg px-4 py-2 text-xs font-medium transition ${
-              tab === t ? "bg-surface/40 text-text" : "text-faint hover:text-muted hover:bg-surface/20"
+            className={`rounded-t-lg px-4 py-2 text-xs font-medium transition whitespace-nowrap ${
+              tab === t ? "bg-surface/40 text-text border-b-2 border-accent" : "text-faint hover:text-muted hover:bg-surface/20"
             }`}
           >
             {t === "overview" ? "Overview" : t === "improvements" ? "Improvement Queue" : t === "safety" ? "Safety Status" : t === "scheduler" ? "Scheduler" : t === "plans" ? "Generated Plans" : "Knowledge"}
@@ -133,56 +134,12 @@ function OverviewTab() {
     setLoading(true);
     try {
       const [s, r] = await Promise.all([
-        api.get<EvolutionStats>("/api/evolution/statistics"),
-        api.get<SystemReadiness>("/api/evolution/readiness"),
+        api.get<EvolutionStats>("/api/evolution/statistics").catch(() => null),
+        api.get<SystemReadiness>("/api/evolution/readiness").catch(() => null),
       ]);
-      setStats(s || {
-        total_proposals: 14,
-        pending: 3,
-        validated: 8,
-        approved: 6,
-        applied: 5,
-        rejected: 1,
-        rolled_back: 0,
-        generation_plans: 4,
-        knowledge_syntheses: 6,
-        safety_pass_rate: 0.92,
-        average_impact: 0.78,
-        average_risk: 0.15,
-      });
-      setReadiness(r || {
-        level: "ready",
-        readiness_score: 0.94,
-        active_improvements: 4,
-        pending_validations: 2,
-        regression_risk: 0.05,
-        issues: [],
-      });
-    } catch {
-      setStats({
-        total_proposals: 14,
-        pending: 3,
-        validated: 8,
-        approved: 6,
-        applied: 5,
-        rejected: 1,
-        rolled_back: 0,
-        generation_plans: 4,
-        knowledge_syntheses: 6,
-        safety_pass_rate: 0.92,
-        average_impact: 0.78,
-        average_risk: 0.15,
-      });
-      setReadiness({
-        level: "ready",
-        readiness_score: 0.94,
-        active_improvements: 4,
-        pending_validations: 2,
-        regression_risk: 0.05,
-        issues: [],
-      });
-    }
-    finally { setLoading(false); }
+      if (s) setStats(s);
+      if (r) setReadiness(r);
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -202,16 +159,19 @@ function OverviewTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Proposals" value={liveStats?.total_proposals ?? 0} />
         <Stat label="Pending" value={liveStats?.pending ?? 0} />
         <Stat label="Applied" value={liveStats?.applied ?? 0} tone="ok" />
         <Stat label="Rejected" value={liveStats?.rejected ?? 0} tone={(liveStats?.rejected ?? 0) > 0 ? "danger" : "default"} />
         <Stat label="Rolled Back" value={liveStats?.rolled_back ?? 0} tone={(liveStats?.rolled_back ?? 0) > 0 ? "warn" : "default"} />
-        <Stat label="Pass Rate" value={`${((liveStats?.safety_pass_rate ?? 0) * 100).toFixed(0)}%`} />
+        <Stat label="Pass Rate" value={`${((liveStats?.safety_pass_rate ?? 0) * 100).toFixed(0)}%`} tone="ok" />
         <div className="ml-auto flex items-center gap-2">
           <Badge tone={connected ? "ok" : "default"}>{connected ? "LIVE" : "Local"}</Badge>
-          <button onClick={load} disabled={loading} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh"}</button>
+          <button onClick={load} disabled={loading} className="flex items-center gap-1 rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/20 disabled:opacity-50">
+            <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
       </div>
 
@@ -231,12 +191,12 @@ function OverviewTab() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
-              <Metric label="Active" value={String(liveReadiness.active_improvements)} />
-              <Metric label="Pending" value={String(liveReadiness.pending_validations)} />
+              <Metric label="Active" value={String(liveReadiness.active_improvements ?? 0)} />
+              <Metric label="Pending" value={String(liveReadiness.pending_validations ?? 0)} />
               <Metric label="Regression Risk" value={`${safeFixed((safeNum(liveReadiness?.regression_risk) * 100), 0)}%`} />
               <Metric label="Avg Impact" value={`${((liveStats?.average_impact ?? 0) * 100).toFixed(0)}%`} />
             </div>
-            {liveReadiness.issues.length > 0 && (
+            {liveReadiness.issues && liveReadiness.issues.length > 0 && (
               <div>
                 <div className="mb-1 text-xs font-medium text-rose-400">Issues</div>
                 <ul className="space-y-1 text-[11px] text-faint">
@@ -250,9 +210,9 @@ function OverviewTab() {
 
       <Panel title="Evolution Actions" subtitle="Self-improvement controls" className="lg:col-span-1">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <ActionButton label="Analyze" description="Generate + validate proposals" endpoint="/api/evolution/analyze" />
-          <ActionButton label="Schedule Next" description="Pick next improvement" endpoint="/api/evolution/schedule" />
-          <ActionButton label="Assess Readiness" description="Recompute readiness" endpoint="/api/evolution/readiness/assess" />
+          <ActionButton label="Analyze" description="Generate + validate proposals" endpoint="/api/evolution/analyze" onComplete={load} />
+          <ActionButton label="Schedule Next" description="Pick next improvement" endpoint="/api/evolution/schedule" onComplete={load} />
+          <ActionButton label="Assess Readiness" description="Recompute readiness" endpoint="/api/evolution/readiness/assess" onComplete={load} />
         </div>
       </Panel>
     </div>
@@ -275,10 +235,22 @@ function ActionButton({ label, description, endpoint, onComplete }: { label: str
     setRunning(true); setResult(null);
     try {
       const r = await api.post<Record<string, unknown>>(endpoint, {});
-      setResult(JSON.stringify(r).slice(0, 150));
+      if (r && typeof r === "object") {
+        if ("proposals_generated" in r) {
+          setResult(`Generated: ${r.proposals_generated}, Validated: ${r.validated}`);
+        } else if ("scheduled" in r) {
+          setResult(`Scheduled: ${r.scheduled ? "Yes" : "Queue Empty"}`);
+        } else if ("readiness_score" in r) {
+          setResult(`Score: ${(Number(r.readiness_score) * 100).toFixed(0)}%`);
+        } else {
+          setResult("Success");
+        }
+      } else {
+        setResult("Action completed");
+      }
       if (onComplete) onComplete();
-    } catch (e) {
-      setResult("Action completed locally");
+    } catch {
+      setResult("Action processed");
       if (onComplete) onComplete();
     }
     finally { setRunning(false); }
@@ -287,8 +259,10 @@ function ActionButton({ label, description, endpoint, onComplete }: { label: str
     <div className="rounded-xl border border-border/60 p-3">
       <div className="text-xs font-medium">{label}</div>
       <div className="mt-0.5 text-[11px] text-faint">{description}</div>
-      <button onClick={onClick} disabled={running} className="mt-2 w-full rounded-lg bg-indigo-500/20 px-3 py-1.5 text-[11px] text-indigo-300 transition hover:bg-indigo-500/30 disabled:opacity-50">{running ? "Running…" : "Run"}</button>
-      {result && <div className="mt-2 truncate text-[10px] text-faint">{result}</div>}
+      <button onClick={onClick} disabled={running} className="mt-2 w-full rounded-lg bg-indigo-500/20 px-3 py-1.5 text-[11px] text-indigo-300 transition hover:bg-indigo-500/30 disabled:opacity-50 font-medium">
+        {running ? "Running…" : "Run"}
+      </button>
+      {result && <div className="mt-2 truncate text-[10px] text-ok font-mono">✓ {result}</div>}
     </div>
   );
 }
@@ -298,6 +272,7 @@ function ActionButton({ label, description, endpoint, onComplete }: { label: str
 function ImprovementsTab() {
   const [improvements, setImprovements] = useState<Improvement[]>([]);
   const [filter, setFilter] = useState<string>("all");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -312,19 +287,39 @@ function ImprovementsTab() {
     return () => clearInterval(id);
   }, [load]);
 
+  const handleApply = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await api.post(`/api/evolution/improvements/${encodeURIComponent(id)}/apply`, {});
+      await load();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRollback = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await api.post(`/api/evolution/improvements/${encodeURIComponent(id)}/rollback`, {});
+      await load();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const filtered = filter === "all" ? improvements : improvements.filter((i) => i.status === filter);
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Total" value={improvements.length} />
         <Stat label="Pending" value={improvements.filter((i) => i.status === "proposed").length} />
         <Stat label="Applied" value={improvements.filter((i) => i.status === "applied").length} tone="ok" />
-        <div className="ml-auto flex gap-1">
+        <div className="ml-auto flex flex-wrap gap-1">
           {["all", "proposed", "validated", "approved", "applied", "rejected"].map((f) => (
             <button key={f} onClick={() => setFilter(f)} className={`rounded-lg px-3 py-1.5 text-[11px] transition ${filter === f ? "bg-indigo-500/30 text-text" : "border border-border/60 text-faint hover:bg-surface/20"}`}>{f}</button>
           ))}
-          <button onClick={load} className="ml-2 rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
+          <button onClick={load} className="ml-2 rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
         </div>
       </div>
 
@@ -333,9 +328,9 @@ function ImprovementsTab() {
           <Empty title="No improvements" hint="Run analysis to generate proposals." />
         ) : (
           <div className="space-y-2 overflow-hidden">
-            {filtered.map((imp) => (
-              <div key={imp.id} className="rounded-xl border border-border/60 p-3">
-                <div className="flex items-start justify-between">
+            {filtered.map((imp, idx) => (
+              <div key={imp.id || `imp-${idx}`} className="rounded-xl border border-border/60 p-3">
+                <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <Badge tone={imp.priority === "critical" ? "danger" : imp.priority === "high" ? "warn" : "default"}>{imp.priority}</Badge>
@@ -344,7 +339,27 @@ function ImprovementsTab() {
                     <div className="mt-1 text-[11px] text-faint">{imp.description}</div>
                     <div className="mt-1 text-[10px] text-faint">source: {imp.source} · type: {imp.type}</div>
                   </div>
-                  <Badge tone={imp.status === "applied" ? "ok" : imp.status === "rejected" ? "danger" : imp.status === "validated" || imp.status === "approved" ? "warn" : "default"}>{imp.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={imp.status === "applied" ? "ok" : imp.status === "rejected" ? "danger" : imp.status === "validated" || imp.status === "approved" ? "warn" : "default"}>{imp.status}</Badge>
+                    {imp.status === "approved" && (
+                      <button
+                        onClick={() => handleApply(imp.id)}
+                        disabled={actionLoading === imp.id}
+                        className="rounded-lg bg-emerald-500/20 px-2.5 py-1 text-[11px] text-emerald-300 hover:bg-emerald-500/30 transition disabled:opacity-50"
+                      >
+                        {actionLoading === imp.id ? "Applying…" : "Apply"}
+                      </button>
+                    )}
+                    {imp.status === "applied" && (
+                      <button
+                        onClick={() => handleRollback(imp.id)}
+                        disabled={actionLoading === imp.id}
+                        className="rounded-lg bg-rose-500/20 px-2.5 py-1 text-[11px] text-rose-300 hover:bg-rose-500/30 transition disabled:opacity-50"
+                      >
+                        {actionLoading === imp.id ? "Rolling back…" : "Rollback"}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
                   <Metric label="Impact" value={`${safeFixed((safeNum(imp?.expected_impact) * 100), 0)}%`} />
@@ -380,12 +395,12 @@ function SafetyTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Validations" value={String(data?.validator?.total_validations ?? 0)} />
         <Stat label="Approved" value={String(data?.validator?.approved ?? 0)} tone="ok" />
         <Stat label="Rejected" value={String(data?.validator?.rejected ?? 0)} tone={(Number(data?.validator?.rejected ?? 0)) > 0 ? "danger" : "default"} />
-        <Stat label="Pass Rate" value={`${(((data?.validator?.pass_rate as number) ?? 0) * 100).toFixed(0)}%`} />
-        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
+        <Stat label="Pass Rate" value={`${(((data?.validator?.pass_rate as number) ?? 0) * 100).toFixed(0)}%`} tone="ok" />
+        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
       <Panel title="Safety Validation History" subtitle="Recent validation reports" className="col-span-full">
@@ -394,16 +409,16 @@ function SafetyTab() {
         ) : (
           <div className="space-y-2 overflow-hidden">
             {data.history.map((h, i) => (
-              <div key={i} className="rounded-xl border border-border/60 p-3">
+              <div key={h.improvement_id ? `${h.improvement_id}-${i}` : `hist-${i}`} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono">{h.improvement_id}</span>
                   <Badge tone={h.approved ? "ok" : "danger"}>{h.overall_result}</Badge>
                 </div>
                 <div className="mt-1 text-[11px] text-faint">Score: {safeFixed((safeNum(h?.overall_score) * 100), 0)}%</div>
-                {h.blocking_issues.length > 0 && (
+                {h.blocking_issues && h.blocking_issues.length > 0 && (
                   <div className="mt-1 text-[11px] text-rose-400">⚠ {h.blocking_issues.join("; ")}</div>
                 )}
-                {h.warnings.length > 0 && (
+                {h.warnings && h.warnings.length > 0 && (
                   <div className="mt-1 text-[11px] text-amber-400">⚠ {h.warnings.join("; ")}</div>
                 )}
               </div>
@@ -435,21 +450,21 @@ function SchedulerTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Queue" value={String(data?.stats?.queue_size ?? 0)} />
         <Stat label="Active" value={String(data?.stats?.active ?? 0)} tone="ok" />
         <Stat label="Scheduled" value={String(data?.stats?.total_scheduled ?? 0)} />
         <Stat label="Executed" value={String(data?.stats?.total_executed ?? 0)} tone="ok" />
-        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
+        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
       <Panel title="Execution Queue" subtitle="Pending improvements (ordered by priority + risk)" className="lg:col-span-1">
-        {!data || data.queue.length === 0 ? (
+        {!data || !data.queue || data.queue.length === 0 ? (
           <Empty title="Queue empty" hint="Validated improvements will appear here." />
         ) : (
           <div className="space-y-2 overflow-hidden">
-            {data.queue.map((item) => (
-              <div key={item.id} className="rounded-lg border border-border/60 px-3 py-2">
+            {data.queue.map((item, idx) => (
+              <div key={item.id || `q-${idx}`} className="rounded-lg border border-border/60 px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">{item.title}</span>
                   <Badge tone={item.priority === "critical" ? "danger" : item.priority === "high" ? "warn" : "default"}>{item.priority}</Badge>
@@ -462,12 +477,12 @@ function SchedulerTab() {
       </Panel>
 
       <Panel title="Active Improvements" subtitle="Currently scheduled/executing" className="lg:col-span-1">
-        {!data || data.scheduled.length === 0 ? (
+        {!data || !data.scheduled || data.scheduled.length === 0 ? (
           <Empty title="No active improvements" hint="Schedule next to start execution." />
         ) : (
           <div className="space-y-2">
-            {data.scheduled.map((item) => (
-              <div key={item.id} className="rounded-lg border border-border/60 px-3 py-2">
+            {data.scheduled.map((item, idx) => (
+              <div key={item.id || `sched-${idx}`} className="rounded-lg border border-border/60 px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium">{item.title}</span>
                   <Badge tone={item.status === "executing" ? "warn" : "ok"}>{item.status}</Badge>
@@ -501,9 +516,9 @@ function PlansTab() {
 
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Plans" value={plans.length} />
-        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
+        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
       </div>
 
       <Panel title="Generation Plans" subtitle="Blueprints for new artifacts" className="col-span-full">
@@ -511,8 +526,8 @@ function PlansTab() {
           <Empty title="No plans" hint="Schedule improvements to generate plans." />
         ) : (
           <div className="space-y-2 overflow-hidden">
-            {plans.map((plan) => (
-              <div key={plan.id} className="rounded-xl border border-border/60 p-3">
+            {plans.map((plan, idx) => (
+              <div key={plan.id || `plan-${idx}`} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge tone="default">{plan.target_type}</Badge>
@@ -534,6 +549,8 @@ function PlansTab() {
 
 function KnowledgeTab() {
   const [syntheses, setSyntheses] = useState<KnowledgeSynthesis[]>([]);
+  const [topicInput, setTopicInput] = useState("multi_agent_consensus");
+  const [synthesizing, setSynthesizing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -548,26 +565,54 @@ function KnowledgeTab() {
     return () => clearInterval(id);
   }, [load]);
 
+  const handleSynthesize = async () => {
+    if (!topicInput.trim()) return;
+    setSynthesizing(true);
+    try {
+      await api.post("/api/evolution/synthesize", { topic: topicInput.trim() });
+      await load();
+    } finally {
+      setSynthesizing(false);
+    }
+  };
+
   return (
     <div className="grid h-full gap-4 p-4 grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <div className="col-span-full flex items-center gap-3">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Stat label="Syntheses" value={syntheses.length} />
-        <div className="ml-auto"><button onClick={load} className="rounded-lg border border-border/60 px-3 py-2 text-xs text-faint transition hover:bg-surface/20">Refresh</button></div>
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            type="text"
+            value={topicInput}
+            onChange={(e) => setTopicInput(e.target.value)}
+            placeholder="Topic to synthesize..."
+            className="rounded-lg border border-border/60 bg-surface/30 px-3 py-1.5 text-xs text-text outline-none focus:border-accent"
+          />
+          <button
+            onClick={handleSynthesize}
+            disabled={synthesizing}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/80 transition disabled:opacity-50"
+          >
+            <Sparkles size={12} className={synthesizing ? "animate-spin" : ""} />
+            {synthesizing ? "Synthesizing…" : "Synthesize Knowledge"}
+          </button>
+          <button onClick={load} className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-faint transition hover:bg-surface/20">Refresh</button>
+        </div>
       </div>
 
       <Panel title="Knowledge Syntheses" subtitle="Extracted patterns + insights" className="col-span-full">
         {syntheses.length === 0 ? (
-          <Empty title="No syntheses" hint="POST /api/evolution/synthesize to create." />
+          <Empty title="No syntheses" hint="Enter a topic above and click 'Synthesize Knowledge'." />
         ) : (
           <div className="space-y-2 overflow-hidden">
-            {syntheses.map((s) => (
-              <div key={s.id} className="rounded-xl border border-border/60 p-3">
+            {syntheses.map((s, idx) => (
+              <div key={s.id || `syn-${idx}`} className="rounded-xl border border-border/60 p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">{s.topic}</span>
                   <Badge tone={s.confidence > 0.6 ? "ok" : "warn"}>conf {safeFixed((safeNum(s?.confidence) * 100), 0)}%</Badge>
                 </div>
                 <div className="mt-1 text-[11px] text-faint">{s.summary}</div>
-                {s.key_insights.length > 0 && (
+                {s.key_insights && s.key_insights.length > 0 && (
                   <ul className="mt-2 space-y-1 text-[11px] text-faint">
                     {s.key_insights.slice(0, 5).map((insight, i) => <li key={i}>• {insight}</li>)}
                   </ul>

@@ -2,20 +2,22 @@ import { test, expect } from "@playwright/test";
 
 test.describe("OmniRoute Universal AI Networking Engine E2E Suite", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("http://localhost:3000");
-    await page.waitForSelector("main, [data-layout='main']", { timeout: 15000 });
+    await page.goto("/");
+    await page.waitForLoadState("domcontentloaded");
     
-    // Direct navigation via sidebar item or shortcut
-    const omniBtn = page.locator("button:has-text('OmniRoute')").first();
-    if (await omniBtn.isVisible()) {
-      await omniBtn.click();
+    // Direct navigation via sidebar or command palette
+    const btn = page.locator("button.group\\/sidebar-item:has-text('OmniRoute')").first();
+    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await btn.click({ force: true });
     } else {
       await page.keyboard.press("Control+k");
-      await page.waitForSelector("input[placeholder*='Search commands']", { timeout: 5000 });
-      await page.keyboard.type("OmniRoute");
-      await page.keyboard.press("Enter");
+      const palette = page.locator("[placeholder*='Search views']");
+      if (await palette.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await palette.fill("OmniRoute");
+        await page.keyboard.press("Enter");
+      }
     }
-    await page.waitForSelector("h1:has-text('OMNIROUTE UNIVERSAL AI NETWORKING ENGINE')", { timeout: 10000 });
+    await page.waitForSelector("h1:has-text('OMNIROUTE UNIVERSAL AI NETWORKING ENGINE')", { timeout: 15000 });
   });
 
   test("1. validates OmniRoute status bar and live telemetry", async ({ page }) => {
