@@ -342,7 +342,15 @@ const edgeTypes: EdgeTypes = {
 export function ExecutionGraph() {
   const tasks = useStore((s) => s.tasks);
   const agents = useStore((s) => s.agents);
+  const executions = useStore((s) => s.executions);
+  const missions = useStore((s) => s.missions);
   const telemetry = useStore((s) => s.telemetry);
+
+  useEffect(() => {
+    void useStore.getState().hydrate();
+    void useStore.getState().hydrateExecutions();
+  }, []);
+
   const [selected, setSelected] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     status: ["running", "completed", "failed", "paused", "cancelled", "idle", "healthy", "down", "degraded", "recovered", "in_progress", "planned", "created", "dispatched", "assigned"],
@@ -358,27 +366,36 @@ export function ExecutionGraph() {
 
     const taskList = Object.values(tasks);
     const agentList = Object.values(agents);
-    const anyRunning =
-      taskList.some(
-        (t) => t.status === "running" || t.status === "in_progress" || t.status === "assigned" || t.status === "dispatched"
-      ) || agentList.some((a) => a.status === "running");
+    const executionList = Object.values(executions);
+    const missionList = Object.values(missions);
+
+    const activeMission =
+      missionList.find((m) => m.status === "running" || m.status === "in_progress") ||
+      missionList.find((m) => m.status === "planning") ||
+      null;
 
     // Real task calculation
     let completedCount = 0;
     let runningCount = 0;
+    let failedCount = 0;
+    let totalProgressSum = 0;
 
     taskList.forEach((task, i) => {
       const isDone = task.status === "completed";
       const isRun = task.status === "running" || task.status === "in_progress";
+      const isFail = task.status === "failed";
+
       if (isDone) completedCount++;
       if (isRun) runningCount++;
+      if (isFail) failedCount++;
 
-      const progressPct = isDone ? 100 : isRun ? 65 : task.status === "assigned" || task.status === "dispatched" ? 25 : 0;
+      const progressPct = isDone ? 100 : isRun ? 60 : task.status === "assigned" || task.status === "dispatched" ? 25 : 0;
+      totalProgressSum += progressPct;
 
       executionNodes.push({
         id: `task-${task.id}`,
         type: "task",
-        position: { x: 300 + (i % 3) * 280, y: 80 + Math.floor(i / 3) * 160 },
+        position: { x: 320 + (i % 3) * 280, y: 80 + Math.floor(i / 3) * 160 },
         data: {
           label: task.title || task.id,
           status: task.status,
@@ -391,6 +408,11 @@ export function ExecutionGraph() {
 
     // Real agent calculation
     agentList.forEach((agent, i) => {
+      const isAgentRunning = agent.status === "running";
+      if (isAgentRunning && taskList.length === 0) {
+        runningCount++;
+      }
+
       executionNodes.push({
         id: `agent-${agent.id}`,
         type: "agent",
@@ -415,10 +437,18 @@ export function ExecutionGraph() {
     });
 
     // System nodes based on live telemetry
+    const anyRunning =
+      runningCount > 0 ||
+      taskList.some(
+        (t) => t.status === "running" || t.status === "in_progress" || t.status === "assigned" || t.status === "dispatched"
+      ) ||
+      agentList.some((a) => a.status === "running") ||
+      executionList.some((e) => e.status === "running");
+
     executionNodes.push({
       id: `system-health`,
       type: "system",
-      position: { x: 300, y: 20 },
+      position: { x: 320, y: 20 },
       data: {
         label: "System Health",
         status: telemetry.errors > 0 ? "failed" : anyRunning ? "running" : "idle",
@@ -431,7 +461,7 @@ export function ExecutionGraph() {
       executionNodes.push({
         id: `system-error`,
         type: "system",
-        position: { x: 300, y: 500 },
+        position: { x: 320, y: 500 },
         data: {
           label: `System Error (${telemetry.errors})`,
           status: "failed",
@@ -441,25 +471,48 @@ export function ExecutionGraph() {
       });
     }
 
-    const totalTaskCount = taskList.length;
-    const overallProgressPct = totalTaskCount > 0 ? Math.round((completedCount / totalTaskCount) * 100) : (anyRunning ? 45 : 0);
-    const overallRemainingPct = 100 - overallProgressPct;
+    // ── Truthful Real Progress Calculation ──
+    let overallProgressPct = 0;
+    let totalWorkUnits = taskList.length;
 
-    const hasActivity = taskList.length > 0 || agentList.length > 0 || telemetry.errors > 0;
+    if (totalWorkUnits > 0) {
+      // Progress is exact average of actual task progress units
+      overallProgressPct = Math.round(totalProgressSum / totalWorkUnits);
+    } else if (executionList.length > 0) {
+      totalWorkUnits = executionList.length;
+      const execCompleted = executionList.filter((e) => e.status === "completed").length;
+      const execRunning = executionList.filter((e) => e.status === "running").length;
+      runningCount = execRunning;
+      completedCount = execCompleted;
+      overallProgressPct = Math.round(((execCompleted * 100) + (execRunning * 50)) / totalWorkUnits);
+    } else if (activeMission) {
+      overallProgressPct = activeMission.status === "completed" ? 100 : anyRunning ? 50 : 0;
+    } else if (agentList.length > 0) {
+      const activeAgents = agentList.filter((a) => a.status === "running").length;
+      const completedAgents = agentList.filter((a) => a.status === "completed").length;
+      runningCount = activeAgents;
+      completedCount = completedAgents;
+      overallProgressPct = Math.round((completedAgents / agentList.length) * 100);
+    } else {
+      overallProgressPct = 0;
+    }
+
+    const overallRemainingPct = Math.max(0, 100 - overallProgressPct);
+    const hasActivity = taskList.length > 0 || agentList.length > 0 || executionList.length > 0 || telemetry.errors > 0;
 
     return {
       nodes: executionNodes,
       edges: executionEdges,
       hasActivity,
       overallMetrics: {
-        totalTasks: totalTaskCount,
+        totalTasks: totalWorkUnits,
         completedTasks: completedCount,
         runningTasks: runningCount,
         overallProgressPct,
         overallRemainingPct,
       },
     };
-  }, [tasks, agents, telemetry]);
+  }, [tasks, agents, executions, missions, telemetry]);
 
   const filteredNodes = useMemo(() => {
     return nodes.filter((node) => {
