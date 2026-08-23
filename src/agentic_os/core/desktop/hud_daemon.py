@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -24,12 +24,12 @@ class GlobalHUDDaemon:
     """Processes global floating HUD natural language commands from anywhere in the OS."""
 
     def __init__(self) -> None:
-        self._history: List[HUDCommandResult] = []
+        self._history: list[HUDCommandResult] = []
 
     def execute_hud_query(self, query: str) -> HUDCommandResult:
         cid = f"hud-{uuid.uuid4().hex[:6]}"
         lower = query.lower()
-        
+
         if "test" in lower or "pytest" in lower:
             action = "Executed backend test runner"
             snippet = "162 passed in 2.00s (100% Green)"
@@ -38,7 +38,7 @@ class GlobalHUDDaemon:
             snippet = "Branch main synchronized cleanly"
         else:
             action = "Dispatched agent prompt to OmniRoute"
-            snippet = f"Routing evaluated: targeted auto:codex with 55ms latency"
+            snippet = "Routing evaluated: targeted auto:codex with 55ms latency"
 
         res = HUDCommandResult(
             command_id=cid,
@@ -50,7 +50,7 @@ class GlobalHUDDaemon:
         self._history.append(res)
         return res
 
-    def get_history(self) -> List[Dict[str, Any]]:
+    def get_history(self) -> list[dict[str, Any]]:
         return [h.__dict__ for h in self._history]
 
 

@@ -4,9 +4,8 @@ Phase 4 — Zero-Config Local GPU Hub & Hardware Profiling.
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -29,13 +28,17 @@ class LocalGPUHub:
         self.allocated_vram_gb = 5.2
         self.gpu_temp_c = 48.0
         self.is_offline_mode = False
-        self._models: List[LocalModelProfile] = [
-            LocalModelProfile("deepseek-coder:6.7b", "DeepSeek Coder 6.7B", 4.1, 5.2, 88.5, True, True),
+        self._models: list[LocalModelProfile] = [
+            LocalModelProfile(
+                "deepseek-coder:6.7b", "DeepSeek Coder 6.7B", 4.1, 5.2, 88.5, True, True
+            ),
             LocalModelProfile("qwen2.5-coder:7b", "Qwen 2.5 Coder 7B", 4.7, 5.8, 74.2, True, False),
-            LocalModelProfile("llama3.3:70b-q4", "Llama 3.3 70B (Q4_K_M)", 40.2, 22.0, 32.0, False, False),
+            LocalModelProfile(
+                "llama3.3:70b-q4", "Llama 3.3 70B (Q4_K_M)", 40.2, 22.0, 32.0, False, False
+            ),
         ]
 
-    def get_gpu_telemetry(self) -> Dict[str, Any]:
+    def get_gpu_telemetry(self) -> dict[str, Any]:
         return {
             "device_name": self.device_name,
             "total_vram_gb": self.total_vram_gb,
@@ -46,28 +49,38 @@ class LocalGPUHub:
             "models": [m.__dict__ for m in self._models],
         }
 
-    def toggle_offline(self, offline: bool) -> Dict[str, Any]:
+    def toggle_offline(self, offline: bool) -> dict[str, Any]:
         self.is_offline_mode = offline
         return {"is_offline_mode": self.is_offline_mode}
 
-    def load_model(self, model_id: str) -> Dict[str, Any]:
+    def load_model(self, model_id: str) -> dict[str, Any]:
         for m in self._models:
             if m.model_id == model_id:
                 m.is_downloaded = True
                 m.is_active = True
-                self.allocated_vram_gb = min(self.total_vram_gb, self.allocated_vram_gb + m.vram_required_gb)
-                return {"model_id": model_id, "status": "loaded", "allocated_vram_gb": self.allocated_vram_gb}
+                self.allocated_vram_gb = min(
+                    self.total_vram_gb, self.allocated_vram_gb + m.vram_required_gb
+                )
+                return {
+                    "model_id": model_id,
+                    "status": "loaded",
+                    "allocated_vram_gb": self.allocated_vram_gb,
+                }
         return {"model_id": model_id, "status": "not_found"}
 
-    def unload_model(self, model_id: str) -> Dict[str, Any]:
+    def unload_model(self, model_id: str) -> dict[str, Any]:
         for m in self._models:
             if m.model_id == model_id:
                 m.is_active = False
                 self.allocated_vram_gb = max(0.0, self.allocated_vram_gb - m.vram_required_gb)
-                return {"model_id": model_id, "status": "unloaded", "allocated_vram_gb": self.allocated_vram_gb}
+                return {
+                    "model_id": model_id,
+                    "status": "unloaded",
+                    "allocated_vram_gb": self.allocated_vram_gb,
+                }
         return {"model_id": model_id, "status": "not_found"}
 
-    def download_model(self, model_id: str) -> Dict[str, Any]:
+    def download_model(self, model_id: str) -> dict[str, Any]:
         for m in self._models:
             if m.model_id == model_id:
                 m.is_downloaded = True

@@ -154,12 +154,12 @@ export class CanaryPatcher {
                 <Volume2 size={14} /> Voice Command Transcripts
               </div>
               {transcripts.length === 0 ? (
-                <div className="text-[11px] text-faint">No voice commands recorded. Click 'Voice Command Dispatch' above.</div>
+                <div className="text-[11px] text-faint">No voice commands recorded. Click &apos;Voice Command Dispatch&apos; above.</div>
               ) : (
                 transcripts.map((t) => (
                   <div key={t.transcript_id} className="text-[11px] space-y-1 pt-1 border-t border-border/30">
-                    <div className="text-text font-medium">🗣 "{t.transcribed_text}"</div>
-                    <div className="text-emerald-400 font-mono">🤖 Spoken Response: "{t.spoken_response}"</div>
+                    <div className="text-text font-medium">🗣 &ldquo;{t.transcribed_text}&rdquo;</div>
+                    <div className="text-emerald-400 font-mono">🤖 Spoken Response: &ldquo;{t.spoken_response}&rdquo;</div>
                   </div>
                 ))
               )}

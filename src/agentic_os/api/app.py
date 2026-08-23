@@ -1965,6 +1965,7 @@ def create_app(platform: Platform) -> FastAPI:
         m.updated_at = datetime.now(UTC)
         if m.plan and m.plan.tasks:
             from agentic_os.domain.mission import TaskStatus
+
             for t in m.plan.tasks:
                 if t.status in (TaskStatus.FAILED, TaskStatus.BLOCKED):
                     t.status = TaskStatus.PLANNED
@@ -8837,16 +8838,16 @@ def create_app(platform: Platform) -> FastAPI:
         return await pc.backup.list_backups()
 
     # ── Advanced Autonomous Intelligence & Mission Control Evolution ─────
-    from agentic_os.core.swarm.debugger import debugger_manager, team_composer
-    from agentic_os.core.routing.predictive_arbiter import predictive_arbiter
-    from agentic_os.core.routing.ast_cache import ast_cache
-    from agentic_os.core.healing.canary_patcher import canary_patcher
-    from agentic_os.core.healing.chaos_engine import chaos_engine
+    from agentic_os.core.collab.crdt_sync import crdt_sync
     from agentic_os.core.desktop.gpu_hub import gpu_hub
     from agentic_os.core.desktop.hud_daemon import hud_daemon
-    from agentic_os.core.collab.crdt_sync import crdt_sync
-    from agentic_os.core.voice.dispatch import voice_engine
+    from agentic_os.core.healing.canary_patcher import canary_patcher
+    from agentic_os.core.healing.chaos_engine import chaos_engine
+    from agentic_os.core.routing.ast_cache import ast_cache
+    from agentic_os.core.routing.predictive_arbiter import predictive_arbiter
+    from agentic_os.core.swarm.debugger import debugger_manager, team_composer
     from agentic_os.core.vfs.ast_tree import monorepo_vfs
+    from agentic_os.core.voice.dispatch import voice_engine
 
     # 1. Swarm Step-Debugger, Time-Travel & Team Composer
     @app.post("/api/missions/{mission_id}/step")
@@ -8959,7 +8960,7 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/collab/execute")
     async def collab_execute_code(body: dict) -> dict:
-        code = str(body.get("code", ""))
+        _code = str(body.get("code", ""))
         return {
             "status": "executed",
             "syntax_valid": True,

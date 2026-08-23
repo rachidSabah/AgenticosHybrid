@@ -8,11 +8,11 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from enum import StrEnum
+from typing import Any
 
 
-class ExecutionState(str, Enum):
+class ExecutionState(StrEnum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
@@ -26,9 +26,9 @@ class FrameSnapshot:
     frame_id: str
     step_index: int
     timestamp: float
-    agent_states: Dict[str, Any]
-    memory_snapshot: Dict[str, Any]
-    pending_tool_calls: List[Dict[str, Any]]
+    agent_states: dict[str, Any]
+    memory_snapshot: dict[str, Any]
+    pending_tool_calls: list[dict[str, Any]]
     active_tokens: int
     diff_summary: str
     prompt_context: str
@@ -39,9 +39,9 @@ class SwarmDebugSession:
     mission_id: str
     state: ExecutionState = ExecutionState.IDLE
     current_step: int = 0
-    breakpoints: List[int] = field(default_factory=list)
-    frames: List[FrameSnapshot] = field(default_factory=list)
-    active_agent_id: Optional[str] = None
+    breakpoints: list[int] = field(default_factory=list)
+    frames: list[FrameSnapshot] = field(default_factory=list)
+    active_agent_id: str | None = None
     created_at: float = field(default_factory=time.time)
 
 
@@ -49,7 +49,7 @@ class SwarmDebuggerManager:
     """Manages step-by-step execution, pausing, stepping, and time-travel rewind for agent graphs."""
 
     def __init__(self) -> None:
-        self._sessions: Dict[str, SwarmDebugSession] = {}
+        self._sessions: dict[str, SwarmDebugSession] = {}
         self._lock = asyncio.Lock()
 
     def get_or_create_session(self, mission_id: str) -> SwarmDebugSession:
@@ -60,9 +60,9 @@ class SwarmDebuggerManager:
     async def capture_frame(
         self,
         mission_id: str,
-        agent_states: Dict[str, Any],
-        memory_snapshot: Dict[str, Any],
-        pending_tool_calls: List[Dict[str, Any]],
+        agent_states: dict[str, Any],
+        memory_snapshot: dict[str, Any],
+        pending_tool_calls: list[dict[str, Any]],
         active_tokens: int,
         diff_summary: str,
         prompt_context: str,
@@ -86,19 +86,27 @@ class SwarmDebuggerManager:
                 session.state = ExecutionState.PAUSED
             return frame
 
-    async def pause(self, mission_id: str) -> Dict[str, Any]:
+    async def pause(self, mission_id: str) -> dict[str, Any]:
         async with self._lock:
             session = self.get_or_create_session(mission_id)
             session.state = ExecutionState.PAUSED
-            return {"mission_id": mission_id, "state": session.state.value, "step": session.current_step}
+            return {
+                "mission_id": mission_id,
+                "state": session.state.value,
+                "step": session.current_step,
+            }
 
-    async def resume(self, mission_id: str) -> Dict[str, Any]:
+    async def resume(self, mission_id: str) -> dict[str, Any]:
         async with self._lock:
             session = self.get_or_create_session(mission_id)
             session.state = ExecutionState.RUNNING
-            return {"mission_id": mission_id, "state": session.state.value, "step": session.current_step}
+            return {
+                "mission_id": mission_id,
+                "state": session.state.value,
+                "step": session.current_step,
+            }
 
-    async def step(self, mission_id: str) -> Dict[str, Any]:
+    async def step(self, mission_id: str) -> dict[str, Any]:
         async with self._lock:
             session = self.get_or_create_session(mission_id)
             session.state = ExecutionState.STEPPING
@@ -109,7 +117,7 @@ class SwarmDebuggerManager:
                 "frame": session.frames[-1].__dict__ if session.frames else None,
             }
 
-    async def rewind(self, mission_id: str, target_step: int) -> Dict[str, Any]:
+    async def rewind(self, mission_id: str, target_step: int) -> dict[str, Any]:
         async with self._lock:
             session = self.get_or_create_session(mission_id)
             target_frame = next((f for f in session.frames if f.step_index == target_step), None)
@@ -124,7 +132,7 @@ class SwarmDebuggerManager:
                 "frame": target_frame.__dict__ if target_frame else None,
             }
 
-    async def fork(self, mission_id: str, target_step: int, adjusted_prompt: str) -> Dict[str, Any]:
+    async def fork(self, mission_id: str, target_step: int, adjusted_prompt: str) -> dict[str, Any]:
         async with self._lock:
             new_mission_id = f"{mission_id}-fork-{uuid.uuid4().hex[:6]}"
             new_session = SwarmDebugSession(mission_id=new_mission_id)
@@ -146,11 +154,12 @@ class SwarmDebuggerManager:
 
 # ── Team Composer & Consensus Debate ───────────────────────────────────
 
+
 @dataclass
 class AgentRoleSpec:
     role_id: str
     name: str
-    capabilities: List[str]
+    capabilities: list[str]
     system_prompt: str
     temperature: float
     model_preference: str
@@ -170,11 +179,11 @@ class SwarmTeamComposer:
     """Dynamically decomposes tasks, composes specialized agent constellations, and conducts consensus debates."""
 
     def __init__(self) -> None:
-        self._debates: Dict[str, List[DebateContribution]] = {}
+        self._debates: dict[str, list[DebateContribution]] = {}
 
-    def decompose_task(self, task_description: str) -> List[AgentRoleSpec]:
+    def decompose_task(self, task_description: str) -> list[AgentRoleSpec]:
         lower = task_description.lower()
-        roles: List[AgentRoleSpec] = [
+        roles: list[AgentRoleSpec] = [
             AgentRoleSpec(
                 role_id=f"agent-architect-{uuid.uuid4().hex[:4]}",
                 name="Principal Systems Architect",
@@ -227,9 +236,11 @@ class SwarmTeamComposer:
 
         return roles
 
-    def conduct_debate(self, debate_topic: str, proposed_change: str, team: List[AgentRoleSpec]) -> Dict[str, Any]:
+    def conduct_debate(
+        self, debate_topic: str, proposed_change: str, team: list[AgentRoleSpec]
+    ) -> dict[str, Any]:
         debate_id = f"debate-{uuid.uuid4().hex[:8]}"
-        contributions: List[DebateContribution] = []
+        contributions: list[DebateContribution] = []
 
         for member in team:
             if "Architect" in member.name:
@@ -237,11 +248,11 @@ class SwarmTeamComposer:
                 vote = "approve"
                 conf = 0.95
             elif "QA" in member.name:
-                arg = f"Simulated test suite against proposed change. All invariant contracts hold."
+                arg = "Simulated test suite against proposed change. All invariant contracts hold."
                 vote = "approve"
                 conf = 0.98
             elif "Security" in member.name:
-                arg = f"Audited payload against injection vectors and privilege escalation risks."
+                arg = "Audited payload against injection vectors and privilege escalation risks."
                 vote = "approve"
                 conf = 0.99
             else:

@@ -152,8 +152,8 @@ export function SwarmStudio() {
                 <div className="rounded-lg border border-border/40 bg-surface/20 p-3">
                   <div className="font-semibold text-[11px] text-accent uppercase tracking-wider mb-1">Isolated Memory Scope</div>
                   <div className="font-mono text-[11px] text-faint space-y-1">
-                    <div>• domain_models: ["HexagonalKernel", "EventBus"]</div>
-                    <div>• pending_tool_calls: ["write_file", "run_test"]</div>
+                    <div>• domain_models: [&quot;HexagonalKernel&quot;, &quot;EventBus&quot;]</div>
+                    <div>• pending_tool_calls: [&quot;write_file&quot;, &quot;run_test&quot;]</div>
                     <div>• execution_lock: unlocked</div>
                   </div>
                 </div>

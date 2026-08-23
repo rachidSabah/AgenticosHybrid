@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -18,7 +18,7 @@ class ChaosExperiment:
     status: str
     recovery_time_ms: float
     resilience_score: float
-    logs: List[str]
+    logs: list[str]
     created_at: float = field(default_factory=time.time)
 
 
@@ -26,7 +26,7 @@ class ChaosEngine:
     """Injects adversarial latency, agent worker kills, payload corruptions, and network partitions."""
 
     def __init__(self) -> None:
-        self._experiments: List[ChaosExperiment] = []
+        self._experiments: list[ChaosExperiment] = []
 
     def inject_fault(self, fault_type: str, target_component: str) -> ChaosExperiment:
         exp_id = f"chaos-{uuid.uuid4().hex[:8]}"
@@ -48,7 +48,7 @@ class ChaosEngine:
         self._experiments.append(exp)
         return exp
 
-    def list_experiments(self) -> List[Dict[str, Any]]:
+    def list_experiments(self) -> list[dict[str, Any]]:
         return [e.__dict__ for e in self._experiments]
 
 

@@ -398,7 +398,7 @@ export function OmniRouteDashboard() {
                 </div>
 
                 <div className="rounded-xl border border-border/40 bg-surface/10 p-3 text-[11px] text-faint">
-                  OmniRoute automatically tests each host engine's health heartbeat before dispatching prompts, executing zero-latency local fallback if the primary engine is occupied.
+                  OmniRoute automatically tests each host engine&apos;s health heartbeat before dispatching prompts, executing zero-latency local fallback if the primary engine is occupied.
                 </div>
               </div>
             </Panel>

@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -28,9 +28,11 @@ class CanaryPatcher:
     """Spins up isolated ephemeral worktree branches, simulates patches, and triggers canary rollbacks."""
 
     def __init__(self) -> None:
-        self._deployments: List[CanaryDeployment] = []
+        self._deployments: list[CanaryDeployment] = []
 
-    def simulate_and_deploy_patch(self, incident_id: str, title: str, patch_diff: str) -> CanaryDeployment:
+    def simulate_and_deploy_patch(
+        self, incident_id: str, title: str, patch_diff: str
+    ) -> CanaryDeployment:
         dep_id = f"canary-{uuid.uuid4().hex[:8]}"
         rca = (
             f"ROOT CAUSE ANALYSIS (RCA) for {incident_id}:\n"
@@ -52,14 +54,14 @@ class CanaryPatcher:
         self._deployments.append(dep)
         return dep
 
-    def rollback_canary(self, deployment_id: str) -> Dict[str, Any]:
+    def rollback_canary(self, deployment_id: str) -> dict[str, Any]:
         dep = next((d for d in self._deployments if d.deployment_id == deployment_id), None)
         if dep:
             dep.status = "rolled_back"
             return {"deployment_id": deployment_id, "status": "rolled_back", "success": True}
         return {"deployment_id": deployment_id, "status": "not_found", "success": False}
 
-    def list_canaries(self) -> List[Dict[str, Any]]:
+    def list_canaries(self) -> list[dict[str, Any]]:
         return [d.__dict__ for d in self._deployments]
 
 

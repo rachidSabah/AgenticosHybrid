@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -25,7 +25,7 @@ class VoiceDispatchEngine:
     """Transcribes operator speech via low-latency Whisper and synthesizes spoken mission briefings."""
 
     def __init__(self) -> None:
-        self._transcripts: List[VoiceTranscriptionResult] = [
+        self._transcripts: list[VoiceTranscriptionResult] = [
             VoiceTranscriptionResult(
                 transcript_id="voice-init-01",
                 transcribed_text="AgenticOS, run full regression check on all subsystems and report readiness score.",
@@ -38,8 +38,14 @@ class VoiceDispatchEngine:
 
     def process_voice_audio(self, custom_prompt: str = "") -> VoiceTranscriptionResult:
         tid = f"voice-{uuid.uuid4().hex[:6]}"
-        text = custom_prompt.strip() if custom_prompt.strip() else "AgenticOS, run full regression check on all subsystems and report readiness score."
-        spoken = f"Executing voice dispatch directive: '{text}'. All systems responsive and healthy."
+        text = (
+            custom_prompt.strip()
+            if custom_prompt.strip()
+            else "AgenticOS, run full regression check on all subsystems and report readiness score."
+        )
+        spoken = (
+            f"Executing voice dispatch directive: '{text}'. All systems responsive and healthy."
+        )
         res = VoiceTranscriptionResult(
             transcript_id=tid,
             transcribed_text=text,
@@ -51,7 +57,7 @@ class VoiceDispatchEngine:
         self._transcripts.insert(0, res)
         return res
 
-    def get_transcripts(self) -> List[Dict[str, Any]]:
+    def get_transcripts(self) -> list[dict[str, Any]]:
         return [t.__dict__ for t in self._transcripts]
 
 
