@@ -374,7 +374,9 @@ class SwarmCoordinator:
         self._swarm_members: dict[str, list[dict[str, Any]]] = {}  # swarm_id → members
         self._swarm_roles: dict[str, dict[str, SwarmRole]] = {}  # swarm_id → {member_id: role}
         self._swarm_phases: dict[str, SwarmPhase] = {}  # swarm_id → phase
-        self._swarm_mission_meta: dict[str, dict[str, Any]] = {}  # swarm_id → {title, source, created_at}
+        self._swarm_mission_meta: dict[
+            str, dict[str, Any]
+        ] = {}  # swarm_id → {title, source, created_at}
         self._swarm_history: list[dict[str, Any]] = []
 
     @property

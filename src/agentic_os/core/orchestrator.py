@@ -136,7 +136,9 @@ def _is_error_output(text: str) -> bool:
     return False
 
 
-def _extract_and_persist_files(result: str, task: Task, ws_root: str, provider_kind: str) -> list[str]:
+def _extract_and_persist_files(
+    result: str, task: Task, ws_root: str, provider_kind: str
+) -> list[str]:
     """Extract code blocks and persist generated files and reports to workspace root."""
     import os
     import re
@@ -160,7 +162,13 @@ def _extract_and_persist_files(result: str, task: Task, ws_root: str, provider_k
     user_prompt_lower = (task.user_prompt or "").lower()
     if any(
         kw in title_lower or kw in user_prompt_lower
-        for kw in ("architecture", "system design", "component diagram", "data contract", "architectural")
+        for kw in (
+            "architecture",
+            "system design",
+            "component diagram",
+            "data contract",
+            "architectural",
+        )
     ):
         arch_path = os.path.join(ws_root, "ARCHITECTURE.md")
         if not os.path.exists(arch_path) or os.path.getsize(arch_path) < 50:
@@ -247,10 +255,16 @@ def _extract_and_persist_files(result: str, task: Task, ws_root: str, provider_k
                 target_filename = f"{task.role}_{default_name}" if task.role else default_name
             else:
                 base, ext = os.path.splitext(default_name)
-                target_filename = f"{task.role}_{base}_{file_idx}{ext}" if task.role else f"{base}_{file_idx}{ext}"
+                target_filename = (
+                    f"{task.role}_{base}_{file_idx}{ext}"
+                    if task.role
+                    else f"{base}_{file_idx}{ext}"
+                )
 
         if target_filename:
-            target_filename = target_filename.replace("/", os.sep).replace("\\", os.sep).lstrip(os.sep)
+            target_filename = (
+                target_filename.replace("/", os.sep).replace("\\", os.sep).lstrip(os.sep)
+            )
             code_file_path = os.path.join(ws_root, target_filename)
             try:
                 os.makedirs(os.path.dirname(code_file_path), exist_ok=True)
@@ -846,7 +860,9 @@ class Orchestrator:
 
                     ws_root = get_workspace_root()
                     if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                        _extract_and_persist_files(result, task, ws_root, fallback_provider.info.kind)
+                        _extract_and_persist_files(
+                            result, task, ws_root, fallback_provider.info.kind
+                        )
                 except Exception:
                     pass
 
@@ -1003,7 +1019,9 @@ class Orchestrator:
             EventEnvelope(
                 type="agent.failed",
                 source="supervisor",
-                topic=Topic.AGENT_FAILED.value if hasattr(Topic, "AGENT_FAILED") else "agent.failed",
+                topic=Topic.AGENT_FAILED.value
+                if hasattr(Topic, "AGENT_FAILED")
+                else "agent.failed",
                 payload={
                     "agent_id": agent.id,
                     "task_id": task.id,

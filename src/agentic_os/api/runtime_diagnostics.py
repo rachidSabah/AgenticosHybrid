@@ -342,7 +342,9 @@ async def providers(platform: Any) -> dict[str, Any]:
                         "name": b.display_name,
                         "vendor": str(b.vendor),
                         "health": b.health,
-                        "status": str(b.status) if str(b.status) != "unknown" else ("healthy" if b.health >= 50 else "idle"),
+                        "status": str(b.status)
+                        if str(b.status) != "unknown"
+                        else ("healthy" if b.health >= 50 else "idle"),
                         "latency_ms": b.latency if b.latency > 0 else 15.0,
                         "brain_id": b.id,
                         "bound": b.health >= 50,

@@ -75,15 +75,18 @@ async def build_adapter(config: ProviderConfig, get_key) -> ProviderAdapter:
     }
     binary_name = kind.replace("_", "-")  # e.g. aider, codex, ollama, agy
     if kind in cli_kinds or shutil.which(binary_name) or shutil.which(kind):
-        resolved_bin = binary_name if shutil.which(binary_name) else (kind if shutil.which(kind) else binary_name)
+        resolved_bin = (
+            binary_name
+            if shutil.which(binary_name)
+            else (kind if shutil.which(kind) else binary_name)
+        )
         api_key = await get_key(name) or ""
         log.info("factory.strategy_bind_cli", name=name, kind=kind, binary=resolved_bin)
         return StrategyBasedProvider(
             ProviderAdapterConfig(
                 bin_path=resolved_bin,
                 name=name,
-                kind=kind,
-                capabilities=list(config.capabilities) if hasattr(config, "capabilities") else [],
+                capabilities=[str(c) for c in getattr(config, "capabilities", [])],
                 api_key=api_key,
             )
         )

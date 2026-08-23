@@ -26,7 +26,7 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: |
@@ -42,7 +42,7 @@ jobs:
             rpm
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -57,7 +57,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install uv
@@ -105,7 +105,7 @@ jobs:
           ls -la dist/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: linux-artifacts
           path: apps/mission-control/dist/artifacts/*
@@ -121,10 +121,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -139,7 +139,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install uv
@@ -219,7 +219,7 @@ jobs:
           Get-ChildItem $ArtifactsDir
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
           path: apps/mission-control/dist/artifacts/*
@@ -235,10 +235,10 @@ jobs:
         working-directory: apps/mission-control
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -253,7 +253,7 @@ jobs:
           workspaces: apps/mission-control/src-tauri
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install uv
@@ -297,7 +297,7 @@ jobs:
           ls -la dist/artifacts/
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts
           path: apps/mission-control/dist/artifacts/*
@@ -314,10 +314,10 @@ jobs:
       actions: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: release-assets
 

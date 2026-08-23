@@ -45,11 +45,7 @@ class HealthMonitorImpl:
         # health.check failures for agents whose tasks finished long ago.
         if agent.status != AgentStatus.RUNNING:
             return True
-        task = (
-            self._registry.get_task(agent.current_task_id)
-            if agent.current_task_id
-            else None
-        )
+        task = self._registry.get_task(agent.current_task_id) if agent.current_task_id else None
         if task is not None and task.status == TaskStatus.IN_PROGRESS:
             return True
         if agent.last_heartbeat is None:

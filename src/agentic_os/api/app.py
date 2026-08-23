@@ -674,7 +674,9 @@ def create_app(platform: Platform) -> FastAPI:
                         "role": getattr(p, "kind", "Generic Agent"),
                         "status": "active",
                         "health": "healthy",
-                        "capabilities": getattr(p, "capabilities", ["code-gen", "architecture", "refactor"]),
+                        "capabilities": getattr(
+                            p, "capabilities", ["code-gen", "architecture", "refactor"]
+                        ),
                     }
                 )
         return agents
@@ -725,7 +727,9 @@ def create_app(platform: Platform) -> FastAPI:
         sc = getattr(platform, "swarm_coordinator", None)
         swarms = sc.list_swarms() if sc is not None else []
         total_swarms = len(swarms)
-        active_swarms = sum(1 for s in swarms if s.get("phase") in ("executing", "planning", "active"))
+        active_swarms = sum(
+            1 for s in swarms if s.get("phase") in ("executing", "planning", "active")
+        )
 
         # Real tasks from the orchestrator registry, not fabricated counts.
         tasks = list(orch.registry.tasks())
@@ -6406,6 +6410,7 @@ def create_app(platform: Platform) -> FastAPI:
 
                 def _norm_name(s: str) -> str:
                     import re as _re
+
                     n = _re.sub(r"[^a-z0-9]", "", str(s).lower())
                     return _re.sub(r"(agent|desktop|cli|ai|code|app)$", "", n)
 
@@ -6425,10 +6430,7 @@ def create_app(platform: Platform) -> FastAPI:
                     key = str(r.get("type", "")).lower()
                     nk = _norm_name(r.get("name", ""))
                     probe = (
-                        live_map.get(nk)
-                        or live_map.get(key)
-                        or rm_map.get(nk)
-                        or rm_map.get(key)
+                        live_map.get(nk) or live_map.get(key) or rm_map.get(nk) or rm_map.get(key)
                     )
                     if not probe:
                         return None
@@ -6586,6 +6588,7 @@ def create_app(platform: Platform) -> FastAPI:
                 # manager's auto-discovered runtimes (has binary_path).
                 def _norm(s: str) -> str:
                     import re as _re
+
                     n = _re.sub(r"[^a-z0-9]", "", str(s).lower())
                     return _re.sub(r"(agent|desktop|cli|ai|code|app)$", "", n)
 
@@ -6595,7 +6598,10 @@ def create_app(platform: Platform) -> FastAPI:
                     try:
                         for agent in await local.get_agents():
                             d = agent.to_dict()
-                            for k in (str(d.get("tool_type", "")).lower(), _norm(d.get("name", ""))):
+                            for k in (
+                                str(d.get("tool_type", "")).lower(),
+                                _norm(d.get("name", "")),
+                            ):
                                 if k:
                                     live_map[k] = d
                     except Exception:
@@ -6643,9 +6649,16 @@ def create_app(platform: Platform) -> FastAPI:
                                 # candidate whose binary actually exists on disk.
                                 if not executable_path:
                                     import os as _os
+
                                     nk = _norm(b.display_name)
                                     for cand in list(rm_map.values()) + list(live_map.values()):
-                                        cname = _norm(str(cand.get("name", "") or cand.get("tool_type", "") or cand.get("executable", "")))
+                                        cname = _norm(
+                                            str(
+                                                cand.get("name", "")
+                                                or cand.get("tool_type", "")
+                                                or cand.get("executable", "")
+                                            )
+                                        )
                                         if cname == nk:
                                             cand_path = (
                                                 cand.get("executable_path")
@@ -6659,7 +6672,9 @@ def create_app(platform: Platform) -> FastAPI:
                                     "id": b.id,
                                     "name": b.display_name,
                                     "type": str(b.vendor),
-                                    "status": "running" if (isinstance(pid, int) and pid > 0) else "idle",
+                                    "status": "running"
+                                    if (isinstance(pid, int) and pid > 0)
+                                    else "idle",
                                     "pid": pid,
                                     "executable": b.display_name,
                                     "executable_path": executable_path,
@@ -6685,7 +6700,10 @@ def create_app(platform: Platform) -> FastAPI:
                 import shutil
                 import subprocess
 
-                base = _re.sub(r"[ _-]?(cli|agent|desktop|app)$", "", str(name).lower()) or str(name).lower()
+                base = (
+                    _re.sub(r"[ _-]?(cli|agent|desktop|app)$", "", str(name).lower())
+                    or str(name).lower()
+                )
 
                 if not executable_path:
                     executable_path = base
@@ -7348,9 +7366,11 @@ def create_app(platform: Platform) -> FastAPI:
                 return p
         # 2) normalise separators: claude-code <-> claude_code
         norm = provider_id.replace("-", "_")
+
         # 3) accept an "auto:" prefix on either side
         def strip_auto(s: str) -> str:
             return s[5:] if s.startswith("auto:") else s
+
         for p in providers:
             pn = p.name.replace("-", "_")
             if pn == norm or strip_auto(pn) == strip_auto(norm):

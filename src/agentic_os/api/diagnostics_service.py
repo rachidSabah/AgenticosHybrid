@@ -882,7 +882,11 @@ class RuntimeDiagnosticsService:
                 try:
                     all_brains = await br.list_all()
                     for b in all_brains:
-                        bd = b.to_dict() if hasattr(b, "to_dict") else (b if isinstance(b, dict) else {})
+                        bd = (
+                            b.to_dict()
+                            if hasattr(b, "to_dict")
+                            else (b if isinstance(b, dict) else {})
+                        )
                         dn = str(bd.get("display_name") or "").lower()
                         vn = str(bd.get("vendor") or "").lower()
                         for key in {dn, vn}:
@@ -896,9 +900,12 @@ class RuntimeDiagnosticsService:
                             rank = {"connected": 3, "executing": 3, "busy": 2, "idle": 1}.get(
                                 str(bd.get("status")), 0
                             )
-                            if cur is None or rank > {"connected": 3, "executing": 3, "busy": 2, "idle": 1}.get(
-                                str(cur.get("status")), 0
-                            ):
+                            if cur is None or rank > {
+                                "connected": 3,
+                                "executing": 3,
+                                "busy": 2,
+                                "idle": 1,
+                            }.get(str(cur.get("status")), 0):
                                 best_brain[key] = bd
                 except Exception:  # noqa: BLE001
                     pass
