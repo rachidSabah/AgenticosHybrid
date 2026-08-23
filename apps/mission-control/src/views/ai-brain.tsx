@@ -188,7 +188,7 @@ export function AIBrain() {
         status: p.status.toUpperCase(),
         cpu: Math.max(12, Math.round(p.latency_ms / 10) % 60),
         ram: Math.max(20, Math.round((p.latency_ms * 1.5) % 80)),
-        tasks: agentCount || 5,
+        tasks: agentCount,
         color: getProviderColor(p.provider),
         isCore: false,
         pos: { x: Math.round(x + jitterX), y: Math.round(y + jitterY) },
@@ -527,13 +527,27 @@ export function AIBrain() {
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
           </div>
           <div className="text-base font-bold font-mono text-white flex items-baseline gap-1 mt-0.5">
-            <span>{storeEvents.length * 128 || 12847}</span>
-            <span className="text-[8px] text-cyan-400 font-normal">events/s</span>
+            <span>{storeEvents.length}</span>
+            <span className="text-[8px] text-cyan-400 font-normal">events</span>
           </div>
           <div className="h-5 mt-1 flex items-end gap-0.5">
-            {[30, 45, 60, 40, 75, 50, 90, 65, 80, 55, 95, 70, 85, 60, 100, 75].map((h, i) => (
-              <div key={i} className="flex-1 bg-cyan-500/40 rounded-xs" style={{ height: `${h}%` }} />
-            ))}
+            {(() => {
+              const now = Date.now();
+              const SLOTS = 16;
+              const WINDOW = 5 * 60 * 1000; // last 5 minutes
+              return Array.from({ length: SLOTS }, (_, i) => {
+                const slotStart = now - WINDOW + (i / SLOTS) * WINDOW;
+                const slotEnd = now - WINDOW + ((i + 1) / SLOTS) * WINDOW;
+                return storeEvents.filter(e => {
+                  const t = new Date(e.timestamp).getTime();
+                  return t >= slotStart && t < slotEnd;
+                }).length;
+              });
+            })().map((count, i, arr) => {
+              const max = Math.max(...arr, 1);
+              const h = Math.round((count / max) * 100);
+              return <div key={i} className="flex-1 bg-cyan-500/40 rounded-xs" style={{ height: `${Math.max(h, 5)}%` }} />;
+            })}
           </div>
         </div>
 

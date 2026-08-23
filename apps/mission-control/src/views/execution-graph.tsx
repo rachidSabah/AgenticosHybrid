@@ -486,7 +486,7 @@ export function ExecutionGraph() {
       completedCount = execCompleted;
       overallProgressPct = Math.round(((execCompleted * 100) + (execRunning * 50)) / totalWorkUnits);
     } else if (activeMission) {
-      overallProgressPct = activeMission.status === "completed" ? 100 : anyRunning ? 50 : 0;
+      overallProgressPct = activeMission.status === "completed" ? 100 : activeMission.status === "failed" ? 0 : anyRunning ? 5 : 0;
     } else if (agentList.length > 0) {
       const activeAgents = agentList.filter((a) => a.status === "running").length;
       const completedAgents = agentList.filter((a) => a.status === "completed").length;

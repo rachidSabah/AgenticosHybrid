@@ -180,10 +180,18 @@ function TimelineRow({ index, style, filteredEvents, expanded, onToggle }: {
 export function TaskTimeline() {
   const tasks = useStore((s) => s.tasks);
   const agents = useStore((s) => s.agents);
+  const storeEvents = useStore((s) => s.events);
+  const executions = useStore((s) => s.executions);
   const telemetry = useStore((s) => s.telemetry);
+
+  useEffect(() => {
+    void useStore.getState().hydrate();
+    void useStore.getState().hydrateExecutions();
+  }, []);
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filters, setFilters] = useState<FilterState>({
-    status: ["running", "completed", "failed", "paused", "cancelled"],
+    status: ["running", "completed", "failed", "paused", "cancelled", "created", "planned", "dispatched", "assigned"],
     type: ["task", "agent", "system"],
     search: "",
     sort: "newest",
@@ -192,147 +200,83 @@ export function TaskTimeline() {
   const events = useMemo(() => {
     const list: TimelineEvent[] = [];
 
-    // Task events
-    Object.values(tasks).forEach((task) => {
+    // 1. Real EventBus events
+    storeEvents.slice(0, 50).forEach((e, idx) => {
+      const p = e.payload as Record<string, any>;
+      const isTask = e.topic.startsWith("task.");
+      const isAgent = e.topic.startsWith("agent.");
+      const type: TimelineEvent["type"] = isTask ? "task" : isAgent ? "agent" : "system";
+
+      let status: TimelineEvent["status"] = "running";
+      if (e.topic.includes("completed")) status = "completed";
+      else if (e.topic.includes("failed") || e.topic.includes("denied")) status = "failed";
+      else if (e.topic.includes("planned")) status = "planned";
+      else if (e.topic.includes("dispatched")) status = "dispatched";
+      else if (e.topic.includes("assigned")) status = "assigned";
+      else if (e.topic.includes("created")) status = "created";
+      else if (e.topic.includes("paused")) status = "paused";
+
+      const title = p.title || p.command || p.status_text || e.topic;
+      const detail = p.role || p.provider || JSON.stringify(p).slice(0, 60);
+
       list.push({
-        id: `task-${task.id}-created`,
-        taskId: task.id,
-        type: "task",
-        status: "created",
-        title: `Task created: ${task.title || task.id}`,
-        detail: `Role: ${task.role || "unspecified"}`,
-        at: Date.now() - 1000 * 60 * 5,
-        tags: task.role ? [task.role] : undefined,
+        id: `event-${e.id || idx}-${e.timestamp}`,
+        taskId: String(p.task_id || p.taskId || p.mission_id || "system"),
+        agentId: p.agent_id ? String(p.agent_id) : undefined,
+        type,
+        status,
+        title,
+        detail,
+        at: new Date(e.timestamp).getTime() || Date.now(),
+        tags: [p.provider, p.role, e.topic].filter(Boolean) as string[],
       });
-      if (task.status === "planned") {
-        list.push({
-          id: `task-${task.id}-planned`,
-          taskId: task.id,
-          type: "task",
-          status: "planned",
-          title: `Task planned: ${task.title || task.id}`,
-          detail: `Execution plan generated`,
-          at: Date.now() - 1000 * 60 * 4,
-          tags: task.role ? [task.role] : undefined,
-        });
-      }
-      if (task.status === "dispatched") {
-        list.push({
-          id: `task-${task.id}-dispatched`,
-          taskId: task.id,
-          type: "task",
-          status: "dispatched",
-          title: `Task dispatched: ${task.title || task.id}`,
-          detail: `Assigned to agent pool`,
-          at: Date.now() - 1000 * 60 * 3,
-          tags: task.role ? [task.role] : undefined,
-        });
-      }
-      if (task.status === "assigned") {
-        list.push({
-          id: `task-${task.id}-assigned`,
-          taskId: task.id,
-          type: "task",
-          status: "assigned",
-          title: `Task assigned: ${task.title || task.id}`,
-          detail: `Agent: ${task.role}`,
-          at: Date.now() - 1000 * 60 * 2,
-          tags: task.role ? [task.role] : undefined,
-        });
-      }
-      if (task.status === "completed") {
-        list.push({
-          id: `task-${task.id}-completed`,
-          taskId: task.id,
-          type: "task",
-          status: "completed",
-          title: `Task completed: ${task.title || task.id}`,
-          detail: `All steps executed successfully`,
-          at: Date.now() - 1000 * 60 * 1,
-          duration: 60 * 1000,
-          tags: task.role ? [task.role] : undefined,
-        });
-      }
-      if (task.status === "failed") {
-        list.push({
-          id: `task-${task.id}-failed`,
-          taskId: task.id,
-          type: "task",
-          status: "failed",
-          title: `Task failed: ${task.title || task.id}`,
-          detail: `Error: ${task.role || "unknown error"}`,
-          at: Date.now() - 1000 * 30,
-          tags: task.role ? [task.role] : undefined,
-        });
-      }
     });
 
-    // Agent events
+    // 2. Real Execution records
+    Object.values(executions).forEach((exec) => {
+      list.push({
+        id: `exec-${exec.execution_id}`,
+        taskId: exec.task_id || exec.mission_id || "exec",
+        agentId: exec.agent_id,
+        type: "task",
+        status: exec.status === "completed" ? "completed" : exec.status === "failed" ? "failed" : "running",
+        title: `Execution: ${exec.command || exec.execution_id.slice(0, 10)}`,
+        detail: `Runtime: ${exec.runtime || exec.provider} · Strategy: ${exec.strategy}`,
+        at: exec.started_at ? new Date(exec.started_at).getTime() : Date.now(),
+        duration: exec.duration_ms,
+        tags: [exec.provider, exec.runtime, exec.strategy].filter(Boolean) as string[],
+      });
+    });
+
+    // 3. Task records from store
+    Object.values(tasks).forEach((task) => {
+      const taskStatus = task.status === "in_progress" ? "running" : task.status;
+      list.push({
+        id: `task-${task.id}`,
+        taskId: task.id,
+        type: "task",
+        status: (taskStatus as TimelineEvent["status"]) || "running",
+        title: `Task: ${task.title || task.id}`,
+        detail: `Role: ${task.role || "unspecified"}`,
+        at: Date.now(),
+        tags: task.role ? [task.role] : undefined,
+      });
+    });
+
+    // 4. Agent records from store
     Object.values(agents).forEach((agent) => {
       list.push({
-        id: `agent-${agent.id}-started`,
+        id: `agent-${agent.id}`,
         taskId: agent.current_task || "system",
         agentId: agent.id,
         type: "agent",
-        status: "running",
-        title: `Agent started: ${agent.role}`,
-        detail: `Provider: ${agent.provider || "unknown"}`,
-        at: Date.now() - 1000 * 60 * 5,
+        status: agent.status === "running" ? "running" : agent.status === "completed" ? "completed" : agent.status === "failed" ? "failed" : "running",
+        title: `Agent: ${agent.role}`,
+        detail: `Provider: ${agent.provider || "System Agent"}`,
+        at: Date.now(),
         tags: [agent.provider, agent.role].filter(Boolean) as string[],
       });
-      if (agent.status === "completed") {
-        list.push({
-          id: `agent-${agent.id}-completed`,
-          taskId: agent.current_task || "system",
-          agentId: agent.id,
-          type: "agent",
-          status: "completed",
-          title: `Agent completed: ${agent.role}`,
-          detail: `Task: ${agent.current_task || "system task"}`,
-          at: Date.now() - 1000 * 60 * 1,
-          duration: 60 * 1000,
-          tags: [agent.provider, agent.role].filter(Boolean) as string[],
-        });
-      }
-      if (agent.status === "failed") {
-        list.push({
-          id: `agent-${agent.id}-failed`,
-          taskId: agent.current_task || "system",
-          agentId: agent.id,
-          type: "agent",
-          status: "failed",
-          title: `Agent failed: ${agent.role}`,
-          detail: `Error: ${agent.health === "down" ? "Provider unavailable" : "Internal error"}`,
-          at: Date.now() - 1000 * 30,
-          tags: [agent.provider, agent.role].filter(Boolean) as string[],
-        });
-      }
     });
-
-    // System events
-    list.push({
-      id: `system-health-check`,
-      taskId: "system",
-      type: "system",
-      status: "running",
-      title: `System health check`,
-      detail: `Agents: ${telemetry.agents}, Tasks: ${telemetry.tasks}, Providers: ${telemetry.providers}`,
-      at: Date.now() - 1000 * 10,
-      tags: ["health"],
-    });
-
-    if (telemetry.errors > 0) {
-      list.push({
-        id: `system-error`,
-        taskId: "system",
-        type: "system",
-        status: "failed",
-        title: `System error detected`,
-        detail: `${telemetry.errors} errors in last 5 minutes`,
-        at: Date.now() - 1000 * 5,
-        tags: ["error"],
-      });
-    }
 
     // Sort
     return list.sort((a, b) => {
@@ -340,7 +284,7 @@ export function TaskTimeline() {
       if (filters.sort === "oldest") return a.at - b.at;
       return (b.duration || 0) - (a.duration || 0);
     });
-  }, [tasks, agents, telemetry, filters.sort]);
+  }, [storeEvents, executions, tasks, agents, filters.sort]);
 
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {

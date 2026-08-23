@@ -60,7 +60,7 @@ function MetricStatCard({
 function MissionCardItem({ mission, index }: { mission: MissionType; index: number }) {
   const taskCount = mission.plan?.task_count ?? 0;
   const completed = mission.plan?.tasks?.filter((t) => t.status === "completed").length ?? 0;
-  const progress = taskCount > 0 ? Math.round((completed / taskCount) * 100) : 45; // default visual match if brand new
+  const progress = taskCount > 0 ? Math.round((completed / taskCount) * 100) : 0;
   const statusText = mission.status === "executing" || mission.status === "running" ? "Active" : mission.status;
   const isErr = mission.status === "failed" || Boolean(mission.error);
 
@@ -87,7 +87,7 @@ function MissionCardItem({ mission, index }: { mission: MissionType; index: numb
       </div>
 
       <p className="mt-1.5 text-xs text-white/50 line-clamp-2 leading-relaxed">
-        {mission.description || "Agent a compretansor for management, platforms, and agents..."}
+        {mission.description || "No description provided"}
       </p>
 
       {/* Health & Status Indicator dots */}
@@ -170,18 +170,41 @@ function DefaultAgentCard({ title, desc, badge = "Active", tone = "active", dots
 function ActivityChart({ events }: { events: ReturnType<typeof useStore.getState>["events"] }) {
   const [timeRange, setTimeRange] = useState("Past 24 hours");
 
-  // Generate realistic curved path coordinates based on events or default mock curve matching photo
-  const pointsActive = [
-    [0, 60], [30, 65], [60, 58], [90, 62], [120, 60], [150, 68],
-    [180, 72], [210, 68], [240, 75], [270, 70], [300, 65], [330, 50],
-    [360, 45], [390, 30], [420, 25], [450, 35], [480, 40]
-  ];
+  // Generate real chart data from events bucketed into 16 time slots over the last 24h
+  const now = Date.now();
+  const SLOTS = 16;
+  const WINDOW = 24 * 60 * 60 * 1000; // 24 hours
+  const buckets = Array.from({ length: SLOTS }, (_, i) => {
+    const slotStart = now - WINDOW + (i / SLOTS) * WINDOW;
+    const slotEnd = now - WINDOW + ((i + 1) / SLOTS) * WINDOW;
+    const count = events.filter(e => {
+      const t = new Date(e.timestamp).getTime();
+      return t >= slotStart && t < slotEnd;
+    }).length;
+    return count;
+  });
+  const maxBucket = Math.max(...buckets, 1);
+  // Map to SVG Y coords (0 = top = busy, 120 = bottom = idle)
+  const pointsActive = buckets.map((count, i) => [
+    (i / (SLOTS - 1)) * 480,
+    120 - (count / maxBucket) * 110,
+  ]);
 
-  const pointsResources = [
-    [0, 115], [30, 115], [60, 115], [90, 115], [120, 115], [150, 115],
-    [180, 115], [210, 115], [240, 112], [270, 110], [300, 105], [330, 108],
-    [360, 50], [375, 45], [390, 95], [405, 55], [420, 115], [450, 115], [480, 115]
-  ];
+  // Resources line: track task/agent events specifically
+  const resourceBuckets = Array.from({ length: SLOTS }, (_, i) => {
+    const slotStart = now - WINDOW + (i / SLOTS) * WINDOW;
+    const slotEnd = now - WINDOW + ((i + 1) / SLOTS) * WINDOW;
+    const count = events.filter(e => {
+      const t = new Date(e.timestamp).getTime();
+      return t >= slotStart && t < slotEnd && (e.topic.startsWith('task.') || e.topic.startsWith('agent.'));
+    }).length;
+    return count;
+  });
+  const maxResource = Math.max(...resourceBuckets, 1);
+  const pointsResources = resourceBuckets.map((count, i) => [
+    (i / (SLOTS - 1)) * 480,
+    120 - (count / maxResource) * 110,
+  ]);
 
   const activePathD = "M " + pointsActive.map(([x, y]) => `${x},${y}`).join(" L ");
   const resourcesPathD = "M " + pointsResources.map(([x, y]) => `${x},${y}`).join(" L ");
@@ -255,14 +278,10 @@ function ActivityChart({ events }: { events: ReturnType<typeof useStore.getState
           </defs>
         </svg>
 
-        {/* Y Axis Labels */}
-        <div className="absolute top-0 left-0 text-[9px] text-white/30">200</div>
-        <div className="absolute top-1/3 left-0 text-[9px] text-white/30">100</div>
+        {/* Y Axis Labels — real event counts */}
+        <div className="absolute top-0 left-0 text-[9px] text-white/30">{maxBucket}</div>
+        <div className="absolute top-1/3 left-0 text-[9px] text-white/30">{Math.round(maxBucket / 2)}</div>
         <div className="absolute bottom-2 left-0 text-[9px] text-white/30">0</div>
-
-        <div className="absolute top-0 right-0 text-[9px] text-white/30">80k</div>
-        <div className="absolute top-1/3 right-0 text-[9px] text-white/30">40k</div>
-        <div className="absolute bottom-2 right-0 text-[9px] text-white/30">0</div>
       </div>
 
       {/* X Axis Time Labels */}
@@ -282,22 +301,22 @@ function ActivityChart({ events }: { events: ReturnType<typeof useStore.getState
 
 // ── Event Log (Exact Match for Screenshot) ──
 function EventLogPanel({ events }: { events: ReturnType<typeof useStore.getState>["events"] }) {
-  const defaultLogs = [
-    { agent: "Agent 1: In agent ...", msg: "Stream message on none atterrate the tapioating." },
-    { agent: "Agent 2: In agent ...", msg: "Messsering agents the time for events and the messages." },
-    { agent: "Agent 3: In agent ...", msg: "Running the layest with his messages." },
-    { agent: "Agent 4: In agent ...", msg: "Running for trenent utllizate your agent is message." },
-    { agent: "Agent 5: In agent ...", msg: "Message to procews the ment into tno revilth." },
-    { agent: "Agent 6: In agent ...", msg: "Message in piract'ne the vloud vanival messages." },
-    { agent: "Agent 8: In agent ...", msg: "Thesir-lomp spreats is comnoded." },
-  ];
-
   const logList = useMemo(() => {
-    if (events.length === 0) return defaultLogs;
-    return events.slice(0, 10).map((e, idx) => ({
-      agent: `Agent ${idx + 1}: ${e.source || "system"} ...`,
-      msg: e.topic || "Event processed successfully.",
-    }));
+    if (events.length === 0) {
+      return [
+        { agent: "System Orchestrator", msg: "EventBus connected · Awaiting mission dispatches" },
+        { agent: "Runtime Registry", msg: "Background health and discovery monitors active" },
+      ];
+    }
+    return events.slice(0, 10).map((e) => {
+      const p = e.payload as Record<string, any>;
+      const agentLabel = String(p.provider || p.agent_id || p.source || e.source || "EventBus");
+      const detailMsg = String(p.title || p.command || p.status_text || e.topic || "Event processed");
+      return {
+        agent: agentLabel,
+        msg: detailMsg,
+      };
+    });
   }, [events]);
 
   return (
@@ -332,7 +351,10 @@ export function MissionOverview() {
   const m = useStore(useShallow(selectMetrics));
   const agentsMap = useStore((s) => s.agents);
   const events = useStore((s) => s.events);
+  const tasksMap = useStore((s) => s.tasks);
+  const providersMap = useStore((s) => s.providers);
   const missions = useStore((s) => s.missions);
+  const performance = useStore((s) => s.performance);
 
   const [gwHealth, setGwHealth] = useState<GatewayHealth | null>(null);
 
@@ -343,13 +365,28 @@ export function MissionOverview() {
 
   // Compute live metrics dynamically from active state
   const activeAgentCount = useMemo(() => {
-    const storeCount = Object.keys(agentsMap).length;
-    return storeCount > 0 ? storeCount : m.agents || 12;
-  }, [agentsMap, m.agents]);
+    const storeAgentCount = Object.keys(agentsMap).length;
+    const providerCount = Object.values(providersMap).filter(
+      (p) => p.status === "healthy" || p.status === "unknown"
+    ).length;
+    return Math.max(storeAgentCount, providerCount, m.agents || 0);
+  }, [agentsMap, providersMap, m.agents]);
 
-  const runningTaskCount = m.tasks ?? 3;
-  const uptimeVal = gwHealth?.status === "active" ? formatUptime(gwHealth.uptime_seconds) : "99.2%";
-  const avgResponse = "2.1s";
+  const runningTaskCount = useMemo(() => {
+    return Object.values(tasksMap).filter((t) => t.status === "running" || t.status === "in_progress").length || m.tasks || 0;
+  }, [tasksMap, m.tasks]);
+
+  const uptimeVal = gwHealth?.status === "active"
+    ? formatUptime(gwHealth.uptime_seconds)
+    : performance?.uptime_seconds
+    ? formatUptime(performance.uptime_seconds)
+    : "100%";
+
+  const avgResponse = m.latency > 0
+    ? `${Math.round(m.latency)}ms`
+    : performance?.uptime_seconds
+    ? `<1s`
+    : "—";
 
   const missionList = useMemo(
     () =>
@@ -401,34 +438,11 @@ export function MissionOverview() {
                 );
               })
           ) : (
-            <>
-              <MissionCardItem
-                mission={{
-                  id: "ms-1",
-                  title: "Active Mission",
-                  description: "Agent supervisor management platform for intelligent autonomous agents.",
-                  prompt: "",
-                  objectives: [],
-                  deliverables: [],
-                  priority: "high",
-                  execution_mode: "hybrid",
-                  constraints: [],
-                  tags: [],
-                  attachments: [],
-                  status: "executing",
-                  created_at: new Date().toISOString(),
-                }}
-                index={0}
-              />
-              <DefaultAgentCard
-                title="Agent Dynamic Coordinator"
-                desc="Coordinates agent sub-tasks, messaging workflows, and gateway routes."
-              />
-              <DefaultAgentCard
-                title="Mission Manager"
-                desc="Manages objective trees, deliverables, and parallel execution timelines."
-              />
-            </>
+            <div className="rounded-xl border border-white/10 bg-[#161a23]/70 p-6 flex flex-col items-center gap-3 text-center">
+              <div className="text-2xl">🛸</div>
+              <div className="text-sm font-medium text-white/70">No active missions</div>
+              <div className="text-xs text-white/40">Submit a mission from Prompt Center to see live data here.</div>
+            </div>
           )}
         </div>
 
