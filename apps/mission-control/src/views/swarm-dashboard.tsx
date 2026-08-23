@@ -164,7 +164,6 @@ export function SwarmDashboard() {
   const [userLogs, setUserLogs] = useState<Array<{ author: string; time: string; text: string; color: string }>>([]);
 
   const storeEvents = useStore((s) => s.events);
-  const storeProviders = useStore((s) => s.providers);
 
   const loadData = useCallback(async () => {
     try {
@@ -191,82 +190,44 @@ export function SwarmDashboard() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Active swarm derived from real swarms or live metrics
-  const activeSwarm = swarms.find((s) => s.status === "executing" || s.status === "active") || swarms[0];
-  const swarmName = activeSwarm?.name || "Fibonacci Implementation Swarm";
-  const swarmPattern = activeSwarm?.topology || "hierarchical";
-  const swarmStatus = activeSwarm?.status || "executing";
+  // Active swarm derived ONLY from real swarms (backend state)
+  const activeSwarm = swarms.find((s) => s.status === "executing" || s.status === "active") || swarms[0] || null;
+  const swarmName = activeSwarm?.name || "No active swarm";
+  const swarmPattern = activeSwarm?.topology || "—";
+  const swarmStatus = activeSwarm?.status || "idle";
 
-  // Dynamic progress calculation based on real task completion metrics if available
+  // Progress derived ONLY from real task completion (completed/total). No fabricated fallback.
   const overallProgress = useMemo(() => {
     if (metrics && metrics.total_tasks > 0) {
       return Math.round((metrics.completed_tasks / metrics.total_tasks) * 100);
     }
-    return 67;
+    return null; // no measurable progress — display "progress unavailable"
   }, [metrics]);
 
-  // Real data binding for role cards using discovered agents/providers
+  // Role cards built ONLY from real registered swarm agents. No synthetic
+  // role/percentage data: if fewer real agents exist, fewer cards render.
   const roleCards: AgentCardProps[] = useMemo(() => {
-    const roles = ["Leader", "Planner", "Researcher", "Coder", "Reviewer", "Validator", "Executor", "Observer"];
-    const defaults = [
-      { action: "Monitoring progress, guiding the team", task: "Overall project direction and milestone definition", progress: 85 },
-      { action: "Iterating on sub-task breakdown", task: "Creating step-by-step implementation plan for Fibonacci sequence", progress: 70 },
-      { action: "Fetching recursive vs. iterative performance benchmarks", task: "Gathering best practices for efficient Fibonacci implementation", progress: 90 },
-      { action: "Writing recursive function with type hints...", task: "Implementing core Fibonacci logic in Python", progress: 65 },
-      { action: "Code quality check passed, offering optimization suggestions", task: "Reviewing code for readability and potential improvements", progress: 100 },
-      { action: "Running unit tests, edge cases being evaluated", task: "Testing the Fibonacci function against pre-defined test vectors", progress: 55 },
-      { action: "Awaiting valid code and data for execution", task: "Performing final deployment and producing actual Fibonacci numbers", progress: 0 },
-      { action: "Logging system metrics, reporting bottleneck in validation", task: "Continuous monitoring and data collection for swarm performance", progress: null },
-    ];
-
-    return roles.map((role, idx) => {
-      const realAgent = agents[idx];
-      const realProvider = Object.values(storeProviders)[idx];
+    return agents.slice(0, 8).map((a, idx) => {
+      const role = a.role ? a.role.charAt(0).toUpperCase() + a.role.slice(1) : `Agent ${idx + 1}`;
+      // Progress is only meaningful when the backend reports task metrics;
+      // per-agent progress derives from nothing fabricated — null = unavailable.
+      let progress: number | null = null;
+      if (metrics && metrics.total_tasks > 0 && metrics.completed_tasks >= metrics.total_tasks) {
+        progress = 100; // all real tasks completed
+      }
       return {
         role,
-        agentId: realAgent?.agent_id || (realProvider?.provider ? realProvider.provider.toLowerCase().replace(/\s+/g, "") : `Agent00${idx + 1}`),
-        action: realAgent?.status ? `Status: ${realAgent.status}` : defaults[idx].action,
-        task: realAgent?.capabilities ? `Capabilities: ${realAgent.capabilities.join(", ")}` : defaults[idx].task,
-        progress: defaults[idx].progress,
+        agentId: a.agent_id,
+        action: `Status: ${a.status || "unknown"}`,
+        task: a.capabilities?.length ? `Capabilities: ${a.capabilities.join(", ")}` : `Agent: ${a.name}`,
+        progress,
       };
     });
-  }, [agents, storeProviders]);
+  }, [agents, metrics]);
 
-  // Combine real live EventBus messages with default historical activity
+  // Live activity log = real EventBus events + operator messages ONLY.
+  // No fabricated historical entries (the old 2024-05-15 demo logs are gone).
   const liveLogs = useMemo(() => {
-    const defaultLogs = [
-      {
-        author: "Coder (Agent004)",
-        time: "2024-05-15 14:35:12",
-        text: "Writing fibonacci function with type hints... (2024-05-15 14:35:12)",
-        color: "border-blue-400 text-blue-300",
-      },
-      {
-        author: "Reviewer (Agent005)",
-        time: "2024-05-15 14:38:01",
-        text: "Code quality check passed, ready for validation. (2024-05-15 14:38:01)",
-        color: "border-emerald-400 text-emerald-300",
-      },
-      {
-        author: "Validator (Agent006)",
-        time: "2024-05-15 14:38:20",
-        text: "Running tests for negative inputs... pier validatted. (2024-05-15 14:36:20)",
-        color: "border-amber-400 text-amber-300",
-      },
-      {
-        author: "Validator (Agent006)",
-        time: "2024-05-15 14:38:20",
-        text: "Running tests for negative inputs... or evaluated. (2024-05-15 14:37:20)",
-        color: "border-amber-400 text-amber-300",
-      },
-      {
-        author: "Validator (Agent006)",
-        time: "2024-05-15 14:37:05",
-        text: "Tests passing 5/5. Validated successful. (2024-05-15 14:37:05)",
-        color: "border-amber-400 text-amber-300",
-      },
-    ];
-
     const realEventLogs = storeEvents.slice(0, 10).map((e) => ({
       author: `${e.source || "System"}`,
       time: new Date(e.timestamp).toLocaleTimeString(),
@@ -274,7 +235,7 @@ export function SwarmDashboard() {
       color: "border-indigo-400 text-indigo-300",
     }));
 
-    return [...userLogs, ...realEventLogs, ...defaultLogs];
+    return [...userLogs, ...realEventLogs];
   }, [storeEvents, userLogs]);
 
   const handleSendMessage = () => {
@@ -304,32 +265,26 @@ export function SwarmDashboard() {
         return {
           name: a.role || `Agent-${i + 1}`,
           id: a.agent_id.slice(0, 8),
-          action: `${a.role || "Agent"} ${a.status || "active"}`,
+          action: `${a.role || "Agent"} ${a.status || "registered"}`,
           color: `${parts[0]} ${parts[1]}`,
           bg: parts[2],
         };
       });
     }
-    return [
-      { name: "Leader", id: "Agent001", action: "Leader activated", color: "border-cyan-500 text-cyan-300", bg: "bg-cyan-500/10" },
-      { name: "Planner", id: "Agent002", action: "Coder activated", color: "border-emerald-500 text-emerald-300", bg: "bg-emerald-500/10" },
-      { name: "Reviewer", id: "Agent005", action: "Reviewer reassigned", color: "border-green-500 text-green-300", bg: "bg-green-500/10" },
-      { name: "Validator", id: "Agent006", action: "Validator activated", color: "border-amber-500 text-amber-300", bg: "bg-amber-500/10" },
-      { name: "Executor", id: "Agent007", action: "Executor reassigned", color: "border-orange-500 text-orange-300", bg: "bg-orange-500/10" },
-      { name: "Observer", id: "Agent008", action: "Observer reassigned", color: "border-slate-500 text-slate-300", bg: "bg-slate-500/10" },
-    ];
+    // No real agents registered — return empty (renders nothing fake)
+    return [];
   }, [agents]);
 
-  // Metrics telemetry derived from real API response if available
-  const throughputStr = metrics && typeof metrics.completed_tasks === "number"
-    ? `${metrics.completed_tasks} tasks completed`
-    : "e.g., 25 tasks/min";
-  const overheadStr = metrics && typeof metrics.avg_latency_ms === "number"
-    ? `${metrics.avg_latency_ms.toFixed(0)}ms latency`
-    : "e.g., 12%";
+  // Metrics telemetry derived ONLY from real API values; honest "N/A" otherwise.
+  const throughputStr = metrics && typeof metrics.completed_tasks === "number" && metrics.total_tasks > 0
+    ? `${metrics.completed_tasks} of ${metrics.total_tasks} tasks completed`
+    : "no tasks yet";
+  const overheadStr = metrics && typeof metrics.avg_latency_ms === "number" && metrics.avg_latency_ms > 0
+    ? `${metrics.avg_latency_ms.toFixed(0)}ms avg latency`
+    : "latency N/A";
   const successRateStr = metrics && typeof metrics.total_tasks === "number" && metrics.total_tasks > 0
     ? `${Math.round((((metrics.total_tasks - (metrics.failed_tasks || 0)) / metrics.total_tasks) * 100))}%`
-    : "e.g., 98%";
+    : "no executions yet";
 
   return (
     <div className="flex h-full w-full max-w-full flex-col p-3 sm:p-6 pb-12 bg-[#0c0d14] text-white overflow-y-auto no-hscroll space-y-4">
@@ -351,30 +306,46 @@ export function SwarmDashboard() {
               </div>
             </div>
           </div>
-          <span className="inline-flex items-center rounded-lg border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-400 shrink-0">
-            Active swarm
+          <span className={`inline-flex items-center rounded-lg border px-3 py-1 text-xs font-semibold shrink-0 ${
+            activeSwarm
+              ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-400"
+              : "border-white/10 bg-white/5 text-white/40"
+          }`}>
+            {activeSwarm ? "Active swarm" : "No swarm"}
           </span>
         </div>
 
-        {/* Multi-colored Gradient Progress Bar */}
+        {/* Progress bar — only rendered when real task metrics exist */}
         <div className="mt-4 flex items-center justify-between gap-3 min-w-0">
           <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-cyan-400 to-emerald-400 transition-all duration-700"
-              style={{ width: `${overallProgress}%` }}
-            />
+            {overallProgress !== null ? (
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-fuchsia-500 via-cyan-400 to-emerald-400 transition-all duration-700"
+                style={{ width: `${overallProgress}%` }}
+              />
+            ) : (
+              <div className="h-full w-0" />
+            )}
           </div>
-          <span className="text-sm font-bold text-white/90 tabular-nums shrink-0">{overallProgress}%</span>
+          <span className="text-sm font-bold text-white/90 tabular-nums shrink-0">
+            {overallProgress !== null ? `${overallProgress}%` : "progress unavailable"}
+          </span>
         </div>
       </div>
 
       {/* Main Content Grid: 8 Role Cards & Log/Consensus/Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-w-0">
-        {/* Left Column (8 Role Cards arranged in 2x4 grid) */}
+        {/* Left Column (real agent cards; honest empty state when none) */}
         <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
-          {roleCards.map((card) => (
-            <RoleAgentCard key={card.role} {...card} />
-          ))}
+          {roleCards.length > 0 ? (
+            roleCards.map((card) => (
+              <RoleAgentCard key={card.role + card.agentId} {...card} />
+            ))
+          ) : (
+            <div className="sm:col-span-2 rounded-xl border border-white/10 bg-[#141724]/60 p-6 text-center text-white/50 text-sm">
+              No swarm agents registered. Bound agents will appear here when a swarm executes real tasks.
+            </div>
+          )}
         </div>
 
         {/* Right Column (Activity Log, Consensus Votes, Role Timeline) */}
@@ -393,20 +364,7 @@ export function SwarmDashboard() {
                   </div>
                 ))
               ) : (
-                <>
-                  <div className="flex items-center justify-between gap-2 text-white/70">
-                    <span className="truncate">Key decision Consensus Votes to key decisions</span>
-                    <span className="h-4 w-4 shrink-0 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold">✓</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-white/70">
-                    <span className="truncate">Rancknanand tests the runnise code performanceosliqor</span>
-                    <span className="h-4 w-4 shrink-0 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold">✓</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 text-white/70">
-                    <span className="truncate">Review and mielmansus to sample decalde this consensus Votes</span>
-                    <span className="h-4 w-4 shrink-0 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold">✓</span>
-                  </div>
-                </>
+                <div className="text-white/40 text-[11px]">No consensus rounds recorded</div>
               )}
             </div>
           </div>
@@ -452,14 +410,18 @@ export function SwarmDashboard() {
               Role Assignments Timeline
             </h3>
             <div className="space-y-2">
-              {timelineRoles.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between gap-2 text-xs">
-                  <div className={`rounded-md border ${item.color} ${item.bg} px-2 py-0.5 text-[10px] font-mono font-medium truncate shrink-0`}>
-                    {item.name} <span className="opacity-60">{item.id}</span>
+              {timelineRoles.length > 0 ? (
+                timelineRoles.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 text-xs">
+                    <div className={`rounded-md border ${item.color} ${item.bg} px-2 py-0.5 text-[10px] font-mono font-medium truncate shrink-0`}>
+                      {item.name} <span className="opacity-60">{item.id}</span>
+                    </div>
+                    <div className="text-[11px] text-white/60 truncate">{item.action}</div>
                   </div>
-                  <div className="text-[11px] text-white/60 truncate">{item.action}</div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="text-white/40 text-[11px]">No agents assigned yet</div>
+              )}
             </div>
           </div>
         </div>

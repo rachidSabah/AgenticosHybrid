@@ -768,7 +768,7 @@ export const api = {
   bindingManual: (body: Record<string, unknown>) =>
     post<{ id: string; provider: string; bound: boolean }>("/binding/manual", body),
   bindingValidate: (providerId: string) =>
-    post<{ provider_id: string; healthy: boolean; details: Record<string, unknown> }>(`/binding/validate`, { provider_id: providerId }),
+    post<{ provider_id: string; healthy: boolean; bound?: boolean; details: Record<string, unknown> }>(`/binding/validate`, { provider_id: providerId }),
   bindingRepair: (providerId: string) =>
     post<{ provider_id: string; repaired: boolean; action_taken: string }>(`/binding/repair`, { provider_id: providerId }),
   bindingRebind: (providerId: string, newPath: string) =>

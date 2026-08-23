@@ -87,6 +87,183 @@ def _is_unusable_output(text: str) -> bool:
     return present >= 2 and len(text) > 200
 
 
+# Error signatures that bound agent CLIs return when execution did NOT
+# actually happen (auth failure, unsupported model, process error, etc.).
+# If a provider returns one of these as its "result", the task must be
+# marked FAILED — never COMPLETED — so a failed run can't masquerade as
+# successful execution (spec RULE 5/7: no success without execution evidence).
+_ERROR_SIGNATURES = (
+    "http 401",
+    "401:",
+    "401 ",
+    "403:",
+    "403 ",
+    "http 403",
+    "not supported",
+    "model not found",
+    "api key",
+    "unauthorized",
+    "authentication failed",
+    "exited 1:",
+    "exited 2:",
+    "timed out after",
+    "cannot connect to api",
+    "unable to connect",
+    "traceback (most recent call last)",
+    "error:",
+    "command not found",
+    "not recognized as",
+    "stray separator",
+    "how can i help",
+    "looks like a",
+    "i can help",
+    "please provide",
+)
+
+
+def _is_error_output(text: str) -> bool:
+    """True when ``text`` is an error/diagnostic, not real execution output.
+
+    Used to prevent a failed agent run (auth error, crashed CLI, unsupported
+    model) from being recorded as a COMPLETED task.
+    """
+    if not text or not text.strip():
+        return False
+    lowered = text.lower()
+    # Any explicit error signature means the agent did not produce real work.
+    if any(sig in lowered for sig in _ERROR_SIGNATURES):
+        return True
+    return False
+
+
+def _extract_and_persist_files(result: str, task: Task, ws_root: str, provider_kind: str) -> list[str]:
+    """Extract code blocks and persist generated files and reports to workspace root."""
+    import os
+    import re
+
+    extracted_files: list[str] = []
+    if not ws_root or not os.path.isdir(ws_root) or not result:
+        return extracted_files
+
+    # 1. Save task execution summary report
+    report_filename = f"task_{task.id[:8]}_{task.role}.md"
+    report_path = os.path.join(ws_root, report_filename)
+    try:
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+        extracted_files.append(report_path)
+    except Exception:
+        pass
+
+    # If the task is architecture/design or specification, also write ARCHITECTURE.md
+    title_lower = (task.title or "").lower()
+    user_prompt_lower = (task.user_prompt or "").lower()
+    if any(
+        kw in title_lower or kw in user_prompt_lower
+        for kw in ("architecture", "system design", "component diagram", "data contract", "architectural")
+    ):
+        arch_path = os.path.join(ws_root, "ARCHITECTURE.md")
+        if not os.path.exists(arch_path) or os.path.getsize(arch_path) < 50:
+            try:
+                with open(arch_path, "w", encoding="utf-8") as f:
+                    f.write(f"# System Architecture Design\n\n{result}\n")
+                extracted_files.append(arch_path)
+            except Exception:
+                pass
+
+    # 2. Extract code blocks with target filenames or language extensions
+    ext_to_default_file: dict[str, str] = {
+        "html": "index.html",
+        "css": "styles.css",
+        "scss": "styles.scss",
+        "javascript": "index.js",
+        "js": "index.js",
+        "jsx": "App.jsx",
+        "typescript": "index.ts",
+        "ts": "index.ts",
+        "tsx": "App.tsx",
+        "python": "app.py",
+        "py": "app.py",
+        "json": "config.json",
+        "yaml": "config.yaml",
+        "yml": "config.yaml",
+        "toml": "config.toml",
+        "sql": "schema.sql",
+        "sh": "script.sh",
+        "bash": "script.sh",
+        "ps1": "script.ps1",
+        "rust": "main.rs",
+        "rs": "main.rs",
+        "go": "main.go",
+        "c": "main.c",
+        "cpp": "main.cpp",
+        "java": "Main.java",
+        "cs": "Program.cs",
+        "csharp": "Program.cs",
+        "dockerfile": "Dockerfile",
+        "env": ".env.example",
+    }
+
+    # Match code blocks with optional language and optional filepath header
+    pattern = re.compile(
+        r"```(?:(?P<lang>[a-zA-Z0-9_\-]+)(?:[:\s]+(?P<file1>[^\n\r`]+))?|(?P<file2>[^\n\r`]+\.[a-zA-Z0-9]+))\r?\n(?P<code>.*?)```",
+        re.DOTALL,
+    )
+
+    file_idx = 0
+    for match in pattern.finditer(result):
+        lang = (match.group("lang") or "").strip().lower()
+        file_meta = (match.group("file1") or match.group("file2") or "").strip()
+        code = match.group("code").strip()
+        if not code:
+            continue
+
+        target_filename = None
+        # Check if file_meta contains a clean filename/path
+        if file_meta and not any(ch in file_meta for ch in ('"', "'", "<", ">", "|", "*", "?")):
+            clean_meta = file_meta.strip().split()[-1].lstrip(":").strip()
+            if "." in clean_meta and len(clean_meta) < 120 and not clean_meta.endswith(".md"):
+                target_filename = clean_meta
+
+        # If not in header, check first lines of code for // filename: or # filepath: or similar
+        if not target_filename:
+            first_lines = code.split("\n")[:3]
+            for fl in first_lines:
+                fn_match = re.search(
+                    r"(?:filename|filepath|file)[:\s=]+\s*([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)",
+                    fl,
+                    re.IGNORECASE,
+                )
+                if fn_match:
+                    found_fn = fn_match.group(1).strip()
+                    if not found_fn.endswith(".md"):
+                        target_filename = found_fn
+                        break
+
+        # Fallback to language extension mapping
+        if not target_filename and lang in ext_to_default_file:
+            default_name = ext_to_default_file[lang]
+            if file_idx == 0:
+                target_filename = f"{task.role}_{default_name}" if task.role else default_name
+            else:
+                base, ext = os.path.splitext(default_name)
+                target_filename = f"{task.role}_{base}_{file_idx}{ext}" if task.role else f"{base}_{file_idx}{ext}"
+
+        if target_filename:
+            target_filename = target_filename.replace("/", os.sep).replace("\\", os.sep).lstrip(os.sep)
+            code_file_path = os.path.join(ws_root, target_filename)
+            try:
+                os.makedirs(os.path.dirname(code_file_path), exist_ok=True)
+                with open(code_file_path, "w", encoding="utf-8") as f:
+                    f.write(code + "\n")
+                extracted_files.append(code_file_path)
+                file_idx += 1
+            except Exception:
+                pass
+
+    return extracted_files
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -233,6 +410,25 @@ class Orchestrator:
             else:
                 real_candidates = filtered
         if real_candidates:
+            # Prioritize dedicated AI agent providers over auto_detected utilities
+            ai_agents = [
+                p
+                for p in real_candidates
+                if p.kind
+                in (
+                    "claude_code",
+                    "hermes",
+                    "codex",
+                    "opencode",
+                    "antigravity",
+                    "gemini_cli",
+                    "qwen_cli",
+                    "ollama",
+                    "local_cli",
+                )
+            ]
+            if ai_agents:
+                real_candidates = ai_agents
             idx = self._provider_rr_idx % len(real_candidates)
             self._provider_rr_idx += 1
             chosen = real_candidates[idx]
@@ -478,6 +674,28 @@ class Orchestrator:
             )
             elapsed = _time.monotonic() - start_time
             agent.mark_completed()
+            # A non-empty return does NOT mean success. Bound agent CLIs return
+            # auth errors / crash traces as their "result". If the output is an
+            # error signature or unusable, the task FAILED — never COMPLETED.
+            # (spec RULE 5/7: no success without real execution evidence.)
+            result_is_error = _is_error_output(result) or _is_unusable_output(result)
+            if result_is_error:
+                task.status = TaskStatus.FAILED
+                task.error = (result or "agent returned an error instead of real output")[:500]
+                task.result = result
+                task.touch()
+                self._finish_execution(exec_rec, "failed", stderr=result)
+                log.warning(
+                    "execution.result_is_error",
+                    task=task.id,
+                    agent=agent.id,
+                    mission_id=task.mission_id,
+                    provider=provider.info.kind,
+                    elapsed_s=round(elapsed, 3),
+                    attempt=1,
+                )
+                await self._publish_failed(agent, task, result)
+                return
             task.status = TaskStatus.COMPLETED
             task.result = result
             task.touch()
@@ -492,80 +710,12 @@ class Orchestrator:
             )
             # Persist generated output files and extract any code blocks into target workspace root
             try:
-                import re as _re
-
                 from agentic_os.domain.workspace import get_workspace_root
 
                 ws_root = get_workspace_root()
                 if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                    if _is_unusable_output(result):
-                        # Don't persist binary/garbage or an echoed prompt
-                        # wrapper as a text report. Write an honest diagnostic
-                        # note instead so the mission record reflects that no
-                        # usable output was produced.
-                        note = (
-                            f"# Output for Task: {task.title}\n\n"
-                            "> WARNING: provider output could not be persisted as text "
-                            "(binary data or an echoed prompt wrapper).\n\n"
-                            f"> provider: {provider.info.kind}\n"
-                            f"> workspace: {ws_root}\n\n"
-                            "No source files were extracted. Verify the provider CLI "
-                            "and the workspace before re-running.\n"
-                        )
-                        out_path = _os.path.join(ws_root, f"task_{task.id[:8]}_{task.role}.md")
-                        with open(out_path, "w", encoding="utf-8") as f:
-                            f.write(note)
-                        log.warning(
-                            "task.output_unusable",
-                            path=out_path,
-                            provider=provider.info.kind,
-                            bytes=len(result),
-                        )
-                    else:
-                        # 1. Save execution summary report
-                        filename = f"task_{task.id[:8]}_{task.role}.md"
-                        out_path = _os.path.join(ws_root, filename)
-                        with open(out_path, "w", encoding="utf-8") as f:
-                            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
-                        log.info("task.output_persisted", path=out_path, bytes=len(result))
-
-                        # 2. Extract code blocks with target filenames or language extensions
-                        pattern = _re.compile(
-                            r"```(?:\w+[:\s]+([^\n]+)|(\w+))\n(.*?)```", _re.DOTALL
-                        )
-                        for match in pattern.finditer(result):
-                            filename_meta, lang, code_content = match.groups()
-                            code = code_content.strip()
-                            if not code:
-                                continue
-
-                            # Determine target filename
-                            target_filename = None
-                            if filename_meta and "." in filename_meta and " " not in filename_meta:
-                                target_filename = filename_meta.strip()
-                            elif lang:
-                                ext_map = {
-                                    "html": "index.html",
-                                    "css": "styles.css",
-                                    "javascript": "script.js",
-                                    "js": "script.js",
-                                    "python": "app.py",
-                                    "py": "app.py",
-                                    "json": "config.json",
-                                }
-                                ext = ext_map.get(lang.lower())
-                                if ext:
-                                    target_filename = f"{task.role}_{ext}"
-
-                            if target_filename:
-                                code_file_path = _os.path.join(ws_root, target_filename)
-                                with open(code_file_path, "w", encoding="utf-8") as f:
-                                    f.write(code + "\n")
-                                log.info(
-                                    "task.code_file_extracted",
-                                    path=code_file_path,
-                                    bytes=len(code),
-                                )
+                    saved = _extract_and_persist_files(result, task, ws_root, provider.info.kind)
+                    log.info("task.files_persisted", count=len(saved), workspace=ws_root)
             except Exception as e:
                 log.warning("task.persist_output_failed", error=str(e))
 
@@ -624,10 +774,7 @@ class Orchestrator:
 
                     ws_root = get_workspace_root()
                     if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                        filename = f"task_{task.id[:8]}_{task.role}.md"
-                        out_path = _os.path.join(ws_root, filename)
-                        with open(out_path, "w", encoding="utf-8") as f:
-                            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+                        _extract_and_persist_files(result, task, ws_root, provider.info.kind)
                 except Exception:
                     pass
 
@@ -699,10 +846,7 @@ class Orchestrator:
 
                     ws_root = get_workspace_root()
                     if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                        filename = f"task_{task.id[:8]}_{task.role}.md"
-                        out_path = _os.path.join(ws_root, filename)
-                        with open(out_path, "w", encoding="utf-8") as f:
-                            f.write(f"# Output for Task: {task.title}\n\n{result}\n")
+                        _extract_and_persist_files(result, task, ws_root, fallback_provider.info.kind)
                 except Exception:
                     pass
 
@@ -830,6 +974,40 @@ class Orchestrator:
                     "task_id": task.id,
                     "result": result[:500] if result else "",
                     "elapsed_s": round(elapsed, 3),
+                },
+            )
+        )
+
+    async def _publish_failed(
+        self,
+        agent: Agent,
+        task: Task,
+        error: str,
+    ) -> None:
+        """Publish task.failed / agent.failed events (spec EventBus contract)."""
+        await self.bus.publish(
+            EventEnvelope(
+                type="task.failed",
+                source="orchestrator",
+                topic="task.failed",
+                payload={
+                    "task_id": task.id,
+                    "agent_id": agent.id,
+                    "provider": agent.provider,
+                    "error": (error or "")[:500],
+                    "mission_id": task.mission_id,
+                },
+            )
+        )
+        await self.bus.publish(
+            EventEnvelope(
+                type="agent.failed",
+                source="supervisor",
+                topic=Topic.AGENT_FAILED.value if hasattr(Topic, "AGENT_FAILED") else "agent.failed",
+                payload={
+                    "agent_id": agent.id,
+                    "task_id": task.id,
+                    "error": (error or "")[:500],
                 },
             )
         )

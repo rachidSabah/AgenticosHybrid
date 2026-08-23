@@ -64,8 +64,10 @@ class TestStrategyCommands:
         cmd = s.build_command(make_task(), "opencode")
         assert cmd[0] == "opencode"
         assert "run" in cmd
-        # opencode reads prompt from stdin via "-"
-        assert "-" in cmd
+        # opencode runs headless reading the prompt from STDIN (no positional
+        # arg — avoids the Windows .CMD shim argument-length limit, and no
+        # interactive "run -" TUI that never exits).
+        assert cmd == ["opencode", "run"]
         stdin = s.build_stdin(make_task())
         assert stdin is not None
         assert b"Write hello world" in stdin
@@ -75,6 +77,10 @@ class TestStrategyCommands:
         cmd = s.build_command(make_task(), "codex")
         assert cmd[0] == "codex"
         assert "exec" in cmd
+        # Headless automation: bypass approvals/sandbox and skip the
+        # trusted-directory check (AgenticOS runs in a worktree).
+        assert "--dangerously-bypass-approvals-and-sandbox" in cmd
+        assert "--skip-git-repo-check" in cmd
         # Prompt is the exec positional argument (codex exec [PROMPT])
         assert "Write hello world" in cmd[-1]
 
@@ -97,11 +103,20 @@ class TestStrategyCommands:
         assert stdin is not None
         assert b"Write hello world" in stdin
 
-    def test_agy_uses_run_subcommand(self):
+    def test_agy_uses_stdin_no_run_subcommand(self):
+        # agy's CLI has NO `run` subcommand — it reads the prompt from stdin
+        # with `-p` + `--dangerously-skip-permissions` for headless runs
+        # (verified: `agy` rejects `run` with "unexpected argument run").
         s = AGYExecutionStrategy()
         cmd = s.build_command(make_task(), "agy")
         assert cmd[0] == "agy"
-        assert "run" in cmd
+        assert "run" not in cmd
+        assert "--output-format" in cmd
+        assert "--dangerously-skip-permissions" in cmd
+        # Prompt is supplied via stdin, not as a positional argument.
+        stdin = s.build_stdin(make_task())
+        assert stdin is not None
+        assert b"Write hello world" in stdin
 
     def test_ollama_uses_run_with_model_and_stdin(self):
         s = OllamaExecutionStrategy()

@@ -472,12 +472,16 @@ export interface SwarmProfile {
 }
 
 export interface SwarmSummary {
-  id: string;
+  swarm_id?: string;
+  id?: string;
   name: string;
   topology: string;
-  agent_count: number;
+  agent_count?: number;
+  member_count?: number;
   status: string;
-  created_at: string;
+  phase?: string;
+  created_at?: string;
+  source?: string;
 }
 
 export interface SwarmDetail extends SwarmSummary {

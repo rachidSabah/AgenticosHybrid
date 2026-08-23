@@ -213,21 +213,62 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
 
 
 class OpenCodeExecutionStrategy(ProviderExecutionStrategy):
-    """OpenCode CLI: ``opencode run -`` (prompt via stdin).
+    """OpenCode CLI: ``opencode run "{prompt}"`` (prompt as positional arg).
 
-    The prompt is sent via **stdin** to avoid the Windows ``cmd.exe``
-    8191-char command line limit.
+    OpenCode's ``run -`` form (prompt via stdin) launches an interactive TUI
+    session that never exits on its own, so it always hits the execution
+    timeout without producing output. Passing the prompt as a positional
+    argument to ``opencode run`` makes it run headless and exit when the task
+    is done — the correct non-interactive invocation.
     """
 
     @property
     def kind(self) -> str:
         return "opencode"
 
+    def _api_key_env_name(self) -> str:
+        # OpenCode authenticates via its own config (~/.config/opencode/opencode.json).
+        # The key is also exported in the backend env as a belt-and-suspenders measure.
+        return "OPENCODE_GO_API_KEY"
+
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "run", "-"]
+        # Pass the prompt via STDIN (not as a positional arg). OpenCode's
+        # `run "<prompt>"` form hits the Windows .CMD shim's argument-length
+        # limit on long prompts (causing "message got cut off" / "empty"
+        # failures), while `run -` launches an interactive TUI that never
+        # exits. `run` with the prompt on STDIN (closed after write) runs
+        # headless and exits when the task completes — the reliable form.
+        return [bin_path, "run"]
 
     def build_stdin(self, task: Task) -> bytes | None:
         return self.build_prompt(task).encode("utf-8")
+
+    def build_prompt(self, task: Task) -> str:
+        """Clean, direct prompt for OpenCode.
+
+        OpenCode's positional ``run "<prompt>"`` form parses the prompt as a
+        session message; the workspace-context wrapper that AgenticOS prepends
+        (a ``=== Workspace Context ===`` block with a file tree) makes OpenCode
+        see a "stray separator / empty message" and refuse to act. Strip that
+        wrapper and pass ONLY the real user request plus a concise file-
+        creation directive.
+        """
+        raw = (task.user_prompt or "").strip()
+        # Strip the "=== Workspace Context === ... ===" prefix injected by
+        # app.py before dispatch (everything up to the first blank line that
+        # follows a divider block). Keep only the actual instruction.
+        parts = raw.split("\n\n", 1)
+        if len(parts) == 2 and "Workspace Context" in parts[0]:
+            user_prompt = parts[1].strip()
+        else:
+            user_prompt = raw
+        if not user_prompt:
+            user_prompt = (task.description or task.title or "").strip()
+        directive = (
+            " Work in the current working directory and write any requested "
+            "files to disk (do not only describe them in chat)."
+        )
+        return (user_prompt + directive).strip()
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -240,8 +281,21 @@ class CodexExecutionStrategy(ProviderExecutionStrategy):
     def kind(self) -> str:
         return "codex"
 
+    def _api_key_env_name(self) -> str:
+        return "OPENAI_API_KEY"
+
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "exec", self.build_prompt(task)]
+        # -a never: never prompt for command approval (headless automation).
+        # --skip-git-repo-check: codex refuses to run outside a "trusted"
+        # directory (e.g. the AgenticOS worktree), otherwise it exits 1 with
+        # "Not inside a trusted directory".
+        return [
+            bin_path,
+            "exec",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--skip-git-repo-check",
+            self.build_prompt(task),
+        ]
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -257,6 +311,9 @@ class AiderExecutionStrategy(ProviderExecutionStrategy):
     @property
     def timeout_s(self) -> float:
         return 180.0  # Aider can be slow (starts a model)
+
+    def _api_key_env_name(self) -> str:
+        return "OPENAI_API_KEY"
 
     def build_command(self, task: Task, bin_path: str) -> list[str]:
         return [bin_path, "--message", self.build_prompt(task), "--no-auto-commits"]
@@ -293,18 +350,23 @@ class GeminiExecutionStrategy(ProviderExecutionStrategy):
 
 
 class AGYExecutionStrategy(ProviderExecutionStrategy):
-    """AGY CLI: ``agy run -`` (prompt via stdin).
+    """AGY CLI: prompt via **stdin** (no `run` subcommand).
 
-    The prompt is sent via **stdin** to avoid the Windows ``cmd.exe``
-    8191-char command line length limit ([WinError 206]).
+    The agy CLI reads prompts from stdin (or ``-p/--print``); it has no
+    ``run`` subcommand. Sending the prompt via stdin avoids the Windows
+    ``cmd.exe`` 8191-char command line length limit ([WinError 206]).
     """
 
     @property
     def kind(self) -> str:
         return "antigravity"
 
+    def _api_key_env_name(self) -> str:
+        return "GOOGLE_API_KEY"
+
     def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "run", "-"]
+        # agy reads the prompt from stdin and requires --output-format text + --dangerously-skip-permissions for headless runs
+        return [bin_path, "--output-format", "text", "--dangerously-skip-permissions"]
 
     def build_stdin(self, task: Task) -> bytes | None:
         return self.build_prompt(task).encode("utf-8")
@@ -523,7 +585,7 @@ class StrategyBasedProvider:
                 subprocess.run,
                 health_cmd,
                 capture_output=True,
-                timeout=5,
+                timeout=12,
             )
             return result.returncode == 0
         except Exception:

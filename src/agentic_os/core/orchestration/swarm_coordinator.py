@@ -374,6 +374,7 @@ class SwarmCoordinator:
         self._swarm_members: dict[str, list[dict[str, Any]]] = {}  # swarm_id → members
         self._swarm_roles: dict[str, dict[str, SwarmRole]] = {}  # swarm_id → {member_id: role}
         self._swarm_phases: dict[str, SwarmPhase] = {}  # swarm_id → phase
+        self._swarm_mission_meta: dict[str, dict[str, Any]] = {}  # swarm_id → {title, source, created_at}
         self._swarm_history: list[dict[str, Any]] = []
 
     @property
@@ -789,15 +790,52 @@ class SwarmCoordinator:
         }
 
     def list_swarms(self) -> list[dict[str, Any]]:
-        """List all swarms."""
-        return [
+        """List all swarms.
+
+        Exposes name/status/topology/created_at so the Mission Control swarm
+        view can bind to real state (the frontend matches on ``status``).
+        """
+        results: list[dict[str, Any]] = []
+        for sid, phase in self._swarm_phases.items():
+            members = self._swarm_members.get(sid, [])
+            mission_meta = self._swarm_mission_meta.get(sid, {})
+            # Mission-triggered swarms derive their status from the phase;
+            # real (manually created) swarms are active while phase=executing.
+            status = phase.value if phase != SwarmPhase.EXECUTING else "executing"
+            results.append(
+                {
+                    "swarm_id": sid,
+                    "name": mission_meta.get("title", sid),
+                    "status": status,
+                    "topology": mission_meta.get("topology", "mission"),
+                    "phase": phase.value,
+                    "member_count": len(members),
+                    "members": [m.get("id") for m in members if isinstance(m, dict)],
+                    "created_at": mission_meta.get("created_at"),
+                    "source": mission_meta.get("source", "swarm"),
+                }
+            )
+        return results
+
+    def complete_mission(self, mission_id: str, failed: bool = False) -> None:
+        """Transition a mission-triggered swarm to COMPLETED/FAILED.
+
+        Called when a mission finishes so swarm state reflects real task
+        outcome instead of staying 'executing' forever.
+        """
+        swarm_id = f"mission-{mission_id}"
+        if swarm_id not in self._swarm_phases:
+            return
+        new_phase = SwarmPhase.FAILED if failed else SwarmPhase.COMPLETED
+        self._swarm_phases[swarm_id] = new_phase
+        self._swarm_history.append(
             {
-                "swarm_id": sid,
-                "phase": phase.value,
-                "member_count": len(self._swarm_members.get(sid, [])),
+                "swarm_id": swarm_id,
+                "phase": new_phase.value,
+                "completed_at": _now_iso(),
+                "source": "mission",
             }
-            for sid, phase in self._swarm_phases.items()
-        ]
+        )
 
     def record_mission(
         self,
@@ -820,6 +858,11 @@ class SwarmCoordinator:
             self._swarm_members[swarm_id] = [{"id": name, "role": "member"} for name in agents]
         if swarm_id not in self._swarm_roles:
             self._swarm_roles[swarm_id] = {}
+        self._swarm_mission_meta[swarm_id] = {
+            "title": title,
+            "source": "mission",
+            "created_at": _now_iso(),
+        }
         entry = {
             "swarm_id": swarm_id,
             "goal": title,

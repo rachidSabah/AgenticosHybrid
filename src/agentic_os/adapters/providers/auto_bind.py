@@ -24,6 +24,13 @@ from agentic_os.core.registry import ProviderRegistry
 from agentic_os.domain.agent import ProviderInfo
 from agentic_os.infrastructure.logging import get_logger
 
+# On Windows, subprocess calls spawn a visible console window unless we pass
+# CREATE_NO_WINDOW.  Deep Scan probes thousands of binaries, so without this
+# the user sees a storm of popping cmd windows.  This flag is Windows-only.
+_SUBPROCESS_WINDOW_FLAGS = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if _platform.system() == "Windows" else 0
+)
+
 log = get_logger("discovery.auto_bind")
 
 # ── Known AI agents that AgenticOS can auto-detect and bind ───────────────
@@ -283,6 +290,7 @@ def _probe_binary(bin_path: Path) -> dict | None:
             capture_output=True,
             text=False,
             timeout=3,
+            creationflags=_SUBPROCESS_WINDOW_FLAGS,
         )
         stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
         stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""

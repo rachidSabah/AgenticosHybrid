@@ -154,6 +154,16 @@ class MissionPlannerImpl:
         customized by the mission's inputs. This is the default decomposition
         strategy — advanced strategies can be added later.
         """
+        user_prompt = mission.prompt or mission.description or ""
+
+        # Intent-based scoping (spec #3/#20/#34): a trivial single-action prompt
+        # (create a file, run a command, answer a question) must NOT be blown
+        # up into the full 9-task engineering template — that guarantees
+        # failure cascades and masks whether the one real action succeeded.
+        # Keep a minimal, honest plan proportional to the actual request.
+        if self._is_simple_task(user_prompt):
+            return self._decompose_simple(mission, user_prompt)
+
         tasks: list[MissionTask] = []
 
         user_prompt = mission.prompt or mission.description or ""
@@ -286,6 +296,70 @@ class MissionPlannerImpl:
         )
 
         return tasks
+
+    @staticmethod
+    def _is_simple_task(prompt: str) -> bool:
+        """Heuristic: a single, self-contained action that does not need the
+        full multi-phase engineering lifecycle.
+
+        Examples: create a file, run a command, inspect something, answer a
+        question, produce a short artifact. These should map to ONE real task,
+        not the 9-task template.
+        """
+        p = (prompt or "").strip().lower()
+        if not p or len(p) > 600:
+            return False
+        # Strong signals of a simple, single-step request.
+        simple_markers = (
+            "create a file",
+            "write a file",
+            "create file",
+            "make a file",
+            "touch ",
+            "run ",
+            "execute ",
+            "inspect ",
+            "report the",
+            "list ",
+            "show me",
+            "what is",
+            "what are",
+            "reply with",
+            "output",
+            "print",
+            "echo ",
+        )
+        if any(m in p for m in simple_markers):
+            # If it also asks for multi-agent analysis / review / fix of a
+            # system, it's NOT simple — let the full template handle it.
+            complex_markers = (
+                "all bound",
+                "multiple agents",
+                "diagnose",
+                "fix the",
+                "refactor",
+                "implement ",
+                "build a",
+                "architecture",
+                "security problems",
+                "each agent",
+            )
+            if not any(c in p for c in complex_markers):
+                return True
+        return False
+
+    def _decompose_simple(self, mission: Mission, user_prompt: str) -> list[MissionTask]:
+        """Minimal 1-task plan for a simple single-action prompt."""
+        task = MissionTask(
+            mission_id=mission.id,
+            user_prompt=user_prompt,
+            title=mission.title or "Execute requested action",
+            description=user_prompt or mission.description or "Execute the requested task.",
+            dependencies=[],
+            estimated_minutes=10,
+            assigned_role=AgentRole.DEBUGGER,
+        )
+        return [task]
 
     def _assign_roles(self, tasks: list[MissionTask]) -> None:
         """Assign providers to each task based on the role mapping.

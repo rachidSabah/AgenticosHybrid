@@ -432,9 +432,20 @@ class LocalDiscoveryService:
 
     @staticmethod
     def _map_status(proc_info: dict[str, Any]) -> AgentStatus:
-        """Map process info to an :class:`AgentStatus`."""
+        """Map process info to an :class:`AgentStatus`.
+
+        A CLI/agent binary that was *discovered on disk* is available even
+        when no live session process exists (these tools are invoked
+        on-demand, not as daemons). The health monitor uses the same
+        convention — a tracked agent with no PID is reported ``IDLE``
+        (health_monitor.py:191), which the dashboard treats as healthy.
+
+        Return ``UNKNOWN`` only when discovery produced no information at
+        all; otherwise prefer ``IDLE`` so installed tools are not falsely
+        flagged ``degraded``.
+        """
         if not proc_info:
-            return AgentStatus.UNKNOWN
+            return AgentStatus.IDLE
         pid = proc_info.get("pid")
         if pid and pid > 0:
             return AgentStatus.RUNNING

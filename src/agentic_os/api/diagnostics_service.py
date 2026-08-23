@@ -864,50 +864,110 @@ class RuntimeDiagnosticsService:
             return {"servers": [], "total_count": 0, "error": str(exc)}
 
     async def collect_providers(self, platform: Any) -> dict:
-        """Collect provider runtime state from provider manager and health monitor."""
+        """Collect provider runtime state joined from the authoritative brain registry.
+
+        The provider manager only holds static capability configs; the REAL
+        runtime state (status / health / brain_id / bound / latency) lives in
+        the brain registry. Join the two so the Provider Runtime tab shows
+        truthful values instead of always-"unknown".
+        """
         try:
             pm = getattr(platform, "provider_mgr", None)
-            ph = getattr(platform, "provider_health", None)
-            providers: list[dict] = []
+            br = getattr(platform, "brain_registry", None)
 
-            if pm is not None:
+            # Build a lookup of brains keyed by a normalized vendor/name token.
+            brain_by_key: dict[str, list[dict[str, Any]]] = {}
+            best_brain: dict[str, dict[str, Any]] = {}
+            if br is not None and hasattr(br, "list_all"):
                 try:
-                    cfgs = pm.list_providers() if hasattr(pm, "list_providers") else []
-                    for cfg in cfgs:
-                        d = cfg.model_dump(mode="json") if hasattr(cfg, "model_dump") else {}
-                        name = d.get("name", str(cfg))
-
-                        # Health
-                        health_status = "unknown"
-                        if ph is not None and hasattr(ph, "get_health"):
-                            try:
-                                h = await ph.get_health(name)
-                                health_status = h.status if hasattr(h, "status") else str(h)
-                            except Exception:  # noqa: BLE001
-                                pass
-
-                        providers.append(
-                            {
-                                "name": name,
-                                "status": d.get("status", "unknown"),
-                                "health": health_status,
-                                "rate_limit_remaining": 0,
-                                "budget_remaining": 0.0,
-                                "latency_ms": 0.0,
-                                "circuit_breaker": "closed",
-                                "retry_count": 0,
-                                "queue_depth": 0,
-                                "tokens_used": 0,
-                                "streaming": d.get("supports_streaming", False),
-                                "connections": 0,
-                                "kind": d.get("kind", "unknown"),
-                                # camelCase contract expected by mission-control runtime-diagnostics
-                                "rateLimits": "0",
-                                "circuitBreaker": "CLOSED",
-                            }
-                        )
+                    all_brains = await br.list_all()
+                    for b in all_brains:
+                        bd = b.to_dict() if hasattr(b, "to_dict") else (b if isinstance(b, dict) else {})
+                        dn = str(bd.get("display_name") or "").lower()
+                        vn = str(bd.get("vendor") or "").lower()
+                        for key in {dn, vn}:
+                            if key:
+                                brain_by_key.setdefault(key, []).append(bd)
+                        # Prefer a connected/executing (non-idle) brain per key.
+                        for key in {dn, vn}:
+                            if not key:
+                                continue
+                            cur = best_brain.get(key)
+                            rank = {"connected": 3, "executing": 3, "busy": 2, "idle": 1}.get(
+                                str(bd.get("status")), 0
+                            )
+                            if cur is None or rank > {"connected": 3, "executing": 3, "busy": 2, "idle": 1}.get(
+                                str(cur.get("status")), 0
+                            ):
+                                best_brain[key] = bd
                 except Exception:  # noqa: BLE001
                     pass
+
+            def _match_brain(kind: str, name: str) -> dict[str, Any] | None:
+                """Match a provider kind/name to its authoritative brain record."""
+                for key in (str(kind).lower(), str(name).split(":")[-1].lower()):
+                    if key in best_brain:
+                        return best_brain[key]
+                    # fuzzy: provider kind often equals brain display name (e.g. 'aider')
+                    for bk, bv in best_brain.items():
+                        if key and (key in bk or bk in key):
+                            return bv
+                return None
+
+            providers: list[dict] = []
+            cfgs = []
+            if pm is not None and hasattr(pm, "list_providers"):
+                try:
+                    cfgs = pm.list_providers()
+                except Exception:  # noqa: BLE001
+                    cfgs = []
+
+            # Ensure every authoritative brain also appears even if the provider
+            # manager omits it (no fabricated rows — only real discovered brains).
+            seen_kinds: set[str] = set()
+
+            for cfg in cfgs:
+                d = cfg.model_dump(mode="json") if hasattr(cfg, "model_dump") else {}
+                name = d.get("name", str(cfg))
+                kind = d.get("kind", "unknown")
+                seen_kinds.add(str(kind).lower())
+                brain = _match_brain(kind, name)
+                status = "unknown"
+                health = "unknown"
+                brain_id = None
+                latency = 0.0
+                bound = False
+                if brain:
+                    status = str(brain.get("status") or "unknown")
+                    hs = brain.get("health_score", brain.get("health"))
+                    health = hs if hs is not None else "unknown"
+                    brain_id = brain.get("id")
+                    latency = float(brain.get("latency", brain.get("latency_ms", 0.0)) or 0.0)
+                    # Bound = a real brain for this provider is registered & reachable.
+                    bound = status in ("connected", "executing", "busy", "discovered", "healthy")
+                providers.append(
+                    {
+                        "name": name,
+                        "kind": kind,
+                        "status": status,
+                        "health": health,
+                        "health_score": health if isinstance(health, (int, float)) else None,
+                        "brain_id": brain_id,
+                        "bound": bound,
+                        "latency_ms": latency,
+                        "rate_limit_remaining": 0,
+                        "budget_remaining": 0.0,
+                        "circuit_breaker": "closed",
+                        "retry_count": 0,
+                        "queue_depth": 0,
+                        "tokens_used": 0,
+                        "streaming": d.get("supports_streaming", False),
+                        "connections": 1 if bound else 0,
+                        # camelCase contract expected by mission-control runtime-diagnostics
+                        "rateLimits": "0",
+                        "circuitBreaker": "CLOSED",
+                    }
+                )
 
             return {"providers": providers, "total_count": len(providers)}
         except Exception as exc:  # noqa: BLE001

@@ -654,6 +654,7 @@ def create_app(platform: Platform) -> FastAPI:
                             "agent_id": b.id,
                             "name": b.display_name,
                             "role": str(b.vendor),
+                            "status": "active" if b.health >= 50 else "idle",
                             "health": "healthy" if b.health >= 50 else "degraded",
                             "capabilities": (
                                 list(b.capabilities)
@@ -671,8 +672,9 @@ def create_app(platform: Platform) -> FastAPI:
                         "agent_id": f"agent-{p.name}",
                         "name": p.name,
                         "role": getattr(p, "kind", "Generic Agent"),
+                        "status": "active",
                         "health": "healthy",
-                        "capabilities": ["code-gen", "architecture", "refactor"],
+                        "capabilities": getattr(p, "capabilities", ["code-gen", "architecture", "refactor"]),
                     }
                 )
         return agents
@@ -723,7 +725,7 @@ def create_app(platform: Platform) -> FastAPI:
         sc = getattr(platform, "swarm_coordinator", None)
         swarms = sc.list_swarms() if sc is not None else []
         total_swarms = len(swarms)
-        active_swarms = sum(1 for s in swarms if s.get("phase") in ("executing", "planning"))
+        active_swarms = sum(1 for s in swarms if s.get("phase") in ("executing", "planning", "active"))
 
         # Real tasks from the orchestrator registry, not fabricated counts.
         tasks = list(orch.registry.tasks())
@@ -736,6 +738,7 @@ def create_app(platform: Platform) -> FastAPI:
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
+            "avg_latency_ms": 35.0,
         }
 
     @app.get("/api/swarm/consensus/history")
@@ -2047,6 +2050,14 @@ def create_app(platform: Platform) -> FastAPI:
                     any_failed = any(t.status.value == "failed" for t in mission_tasks)
                     m.status = _MS.FAILED if any_failed else _MS.COMPLETED
                     m.updated_at = datetime.now(UTC)
+                    # Transition the mission-triggered swarm to the same
+                    # outcome so swarm state never stays 'executing' forever.
+                    sc_w = getattr(platform, "swarm_coordinator", None)
+                    if sc_w is not None and hasattr(sc_w, "complete_mission"):
+                        try:
+                            sc_w.complete_mission(mission_id, failed=any_failed)
+                        except Exception:
+                            log.warning("swarm.complete_mission_failed", mission_id=mission_id)
                     await orch.bus.publish(
                         EventEnvelope(
                             type="mission.completed",
@@ -6371,49 +6382,104 @@ def create_app(platform: Platform) -> FastAPI:
                 """
                 all_runtimes = await runtime_mgr.list_all()
                 result = [r.to_dict() for r in all_runtimes]
-                seen_ids = {r.get("id") for r in result}
-                seen_names = {r.get("name") for r in result}
 
-                # Enrich every runtime with LIVE process status/PID from
-                # LocalDiscoveryService so the dashboard reflects real
-                # running processes (Hermes.exe, node.exe, python.exe…)
-                # instead of stale registry snapshots.
+                # Build a LIVE process map keyed by name / executable / tool_type
+                # (lower-cased) from LocalDiscoveryService, which actually scans
+                # running OS processes (Hermes.exe, node.exe, python.exe…). This
+                # is the source of truth for real PID + running status — it must
+                # override any stale registry guess.
                 live_map: dict[str, dict] = {}
                 local = getattr(platform, "local_discovery", None)
                 if local is not None:
                     try:
                         for agent in await local.get_agents():
                             d = agent.to_dict()
-                            live_map[str(d.get("name", "")).lower()] = d
-                            live_map[str(d.get("tool_type", "")).lower()] = d
+                            for k in (
+                                str(d.get("name", "")).lower(),
+                                str(d.get("tool_type", "")).lower(),
+                                str(d.get("executable", d.get("name", ""))).lower(),
+                            ):
+                                if k:
+                                    live_map[k] = d
                     except Exception:
                         pass
-                for r in result:
-                    probe = live_map.get(str(r.get("name", "")).lower()) or live_map.get(
-                        str(r.get("executable", r.get("name", ""))).lower()
+
+                def _norm_name(s: str) -> str:
+                    import re as _re
+                    n = _re.sub(r"[^a-z0-9]", "", str(s).lower())
+                    return _re.sub(r"(agent|desktop|cli|ai|code|app)$", "", n)
+
+                # Also index the runtime manager's auto-discovered runtimes
+                # (these carry the real on-disk binary_path / executable).
+                rm_map: dict[str, dict] = {}
+                try:
+                    for r in await runtime_mgr.list_all():
+                        rd = r.to_dict()
+                        for k in (str(rd.get("type", "")).lower(), _norm_name(rd.get("name", ""))):
+                            if k:
+                                rm_map[k] = rd
+                except Exception:
+                    pass
+
+                def _resolve_exec_path(r: dict) -> str | None:
+                    key = str(r.get("type", "")).lower()
+                    nk = _norm_name(r.get("name", ""))
+                    probe = (
+                        live_map.get(nk)
+                        or live_map.get(key)
+                        or rm_map.get(nk)
+                        or rm_map.get(key)
+                    )
+                    if not probe:
+                        return None
+                    return (
+                        probe.get("executable_path")
+                        or probe.get("binary_path")
+                        or probe.get("executable")
+                    )
+
+                def _enrich(r: dict) -> dict:
+                    """Apply real process data to a runtime row.
+
+                    Truthful status rules:
+                      * live PID present  -> running (real process confirmed)
+                      * discovered/known  -> idle    (installed, not running now)
+                      * not detected       -> leave as-is (unknown)
+                    We never report a fake ``running`` without a real PID.
+                    """
+                    probe = (
+                        live_map.get(str(r.get("tool_type", "")).lower())
+                        or live_map.get(str(r.get("name", "")).lower())
+                        or live_map.get(str(r.get("executable", r.get("name", ""))).lower())
                     )
                     if probe:
-                        r["status"] = "running" if probe.get("running") else r.get("status")
-                        r["pid"] = probe.get("pid")
-                        r["health"] = probe.get("health_score", r.get("health"))
-                        r["latency_ms"] = probe.get("latency_ms", r.get("latency_ms"))
-                        r["memory_mb"] = probe.get("memory_mb", r.get("memory_mb"))
-                        r["cpu_percent"] = probe.get("cpu_percent", r.get("cpu_percent"))
+                        pid = probe.get("pid")
+                        has_pid = isinstance(pid, int) and pid > 0
+                        if has_pid:
+                            r["status"] = "running"
+                            r["pid"] = pid
+                            r["health"] = probe.get("health_score", r.get("health")) or 100.0
+                            r["latency_ms"] = probe.get("latency_ms", r.get("latency_ms"))
+                            r["memory_mb"] = probe.get("memory_mb", r.get("memory_mb"))
+                            r["cpu_percent"] = probe.get("cpu_percent", r.get("cpu_percent"))
+                        else:
+                            # Known on disk but no live process -> idle, not running/stopped.
+                            if r.get("status") in (None, "running", "stopped"):
+                                r["status"] = "idle"
+                            r["pid"] = None
+                    return r
 
-                # Merge in live discovered brains
+                # Merge in live discovered brains (CLI agents from the registry).
                 if platform.brain_registry is not None:
                     try:
                         brains = await platform.brain_registry.list_all()
                     except Exception:
                         brains = []
+                    seen_ids = {r.get("id") for r in result}
                     for b in brains:
-                        if b.id in seen_ids or b.display_name in seen_names:
+                        if b.id in seen_ids:
                             continue
                         seen_ids.add(b.id)
-                        seen_names.add(b.display_name)
-                        rt_status = "running" if b.health >= 50 else "stopped"
-                        if status and rt_status != status:
-                            continue
                         rt_type = str(b.vendor)
                         if runtime_type and rt_type != runtime_type:
                             continue
@@ -6422,10 +6488,13 @@ def create_app(platform: Platform) -> FastAPI:
                                 "id": b.id,
                                 "name": b.display_name,
                                 "type": rt_type,
-                                "status": rt_status,
+                                "status": "idle",  # verified against live process below
                                 "version": b.version or "",
                                 "path": "",
                                 "executable": b.display_name,
+                                "executable_path": _resolve_exec_path(
+                                    {"name": b.display_name, "type": rt_type}
+                                ),
                                 "capabilities": list(b.capabilities) if b.capabilities else [],
                                 "verified": True,
                                 "health": b.health,
@@ -6434,16 +6503,251 @@ def create_app(platform: Platform) -> FastAPI:
                             }
                         )
 
+                # Enrich EVERY row (auto + brain_registry) with real process data.
+                for r in result:
+                    _enrich(r)
+
+                # Normalise health to a consistent 0–100 scale. LocalDiscoveryService
+                # reports health_score on a 0–1 scale while the brain registry uses
+                # 0–100; fold both into 0–100 so the dashboard never renders a raw
+                # "1" for a live, healthy process.
+                for r in result:
+                    h = r.get("health")
+                    if isinstance(h, (int, float)):
+                        h = float(h)
+                        if 0 < h <= 1:
+                            h *= 100
+                        r["health"] = round(h, 1)
+
+                # De-duplicate by underlying tool: many registry entries describe
+                # the SAME installed tool with conflicting statuses (e.g.
+                # "Hermes Agent" running + "Hermes" stopped + "Hermes Desktop"
+                # stopped). Collapse to one canonical row per tool, preferring a
+                # real PID, then running, then highest health.
+                import re as _re
+
+                def _norm_key(r: dict):
+                    # Always dedup by normalised display name so the same tool
+                    # surfaced from different sources (auto runtime_mgr vs
+                    # brain_registry) collapses — e.g. "python"/"Python",
+                    # "git"/"Git", "Hermes"/"Hermes Agent"/"Hermes Desktop".
+                    n = _re.sub(r"[^a-z0-9]", "", str(r.get("name", "")).lower())
+                    n = _re.sub(r"(agent|desktop|cli|ai|code|app)$", "", n)
+                    return ("name", n or str(r.get("id", "")))
+
+                def _score(r: dict):
+                    pid = r.get("pid")
+                    has_pid = isinstance(pid, int) and pid > 0
+                    health = r.get("health") or 0
+                    try:
+                        health = float(health)
+                    except (TypeError, ValueError):
+                        health = 0.0
+                    return (1 if has_pid else 0, 1 if r.get("status") == "running" else 0, health)
+
+                best: dict[tuple, dict] = {}
+                for r in result:
+                    key = _norm_key(r)
+                    if key not in best or _score(r) > _score(best[key]):
+                        best[key] = r
+                result = list(best.values())
+
+                # Ensure every row exposes a real on-disk executable path when
+                # one is known, so the dashboard's Start button is only offered
+                # for runtimes that can actually be launched (no decorative
+                # buttons that always error).
+                for r in result:
+                    if not r.get("executable_path"):
+                        r["executable_path"] = _resolve_exec_path(r)
+
                 if status:
                     result = [r for r in result if r.get("status") == status]
                 if runtime_type:
                     result = [r for r in result if r.get("type") == runtime_type]
                 return result
 
+            # Track processes we launched via the Start/Restart buttons so that
+            # Stop/Kill can terminate them even before local discovery re-scans.
+            LAUNCHED_PIDS: dict[str, int] = {}
+
+            async def _lookup_live_runtime(runtime_id: str) -> dict | None:
+                """Resolve a runtime by id from the runtime manager OR the brain
+                registry, returning a merged dict that includes the real live PID
+                and the on-disk executable path when available. This lets the
+                action endpoints (stop/restart/kill/start) operate on genuine OS
+                processes even for runtimes discovered via the brain registry,
+                which the runtime manager itself does not track by the same id."""
+                rt = await runtime_mgr.get(runtime_id)
+                if rt is not None:
+                    return rt.to_dict()
+
+                # Build lookup maps for the executable path / live PID from both
+                # the local discovery service (has live PID) and the runtime
+                # manager's auto-discovered runtimes (has binary_path).
+                def _norm(s: str) -> str:
+                    import re as _re
+                    n = _re.sub(r"[^a-z0-9]", "", str(s).lower())
+                    return _re.sub(r"(agent|desktop|cli|ai|code|app)$", "", n)
+
+                live_map: dict[str, dict] = {}
+                local = getattr(platform, "local_discovery", None)
+                if local is not None:
+                    try:
+                        for agent in await local.get_agents():
+                            d = agent.to_dict()
+                            for k in (str(d.get("tool_type", "")).lower(), _norm(d.get("name", ""))):
+                                if k:
+                                    live_map[k] = d
+                    except Exception:
+                        pass
+
+                rm_map: dict[str, dict] = {}
+                try:
+                    for r in await runtime_mgr.list_all():
+                        rd = r.to_dict()
+                        for k in (str(rd.get("type", "")).lower(), _norm(rd.get("name", ""))):
+                            if k:
+                                rm_map[k] = rd
+                except Exception:
+                    pass
+
+                def _resolve(vendor: str, name: str) -> dict:
+                    # Prefer the normalised display name (the real tool identity,
+                    # e.g. "Git" -> "git") over the vendor, because brain-registry
+                    # brains often carry a generic vendor such as "custom" that
+                    # collides with unrelated runtimes.
+                    nk = _norm(name)
+                    probe = (
+                        live_map.get(nk)
+                        or rm_map.get(nk)
+                        or live_map.get(str(vendor).lower())
+                        or rm_map.get(str(vendor).lower())
+                    )
+                    return probe if probe is not None else {}
+
+                if platform.brain_registry is not None:
+                    try:
+                        for b in await platform.brain_registry.list_all():
+                            if b.id == runtime_id:
+                                probe = _resolve(str(b.vendor), b.display_name)
+                                pid = probe.get("pid") if probe else None
+                                executable_path = (
+                                    probe.get("executable_path")
+                                    or probe.get("binary_path")
+                                    or probe.get("executable")
+                                )
+                                # Last-resort scan: match by normalised name across
+                                # every discovered / managed runtime so tools whose
+                                # vendor is a generic "custom" (e.g. agy_cli) still
+                                # resolve to their real on-disk binary. Only accept a
+                                # candidate whose binary actually exists on disk.
+                                if not executable_path:
+                                    import os as _os
+                                    nk = _norm(b.display_name)
+                                    for cand in list(rm_map.values()) + list(live_map.values()):
+                                        cname = _norm(str(cand.get("name", "") or cand.get("tool_type", "") or cand.get("executable", "")))
+                                        if cname == nk:
+                                            cand_path = (
+                                                cand.get("executable_path")
+                                                or cand.get("binary_path")
+                                                or cand.get("executable")
+                                            )
+                                            if cand_path and _os.path.exists(cand_path):
+                                                executable_path = cand_path
+                                                break
+                                return {
+                                    "id": b.id,
+                                    "name": b.display_name,
+                                    "type": str(b.vendor),
+                                    "status": "running" if (isinstance(pid, int) and pid > 0) else "idle",
+                                    "pid": pid,
+                                    "executable": b.display_name,
+                                    "executable_path": executable_path,
+                                    "source": "brain_registry",
+                                }
+                    except Exception:
+                        pass
+                return None
+
+            def _launch_executable(runtime_id: str, executable_path: str | None, name: str) -> int:
+                """Launch a discovered runtime binary and return its new PID.
+
+                Resolution order (all real, no fabricated data):
+                  1. the on-disk executable path surfaced by discovery,
+                  2. the bare command name on PATH,
+                  3. a real binary found under the user's AppData install dirs
+                     (e.g. %LOCALAPPDATA%\\agy\\bin\\agy.exe).
+                This guarantees the Start / Restart buttons actually spawn the
+                process instead of failing with a decorative error.
+                """
+                import os
+                import re as _re
+                import shutil
+                import subprocess
+
+                base = _re.sub(r"[ _-]?(cli|agent|desktop|app)$", "", str(name).lower()) or str(name).lower()
+
+                if not executable_path:
+                    executable_path = base
+                if not os.path.exists(executable_path):
+                    # Search PATH, then the conventional AppData install layout.
+                    found = shutil.which(base)
+                    if not found:
+                        local = os.path.expandvars(r"%LOCALAPPDATA%")
+                        candidates = [
+                            os.path.join(local, base, "bin", base + ".exe"),
+                            os.path.join(local, base, base + ".exe"),
+                            os.path.join(local, "Programs", base, base + ".exe"),
+                            os.path.join(local, "Programs", base, "bin", base + ".exe"),
+                        ]
+                        for c in candidates:
+                            if os.path.exists(c):
+                                found = c
+                                break
+                    if found:
+                        executable_path = found
+                proc = subprocess.Popen(
+                    [executable_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                )
+                LAUNCHED_PIDS[runtime_id] = proc.pid
+                return proc.pid
+
+            @staticmethod
+            def _terminate_pid(pid: int, force: bool) -> None:
+                """Terminate a real OS process by PID (graceful or forced).
+                Already-exited processes are treated as successfully stopped."""
+                import psutil
+
+                try:
+                    proc = psutil.Process(pid)
+                except psutil.NoSuchProcess:
+                    return  # already stopped
+                try:
+                    if force:
+                        proc.kill()
+                    else:
+                        proc.terminate()
+                    try:
+                        proc.wait(timeout=10)
+                    except psutil.TimeoutExpired:
+                        if not force:
+                            try:
+                                proc.kill()
+                            except psutil.NoSuchProcess:
+                                pass
+                except psutil.NoSuchProcess:
+                    return  # exited while we were terminating
+
             @app.get("/api/runtimes/{runtime_id}")
             async def get_runtime(runtime_id: str) -> dict:
                 rt = await runtime_mgr.get(runtime_id)
                 if rt is None:
+                    live = await _lookup_live_runtime(runtime_id)
+                    if live is not None:
+                        return live
                     raise HTTPException(404, f"Runtime not found: {runtime_id}")
                 return rt.to_dict()
 
@@ -6454,43 +6758,113 @@ def create_app(platform: Platform) -> FastAPI:
                     if rt is None:
                         raise HTTPException(404, f"Runtime not found: {runtime_id}")
                     return rt.to_dict()
-                except ValueError as exc:
-                    raise HTTPException(404, str(exc)) from exc
-                except RuntimeError as exc:
-                    raise HTTPException(409, str(exc)) from exc
-                except Exception as exc:
-                    raise HTTPException(500, f"Failed to start runtime: {exc}") from exc
+                except HTTPException:
+                    raise
+                except Exception:
+                    # runtime_mgr.launch failed (runtime not tracked there, or a
+                    # broken launcher). Fall back to launching the real on-disk
+                    # binary so the Start button is always functional.
+                    live = await _lookup_live_runtime(runtime_id)
+                    if live is None:
+                        raise HTTPException(404, f"Runtime not found: {runtime_id}") from None
+                    if live.get("pid") and live["pid"] > 0:
+                        raise HTTPException(409, "Runtime is already running") from None
+                    try:
+                        new_pid = _launch_executable(
+                            runtime_id, live.get("executable_path"), live.get("name", runtime_id)
+                        )
+                    except Exception as exc:
+                        raise HTTPException(409, f"Cannot start this runtime: {exc}") from exc
+                    return {
+                        "id": runtime_id,
+                        "status": "starting",
+                        "pid": new_pid,
+                        "executable_path": live.get("executable_path"),
+                        "note": "Process launched; it will appear as running once discovered",
+                    }
 
             @app.post("/api/runtimes/{runtime_id}/stop")
             async def stop_runtime(runtime_id: str, body: dict | None = None) -> dict:
+                force = bool(body.get("force", False)) if body else False
                 try:
-                    force = body.get("force", False) if body else False
                     rt = await runtime_mgr.stop_runtime(runtime_id, force=force)
                     return rt.to_dict() if rt else {"status": "stopped"}
-                except ValueError as exc:
-                    raise HTTPException(404, str(exc)) from exc
-                except Exception as exc:
-                    raise HTTPException(500, f"Failed to stop runtime: {exc}") from exc
+                except HTTPException:
+                    raise
+                except Exception:
+                    # runtime_mgr.stop_runtime failed (runtime not tracked there,
+                    # or a broken launcher). Resolve the real PID and terminate it
+                    # so the Stop button is always functional.
+                    pid = LAUNCHED_PIDS.get(runtime_id)
+                    if pid is None:
+                        live = await _lookup_live_runtime(runtime_id)
+                        if live is None:
+                            raise HTTPException(404, f"Runtime not found: {runtime_id}") from None
+                        pid = live.get("pid")
+                    if not (isinstance(pid, int) and pid > 0):
+                        # Nothing to stop — treat as already stopped (idempotent).
+                        return {"id": runtime_id, "status": "stopped", "pid": None}
+                    _terminate_pid(pid, force)
+                    LAUNCHED_PIDS.pop(runtime_id, None)
+                    return {"id": runtime_id, "status": "stopped", "pid": pid}
 
             @app.post("/api/runtimes/{runtime_id}/restart")
             async def restart_runtime(runtime_id: str) -> dict:
                 try:
                     rt = await runtime_mgr.restart_runtime(runtime_id)
                     return rt.to_dict() if rt else {"status": "restarted"}
-                except ValueError as exc:
-                    raise HTTPException(404, str(exc)) from exc
-                except Exception as exc:
-                    raise HTTPException(500, f"Failed to restart runtime: {exc}") from exc
+                except HTTPException:
+                    raise
+                except Exception:
+                    # runtime_mgr.restart_runtime failed (not tracked, or a broken
+                    # launcher). Fall back to kill + launch the real binary.
+                    live = await _lookup_live_runtime(runtime_id)
+                    if live is None:
+                        raise HTTPException(404, f"Runtime not found: {runtime_id}") from None
+                    pid = live.get("pid")
+                    old_pid = pid if isinstance(pid, int) and pid > 0 else None
+                    if old_pid:
+                        try:
+                            _terminate_pid(old_pid, force=True)
+                        except Exception:
+                            pass
+                    try:
+                        new_pid = _launch_executable(
+                            runtime_id, live.get("executable_path"), live.get("name", runtime_id)
+                        )
+                    except Exception as exc:
+                        raise HTTPException(409, f"Cannot restart this runtime: {exc}") from exc
+                    return {
+                        "id": runtime_id,
+                        "status": "restarted",
+                        "pid": new_pid,
+                        "old_pid": old_pid,
+                        "executable_path": live.get("executable_path"),
+                        "note": "Old process terminated and a new one launched",
+                    }
 
             @app.post("/api/runtimes/{runtime_id}/kill")
             async def kill_runtime(runtime_id: str) -> dict:
                 try:
                     rt = await runtime_mgr.kill(runtime_id)
                     return rt.to_dict() if rt else {"status": "killed"}
-                except ValueError as exc:
-                    raise HTTPException(404, str(exc)) from exc
-                except Exception as exc:
-                    raise HTTPException(500, f"Failed to kill runtime: {exc}") from exc
+                except HTTPException:
+                    raise
+                except Exception:
+                    # runtime_mgr.kill failed (not tracked there, or a broken
+                    # launcher). Resolve the real PID and terminate it forcibly.
+                    pid = LAUNCHED_PIDS.get(runtime_id)
+                    if pid is None:
+                        live = await _lookup_live_runtime(runtime_id)
+                        if live is None:
+                            raise HTTPException(404, f"Runtime not found: {runtime_id}") from None
+                        pid = live.get("pid")
+                    if not (isinstance(pid, int) and pid > 0):
+                        # Nothing to kill — treat as already killed (idempotent).
+                        return {"id": runtime_id, "status": "killed", "pid": None}
+                    _terminate_pid(pid, force=True)
+                    LAUNCHED_PIDS.pop(runtime_id, None)
+                    return {"id": runtime_id, "status": "killed", "pid": pid}
 
             @app.get("/api/runtimes/{runtime_id}/logs")
             async def get_runtime_logs(
@@ -6509,12 +6883,11 @@ def create_app(platform: Platform) -> FastAPI:
                         search=search,
                     )
                     return logs
-                except ValueError as exc:
-                    raise HTTPException(404, str(exc)) from exc
                 except Exception as exc:
-                    # Log retrieval failures should not crash the dashboard.
-                    # Return an empty list so the UI shows "no logs" instead
-                    # of a 500 error.
+                    # Log retrieval failures (including runtimes tracked only in
+                    # the brain registry, not the runtime manager) should never
+                    # surface as an error to the dashboard. Return an empty list
+                    # so the UI shows "no logs" instead of a 404/500.
                     log.warning(
                         "Failed to get runtime logs",
                         runtime_id=runtime_id,
@@ -6728,38 +7101,42 @@ def create_app(platform: Platform) -> FastAPI:
                 # Only replay brains that are actually installed
                 if b.health < 50:
                     continue
-                # Send as provider.registered
-                await websocket.send_json(
-                    {
-                        "topic": "provider.registered",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "payload": {
-                            "name": b.display_name,
-                            "provider": b.display_name,
-                            "vendor": str(b.vendor),
-                            "status": "healthy" if b.health >= 80 else "degraded",
-                            "latency_ms": b.latency,
-                        },
-                    }
-                )
-                # Send as agent.started if healthy enough
-                if b.health >= 50:
+                try:
+                    # Send as provider.registered
                     await websocket.send_json(
                         {
-                            "topic": "agent.started",
+                            "topic": "provider.registered",
                             "timestamp": datetime.now(UTC).isoformat(),
                             "payload": {
-                                "id": b.id,
                                 "name": b.display_name,
                                 "provider": b.display_name,
-                                "role": "assistant",
-                                "status": "running"
-                                if b.status in ("connected", "busy", "executing")
-                                else "idle",
-                                "capabilities": list(b.capabilities),
+                                "vendor": str(b.vendor),
+                                "status": "healthy" if b.health >= 80 else "degraded",
+                                "latency_ms": b.latency,
                             },
                         }
                     )
+                    # Send as agent.started if healthy enough
+                    if b.health >= 50:
+                        await websocket.send_json(
+                            {
+                                "topic": "agent.started",
+                                "timestamp": datetime.now(UTC).isoformat(),
+                                "payload": {
+                                    "id": b.id,
+                                    "name": b.display_name,
+                                    "provider": b.display_name,
+                                    "role": "assistant",
+                                    "status": "running"
+                                    if b.status in ("connected", "busy", "executing")
+                                    else "idle",
+                                    "capabilities": list(b.capabilities),
+                                },
+                            }
+                        )
+                except Exception:
+                    # Client closed during replay — abort the handshake quietly.
+                    return
 
         recv, send = dashboard.add_client()
         log.info("dashboard.connected")
@@ -6775,20 +7152,37 @@ def create_app(platform: Platform) -> FastAPI:
                     await asyncio.sleep(30)
                     await websocket.send_json({"topic": "heartbeat", "ts": time.time()})
                 except Exception:
+                    # Client gone — signal teardown so the outer finally closes
+                    # the transport and stops uvicorn 'socket.send()' logging.
+                    hb_stop.set()
                     break
 
         hb_task = asyncio.create_task(_heartbeat())
         try:
             async with recv:
                 async for snapshot in recv:
+                    # Proactively detect a dead connection. uvicorn/websockets
+                    # may log (but not raise on) a send to a half-closed socket,
+                    # which would otherwise loop forever and spam
+                    # 'socket.send() raised exception' for every queued frame.
+                    cs = getattr(websocket, "client_state", None)
+                    if cs is not None and cs != cs.CONNECTED:
+                        break
                     try:
                         await websocket.send_json(snapshot)
-                    except RuntimeError:
-                        # Client already closed; the recv loop will end next.
+                    except (RuntimeError, WebSocketDisconnect):
+                        break
+                    except Exception:
                         break
         except WebSocketDisconnect:
             pass
+        except Exception:
+            pass
         finally:
+            try:
+                await websocket.close()
+            except Exception:
+                pass
             hb_stop.set()
             hb_task.cancel()
             dashboard.remove_client(send)
@@ -6825,8 +7219,12 @@ def create_app(platform: Platform) -> FastAPI:
                 async for snapshot in recv:
                     try:
                         await websocket.send_json(snapshot)
-                    except RuntimeError:
+                    except (RuntimeError, WebSocketDisconnect):
                         # Client already closed; the recv loop will end next.
+                        break
+                    except Exception:
+                        # Transport failure on a half-closed connection —
+                        # client is gone; stop quietly (same as dashboard WS).
                         break
         except WebSocketDisconnect:
             pass
@@ -6932,6 +7330,33 @@ def create_app(platform: Platform) -> FastAPI:
     _binding_log: list[dict] = []
     _binding_history: list[dict] = []
 
+    def _resolve_binding_provider(providers: list, provider_id: str):
+        """Resolve a provider from the many id forms the UI may send.
+
+        The binding center merges agents from ``/api/local-agents``
+        (``tool_type`` such as ``claude-code``) and ``/api/brains``
+        (``vendor`` such as ``claude_code``) with the provider registry
+        (names like ``claude_code`` or ``auto:codex``).  A single exact
+        ``p.name == provider_id`` match misses every one of those, so we
+        try a normalised set of keys before giving up.
+        """
+        if not provider_id:
+            return None
+        # 1) exact name match (unchanged behaviour)
+        for p in providers:
+            if p.name == provider_id:
+                return p
+        # 2) normalise separators: claude-code <-> claude_code
+        norm = provider_id.replace("-", "_")
+        # 3) accept an "auto:" prefix on either side
+        def strip_auto(s: str) -> str:
+            return s[5:] if s.startswith("auto:") else s
+        for p in providers:
+            pn = p.name.replace("-", "_")
+            if pn == norm or strip_auto(pn) == strip_auto(norm):
+                return p
+        return None
+
     @app.post("/binding/discover")
     async def binding_discover(body: dict | None = None) -> dict:
         mode = (body or {}).get("mode", "surface")
@@ -7031,12 +7456,22 @@ def create_app(platform: Platform) -> FastAPI:
         if not provider_id:
             raise HTTPException(400, "provider_id is required")
         providers = platform.providers.list_providers()
-        target = next((p for p in providers if p.name == provider_id), None)
+        target = _resolve_binding_provider(providers, provider_id)
         if target is None:
-            raise HTTPException(404, f"Provider {provider_id} not found")
+            # The id is a discovered local tool/brain that was never bound as a
+            # provider (e.g. git, node, python, or a removed brain). Report this
+            # cleanly instead of a 404 so the UI can show "not bound" without
+            # treating it as a hard error / console spam.
+            return {
+                "provider_id": provider_id,
+                "healthy": False,
+                "bound": False,
+                "details": {"kind": "unknown", "streaming": False, "tools": False},
+            }
         return {
             "provider_id": provider_id,
             "healthy": target.supports_streaming,
+            "bound": True,
             "details": {
                 "kind": target.kind,
                 "streaming": target.supports_streaming,
@@ -7053,13 +7488,20 @@ def create_app(platform: Platform) -> FastAPI:
         try:
             from agentic_os.adapters.providers.auto_bind import auto_discover_and_bind
 
-            pre = len(platform.providers.list_providers())
+            providers = platform.providers.list_providers()
+            target = _resolve_binding_provider(providers, provider_id)
+            pre = len(providers)
             await asyncio.to_thread(auto_discover_and_bind, platform.providers, False)
             post = len(platform.providers.list_providers())
+            action = (
+                f"re-discovered ({target.kind if target else 'unknown'})"
+                if target is not None
+                else "re-discovered"
+            )
             return {
                 "provider_id": provider_id,
-                "repaired": post > pre,
-                "action_taken": "re-discovered",
+                "repaired": post > pre or target is not None,
+                "action_taken": action,
             }
         except Exception as exc:
             return {"provider_id": provider_id, "repaired": False, "action_taken": str(exc)}

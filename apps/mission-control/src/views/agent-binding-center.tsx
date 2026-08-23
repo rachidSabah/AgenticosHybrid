@@ -99,13 +99,40 @@ export function AgentBindingCenter() {
 
       const merged: BoundAgent[] = [];
       const seen = new Set<string>();
+      // Dedupe by normalized display name so that the same logical agent
+      // is never shown more than once (e.g. a path-discovered CLI and a
+      // cli:/cloud-registered brain resolve to the same tool). When a name
+      // collides we keep the entry with the better status and more info.
+      const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+      const byName = new Map<string, BoundAgent>();
+      const rank = (s: string) =>
+        s === "healthy" ? 2 : s === "validating" || s === "repairing" ? 1 : 0;
+      const upsert = (agent: BoundAgent) => {
+        const key = norm(agent.name);
+        const existing = byName.get(key);
+        if (!existing) {
+          byName.set(key, agent);
+          merged.push(agent);
+          return;
+        }
+        // Keep the richer / healthier entry; fold capabilities/models from both.
+        const keep = rank(agent.status) >= rank(existing.status) ? agent : existing;
+        const drop = keep === agent ? existing : agent;
+        keep.capabilities = Array.from(new Set([...keep.capabilities, ...drop.capabilities]));
+        keep.models = Array.from(new Set([...keep.models, ...drop.models]));
+        keep.version = keep.version || drop.version;
+        keep.executable_path = keep.executable_path || drop.executable_path;
+        byName.set(key, keep);
+        const idx = merged.indexOf(drop);
+        if (idx !== -1) merged[idx] = keep;
+      };
 
       // Local agents → BoundAgent
       for (const a of localAgents) {
         const id = String(a.id ?? a.name ?? "");
         if (!id || seen.has(id)) continue;
         seen.add(id);
-        merged.push({
+        upsert({
           id,
           name: String(a.name ?? id),
           vendor: String(a.tool_type ?? "unknown"),
@@ -126,12 +153,18 @@ export function AgentBindingCenter() {
         });
       }
 
-      // Brains not already in the list → BoundAgent
+      // Brains not already in the list → BoundAgent.
+      // Skip terminal/non-discoverable brains (e.g. status "removed") so that
+      // uninstalled agents don't linger in the binding list as false "degraded"
+      // rows. Only present brains the system can actually bind to.
+      const BRAIN_EXCLUDE = new Set(["removed", "shutdown", "failed"]);
       for (const b of brains) {
+        const bstatus = String(b.status ?? "");
+        if (BRAIN_EXCLUDE.has(bstatus.toLowerCase())) continue;
         const id = String(b.id ?? b.display_name ?? "");
         if (!id || seen.has(id)) continue;
         seen.add(id);
-        merged.push({
+        upsert({
           id,
           name: String(b.display_name ?? id),
           vendor: String(b.vendor ?? "unknown"),
@@ -210,18 +243,27 @@ export function AgentBindingCenter() {
   };
 
   // ── Actions ──
-  const handleValidate = async (id: string) => {
-    addLog("Validation Subsystem", "info", `Executing validation suite for provider [${id}]...`);
+  const handleValidate = async (agent: BoundAgent) => {
+    const id = agent.id;
+    // Resolve the backend provider id: local agents expose tool_type
+    // (e.g. "claude-code"); brains expose vendor (e.g. "claude_code").
+    // The backend normalises these to the registered provider name.
+    const providerId = agent.vendor || id;
+    addLog("Validation Subsystem", "info", `Executing validation suite for provider [${providerId}]...`);
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: "validating" } : a)));
     try {
-      const res = await api.bindingValidate(id);
+      const res = await api.bindingValidate(providerId);
       const healthy = Boolean(res?.healthy);
+      const bound = res?.bound !== false; // undefined (older responses) → treat as bound
       setAgents((prev) =>
         prev.map((a) =>
           a.id === id
             ? {
                 ...a,
-                status: healthy ? "healthy" : "degraded",
+                // A discovered local tool that was never bound as a provider
+                // (git, node, python, removed brains) reports bound:false —
+                // keep its existing status instead of flipping to "degraded".
+                status: bound ? (healthy ? "healthy" : "degraded") : a.status,
                 last_validation: new Date().toISOString(),
                 validation: {
                   healthy,
@@ -232,7 +274,9 @@ export function AgentBindingCenter() {
                 },
                 logs: [
                   ...(a.logs || []),
-                  `[VALIDATION ${healthy ? "PASS" : "FAIL"}] ${new Date().toLocaleTimeString()} -- kind=${res?.details?.kind ?? "unknown"} streaming=${res?.details?.streaming} tools=${res?.details?.tools}`,
+                  bound
+                    ? `[VALIDATION ${healthy ? "PASS" : "FAIL"}] ${new Date().toLocaleTimeString()} -- kind=${res?.details?.kind ?? "unknown"} streaming=${res?.details?.streaming} tools=${res?.details?.tools}`
+                    : `[VALIDATION SKIP] ${new Date().toLocaleTimeString()} -- ${providerId} is not a bound provider`,
                 ],
               }
             : a
@@ -241,7 +285,7 @@ export function AgentBindingCenter() {
       addLog(
         "Validation Subsystem",
         healthy ? "success" : "warning",
-        `Provider [${id}] validation ${healthy ? "passed" : "failed"} (streaming=${res?.details?.streaming}, tools=${res?.details?.tools}).`,
+        `Provider [${providerId}] validation ${healthy ? "passed" : "failed"} (streaming=${res?.details?.streaming}, tools=${res?.details?.tools}).`,
       );
     } catch (err) {
       setAgents((prev) =>
@@ -258,16 +302,18 @@ export function AgentBindingCenter() {
       addLog(
         "Validation Subsystem",
         "error",
-        `Provider [${id}] validation failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Provider [${providerId}] validation failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   };
 
-  const handleRepair = async (id: string) => {
-    addLog("Repair Engine", "info", `Initiating auto-repair sequence for provider [${id}]...`);
+  const handleRepair = async (agent: BoundAgent) => {
+    const id = agent.id;
+    const providerId = agent.vendor || id;
+    addLog("Repair Engine", "info", `Initiating auto-repair sequence for provider [${providerId}]...`);
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: "repairing" } : a)));
     try {
-      const res = await api.bindingRepair(id);
+      const res = await api.bindingRepair(providerId);
       const repaired = Boolean(res?.repaired);
       setAgents((prev) =>
         prev.map((a) =>
@@ -286,7 +332,7 @@ export function AgentBindingCenter() {
       addLog(
         "Repair Engine",
         repaired ? "success" : "warning",
-        `Provider [${id}] ${repaired ? "repaired" : "not repaired"}: ${res?.action_taken ?? "no action taken"}`,
+        `Provider [${providerId}] ${repaired ? "repaired" : "not repaired"}: ${res?.action_taken ?? "no action taken"}`,
       );
     } catch (err) {
       setAgents((prev) =>
@@ -303,15 +349,17 @@ export function AgentBindingCenter() {
       addLog(
         "Repair Engine",
         "error",
-        `Provider [${id}] repair failed: ${err instanceof Error ? err.message : String(err)}`,
+        `Provider [${providerId}] repair failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   };
 
-  const handleUnbind = async (id: string) => {
-    addLog("Binding Center", "warning", `Unbinding agent [${id}] from Mission Control (executable file untouched).`);
+  const handleUnbind = async (agent: BoundAgent) => {
+    const id = agent.id;
+    const providerId = agent.vendor || id;
+    addLog("Binding Center", "warning", `Unbinding agent [${providerId}] from Mission Control (executable file untouched).`);
     try {
-      const res = await api.bindingUnbind(id);
+      const res = await api.bindingUnbind(providerId);
       if (res?.unbound) {
         setAgents((prev) => prev.filter((a) => a.id !== id));
         if (selectedId === id) setSelectedId(agents[0]?.id || "");
@@ -326,7 +374,7 @@ export function AgentBindingCenter() {
 
   const handleRebindAll = () => {
     addLog("Binding Center", "info", "Re-validating all registered agents...");
-    agents.forEach((a) => handleValidate(a.id));
+    agents.forEach((a) => handleValidate(a));
   };
 
   const handleManualBind = async () => {
@@ -410,7 +458,7 @@ export function AgentBindingCenter() {
 
           <button
             onClick={() => {
-              agents.forEach((a) => handleRepair(a.id));
+              agents.forEach((a) => handleRepair(a));
             }}
             className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-surface/40 px-2.5 py-1.5 text-xs font-medium text-muted hover:text-text hover:bg-surface/80 transition"
             title="Repair All"
@@ -498,21 +546,21 @@ export function AgentBindingCenter() {
                 actions={
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => handleValidate(selectedAgent.id)}
+                      onClick={() => handleValidate(selectedAgent)}
                       className="flex items-center gap-1 rounded-lg border border-ok/40 bg-ok/10 px-2.5 py-1 text-xs font-medium text-ok hover:bg-ok/20 transition"
                     >
                       <ShieldCheck size={12} />
                       Validate
                     </button>
                     <button
-                      onClick={() => handleRepair(selectedAgent.id)}
+                      onClick={() => handleRepair(selectedAgent)}
                       className="flex items-center gap-1 rounded-lg border border-warn/40 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn hover:bg-warn/20 transition"
                     >
                       <Wrench size={12} />
                       Repair
                     </button>
                     <button
-                      onClick={() => handleUnbind(selectedAgent.id)}
+                      onClick={() => handleUnbind(selectedAgent)}
                       className="flex items-center gap-1 rounded-lg border border-danger/40 bg-danger/10 px-2.5 py-1 text-xs font-medium text-danger hover:bg-danger/20 transition"
                     >
                       <Unlink size={12} />

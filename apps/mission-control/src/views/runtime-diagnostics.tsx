@@ -1020,8 +1020,12 @@ function TabHealthDashboard({ autoRefresh }: { autoRefresh: boolean }) {
 
 function TabConfiguration({ autoRefresh }: { autoRefresh: boolean }) {
   return (
-    <Panel title="Live Configuration (Secrets Redacted)">
+    <Panel title="Example Configuration (static reference — not fetched live)">
       <div className="glass rounded-xl p-4 overflow-auto border border-border/40">
+        <p className="mb-2 text-[10px] text-faint">
+          Illustrative shape only. The running backend does not expose a config
+          endpoint, so this is a static sample — not your live configuration.
+        </p>
         <pre className="text-xs font-mono text-accent/90">
 {`{
   "runtime": {
@@ -1039,12 +1043,12 @@ function TabConfiguration({ autoRefresh }: { autoRefresh: boolean }) {
     "openai": {
       "enabled": true,
       "apiKey": "sk-***...***",
-      "defaultModel": "gpt-4o"
+      "defaultModel": "<your-openai-model>"
     },
     "anthropic": {
       "enabled": true,
       "apiKey": "sk-ant-***...***",
-      "defaultModel": "claude-3-5-sonnet-20240620"
+      "defaultModel": "<your-anthropic-model>"
     }
   },
   "storage": {

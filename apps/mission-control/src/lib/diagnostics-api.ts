@@ -469,35 +469,67 @@ export async function runSelfTest(): Promise<DiagnosticsSelfTestResult> {
 }
 
 export function fetchDiagnosticsSSE(onEvent: (event: any) => void, onError: (err: any) => void): () => void {
-  const source = new EventSource(`${BASE}/api/diagnostics/events`);
+  let source: EventSource | null = null;
+  let isClosed = false;
+  let retryTimer: NodeJS.Timeout | null = null;
 
-  source.addEventListener("connected", (event) => {
-    onEvent({ type: "connected" });
-  });
-
-  source.addEventListener("DIAGNOSTICS_UPDATED", (event) => {
+  function connect() {
+    if (isClosed) return;
     try {
-      const data = JSON.parse(event.data);
-      onEvent(data);
-    } catch (e) {
-      console.error("Failed to parse SSE event", e);
-    }
-  });
+      source = new EventSource(`${BASE}/api/diagnostics/events`);
 
-  source.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      onEvent(data);
-    } catch (e) {
-      console.error("Failed to parse SSE event", e);
-    }
-  };
+      source.onopen = () => {
+        onEvent({ type: "connected" });
+      };
 
-  source.onerror = (err) => {
-    onError(err);
-  };
+      source.addEventListener("connected", () => {
+        onEvent({ type: "connected" });
+      });
+
+      source.addEventListener("DIAGNOSTICS_UPDATED", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          onEvent(data);
+        } catch (e) {
+          console.error("Failed to parse SSE event", e);
+        }
+      });
+
+      source.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          onEvent(data);
+        } catch (e) {
+          console.error("Failed to parse SSE event", e);
+        }
+      };
+
+      source.onerror = (err) => {
+        onError(err);
+        if (source && source.readyState === EventSource.CLOSED) {
+          source.close();
+          source = null;
+          if (!isClosed && !retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              connect();
+            }, 3000);
+          }
+        }
+      };
+    } catch (e) {
+      onError(e);
+    }
+  }
+
+  connect();
 
   return () => {
-    source.close();
+    isClosed = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    if (source) {
+      source.close();
+      source = null;
+    }
   };
 }

@@ -162,8 +162,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+              {typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__ ? (
                 <SystemStats />
-              </div>
+              ) : null}
+            </div>
             </div>
 
             {/* Content Area — THE SINGLE SCROLL CONTAINER for the app */}

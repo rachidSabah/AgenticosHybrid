@@ -93,6 +93,7 @@ interface Runtime {
   streaming: boolean;
   binary_path: string | null;
   executable: string | null;
+  executable_path: string | null;
   source: string;
   discovered: boolean;
   metadata: Record<string, unknown>;
@@ -106,7 +107,17 @@ interface ExecuteResponse {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const API_BASE = "http://localhost:8000";
+// Resolve the backend base URL. Mirrors lib/api.ts resolveBase() so the
+// dashboard honours NEXT_PUBLIC_API_BASE (e.g. when the backend runs on a
+// non-default port such as 8080) instead of hardcoding localhost:8000.
+function resolveRuntimeApiBase(): string {
+  if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__) {
+    return "http://127.0.0.1:8000";
+  }
+  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
+}
+
+const API_BASE = resolveRuntimeApiBase();
 
 const STATUS_COLORS: Record<string, string> = {
   discovered: "bg-gray-500 text-gray-100",
@@ -1089,22 +1100,11 @@ export default function RuntimeDashboard() {
 
   const counters = useMemo(() => {
     const total = runtimes.length;
-    const running = runtimes.filter(
-      (r) =>
-        r.status === "ready" ||
-        r.status === "busy" ||
-        r.status === "idle" ||
-        r.status === "running" ||
-        r.status === "starting" ||
-        r.status === "streaming",
+    const running = runtimes.filter((r) =>
+      ["running", "ready", "busy", "streaming", "starting"].includes(r.status),
     ).length;
-    const stopped = runtimes.filter(
-      (r) =>
-        r.status === "stopped" ||
-        r.status === "crashed" ||
-        r.status === "failed" ||
-        r.status === "discovered" ||
-        r.status === "unknown",
+    const stopped = runtimes.filter((r) =>
+      ["stopped", "crashed", "failed"].includes(r.status),
     ).length;
     return { total, running, stopped };
   }, [runtimes]);
@@ -1209,7 +1209,9 @@ export default function RuntimeDashboard() {
             {/* Table rows */}
             {runtimes.map((rt) => {
               const isExpanded = expandedId === rt.id;
-              const hlColor = HEALTH_COLORS[safeStr(rt?.health).toLowerCase()] ?? "bg-gray-500";
+              const hlValue = safeNum(rt?.health);
+              const hlColor =
+                hlValue >= 80 ? "bg-green-500" : hlValue >= 50 ? "bg-yellow-500" : hlValue > 0 ? "bg-orange-500" : "bg-gray-500";
               const isActionLoading = actionLoading && actionLoading.endsWith(rt.id);
 
               return (
@@ -1273,64 +1275,61 @@ export default function RuntimeDashboard() {
                       className="ml-auto flex w-40 items-center justify-end gap-1"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {rt.status === "ready" ||
-                      rt.status === "busy" ||
-                      rt.status === "idle" ||
-                      rt.status === "running" ||
-                      rt.status === "starting" ||
-                      rt.status === "streaming" ? (
-                        <>
-                          <button
-                            onClick={() => handleAction("stop", rt.id)}
-                            disabled={!!actionLoading}
-                            className="rounded-md border border-yellow-700/40 bg-yellow-900/20 p-1.5 text-yellow-400 hover:bg-yellow-900/40 disabled:opacity-40"
-                            title="Stop"
-                          >
-                            {isActionLoading && actionLoading?.startsWith("stop") ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Square className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleAction("restart", rt.id)}
-                            disabled={!!actionLoading}
-                            className="rounded-md border border-blue-700/40 bg-blue-900/20 p-1.5 text-blue-400 hover:bg-blue-900/40 disabled:opacity-40"
-                            title="Restart"
-                          >
-                            {isActionLoading && actionLoading?.startsWith("restart") ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <RotateCw className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleAction("kill", rt.id)}
-                            disabled={!!actionLoading}
-                            className="rounded-md border border-red-700/40 bg-red-900/20 p-1.5 text-red-400 hover:bg-red-900/40 disabled:opacity-40"
-                            title="Kill"
-                          >
-                            {isActionLoading && actionLoading?.startsWith("kill") ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Skull className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        </>
-                      ) : (
+                      {/* Every runtime is a real, controllable process, so all
+                          four controls are always shown. Start appears only when
+                          the runtime is not currently running. */}
+                      <>
                         <button
-                          onClick={() => handleAction("start", rt.id)}
+                          onClick={() => handleAction("stop", rt.id)}
                           disabled={!!actionLoading}
-                          className="rounded-md border border-green-700/40 bg-green-900/20 p-1.5 text-green-400 hover:bg-green-900/40 disabled:opacity-40"
-                          title="Start"
+                          className="rounded-md border border-yellow-700/40 bg-yellow-900/20 p-1.5 text-yellow-400 hover:bg-yellow-900/40 disabled:opacity-40"
+                          title="Stop"
                         >
-                          {isActionLoading && actionLoading?.startsWith("start") ? (
+                          {isActionLoading && actionLoading?.startsWith("stop") ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <Play className="h-3.5 w-3.5" />
+                            <Square className="h-3.5 w-3.5" />
                           )}
                         </button>
-                      )}
+                        <button
+                          onClick={() => handleAction("restart", rt.id)}
+                          disabled={!!actionLoading}
+                          className="rounded-md border border-blue-700/40 bg-blue-900/20 p-1.5 text-blue-400 hover:bg-blue-900/40 disabled:opacity-40"
+                          title="Restart"
+                        >
+                          {isActionLoading && actionLoading?.startsWith("restart") ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RotateCw className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleAction("kill", rt.id)}
+                          disabled={!!actionLoading}
+                          className="rounded-md border border-red-700/40 bg-red-900/20 p-1.5 text-red-400 hover:bg-red-900/40 disabled:opacity-40"
+                          title="Kill"
+                        >
+                          {isActionLoading && actionLoading?.startsWith("kill") ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Skull className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        {rt.pid == null && (
+                          <button
+                            onClick={() => handleAction("start", rt.id)}
+                            disabled={!!actionLoading}
+                            className="rounded-md border border-green-700/40 bg-green-900/20 p-1.5 text-green-400 hover:bg-green-900/40 disabled:opacity-40"
+                            title="Start"
+                          >
+                            {isActionLoading && actionLoading?.startsWith("start") ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </>
                     </span>
                   </div>
 

@@ -36,7 +36,21 @@ class HealthMonitorImpl:
         agent.heartbeat()
 
     async def check(self, agent: Agent) -> bool:
+        # A completed agent is healthy by definition.
         if agent.status in (AgentStatus.COMPLETED,):
+            return True
+        # An agent that is NOT running (idle / failed / recovering) is not
+        # "unhealthy" — it simply has nothing to heartbeat for. Reporting
+        # healthy:false for idle agents flooded the EventBus with false
+        # health.check failures for agents whose tasks finished long ago.
+        if agent.status != AgentStatus.RUNNING:
+            return True
+        task = (
+            self._registry.get_task(agent.current_task_id)
+            if agent.current_task_id
+            else None
+        )
+        if task is not None and task.status == TaskStatus.IN_PROGRESS:
             return True
         if agent.last_heartbeat is None:
             return False
@@ -45,6 +59,14 @@ class HealthMonitorImpl:
 
     async def _tick(self) -> None:
         for agent in self._registry.agents():
+            # Only agents with a live heartbeat contract emit health events.
+            # Long-idle agents (finished/never-started work) produce endless
+            # healthy:false noise that Mission Control surfaces as ghost
+            # failures — skip them entirely instead of reporting false.
+            if agent.last_heartbeat is None:
+                continue
+            if agent.status != AgentStatus.RUNNING:
+                continue
             healthy = await self.check(agent)
             await self._bus.publish(
                 EventEnvelope(
@@ -54,7 +76,7 @@ class HealthMonitorImpl:
                     payload={"agent_id": agent.id, "healthy": healthy},
                 )
             )
-            if not healthy and agent.status == AgentStatus.RUNNING:
+            if not healthy:
                 # Do not false-degrade an agent whose task is actively executing:
                 # long-running real-provider tasks outlive the heartbeat window,
                 # and recovery would re-dispatch a healthy execution.

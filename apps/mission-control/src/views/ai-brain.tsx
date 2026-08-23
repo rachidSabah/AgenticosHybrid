@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { safeFixed, safeNum } from "@/lib/safe";
 import {
-  RefreshCw, ZoomIn, ZoomOut, Settings, Maximize2, Minimize2
+  RefreshCw, ZoomIn, ZoomOut, Anchor, Maximize2, Minimize2
 } from "lucide-react";
 import { useStore } from "@/lib/store";
 
@@ -87,7 +87,24 @@ export function AIBrain() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnchored, setIsAnchored] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  
+
+  // Drag-to-pan (only active when unanchored). When anchored, the view is
+  // locked to centre, so panning is disabled — this is what makes the
+  // "Toggle Anchor" control meaningful: anchored = locked, unanchored = free pan.
+  const dragRef = useRef<{ active: boolean; startX: number; startY: number; baseX: number; baseY: number }>({
+    active: false, startX: 0, startY: 0, baseX: 0, baseY: 0,
+  });
+  const onPanStart = useCallback((e: React.MouseEvent) => {
+    if (isAnchored) return;
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, baseX: panOffset.x, baseY: panOffset.y };
+  }, [isAnchored, panOffset.x, panOffset.y]);
+  const onPanMove = useCallback((e: React.MouseEvent) => {
+    const d = dragRef.current;
+    if (!d.active) return;
+    setPanOffset({ x: d.baseX + (e.clientX - d.startX), y: d.baseY + (e.clientY - d.startY) });
+  }, []);
+  const onPanEnd = useCallback(() => { dragRef.current.active = false; }, []);
+
   const zoomIn = () => setZoomLevel(z => Math.min(z * 1.2, 3));
   const zoomOut = () => setZoomLevel(z => Math.max(z / 1.2, 0.5));
   const resetView = () => { setZoomLevel(1); setPanOffset({ x: 0, y: 0 }); };
@@ -317,7 +334,14 @@ export function AIBrain() {
       </svg>
 
       {/* ══════════ NEURAL CONSTELLATION CANVAS ══════════ */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        onMouseDown={onPanStart}
+        onMouseMove={onPanMove}
+        onMouseUp={onPanEnd}
+        onMouseLeave={onPanEnd}
+        style={{ cursor: isAnchored ? "default" : "grab" }}
+      >
         <div 
           className="relative w-full h-full min-w-0 min-h-0 transition-transform duration-200"
           style={{
@@ -528,8 +552,8 @@ export function AIBrain() {
           <button onClick={resetView} className="hover:text-white transition-colors p-0.5" title="Reset View (0)">
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={toggleAnchor} className={`hover:text-white transition-colors p-0.5 ${isAnchored ? 'text-cyan-400' : 'text-slate-400'}`} title="Toggle Anchor (A)">
-            <Settings className="w-3.5 h-3.5" />
+          <button onClick={toggleAnchor} className={`hover:text-white transition-colors p-0.5 ${isAnchored ? 'text-cyan-400' : 'text-slate-400'}`} title={isAnchored ? "Anchor: locked to centre (A to free-pan)" : "Unanchored: free-pan (A to lock)"}>
+            <Anchor className="w-3.5 h-3.5" />
           </button>
           {/* Zoom level indicator */}
           <span className="px-1.5 py-0.5 rounded bg-slate-900/50 border border-slate-700 text-[8px] font-mono text-cyan-300 ml-1">

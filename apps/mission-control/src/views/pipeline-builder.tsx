@@ -82,7 +82,7 @@ const PIPELINE_TEMPLATES: PipelineTemplate[] = [
     nodes: [
       pipeNode("p1", "input", "input:user-prompt", 80, 200),
       pipeNode("p2", "route", "route:llm-route", 280, 200),
-      pipeNode("p3", "provider", "provider:gpt-4o", 480, 200),
+      pipeNode("p3", "provider", "provider:default", 480, 200),
       pipeNode("p4", "output", "output:response", 680, 200),
     ],
     edges: [
@@ -115,7 +115,7 @@ const PIPELINE_TEMPLATES: PipelineTemplate[] = [
     nodes: [
       pipeNode("s1", "input", "input:request", 80, 200),
       pipeNode("s2", "route", "route:secure-route", 260, 200),
-      pipeNode("s3", "provider", "provider:gpt-4o", 440, 200),
+      pipeNode("s3", "provider", "provider:default", 440, 200),
       pipeNode("s4", "memory", "memory:context-store", 620, 200),
       pipeNode("s5", "output", "output:response", 800, 200),
     ],
