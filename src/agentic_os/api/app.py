@@ -1961,7 +1961,7 @@ def create_app(platform: Platform) -> FastAPI:
         if not m.plan:
             raise HTTPException(400, "Mission has no plan — call /plan first")
         m.status = MissionStatus.EXECUTING
-        m.error = None
+        m.error = ""
         m.updated_at = datetime.now(UTC)
         if m.plan and m.plan.tasks:
             from agentic_os.domain.mission import TaskStatus
