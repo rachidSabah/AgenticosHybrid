@@ -90,10 +90,24 @@ export function AgentBindingCenter() {
   // live discovery events via WebSocket).
   const refreshAgents = useCallback(async () => {
     try {
-      const [localRes, brainsRes] = await Promise.allSettled([
+      // Single source of truth: the Agent Discovery Engine (spec §1).
+      // Only agents proven by a real executable + successful probe appear.
+      // /api/local-agents and /api/brains are used only as a fallback when
+      // discovery is unreachable, so retired agents never resurface.
+      const [discRes, localRes, brainsRes] = await Promise.allSettled([
+        api.get<{ active_agents?: Array<Record<string, unknown>>; agents?: Array<Record<string, unknown>> }>(
+          "/api/discovery/agents",
+        ),
         api.get<Array<Record<string, unknown>>>("/api/local-agents"),
         api.get<Array<Record<string, unknown>>>("/api/brains"),
       ]);
+
+      const disc =
+        discRes.status === "fulfilled" && discRes.value
+          ? (discRes.value.active_agents?.length
+              ? discRes.value.active_agents
+              : (discRes.value.agents ?? []))
+          : [];
       const localAgents = localRes.status === "fulfilled" && Array.isArray(localRes.value) ? localRes.value : [];
       const brains = brainsRes.status === "fulfilled" && Array.isArray(brainsRes.value) ? brainsRes.value : [];
 
@@ -127,6 +141,51 @@ export function AgentBindingCenter() {
         if (idx !== -1) merged[idx] = keep;
       };
 
+      // Discovery engine results are authoritative (spec §1). When it returns
+      // rows we render ONLY those — merging in registry rows would let retired
+      // agents (gemini) reappear.
+      const discoveryRows: BoundAgent[] = disc
+        .filter((a) => a.is_active === true || a.is_agent === true)
+        .map((a) => {
+          const id = String(a.id ?? a.name ?? "");
+          const caps = Array.isArray(a.capabilities)
+            ? a.capabilities.map((c: unknown) =>
+                typeof c === "string" ? c : String((c as { capability?: unknown })?.capability ?? ""),
+              ).filter(Boolean)
+            : [];
+          return {
+            id,
+            name: String(a.name ?? id),
+            vendor: String(a.kind ?? "unknown"),
+            version: a.version ? String(a.version) : "",
+            executable_path: String(a.executable_path ?? ""),
+            install_source: String(a.kind ?? ""),
+            status: a.status === "healthy" ? "healthy" : "degraded",
+            capabilities: caps,
+            models: [],
+            arguments: [],
+            env: {},
+            startup_mode: "automatic" as const,
+            timeout_seconds: 60,
+            last_validation: String(a.validated_at ?? ""),
+            last_heartbeat: "",
+            user_labels: [],
+            logs: [],
+          } satisfies BoundAgent;
+        });
+
+      if (discoveryRows.length > 0) {
+        for (const agent of discoveryRows) upsert(agent);
+        setAgents(merged);
+        if (merged.length > 0) {
+          setSelectedId((prev) => (merged.find((m) => m.id === prev) ? prev : merged[0].id));
+        } else {
+          setSelectedId("");
+        }
+        return;
+      }
+
+      // Fallback only when discovery produced nothing (engine unreachable).
       // Local agents → BoundAgent
       for (const a of localAgents) {
         const id = String(a.id ?? a.name ?? "");
@@ -221,7 +280,8 @@ export function AgentBindingCenter() {
     try {
       const res =
         mode === "surface" ? await api.bindingDiscover("surface") : await api.bindingDeepScan();
-      try { await api.post("/api/brains/rescan"); } catch { /* ignore if offline */ }
+      // Real rescan through the discovery engine (spec §13). No restart.
+      try { await api.post("/api/discovery/rescan"); } catch { /* ignore if offline */ }
       try { await useStore.getState().hydrate(); } catch { /* ignore */ }
       await refreshAgents();
       setScanningMode("idle");
