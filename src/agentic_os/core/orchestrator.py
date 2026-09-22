@@ -629,9 +629,9 @@ class Orchestrator:
             # generated files land where the user expects. A git workspace
             # would otherwise execute in a worktree that is never merged
             # back, so a "create a website" prompt produces files the user
-            # never sees. Enabled by default; set AGENTICOS_DIRECT_WORKSPACE=0
-            # to restore isolated-worktree behaviour.
-            if _os.environ.get("AGENTICOS_DIRECT_WORKSPACE", "1") != "0":
+            # never sees. Opt-in via AGENTICOS_DIRECT_WORKSPACE=1 so default
+            # behaviour (isolated worktree) is unchanged.
+            if _os.environ.get("AGENTICOS_DIRECT_WORKSPACE", "0") == "1":
                 log.info(
                     "worktree.direct_workspace",
                     agent=agent.id,
