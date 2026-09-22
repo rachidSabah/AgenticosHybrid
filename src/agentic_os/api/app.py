@@ -274,14 +274,24 @@ def create_app(platform: Platform) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Prime the discovery engine and keep it fresh (spec §13) so newly
-        # installed CLIs appear without an application restart.
-        try:
-            await agent_discovery_engine.scan()
-            agent_discovery_engine.start_auto_rescan(interval_seconds=300.0)
-        except Exception as exc:
-            log.warning("discovery engine startup failed", error=str(exc))
+        # Prime discovery in the background (spec §13) and keep it fresh so
+        # newly installed CLIs appear without a restart. Started as a task:
+        # a full PATH scan takes tens of seconds and must not block binding.
+        async def _prime_discovery() -> None:
+            try:
+                await agent_discovery_engine.scan()
+                agent_discovery_engine.start_auto_rescan(interval_seconds=300.0)
+            except Exception as exc:
+                log.warning("discovery engine startup failed", error=str(exc))
+
+        discovery_task = asyncio.create_task(_prime_discovery())
         yield
+        # Server shutdown — stop discovery first so no probe outlives the loop.
+        try:
+            agent_discovery_engine.stop_auto_rescan()
+            discovery_task.cancel()
+        except Exception as exc:
+            log.warning("error stopping discovery task", error=str(exc))
         # Server shutdown — terminate all runtime managers and subprocesses cleanly
         try:
             if platform.runtime is not None:
