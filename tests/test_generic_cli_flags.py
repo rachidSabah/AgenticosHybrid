@@ -13,6 +13,8 @@ def test_is_codex_detects_codex_binary():
     assert is_codex("codex")
     assert is_codex("C:\\path\\to\\codex.EXE")
     assert is_codex("codex.exe")
+    assert is_codex("/usr/local/bin/codex")
+    assert is_codex("/opt/codex")
 
 
 def test_is_codex_rejects_others():

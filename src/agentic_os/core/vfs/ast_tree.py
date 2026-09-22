@@ -21,7 +21,7 @@ class VFSNode:
 class MonorepoVFS:
     """Streams fast AST representations and symbol index across million-line codebases."""
 
-    def __init__(self, root_dir: str = "E:\Agenticos") -> None:
+    def __init__(self, root_dir: str = r"E:\Agenticos") -> None:
         self.root_dir = root_dir
 
     def get_quick_ast_tree(self) -> dict[str, Any]:

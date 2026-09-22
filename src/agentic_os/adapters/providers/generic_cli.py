@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 import shutil
-from pathlib import Path
 
 from agentic_os.adapters.providers.run_cli import run_cli
 from agentic_os.domain.agent import Agent, ProviderInfo, Task
@@ -37,7 +36,7 @@ _CODEX_FLAGS = ("-s", "workspace-write", "--skip-git-repo-check")
 
 def is_codex(bin_path: str) -> bool:
     """True when the binary is the Codex CLI (case/path insensitive)."""
-    name = Path(bin_path).name.lower()
+    name = bin_path.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return name.startswith("codex")
 
 
