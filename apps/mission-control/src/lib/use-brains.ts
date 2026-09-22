@@ -196,7 +196,7 @@ export function normalizeBrainRecord(raw: unknown): BrainRecord {
       available_context: 0,
       connection_state: "disconnected",
       uptime: 0,
-      heartbeat: new Date().toISOString(),
+      heartbeat: "",  // unknown record has no heartbeat (§20)
       tags: [],
       priority: 0,
       metadata: {},

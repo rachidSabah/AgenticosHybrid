@@ -53,21 +53,21 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "key": "qwen",
         "name": "Qwen CLI",
         "exe": "qwen",
-        "vendor": BrainVendor.CUSTOM,
+        "vendor": BrainVendor.QWEN,
         "runtime": BrainRuntime.PYTHON,
     },
     {
         "key": "opencode",
         "name": "OpenCode",
         "exe": "opencode",
-        "vendor": BrainVendor.CUSTOM,
+        "vendor": BrainVendor.OPENCODE,
         "runtime": BrainRuntime.NATIVE,
     },
     {
         "key": "aider",
         "name": "Aider",
         "exe": "aider",
-        "vendor": BrainVendor.CUSTOM,
+        "vendor": BrainVendor.AIDER,
         "runtime": BrainRuntime.PYTHON,
     },
     {
@@ -82,14 +82,14 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "key": "ollama",
         "name": "Ollama",
         "exe": "ollama",
-        "vendor": BrainVendor.CUSTOM,
+        "vendor": BrainVendor.OLLAMA,
         "runtime": BrainRuntime.GO,
     },
     {
         "key": "lm-studio",
         "name": "LM Studio",
         "exe": "",
-        "vendor": BrainVendor.CUSTOM,
+        "vendor": BrainVendor.LM_STUDIO,
         "runtime": BrainRuntime.NATIVE,
     },
     # ── Docker / MCP ──────────────────────────────────────────────────────
@@ -98,22 +98,43 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "name": "Docker",
         "exe": "docker",
         "vendor": BrainVendor.CUSTOM,
-        "runtime": BrainRuntime.NATIVE,
+        "runtime": BrainRuntime.CONTAINER,
     },
     # ── Runtimes that have agent processes ────────────────────────────────
     {
-        "key": "uv",
-        "name": "uv (Python package)",
-        "exe": "uv",
-        "vendor": BrainVendor.CUSTOM,
+        "key": "python",
+        "name": "Python",
+        "exe": "python",
+        "vendor": BrainVendor.PYTHON,
         "runtime": BrainRuntime.PYTHON,
     },
     {
         "key": "node",
         "name": "Node.js",
         "exe": "node",
-        "vendor": BrainVendor.CUSTOM,
+        "vendor": BrainVendor.NODE,
         "runtime": BrainRuntime.NODE,
+    },
+    {
+        "key": "bun",
+        "name": "Bun",
+        "exe": "bun",
+        "vendor": BrainVendor.BUN,
+        "runtime": BrainRuntime.BUN,
+    },
+    {
+        "key": "git",
+        "name": "Git",
+        "exe": "git",
+        "vendor": BrainVendor.GIT,
+        "runtime": BrainRuntime.NATIVE,
+    },
+    {
+        "key": "uv",
+        "name": "uv (Python package)",
+        "exe": "uv",
+        "vendor": BrainVendor.PYTHON,
+        "runtime": BrainRuntime.PYTHON,
     },
 ]
 
@@ -147,11 +168,17 @@ async def _run_powershell(script: str, timeout: float = 10.0) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        return stdout.decode("utf-16-le", errors="replace").strip() if stdout else ""
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return stdout.decode("utf-16-le", errors="replace").strip() if stdout else ""
+        except (TimeoutError, subprocess.TimeoutExpired):
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return ""
     except (
-        TimeoutError,
-        subprocess.TimeoutExpired,
         FileNotFoundError,
         OSError,
         NotImplementedError,
@@ -168,7 +195,15 @@ async def _where_exe(name: str) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        stdout, _ = await proc.communicate()
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
+        except TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return ""
         lines = stdout.decode("utf-8", errors="replace").strip().splitlines()
         for line in lines:
             line = line.strip()
@@ -192,12 +227,20 @@ async def _get_version(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return ""
         output = (stdout or stderr).decode("utf-8", errors="replace").strip()
         # Extract semantic version (first match)
         m = re.search(r"(\d+\.\d+\.\d+[a-zA-Z0-9._-]*)", output)
         return m.group(1) if m else output[:50]
-    except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
+    except (FileNotFoundError, OSError, NotImplementedError):
         return ""
 
 

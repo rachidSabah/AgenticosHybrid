@@ -143,8 +143,16 @@ class _GenericCliConnector(BrainConnector):
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-                version = stdout.decode("utf-8", errors="replace").strip()
+                try:
+                    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+                    version = stdout.decode("utf-8", errors="replace").strip()
+                except TimeoutError:
+                    try:
+                        proc.kill()
+                        await proc.wait()
+                    except Exception:
+                        pass
+                    version = ""
             except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
                 version = ""
 
@@ -175,14 +183,25 @@ class _GenericCliConnector(BrainConnector):
 
     async def to_brain_record(self, info: RuntimeInfo) -> BrainRecord:
         runtime = BrainRuntime.UNKNOWN
-        if self._exe_name.endswith(".py") or self._exe_name in ("hermes",):
+        if self._exe_name.endswith(".py") or self._exe_name in ("hermes", "python", "python3"):
             runtime = BrainRuntime.PYTHON
         elif self._exe_name in ("node", "npx"):
             runtime = BrainRuntime.NODE
+        elif self._exe_name in ("bun",):
+            runtime = BrainRuntime.BUN
         elif self._exe_name in ("go",):
             runtime = BrainRuntime.GO
-        elif self._exe_name in ("codex", "claude", "opencode"):
+        elif self._exe_name in ("codex", "claude", "opencode", "git"):
             runtime = BrainRuntime.NATIVE
+
+        tags: list[str] = []
+        if info.vendor and info.vendor != BrainVendor.CUSTOM:
+            tags.append(str(info.vendor.value if hasattr(info.vendor, "value") else info.vendor))
+        if runtime != BrainRuntime.UNKNOWN:
+            tags.append(str(runtime.value if hasattr(runtime, "value") else runtime))
+        for cap in info.capabilities:
+            if cap in ("code_generation", "testing", "vcs", "chat", "terminal_access"):
+                tags.append(cap)
 
         return BrainRecord(
             id=uuid4().hex[:12],
@@ -195,6 +214,7 @@ class _GenericCliConnector(BrainConnector):
             health=100.0 if info.installed else 0.0,
             capabilities=info.capabilities,
             workspace=info.executable,
+            tags=tuple(tags),
             discovered_at=datetime.now(UTC).isoformat(),
             last_seen=datetime.now(UTC).isoformat(),
         )
@@ -338,6 +358,78 @@ class ContinueConnector(_GenericCliConnector):
         )
 
 
+class PythonConnector(_GenericCliConnector):
+    """Connector for Python runtime."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            tool_type="python",
+            display_name="Python",
+            vendor=BrainVendor.PYTHON,
+            exe_name="python",
+            version_args=("--version",),
+            extra_capabilities=(
+                "code_generation",
+                "testing",
+                "script_execution",
+            ),
+        )
+
+
+class NodeConnector(_GenericCliConnector):
+    """Connector for Node.js runtime."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            tool_type="node",
+            display_name="Node.js",
+            vendor=BrainVendor.NODE,
+            exe_name="node",
+            version_args=("--version",),
+            extra_capabilities=(
+                "code_generation",
+                "testing",
+                "javascript_execution",
+            ),
+        )
+
+
+class BunConnector(_GenericCliConnector):
+    """Connector for Bun runtime."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            tool_type="bun",
+            display_name="Bun",
+            vendor=BrainVendor.BUN,
+            exe_name="bun",
+            version_args=("--version",),
+            extra_capabilities=(
+                "code_generation",
+                "testing",
+                "fast_javascript_runtime",
+            ),
+        )
+
+
+class GitConnector(_GenericCliConnector):
+    """Connector for Git version control."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            tool_type="git",
+            display_name="Git",
+            vendor=BrainVendor.GIT,
+            exe_name="git",
+            version_args=("--version",),
+            extra_capabilities=(
+                "vcs",
+                "diff",
+                "branching",
+            ),
+        )
+
+
 # ── Runtime Bridge ──────────────────────────────────────────────────────────
 
 
@@ -369,6 +461,10 @@ class RuntimeBridge:
             OpenCodeConnector(),
             AiderConnector(),
             ContinueConnector(),
+            PythonConnector(),
+            NodeConnector(),
+            BunConnector(),
+            GitConnector(),
         ]
         for c in connectors:
             self._connectors[c.tool_type] = c

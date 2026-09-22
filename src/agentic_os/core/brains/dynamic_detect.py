@@ -61,7 +61,7 @@ _KNOWN_AGENT_BINARIES = (
     "kilo",
     "crush",
     "amp",
-)# Substrings that mark a binary as a plausible agentic CLI. Used only to
+)  # Substrings that mark a binary as a plausible agentic CLI. Used only to
 # filter the PATH scan; a positive match still must pass a live probe.
 _AGENT_KEYWORDS = (
     "codex",

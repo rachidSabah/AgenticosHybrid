@@ -124,14 +124,18 @@ class TestRuntimeBridgeConnectorManagement:
 
     def test_list_connectors_returns_all(self, bridge: RuntimeBridge) -> None:
         conns = bridge.list_connectors()
-        assert len(conns) == 7
+        assert len(conns) == 11
 
     def test_list_tool_types(self, bridge: RuntimeBridge) -> None:
         types = bridge.list_tool_types()
         assert "claude-code" in types
         assert "hermes" in types
         assert "codex" in types
-        assert len(types) == 7
+        assert "python" in types
+        assert "node" in types
+        assert "bun" in types
+        assert "git" in types
+        assert len(types) == 11
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -142,7 +146,7 @@ class TestRuntimeBridgeConnectorManagement:
 class TestRuntimeBridgeDetection:
     async def test_detect_all_runs_on_all_connectors(self, bridge: RuntimeBridge) -> None:
         results = await bridge.detect_all(use_cache=False)
-        assert len(results) == 7
+        assert len(results) == 11
 
     async def test_detect_all_uses_cache(
         self, bridge: RuntimeBridge, mock_connector: MagicMock
@@ -306,7 +310,7 @@ class TestRuntimeBridgeConversion:
 
     async def test_to_brain_records(self, bridge: RuntimeBridge) -> None:
         records = await bridge.to_brain_records()
-        assert len(records) == 7  # One per default connector
+        assert len(records) == 11  # One per default connector
         for r in records:
             assert isinstance(r, BrainRecord)
 
@@ -315,7 +319,7 @@ class TestRuntimeBridgeConversion:
     ) -> None:
         bridge.register_connector(mock_connector)
         records = await bridge.to_brain_records()
-        assert len(records) == 8
+        assert len(records) == 12
         mock_tool_records = [r for r in records if r.display_name == "Mock Tool"]
         assert len(mock_tool_records) == 1
 

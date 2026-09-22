@@ -64,8 +64,12 @@ def _engine_with(results) -> AgentDiscoveryEngine:
 @pytest.mark.asyncio
 async def test_validate_all_reports_real_pass():
     agent = DiscoveredAgent(
-        id="agent:ok", name="ok", command="ok",
-        kind=KIND_AI_AGENT_CLI, status=STATUS_HEALTHY, version="1.0.0",
+        id="agent:ok",
+        name="ok",
+        command="ok",
+        kind=KIND_AI_AGENT_CLI,
+        status=STATUS_HEALTHY,
+        version="1.0.0",
         health_score=100.0,
     )
     engine = _engine_with({"ok": agent})
@@ -78,8 +82,11 @@ async def test_validate_all_reports_real_pass():
 async def test_validate_all_reports_real_failure():
     """§15: a failing agent is reported failed, never silently passed."""
     agent = DiscoveredAgent(
-        id="agent:bad", name="bad", command="bad",
-        kind=KIND_AI_AGENT_CLI, status=STATUS_UNAVAILABLE,
+        id="agent:bad",
+        name="bad",
+        command="bad",
+        kind=KIND_AI_AGENT_CLI,
+        status=STATUS_UNAVAILABLE,
         error="broken configuration",
     )
     engine = _engine_with({"bad": agent})
@@ -92,8 +99,11 @@ async def test_validate_all_reports_real_failure():
 async def test_repair_all_never_reports_success_when_unfixable():
     """§16: unreparable => 'repair_unavailable', not 'repair successful'."""
     agent = DiscoveredAgent(
-        id="agent:gone", name="gone", command="gone",
-        kind=KIND_AI_AGENT_CLI, status=STATUS_UNAVAILABLE,
+        id="agent:gone",
+        name="gone",
+        command="gone",
+        kind=KIND_AI_AGENT_CLI,
+        status=STATUS_UNAVAILABLE,
     )
     engine = _engine_with({})
     engine._snapshot = DiscoverySnapshot(platform="fake", agents=[agent])
@@ -105,12 +115,19 @@ async def test_repair_all_never_reports_success_when_unfixable():
 @pytest.mark.asyncio
 async def test_repair_all_rebinds_when_executable_found():
     agent = DiscoveredAgent(
-        id="agent:fix", name="fix", command="fix",
-        kind=KIND_AI_AGENT_CLI, status=STATUS_UNAVAILABLE,
+        id="agent:fix",
+        name="fix",
+        command="fix",
+        kind=KIND_AI_AGENT_CLI,
+        status=STATUS_UNAVAILABLE,
     )
     fixed = DiscoveredAgent(
-        id="agent:fix", name="fix", command="fix",
-        kind=KIND_AI_AGENT_CLI, status=STATUS_HEALTHY, version="2.0.0",
+        id="agent:fix",
+        name="fix",
+        command="fix",
+        kind=KIND_AI_AGENT_CLI,
+        status=STATUS_HEALTHY,
+        version="2.0.0",
         health_score=100.0,
     )
     engine = _engine_with({"fix": fixed})

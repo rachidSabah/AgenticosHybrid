@@ -64,12 +64,12 @@ async def test_new_agent_appears_after_install(tmp_path, monkeypatch):
     assert "brandnewagent" in names, f"not discovered; saw {sorted(names)}"
 
     found = next(a for a in snap.agents if a.name == "brandnewagent")
-    assert found.version == "9.9.9"          # real, from the executable
+    assert found.version == "9.9.9"  # real, from the executable
     assert found.status == STATUS_HEALTHY
     assert found.health_score is not None
     # Windows may normalize the extension case (.CMD).
     assert found.executable_path.lower().endswith("brandnewagent.cmd")
-    assert found in snap.active_agents()      # appears in AI Brain/Constellation
+    assert found in snap.active_agents()  # appears in AI Brain/Constellation
 
 
 @pytest.mark.asyncio

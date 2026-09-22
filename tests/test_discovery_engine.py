@@ -128,7 +128,6 @@ def test_capabilities_derived_from_evidence_only():
 async def test_probe_sequence_marks_missing_executable():
     from agentic_os.core.brains.probes import run_probe_sequence
 
-
     agent = await run_probe_sequence("definitely-not-real-xyz", "")
     assert agent.status == STATUS_NOT_FOUND
     assert agent.version is None

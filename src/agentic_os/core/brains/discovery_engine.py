@@ -135,9 +135,7 @@ class AgentDiscoveryEngine:
         """Actually remove the binding, not just hide it (§14)."""
         async with self._lock:
             before = len(self._snapshot.agents)
-            self._snapshot.agents = [
-                a for a in self._snapshot.agents if a.id != agent_id
-            ]
+            self._snapshot.agents = [a for a in self._snapshot.agents if a.id != agent_id]
             removed = len(self._snapshot.agents) < before
             if removed:
                 log.info("discovery.unbound", agent_id=agent_id)
