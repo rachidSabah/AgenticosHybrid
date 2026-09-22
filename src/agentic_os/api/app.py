@@ -274,6 +274,13 @@ def create_app(platform: Platform) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Prime the discovery engine and keep it fresh (spec §13) so newly
+        # installed CLIs appear without an application restart.
+        try:
+            await agent_discovery_engine.scan()
+            agent_discovery_engine.start_auto_rescan(interval_seconds=300.0)
+        except Exception as exc:
+            log.warning("discovery engine startup failed", error=str(exc))
         yield
         # Server shutdown — terminate all runtime managers and subprocesses cleanly
         try:
@@ -1629,6 +1636,16 @@ def create_app(platform: Platform) -> FastAPI:
         """Remove a real binding, not just hide it (spec §14)."""
         removed = await agent_discovery_engine.unbind(agent_id)
         return {"removed": removed, "agent_id": agent_id}
+
+    @app.post("/api/discovery/validate-all")
+    async def discovery_validate_all() -> dict:
+        """Run real validation against every discovered agent (spec §15)."""
+        return await agent_discovery_engine.validate_all()
+
+    @app.post("/api/discovery/repair-all")
+    async def discovery_repair_all() -> dict:
+        """Attempt real remediation (spec §16). Honest when unavailable."""
+        return await agent_discovery_engine.repair_all()
 
     @app.get("/api/discovery/history")
     async def discovery_history() -> list[dict]:

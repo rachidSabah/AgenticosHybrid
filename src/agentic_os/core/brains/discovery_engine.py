@@ -62,6 +62,8 @@ class AgentDiscoveryEngine:
         self._snapshot = DiscoverySnapshot(platform=self._adapter.platform_name)
         self._lock = asyncio.Lock()
         self._history: dict[str, DiscoveredAgent] = {}
+        self._rescan_task: asyncio.Task | None = None
+        self._rescan_interval: float = 300.0
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -140,6 +142,107 @@ class AgentDiscoveryEngine:
             if removed:
                 log.info("discovery.unbound", agent_id=agent_id)
             return removed
+
+    # ── Auto rescan (§13) ───────────────────────────────────────────────────
+
+    def start_auto_rescan(self, interval_seconds: float = 300.0) -> None:
+        """Begin periodic rescanning so newly installed CLIs appear on their own.
+
+        Safe to call more than once; only one loop is ever started.
+        """
+        if self._rescan_task is not None and not self._rescan_task.done():
+            return
+        self._rescan_interval = interval_seconds
+        self._rescan_task = asyncio.create_task(self._rescan_loop())
+        log.info("discovery.auto_rescan_started", interval=interval_seconds)
+
+    def stop_auto_rescan(self) -> None:
+        if self._rescan_task and not self._rescan_task.done():
+            self._rescan_task.cancel()
+            log.info("discovery.auto_rescan_stopped")
+
+    async def _rescan_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.sleep(self._rescan_interval)
+            except asyncio.CancelledError:
+                raise
+            try:
+                await self.scan()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("discovery.auto_rescan_failed", error=str(exc))
+
+    # ── Validate All / Repair All (§15, §16) ───────────────────────────────
+
+    async def validate_all(self) -> dict[str, dict[str, Any]]:
+        """Run the real probe sequence against every bound agent (§15).
+
+        Returns honest per-agent results. No results are generated — an agent
+        that fails validation is reported as failed.
+        """
+        results: dict[str, dict[str, Any]] = {}
+        for agent in list(self._snapshot.agents):
+            try:
+                fresh = await self._adapter.validate(agent.command)
+            except Exception as exc:  # noqa: BLE001
+                results[agent.id] = {
+                    "name": agent.name,
+                    "passed": False,
+                    "status": "failed",
+                    "detail": str(exc),
+                }
+                continue
+            results[agent.id] = {
+                "name": fresh.name,
+                "passed": fresh.status in ("healthy", "degraded"),
+                "status": fresh.status,
+                "version": fresh.version,
+                "health_score": fresh.health_score,
+                "detail": fresh.error or "",
+            }
+        log.info("discovery.validate_all", agents=len(results))
+        return results
+
+    async def repair_all(self) -> dict[str, dict[str, Any]]:
+        """Attempt real remediation for each agent (§16).
+
+        Remediation is limited to what can actually be done: re-resolve the
+        executable and re-probe. If that fails, the result is
+        "repair_unavailable" — never "repair successful".
+        """
+        results: dict[str, dict[str, Any]] = {}
+        for agent in list(self._snapshot.agents):
+            try:
+                path = await self._adapter.resolve(agent.command)
+            except Exception:  # noqa: BLE001
+                path = None
+            if not path:
+                results[agent.id] = {
+                    "name": agent.name,
+                    "repaired": False,
+                    "outcome": "repair_unavailable",
+                    "detail": "executable could not be re-resolved",
+                }
+                continue
+            fresh = await self._adapter.validate(agent.command)
+            if fresh.status in ("healthy", "degraded"):
+                results[agent.id] = {
+                    "name": agent.name,
+                    "repaired": True,
+                    "outcome": "rebound",
+                    "status": fresh.status,
+                    "version": fresh.version,
+                }
+            else:
+                results[agent.id] = {
+                    "name": agent.name,
+                    "repaired": False,
+                    "outcome": "repair_unavailable",
+                    "status": fresh.status,
+                    "detail": fresh.error or "validation still failing",
+                }
+        log.info("discovery.repair_all", agents=len(results))
+        return results
 
     # ── Helpers ─────────────────────────────────────────────────────────────
 

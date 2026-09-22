@@ -55,6 +55,13 @@ packages = ["src/agentic_os"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+# `slow` = tests that walk the whole PATH (full agent discovery scan, ~35s
+# each). Excluded by default; run with `-m slow` when discovery changes.
+markers = [
+    "slow: long-running tests (full PATH discovery scans); run with -m slow",
+]
+# Skip `slow` by default; `pytest -m slow` runs them explicitly.
+addopts = "-m 'not slow'"
 testpaths = ["tests"]
 pythonpath = ["src", "services"]
 filterwarnings = [

@@ -50,6 +50,10 @@ class BaseAgentDiscovery(ABC):
     async def _resolve(self, name: str) -> str | None:
         """Resolve a binary name to an absolute path (None if absent)."""
 
+    async def resolve(self, name: str) -> str | None:
+        """Public resolution — used by repair to re-find a moved executable."""
+        return await self._resolve(name)
+
     async def validate(self, candidate: str) -> DiscoveredAgent:
         from agentic_os.core.brains.probes import run_probe_sequence
 
