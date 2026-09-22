@@ -214,9 +214,14 @@ _PROBE_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-pr
 
 
 def _run_probe_loop(coro_fn):
-    """Run a probe coroutine on a thread with a subprocess-capable loop."""
-    asyncio.set_event_loop_policy(_probe_policy())
-    loop = asyncio.new_event_loop()
+    """Run a probe coroutine on a thread with a subprocess-capable loop.
+
+    The loop is built directly from a policy object rather than by calling
+    ``asyncio.set_event_loop_policy``: that call is process-global (it would
+    mutate the host application's loop policy as a side effect) and is
+    deprecated in Python 3.14.
+    """
+    loop = _probe_policy().new_event_loop()
     try:
         return loop.run_until_complete(coro_fn())
     finally:

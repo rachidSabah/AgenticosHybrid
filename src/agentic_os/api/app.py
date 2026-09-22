@@ -1496,7 +1496,7 @@ def create_app(platform: Platform) -> FastAPI:
                 # must not reach the UI (§4, §8).
                 name = str(getattr(db, "display_name", "") or "")
                 vendor = str(getattr(db, "vendor", "") or "")
-                if not _is_proven(type("B", (), {"vendor": vendor, "display_name": name})()):
+                if not _is_proven(vendor, name):
                     continue
                 brains.append(db.model_dump(mode="json"))
         except Exception:
