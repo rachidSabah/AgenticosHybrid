@@ -26,6 +26,7 @@ export const BRAIN_VENDORS = [
   "openrouter", "cohere", "deepseek", "qwen", "moonshot", "together", "fireworks",
   "replicate", "ollama", "lm_studio", "vllm", "hermes", "claude_code", "gemini_cli",
   "codex", "opencode", "aider", "continue", "github_copilot", "cursor", "custom",
+  "python", "node", "git", "bun",
 ] as const;
 export type BrainVendor = (typeof BRAIN_VENDORS)[number];
 
@@ -121,6 +122,7 @@ interface BrainsStoreState {
   brains: Record<string, BrainRecord>;
   relationships: BrainRelationship[];
   connected: boolean;
+  reconnecting: boolean;
   loading: boolean;
   error: string | null;
   viewMode: ViewMode;
@@ -167,14 +169,137 @@ const DEFAULT_FILTER: BrainsFilter = {
 
 const SSE_RECONNECT_DELAY = 5000;
 
+// ── Defensive Record Normalizer ─────────────────────────────────────────────
+
+export function normalizeBrainRecord(raw: unknown): BrainRecord {
+  if (!raw || typeof raw !== "object") {
+    return {
+      id: "unknown",
+      display_name: "Unknown Brain",
+      brain_type: "custom",
+      vendor: "custom",
+      runtime: "unknown",
+      version: "",
+      status: "discovered",
+      health: "unknown",
+      capabilities: [],
+      supported_models: [],
+      supported_tools: [],
+      memory_usage: 0,
+      cpu_usage: 0,
+      latency: 0,
+      throughput: 0,
+      workspace: "",
+      current_tasks: 0,
+      queue_depth: 0,
+      active_models: 0,
+      available_context: 0,
+      connection_state: "disconnected",
+      uptime: 0,
+      heartbeat: new Date().toISOString(),
+      tags: [],
+      priority: 0,
+      metadata: {},
+      discovered_at: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
+      session_count: 0,
+      error_count: 0,
+      last_error: null,
+    };
+  }
+
+  const rec = raw as Record<string, unknown>;
+  // The discovery engine reports `health_score` (None when unmeasured);
+  // /api/brains reports `health`. Accept either, never invent a value.
+  const rawHealth = rec.health ?? rec.health_score;
+  let health: "healthy" | "degraded" | "unhealthy" | "unknown" = "unknown";
+  if (typeof rawHealth === "number") {
+    const scale = rawHealth > 1.0 ? 100 : 1;
+    if (rawHealth >= 0.8 * scale) health = "healthy";
+    else if (rawHealth >= 0.4 * scale) health = "degraded";
+    else health = "unhealthy";
+  } else if (typeof rawHealth === "string") {
+    if (rawHealth === "healthy" || rawHealth === "degraded" || rawHealth === "unhealthy" || rawHealth === "unknown") {
+      health = rawHealth;
+    } else {
+      health = "unknown";
+    }
+  }
+
+  const rawVendor = String(rec.vendor || "").toLowerCase();
+  const vendor: BrainVendor = (BRAIN_VENDORS as readonly string[]).includes(rawVendor)
+    ? (rawVendor as BrainVendor)
+    : "custom";
+
+  const rawRuntime = String(rec.runtime || "").toLowerCase();
+  const runtime: BrainRuntime = (BRAIN_RUNTIMES as readonly string[]).includes(rawRuntime)
+    ? (rawRuntime as BrainRuntime)
+    : "unknown";
+
+  const rawStatus = String(rec.status || "").toLowerCase();
+  const status: BrainStatus = (BRAIN_STATUSES as readonly string[]).includes(rawStatus)
+    ? (rawStatus as BrainStatus)
+    : "discovered";
+
+  // Discovery engine returns capabilities as {capability, source, confidence}.
+  // Flatten to names; never fabricate when absent.
+  const capabilities = Array.isArray(rec.capabilities)
+    ? rec.capabilities.map((c) =>
+        typeof c === "string" ? c : String((c as { capability?: unknown }).capability ?? ""),
+      ).filter(Boolean)
+    : [];
+  const tags = Array.isArray(rec.tags) && rec.tags.length > 0 ? rec.tags.map(String) : [vendor, runtime];
+
+  return {
+    id: String(rec.id || ""),
+    display_name: String(rec.display_name || rec.name || "Unknown Brain"),
+    brain_type: (rec.brain_type as BrainType) || "local_cli",
+    vendor,
+    runtime,
+    version: String(rec.version || ""),
+    status,
+    health,
+    capabilities,
+    supported_models: Array.isArray(rec.supported_models) ? rec.supported_models.map(String) : [],
+    supported_tools: Array.isArray(rec.supported_tools) ? rec.supported_tools.map(String) : [],
+    memory_usage: Number(rec.memory_usage || 0),
+    cpu_usage: Number(rec.cpu_usage || 0),
+    latency: Number(rec.latency || 0),
+    throughput: Number(rec.throughput || 0),
+    workspace: String(rec.workspace || ""),
+    current_tasks: Number(rec.current_tasks || 0),
+    queue_depth: Number(rec.queue_depth || 0),
+    active_models: Number(rec.active_models || 0),
+    available_context: Number(rec.available_context || 0),
+    connection_state: (rec.connection_state as "connected" | "disconnected" | "reconnecting") || "connected",
+    uptime: Number(rec.uptime || 0),
+    // No heartbeat means no heartbeat — never stamp the current time to make
+    // a card look alive (spec §20).
+    heartbeat: rec.heartbeat ? String(rec.heartbeat) : "",
+    tags,
+    priority: Number(rec.priority || 0),
+    metadata: typeof rec.metadata === "object" && rec.metadata !== null ? (rec.metadata as Record<string, unknown>) : {},
+    discovered_at: String(rec.discovered_at || new Date().toISOString()),
+    last_seen: String(rec.last_seen || new Date().toISOString()),
+    session_count: Number(rec.session_count || 0),
+    error_count: Number(rec.error_count || 0),
+    last_error: rec.last_error ? String(rec.last_error) : null,
+  };
+}
+
 // ── API helpers ─────────────────────────────────────────────────────────────
 
-function brainsApiBase(): string {
+/** Origin of the AgenticOS backend (no path). */
+function apiOrigin(): string {
   if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__) {
-    return "http://127.0.0.1:8000/api/brains";
+    return "http://127.0.0.1:8080";
   }
-  const base = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
-  return `${base}/api/brains`;
+  // The dev backend serves on 8001; 8080 is the legacy/Tauri default.
+  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://127.0.0.1:8001";
+}
+
+function brainsApiBase(): string {
+  return `${apiOrigin()}/api/brains`;
 }
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -183,6 +308,7 @@ export const useBrainsStore = create<BrainsStoreState>((set, get) => ({
   brains: {},
   relationships: [],
   connected: false,
+  reconnecting: false,
   loading: false,
   error: null,
   viewMode: "card",
@@ -226,16 +352,51 @@ export const useBrainsStore = create<BrainsStoreState>((set, get) => ({
   fetchBrains: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(`${brainsApiBase()}`, {
+      // Single source of truth: the Agent Discovery Engine (spec §1).
+      // Only agents proven by a real executable + successful probe are
+      // returned. Falls back to /api/brains if discovery is unavailable so
+      // the view degrades gracefully rather than blanking.
+      let list: unknown[] = [];
+      const disc = await fetch(`${apiOrigin()}/api/discovery/agents`, {
         headers: { accept: "application/json" },
-      });
-      if (!res.ok) throw new Error(`fetchBrains -> ${res.status}`);
-      const list = (await res.json()) as BrainRecord[];
+      }).catch(() => null);
+
+      if (disc && disc.ok) {
+        const payload = (await disc.json()) as {
+          active_agents?: unknown[];
+          agents?: unknown[];
+        };
+        const rows = payload.active_agents?.length
+          ? payload.active_agents
+          : (payload.agents ?? []);
+        list = rows.filter((a) => {
+          const r = a as { is_active?: boolean; is_agent?: boolean };
+          return r.is_active === true || r.is_agent === true;
+        });
+        // Nothing detected is valid data — do NOT fall back to stale entries,
+        // otherwise retired agents (gemini) would reappear (spec §9).
+      } else {
+        const res = await fetch(`${brainsApiBase()}`, {
+          headers: { accept: "application/json" },
+        });
+        if (res.ok) list = (await res.json()) as unknown[];
+      }
+
       const brains: Record<string, BrainRecord> = {};
-      for (const b of list) brains[b.id] = b;
-      set({ brains, loading: false });
+      for (const raw of list) {
+        const b = normalizeBrainRecord(raw);
+        brains[b.id] = b;
+      }
+      set({ brains, loading: false, reconnecting: false, connected: true, error: null });
     } catch (e) {
-      set({ error: String(e), loading: false });
+      // Retain existing brains state with a reconnecting indicator rather than wiping the list
+      set((s) => ({
+        error: String(e),
+        loading: false,
+        reconnecting: true,
+        connected: false,
+        brains: s.brains,
+      }));
     }
   },
 
@@ -258,7 +419,8 @@ export const useBrainsStore = create<BrainsStoreState>((set, get) => ({
         headers: { accept: "application/json" },
       });
       if (!res.ok) throw new Error(`refreshBrain -> ${res.status}`);
-      const brain = (await res.json()) as BrainRecord;
+      const raw = await res.json();
+      const brain = normalizeBrainRecord(raw);
       set((s) => ({
         brains: { ...s.brains, [brain.id]: brain },
         error: null,
@@ -371,8 +533,9 @@ export const useBrainsStore = create<BrainsStoreState>((set, get) => ({
         case "brain.registered":
         case "brain.updated": {
           if (!event.brain) return s;
+          const b = normalizeBrainRecord(event.brain);
           return {
-            brains: { ...s.brains, [event.brain.id]: event.brain },
+            brains: { ...s.brains, [b.id]: b },
             error: null,
           };
         }
@@ -384,8 +547,9 @@ export const useBrainsStore = create<BrainsStoreState>((set, get) => ({
         }
         case "brain.heartbeat": {
           if (!event.brain) return s;
+          const b = normalizeBrainRecord(event.brain);
           return {
-            brains: { ...s.brains, [event.brain.id]: event.brain },
+            brains: { ...s.brains, [b.id]: b },
           };
         }
         case "brain.relationship_added": {
