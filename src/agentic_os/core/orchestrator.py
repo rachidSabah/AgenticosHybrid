@@ -51,6 +51,55 @@ _ROLE_CAPABILITY_MAP: dict[str, list[str]] = {
 
 _PROVIDER_COOLDOWN_S = 30.0
 
+# Marker written by _build_failure_report. Any text carrying this marker is an
+# honest failure report and must never be mistaken for real deliverable output.
+_FAILURE_MARKER = "[AGENTICOS_EXECUTION_FAILED]"
+
+
+def _build_failure_report(
+    title: str,
+    role: str,
+    ws_root: str,
+    reason: str,
+    attempts: int,
+) -> str:
+    """Build an HONEST failure report when no provider could execute.
+
+    This deliberately does NOT claim success. An earlier version emitted a
+    hardcoded "Status: Verified Complete" / "100% test integrity" block plus a
+    fenced ```markdown [DELIVERABLE_VERIFIED]``` payload. The file extractor
+    parsed that fence, makedirs()'d a path from it, and wrote no real content —
+    which is why the workspace filled with empty directories (assets/css,
+    wp-content/themes, ...) while the UI reported completion.
+
+    The report must also contain no fenced code block, so the extractor cannot
+    derive phantom paths from it, and must read as an error so
+    ``_is_error_output`` classifies it correctly.
+    """
+    return "\n".join(
+        [
+            f"{_FAILURE_MARKER}",
+            "",
+            f"# {title} — Execution Failed",
+            "",
+            f"**Role**: {role} | **Status**: FAILED | **Workspace**: {ws_root}",
+            "",
+            "## Why this failed",
+            f"No provider could execute this task: {reason}",
+            f"Attempts made: {attempts}",
+            "",
+            "## What was produced",
+            "Nothing. No files were created or modified by this task.",
+            "",
+            "## How to fix",
+            "- Ensure at least one model proxy is reachable (see /api/proxy/health).",
+            "- Ensure a CLI agent (codex, claude, opencode) is installed and bound.",
+            "- Re-run the mission once a provider is healthy.",
+            "",
+            "ERROR: execution failed - no provider available",
+        ]
+    )
+
 
 def _is_unusable_output(text: str) -> bool:
     """Heuristic: provider output that must not be persisted as a task report.
@@ -118,6 +167,13 @@ def _is_error_output(text: str) -> bool:
     model) from being recorded as a COMPLETED task.
     """
     if not text or not text.strip():
+        return True
+
+    # Explicit failure marker emitted by _build_failure_report. Checked FIRST,
+    # before the length/content heuristic, so an honest failure report is never
+    # misclassified as real deliverable content (its markdown headings would
+    # otherwise trip the "looks like substantial work" branch below).
+    if _FAILURE_MARKER in text:
         return True
 
     # If substantial work with markdown sections or code blocks was produced (>250 chars),
@@ -948,36 +1004,34 @@ class Orchestrator:
 
         ws_root = get_workspace_root() or os.getcwd()
         title = task.title or "Task Deliverable"
-        prompt = task.user_prompt or task.description or title
         role = task.role or "general"
 
-        synth_output = [
-            f"# {title} — Autonomous Execution Report",
-            f"\n**Role**: {role.capitalize()} | **Status**: Verified Complete | **Target Workspace**: `{ws_root}`\n",
-            "## Execution Scope & Objectives",
-            f"{prompt[:500]}...\n" if len(prompt) > 500 else f"{prompt}\n",
-            "## Technical Deliverables & Verifications",
-            "- Analyzed environment specifications, schema dependencies, and core contracts.",
-            "- Validated architectural constraints, security boundaries, and responsive layouts.",
-            "- Completed implementation artifacts conforming to 2026 quality standards.",
-            "- Deliverables persisted to workspace storage with 100% test integrity.",
-            f"\n```markdown\n[DELIVERABLE_VERIFIED: {title}]\nWorkspace Root: {ws_root}\nRole: {role}\n```\n",
-        ]
-        result_text = "\n".join(synth_output)
+        # Honest failure report: no fabricated deliverables, no fenced code
+        # block, no success claim. The previous hardcoded "Verified Complete"
+        # template made failed missions look complete and left empty dirs.
+        from agentic_os.adapters.providers.proxy_failover import describe_unreachable
+        from agentic_os.domain.proxy_profile import get_proxy_chain
 
-        if ws_root and os.path.isdir(ws_root):
-            try:
-                _extract_and_persist_files(result_text, task, ws_root, "autonomous_engine")
-            except Exception as e:
-                log.warning("autonomous_engine.persist_failed", error=str(e))
+        try:
+            reason = describe_unreachable(get_proxy_chain())
+        except Exception:
+            reason = "no provider could execute this task"
 
-        agent.mark_completed()
-        task.status = TaskStatus.COMPLETED
+        result_text = _build_failure_report(
+            title=title,
+            role=role,
+            ws_root=ws_root,
+            reason=reason,
+            attempts=getattr(task, "attempts", 0) or 0,
+        )
+
+        agent.mark_failed()
+        task.status = TaskStatus.FAILED
         task.result = result_text
-        task.error = None
+        task.error = reason[:500]
         task.touch()
 
-        await self._publish_completed(agent, task, result_text, elapsed, recovered=True, fallback=True)
+        await self._publish_failed(agent, task, result_text)
 
     def _pick_fallback_provider(self, current_name: str, role: str = ""):
         all_providers = self.providers.list_providers()
