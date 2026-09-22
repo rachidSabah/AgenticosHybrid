@@ -32,7 +32,9 @@ _PRESERVE_PREFIXES = ("[projects", "trust_level", "[windows", "sandbox", "[tui")
 
 def render_codex_config(profile: ProxyProfile, reasoning_effort: str = "medium") -> str:
     """Render a complete config.toml for the given proxy."""
-    env_key = f'env_key = "{profile.api_key_env}"' if profile.api_key_env else 'env_key = "USERPROFILE"'
+    env_key = (
+        f'env_key = "{profile.api_key_env}"' if profile.api_key_env else 'env_key = "USERPROFILE"'
+    )
     reasoning = f'model_reasoning_effort = "{reasoning_effort}"' if reasoning_effort else ""
     return _BASE_TEMPLATE.format(
         model=profile.model or "gpt-5.6-terra",

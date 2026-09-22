@@ -627,6 +627,7 @@ def create_app(platform: Platform) -> FastAPI:
         if not _is_text_file(p):
             raise HTTPException(400, f"Binary or unsupported file type: {path}")
         try:
+
             def _read_file() -> tuple[str, int, bool]:
                 size = _os_mod.path.getsize(full)
                 if size > 50_000:
@@ -689,6 +690,7 @@ def create_app(platform: Platform) -> FastAPI:
             if create_backup and _os_mod.path.exists(full_path):
                 backup_path = f"{full_path}.bak"
                 import shutil
+
                 shutil.copy2(full_path, backup_path)
 
             with open(full_path, "w", encoding="utf-8") as f:
@@ -1277,9 +1279,7 @@ def create_app(platform: Platform) -> FastAPI:
                         "name": b.display_name,
                         "provider": b.display_name,
                         "role": "assistant",
-                        "status": b.status.value
-                        if hasattr(b.status, "value")
-                        else str(b.status),
+                        "status": b.status.value if hasattr(b.status, "value") else str(b.status),
                         "capabilities": list(b.capabilities),
                         "health": "healthy"
                         if b.health >= 80
@@ -1464,9 +1464,9 @@ def create_app(platform: Platform) -> FastAPI:
         snapshot = agent_discovery_engine.snapshot
         if not snapshot.agents:
             snapshot = await agent_discovery_engine.scan()
-        proven_tokens = {
-            a.command.lower() for a in snapshot.agents if a.is_agent()
-        } | {a.name.lower() for a in snapshot.agents if a.is_agent()}
+        proven_tokens = {a.command.lower() for a in snapshot.agents if a.is_agent()} | {
+            a.name.lower() for a in snapshot.agents if a.is_agent()
+        }
 
         def _is_proven(vendor: str, display_name: str) -> bool:
             if not proven_tokens:
@@ -1615,9 +1615,18 @@ def create_app(platform: Platform) -> FastAPI:
                                     norm_h = (
                                         "healthy"
                                         if raw_h >= (80.0 if raw_h > 1.0 else 0.8)
-                                        else ("degraded" if raw_h >= (40.0 if raw_h > 1.0 else 0.4) else "unhealthy")
+                                        else (
+                                            "degraded"
+                                            if raw_h >= (40.0 if raw_h > 1.0 else 0.4)
+                                            else "unhealthy"
+                                        )
                                     )
-                                elif isinstance(raw_h, str) and raw_h in ("healthy", "degraded", "unhealthy", "unknown"):
+                                elif isinstance(raw_h, str) and raw_h in (
+                                    "healthy",
+                                    "degraded",
+                                    "unhealthy",
+                                    "unknown",
+                                ):
                                     norm_h = raw_h
                                 else:
                                     norm_h = "healthy"
@@ -1941,32 +1950,85 @@ def create_app(platform: Platform) -> FastAPI:
         """Execute live asynchronous micro-benchmarks across all 7 OS subsystems."""
         raw = await run_all_micro_benchmarks()
         baselines = {
-            "Async Event Loop": {"id": "event_loop", "name": "Event Loop Task Dispatch", "legacy": 2.8, "opt": 0.05, "factor": 56.0},
-            "SQLite WAL Concurrency": {"id": "sqlite_contention", "name": "SQLite WAL Concurrency", "legacy": 48.0, "opt": 3.2, "factor": 15.0},
-            "Subprocess Pipe Streaming": {"id": "subprocess_pipes", "name": "Subprocess Pipe Streaming", "legacy": 320.0, "opt": 22.0, "factor": 14.5},
-            "OmniRoute O(1) Evaluation": {"id": "omniroute_speed", "name": "OmniRoute O(1) Evaluation", "legacy": 14.2, "opt": 0.12, "factor": 118.3},
-            "AST Parsing Worker": {"id": "ast_parsing", "name": "AST Offload Worker", "legacy": 45.0, "opt": 5.4, "factor": 8.3},
-            "Worktree Isolation": {"id": "worktree_isolation", "name": "Worktree Isolation", "legacy": 680.0, "opt": 85.0, "factor": 8.0},
-            "Memory Footprint": {"id": "memory_footprint", "name": "Memory & Heap Stability", "legacy": 2500.0, "opt": 120.0, "factor": 20.8},
+            "Async Event Loop": {
+                "id": "event_loop",
+                "name": "Event Loop Task Dispatch",
+                "legacy": 2.8,
+                "opt": 0.05,
+                "factor": 56.0,
+            },
+            "SQLite WAL Concurrency": {
+                "id": "sqlite_contention",
+                "name": "SQLite WAL Concurrency",
+                "legacy": 48.0,
+                "opt": 3.2,
+                "factor": 15.0,
+            },
+            "Subprocess Pipe Streaming": {
+                "id": "subprocess_pipes",
+                "name": "Subprocess Pipe Streaming",
+                "legacy": 320.0,
+                "opt": 22.0,
+                "factor": 14.5,
+            },
+            "OmniRoute O(1) Evaluation": {
+                "id": "omniroute_speed",
+                "name": "OmniRoute O(1) Evaluation",
+                "legacy": 14.2,
+                "opt": 0.12,
+                "factor": 118.3,
+            },
+            "AST Parsing Worker": {
+                "id": "ast_parsing",
+                "name": "AST Offload Worker",
+                "legacy": 45.0,
+                "opt": 5.4,
+                "factor": 8.3,
+            },
+            "Worktree Isolation": {
+                "id": "worktree_isolation",
+                "name": "Worktree Isolation",
+                "legacy": 680.0,
+                "opt": 85.0,
+                "factor": 8.0,
+            },
+            "Memory Footprint": {
+                "id": "memory_footprint",
+                "name": "Memory & Heap Stability",
+                "legacy": 2500.0,
+                "opt": 120.0,
+                "factor": 20.8,
+            },
         }
 
         formatted_results = []
         for r in raw.get("results", []):
             sub_name = r.get("subsystem", "Unknown")
-            b_info = baselines.get(sub_name, {"id": "event_loop", "name": sub_name, "legacy": 50.0, "opt": 5.0, "factor": 10.0})
-            measured_opt = r.get("mean_ms") or r.get("p95_ms") or r.get("latency_ms") or r.get("duration_ms") or b_info["opt"]
+            b_info = baselines.get(
+                sub_name,
+                {"id": "event_loop", "name": sub_name, "legacy": 50.0, "opt": 5.0, "factor": 10.0},
+            )
+            measured_opt = (
+                r.get("mean_ms")
+                or r.get("p95_ms")
+                or r.get("latency_ms")
+                or r.get("duration_ms")
+                or b_info["opt"]
+            )
             speedup = round(b_info["legacy"] / max(float(measured_opt), 0.001), 1)
 
-            formatted_results.append({
-                "subsystem": b_info["id"],
-                "name": b_info["name"],
-                "status": r.get("status", "PASS"),
-                "legacy_latency_ms": b_info["legacy"],
-                "optimized_latency_ms": round(float(measured_opt), 3),
-                "speedup_factor": max(speedup, b_info["factor"]),
-                "iterations": r.get("iterations", 20),
-                "details": r,
-            })
+            formatted_results.append(
+                {
+                    "subsystem": b_info["id"],
+                    "name": b_info["name"],
+                    "status": r.get("status", "PASS"),
+                    "legacy_latency_ms": b_info["legacy"],
+                    "optimized_latency_ms": round(float(measured_opt), 3),
+                    "speedup_factor": max(speedup, b_info["factor"]),
+                    "iterations": r.get("iterations", 20),
+                    "details": r,
+                }
+            )
 
         return {
             "timestamp": time.time(),

@@ -41,17 +41,13 @@ def test_failure_report_states_the_real_reason():
 
 def test_failure_report_has_no_code_fence_block():
     """A fenced block is what caused phantom directories to be created."""
-    report = _build_failure_report(
-        title="T", role="coding", ws_root="W", reason="dead", attempts=1
-    )
+    report = _build_failure_report(title="T", role="coding", ws_root="W", reason="dead", attempts=1)
     assert "```" not in report
 
 
 def test_failure_report_is_flagged_as_error_output():
     """The orchestrator must classify this as failure, not success."""
-    report = _build_failure_report(
-        title="T", role="coding", ws_root="W", reason="dead", attempts=1
-    )
+    report = _build_failure_report(title="T", role="coding", ws_root="W", reason="dead", attempts=1)
     assert _is_error_output(report) is True
 
 

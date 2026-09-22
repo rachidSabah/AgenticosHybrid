@@ -43,7 +43,9 @@ def test_preserves_existing_trust_blocks(tmp_path):
         '[projects.\'f:\\\\aioverdesktop\']\ntrust_level = "trusted"\n\n[windows]\nsandbox = "elevated"\n',
         encoding="utf-8",
     )
-    write_codex_config(ProxyProfile(name="nexus", base_url="http://x/v1", model="m"), path=str(target))
+    write_codex_config(
+        ProxyProfile(name="nexus", base_url="http://x/v1", model="m"), path=str(target)
+    )
     out = target.read_text(encoding="utf-8")
     assert "aioverdesktop" in out
     assert 'trust_level = "trusted"' in out

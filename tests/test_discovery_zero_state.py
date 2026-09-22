@@ -50,7 +50,11 @@ def test_empty_snapshot_has_no_placeholder_counts():
     snap = DiscoverySnapshot()
     assert snap.candidates_seen == 0
     assert snap.to_dict()["counts"]["active"] == 0
-    # No decorative node counts leak into the payload.
-    assert "16" not in str(snap.to_dict())
-    assert "17" not in str(snap.to_dict())
-    assert "29" not in str(snap.to_dict())
+    # No decorative node counts. Check the payload's numeric fields only —
+    # a substring scan of the whole dict also matches the ISO timestamp
+    # (e.g. "13:39:16"), which made this test flaky.
+    counts = snap.to_dict()["counts"]
+    assert all(v == 0 for v in counts.values()), counts
+    assert snap.to_dict()["agents"] == []
+    assert snap.to_dict()["active_agents"] == []
+    assert snap.to_dict()["runtimes"] == []

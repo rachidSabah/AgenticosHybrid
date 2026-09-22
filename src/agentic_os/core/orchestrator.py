@@ -180,7 +180,16 @@ def _is_error_output(text: str) -> bool:
     # incidental words like "error:" or "api key" are normal documentation or code content.
     if len(text.strip()) > 250 and ("```" in text or "\n## " in text or "\n# " in text):
         first_line = text.strip().split("\n")[0].lower()
-        if any(sig in first_line for sig in ("fatal error:", "command not found", "traceback (most recent", "unauthorized", "http 401")):
+        if any(
+            sig in first_line
+            for sig in (
+                "fatal error:",
+                "command not found",
+                "traceback (most recent",
+                "unauthorized",
+                "http 401",
+            )
+        ):
             return True
         return False
 
@@ -956,7 +965,9 @@ class Orchestrator:
                 ):
                     agent.mark_failed()
                     await self._fail_task(
-                        fallback_agent, task, f"All {task.attempts} attempts failed. Last error: {exc3}"
+                        fallback_agent,
+                        task,
+                        f"All {task.attempts} attempts failed. Last error: {exc3}",
                     )
                     return
                 # CLI attempts failed, activate autonomous engine fallback
@@ -981,7 +992,9 @@ class Orchestrator:
         # All attempts failed or no external CLI configured, activate autonomous engine fallback
         await self._execute_autonomous_fallback(agent, task, start_time)
 
-    async def _execute_autonomous_fallback(self, agent: Agent, task: Task, start_time: float) -> None:
+    async def _execute_autonomous_fallback(
+        self, agent: Agent, task: Task, start_time: float
+    ) -> None:
         """Fail-safe terminal state when no provider could execute the task.
 
         This does NOT synthesize deliverables. It records an honest failure so
