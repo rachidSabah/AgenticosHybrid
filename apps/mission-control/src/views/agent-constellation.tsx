@@ -292,7 +292,8 @@ export function AgentConstellation() {
         agentMap.set(key, {
           name,
           providerKey: ag.provider || name,
-          healthStatus: ag.health || "healthy",
+          // No health means unknown — never default to "healthy" (spec §19/§20).
+          healthStatus: ag.health || "unknown",
           latencyMs: 0,
         });
       }
