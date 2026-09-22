@@ -296,7 +296,12 @@ def create_app(platform: Platform) -> FastAPI:
         # Server shutdown — terminate all runtime managers and subprocesses cleanly
         try:
             if platform.runtime is not None:
-                await platform.runtime.stop()
+                # RuntimeManager exposes shutdown(); there is no stop().
+                shutdown = getattr(platform.runtime, "shutdown", None)
+                if shutdown is None:
+                    log.warning("runtime manager has no shutdown(); skipping")
+                else:
+                    await shutdown()
         except Exception as exc:
             log.warning("error stopping runtime on shutdown", error=str(exc))
         try:
@@ -2015,7 +2020,7 @@ def create_app(platform: Platform) -> FastAPI:
                 or r.get("duration_ms")
                 or b_info["opt"]
             )
-            speedup = round(b_info["legacy"] / max(float(measured_opt), 0.001), 1)
+            speedup = round(float(b_info["legacy"]) / max(float(measured_opt), 0.001), 1)
 
             formatted_results.append(
                 {
