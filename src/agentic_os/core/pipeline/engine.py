@@ -556,13 +556,15 @@ class PipelineEngineImpl(PipelineEnginePort):
 
             while ready_queue and execution.status == PipelineExecutionStatus.RUNNING:
                 stage_id = ready_queue.popleft()
+                if stage_id in execution.completed_stages:
+                    continue
                 stage = stage_map[stage_id]
 
                 # Check dependencies
                 deps = reverse_adj[stage_id]
                 if deps and not all(d in execution.completed_stages for d in deps):
                     ready_queue.append(stage_id)
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.005)
                     continue
 
                 # Check retry count
@@ -626,9 +628,14 @@ class PipelineEngineImpl(PipelineEnginePort):
                         continue
                     break
 
-                # Add downstream stages
+                # Add downstream stages whose dependencies have all completed
                 for target in adj[stage_id]:
-                    if target not in execution.completed_stages:
+                    in_degree[target] -= 1
+                    if (
+                        in_degree[target] <= 0
+                        and target not in execution.completed_stages
+                        and target not in ready_queue
+                    ):
                         ready_queue.append(target)
 
             # Finalize

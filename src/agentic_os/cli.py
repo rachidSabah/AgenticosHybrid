@@ -17,7 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument(
         "--host", default="127.0.0.1", help="Host IP to bind (default: 127.0.0.1)"
     )
-    serve_parser.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
+    serve_parser.add_argument("--port", type=int, default=8001, help="Port to bind (default: 8001)")
     args = parser.parse_args(argv)
     if args.command == "serve":
         # On Windows, force SelectorEventLoop to avoid ProactorEventLoop

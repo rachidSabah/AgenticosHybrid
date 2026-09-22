@@ -119,16 +119,29 @@ class ProcessScanner:
                 continue
 
             pid = int(pid_str) if pid_str.isdigit() else 0
-            # tasklist memory format: "12,345 K" or "12,345"
+            # tasklist memory format: "12,345 K", "5 720 Ko", or "12,345"
             mem_kb = 0.0
-            mem_clean = mem_str.replace(",", "").replace(" ", "").upper()
-            if mem_clean.endswith("K"):
-                mem_kb = float(mem_clean[:-1])
-            elif mem_clean.endswith("M"):
-                mem_kb = float(mem_clean[:-1]) * 1024
-            elif mem_clean:
+            normalized = (
+                mem_str.replace("\u202f", "")
+                .replace("\xa0", "")
+                .replace(" ", "")
+                .replace(",", "")
+                .upper()
+            )
+            multiplier = 1.0
+            if normalized.endswith(("KO", "KB", "K")):
+                normalized = normalized.rstrip("OBK")
+                multiplier = 1.0
+            elif normalized.endswith(("MO", "MB", "M")):
+                normalized = normalized.rstrip("OBM")
+                multiplier = 1024.0
+            elif normalized.endswith(("GO", "GB", "G")):
+                normalized = normalized.rstrip("OBG")
+                multiplier = 1024.0 * 1024.0
+
+            if normalized:
                 try:
-                    mem_kb = float(mem_clean)
+                    mem_kb = float(normalized) * multiplier
                 except ValueError:
                     mem_kb = 0.0
 

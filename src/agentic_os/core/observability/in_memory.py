@@ -79,7 +79,9 @@ class InMemoryTracing(TracingPort):
             attributes=attributes or {},
         )
 
-        # Track in traces
+        # Track in traces (bounded to 5000 traces to prevent memory leaks)
+        if len(self._traces) > 5000 and trace_id not in self._traces:
+            del self._traces[next(iter(self._traces))]
         self._traces[trace_id].append(span)
         self._current_span.set(span)
 
@@ -299,6 +301,8 @@ class InMemoryStructuredLogging(LoggingPort):
                 correlation_context=context,
             )
         self._entries.append(entry)
+        if len(self._entries) > 10000:
+            self._entries = self._entries[-5000:]
 
     def debug(self, message: str, **attributes: Any) -> None:
         self.log(

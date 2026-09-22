@@ -651,6 +651,9 @@ class ExecutionEngineImpl:
     # ── Internal record keeping ──
 
     async def _record_execution(self, result: ExecutionResult, strategy: str = "single") -> None:
+        publish_topic: Topic | None = None
+        publish_payload: dict[str, Any] | None = None
+
         async with self._lock:
             self._total_executions += 1
             self._total_latency_ms += result.latency_ms
@@ -665,29 +668,25 @@ class ExecutionEngineImpl:
 
             if result.state == ExecutionState.COMPLETED:
                 self._successful_executions += 1
-                await self._publish(
-                    Topic.EXECUTION_PROVIDER_SUCCESS,
-                    {
-                        "request_id": result.request_id,
-                        "provider": result.provider,
-                        "model": result.model,
-                        "latency_ms": result.latency_ms,
-                        "tokens": result.total_tokens,
-                    },
-                )
+                publish_topic = Topic.EXECUTION_PROVIDER_SUCCESS
+                publish_payload = {
+                    "request_id": result.request_id,
+                    "provider": result.provider,
+                    "model": result.model,
+                    "latency_ms": result.latency_ms,
+                    "tokens": result.total_tokens,
+                }
             elif result.state == ExecutionState.FAILED:
                 self._failed_executions += 1
                 self._provider_error_count += 1
                 pid = result.provider
                 self._provider_error_map[pid] = self._provider_error_map.get(pid, 0) + 1
-                await self._publish(
-                    Topic.EXECUTION_PROVIDER_ERROR,
-                    {
-                        "request_id": result.request_id,
-                        "provider": result.provider,
-                        "error": result.error,
-                    },
-                )
+                publish_topic = Topic.EXECUTION_PROVIDER_ERROR
+                publish_payload = {
+                    "request_id": result.request_id,
+                    "provider": result.provider,
+                    "error": result.error,
+                }
             elif result.state == ExecutionState.CANCELLED:
                 self._cancelled_executions += 1
             elif result.state == ExecutionState.TIMED_OUT:
@@ -709,6 +708,9 @@ class ExecutionEngineImpl:
                 self._fallback_count += 1
             elif strategy == "shadow":
                 self._shadow_count += 1
+
+        if publish_topic is not None and publish_payload is not None:
+            await self._publish(publish_topic, publish_payload)
 
     async def _record_retry(self, request_id: str, attempt: int) -> None:
         async with self._lock:

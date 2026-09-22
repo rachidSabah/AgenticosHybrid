@@ -287,20 +287,20 @@ class OmniRouteEngine:
 
         requirement = (task.required_capability or "chat").lower()
 
+        # Normalise values to 0-1 range (precomputed once outside agent loop)
+        max_cost = max(
+            (a["cost_per_1k"] for a in self._agent_registry.values()),
+            default=1.0,
+        )
+        max_latency = max(
+            (a["latency_ms"] for a in self._agent_registry.values()),
+            default=1000.0,
+        )
+
         # Score each agent
         scored: list[tuple[float, str, dict[str, Any]]] = []
         for agent_id, info in self._agent_registry.items():
-            # Normalise values to 0-1 range
-            max_cost = max(
-                (a["cost_per_1k"] for a in self._agent_registry.values()),
-                default=1.0,
-            )
             cost_norm = 1.0 - (info["cost_per_1k"] / max_cost if max_cost > 0 else 0.0)
-
-            max_latency = max(
-                (a["latency_ms"] for a in self._agent_registry.values()),
-                default=1000.0,
-            )
             speed_norm = 1.0 - (info["latency_ms"] / max_latency if max_latency > 0 else 0.0)
 
             cap_score = info["capabilities"].get(requirement, 0.0)

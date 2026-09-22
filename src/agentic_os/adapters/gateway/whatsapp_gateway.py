@@ -48,9 +48,27 @@ log = get_logger("gateway.whatsapp")
 
 # ── constants ────────────────────────────────────────────────────────────────
 
-# Absolute path to the pre-written bridge script — never computed at runtime.
-# This avoids the cwd / __file__ resolution issue inside ``uv run``.
-_PROJECT_ROOT = Path("E:/Agenticos")
+
+# Resolve project root and bridge script path dynamically.
+# Priority: AOS_ROOT env var -> directory containing wa_bridge.js relative to this file -> cwd -> F:/AOS -> E:/Agenticos
+def _resolve_project_root() -> Path:
+    env_root = os.getenv("AOS_ROOT")
+    if env_root and (Path(env_root) / "wa_bridge.js").exists():
+        return Path(env_root)
+    # Relative to this file: src/agentic_os/adapters/gateway -> 4 levels up
+    relative_root = Path(__file__).resolve().parent.parent.parent.parent
+    if (relative_root / "wa_bridge.js").exists():
+        return relative_root
+    cwd = Path.cwd()
+    if (cwd / "wa_bridge.js").exists():
+        return cwd
+    for candidate in [Path("F:/AOS"), Path("E:/Agenticos"), Path("C:/AgenticOS")]:
+        if (candidate / "wa_bridge.js").exists():
+            return candidate
+    return relative_root
+
+
+_PROJECT_ROOT = _resolve_project_root()
 _BRIDGE_SCRIPT_PATH = _PROJECT_ROOT / "wa_bridge.js"
 
 # Topics subscribed for progress streaming back to the originating chat.

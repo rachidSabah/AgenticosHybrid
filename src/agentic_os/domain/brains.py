@@ -76,6 +76,10 @@ class BrainVendor(StrEnum):
     CONTINUE = "continue"
     GITHUB_COPILOT = "github_copilot"
     CURSOR = "cursor"
+    PYTHON = "python"
+    NODE = "node"
+    GIT = "git"
+    BUN = "bun"
     CUSTOM = "custom"
 
 
@@ -158,6 +162,19 @@ class BrainRecord:
     error_count: int = 0
     last_error: str = ""
 
+    @property
+    def health_status(self) -> str:
+        """Return normalized string enum status for health ('healthy' | 'degraded' | 'unhealthy' | 'unknown')."""
+        score = self.health
+        norm = score / 100.0 if score > 1.0 else score
+        if norm >= 0.8:
+            return "healthy"
+        if norm >= 0.4:
+            return "degraded"
+        if norm >= 0.0:
+            return "unhealthy"
+        return "unknown"
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable dict (str enums, not enum values)."""
         return {
@@ -169,6 +186,8 @@ class BrainRecord:
             "version": self.version,
             "status": self.status.value,
             "health": self.health,
+            "health_score": float(self.health),
+            "health_status": self.health_status,
             "capabilities": list(self.capabilities),
             "supported_models": list(self.supported_models),
             "supported_tools": list(self.supported_tools),

@@ -44,6 +44,31 @@ class RegistrationStatus(Enum):
     FAILED = auto()
 
 
+_REFLECTION_CACHE: dict[Any, tuple[inspect.Signature, dict[str, Any]]] = {}
+
+
+def _get_factory_reflection(factory: Any) -> tuple[inspect.Signature, dict[str, Any]]:
+    """Cached reflection of constructor/callable signature and type hints."""
+    cached = _REFLECTION_CACHE.get(factory)
+    if cached is not None:
+        return cached
+
+    hints: dict[str, Any] = {}
+    try:
+        hints = get_type_hints(factory)
+    except (TypeError, NameError, AttributeError):
+        pass
+
+    if isinstance(factory, type):
+        sig = inspect.signature(factory.__init__)
+    else:
+        sig = inspect.signature(factory)
+
+    result = (sig, hints)
+    _REFLECTION_CACHE[factory] = result
+    return result
+
+
 @dataclass
 class Registration(Generic[T]):
     """Metadata and factory for a single registered service."""
@@ -59,6 +84,7 @@ class Registration(Generic[T]):
     registered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     description: str | None = None
     tags: set[str] = field(default_factory=set)
+    compiled_params: list[tuple[str, Any, str | None]] = field(default_factory=list, repr=False)
 
     @property
     def key(self) -> str:
@@ -146,6 +172,17 @@ class Container:
             resolved_factory = _instance_factory
             resolved_lifetime = Lifetime.SINGLETON
 
+        compiled_params: list[tuple[str, Any, str | None]] = []
+        try:
+            sig, hints = _get_factory_reflection(resolved_factory)
+            for p_name, p_param in sig.parameters.items():
+                if p_name == "self":
+                    continue
+                hint_key = hints[p_name].__name__ if p_name in hints else None
+                compiled_params.append((p_name, p_param.default, hint_key))
+        except Exception:
+            pass
+
         reg: Registration[Any] = Registration(
             interface=interface,
             factory=resolved_factory,
@@ -154,6 +191,7 @@ class Container:
             depends_on=depends_on,
             description=description,
             tags=tags or set(),
+            compiled_params=compiled_params,
         )
 
         with self._lock:
@@ -326,61 +364,39 @@ class Container:
             deps = reg.depends_on or []
             resolved_deps: dict[str, Any] = {}
 
-            if deps:
-                hints = {}
-                try:
-                    hints = get_type_hints(reg.factory)
-                except (TypeError, NameError, AttributeError):
-                    pass
+            compiled_slots = reg.compiled_params
+            if not compiled_slots and callable(reg.factory):
+                sig, hints = _get_factory_reflection(reg.factory)
+                compiled_slots = [
+                    (
+                        p_name,
+                        p_param.default,
+                        hints[p_name].__name__ if p_name in hints else None,
+                    )
+                    for p_name, p_param in sig.parameters.items()
+                    if p_name != "self"
+                ]
 
+            if deps:
                 for dep_type in deps:
                     dep_key = dep_type.__name__
                     resolved_deps[dep_key] = self._resolve(dep_key, resolve_id, visited)
 
             # ── Construct ──
-            instance: Any
+            params = {}
+            for p_name, default_val, hint_key in compiled_slots:
+                if p_name in resolved_deps:
+                    params[p_name] = resolved_deps[p_name]
+                elif default_val is not inspect.Parameter.empty:
+                    params[p_name] = default_val
+                elif hint_key:
+                    try:
+                        params[p_name] = self._resolve(hint_key, resolve_id, visited)
+                    except MissingDependencyError:
+                        if default_val is not inspect.Parameter.empty:
+                            params[p_name] = default_val
 
-            if isinstance(reg.factory, type):
-                # Factory is a class — try to match constructor params
-                sig = inspect.signature(reg.factory.__init__)
-                params = {}
-                for p_name, p_param in sig.parameters.items():
-                    if p_name == "self":
-                        continue
-                    # Try to find param type
-                    if p_name in resolved_deps:
-                        params[p_name] = resolved_deps[p_name]
-                    elif p_param.default is not inspect.Parameter.empty:
-                        params[p_name] = p_param.default
-                    else:
-                        # Check type hints for known types
-                        if p_name in hints:
-                            hint_type = hints[p_name]
-                            hint_key = hint_type.__name__
-                            try:
-                                params[p_name] = self._resolve(hint_key, resolve_id, visited)
-                            except MissingDependencyError:
-                                if p_param.default is not inspect.Parameter.empty:
-                                    params[p_name] = p_param.default
-                instance = reg.factory(**params)
-            else:
-                # Factory is a callable
-                sig = inspect.signature(reg.factory)
-                params = {}
-                for p_name, p_param in sig.parameters.items():
-                    if p_name in resolved_deps:
-                        params[p_name] = resolved_deps[p_name]
-                    elif p_param.default is not inspect.Parameter.empty:
-                        params[p_name] = p_param.default
-                    elif p_name in hints:
-                        hint_type = hints[p_name]
-                        hint_key = hint_type.__name__
-                        try:
-                            params[p_name] = self._resolve(hint_key, resolve_id, visited)
-                        except MissingDependencyError:
-                            if p_param.default is not inspect.Parameter.empty:
-                                params[p_name] = p_param.default
-                instance = reg.factory(**params)
+            instance = reg.factory(**params)
 
         except CyclicDependencyError:
             raise

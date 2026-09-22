@@ -357,7 +357,7 @@ class LifecycleManager:
         failed: list[str] = []
         errors: list[str] = []
 
-        for record in services:
+        async def _boot_service(record: ServiceRecord) -> None:
             service_id = record.id
             try:
                 # 1. INITIALIZING
@@ -429,6 +429,8 @@ class LifecycleManager:
                 errors.append(f"{service_id}: {exc}")
                 if record.hooks and record.hooks.on_error:
                     record.hooks.on_error(exc)
+
+        await asyncio.gather(*(_boot_service(record) for record in services))
 
         duration = (datetime.now(UTC) - started_at).total_seconds() * 1000
         result = PhaseResult(

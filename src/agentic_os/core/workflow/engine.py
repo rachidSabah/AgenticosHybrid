@@ -506,6 +506,7 @@ class WorkflowEngineImpl(WorkflowEnginePort):
                 if deps and not all(d in execution.completed_nodes for d in deps):
                     # Re-queue for later
                     ready_queue.append(node_id)
+                    await asyncio.sleep(0.005)
                     continue
 
                 # Execute node
@@ -565,9 +566,14 @@ class WorkflowEngineImpl(WorkflowEnginePort):
                     # Continue to fail the workflow
                     break
 
-                # Add downstream nodes to ready queue
+                # Add downstream nodes whose dependencies have all completed
                 for target in adj[node_id]:
-                    if target not in execution.completed_nodes:
+                    in_degree[target] -= 1
+                    if (
+                        in_degree[target] <= 0
+                        and target not in execution.completed_nodes
+                        and target not in ready_queue
+                    ):
                         ready_queue.append(target)
 
             # Check final status

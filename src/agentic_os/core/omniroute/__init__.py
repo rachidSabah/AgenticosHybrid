@@ -11,6 +11,7 @@ from agentic_os.core.health_registry import HealthRegistry
 from agentic_os.core.observability_registry import ObservabilityRegistry
 from agentic_os.core.omniroute.aggregation import AggregationEngineImpl
 from agentic_os.core.omniroute.budgets import BudgetEngineImpl
+from agentic_os.core.omniroute.engine import OmniRouteEngine, omniroute_engine
 from agentic_os.core.omniroute.executor import ExecutionEngineImpl
 from agentic_os.core.omniroute.failover import CircuitBreakerEngineImpl
 from agentic_os.core.omniroute.learning import AdaptiveLearningEngineImpl
@@ -168,5 +169,7 @@ def create_omniroute_engine(
 
 
 __all__ = [
+    "OmniRouteEngine",
     "create_omniroute_engine",
+    "omniroute_engine",
 ]

@@ -18,6 +18,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 from agentic_os.core.persistent.domain import (
     AuditRecord,
@@ -78,17 +79,18 @@ class PersistenceLayer:
     def data_dir(self) -> str:
         return str(self._data_dir)
 
-    # ── Snapshots ──────────────────────────────────────────────────
-
     async def save_snapshot(self, snapshot: SystemSnapshot) -> str:
         """Save a snapshot to disk. Returns the file path."""
         self._ensure_dirs()
         path = self._snapshots_dir / f"{snapshot.id}.json"
-        data = json.dumps(snapshot.to_dict(), default=str)
-        snapshot.checksum = hashlib.sha256(data.encode()).hexdigest()
+        d = snapshot.to_dict()
+        d["checksum"] = ""
+        raw_bytes = json.dumps(d, default=str).encode()
+        snapshot.checksum = hashlib.sha256(raw_bytes).hexdigest()
+        d["checksum"] = snapshot.checksum
+        data = json.dumps(d, default=str)
         snapshot.size_bytes = len(data.encode())
-        # Re-serialize with checksum
-        data = json.dumps(snapshot.to_dict(), default=str)
+        d["size_bytes"] = snapshot.size_bytes
         await asyncio.to_thread(self._write_file, str(path), data)
         return str(path)
 
@@ -272,8 +274,10 @@ class PersistenceLayer:
 
     @staticmethod
     def _write_file(path: str, data: str) -> None:
-        with open(path, "w", encoding="utf-8") as f:
+        tmp_path = f"{path}.tmp.{uuid4().hex[:8]}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(data)
+        os.replace(tmp_path, path)
 
     @staticmethod
     def _read_file(path: str) -> str:

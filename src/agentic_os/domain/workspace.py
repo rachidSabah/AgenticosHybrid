@@ -51,13 +51,15 @@ def set_workspace_root(path: str) -> str:
     """
     _workspace_state["path"] = os.path.realpath(path)
 
-    # Persist to disk (best-effort)
+    # Persist to disk (best-effort, atomic)
     try:
         _WORKSPACE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _WORKSPACE_FILE.write_text(
+        tmp = _WORKSPACE_FILE.with_suffix(f".tmp.{os.getpid()}")
+        tmp.write_text(
             json.dumps({"path": _workspace_state["path"]}),
             encoding="utf-8",
         )
+        os.replace(tmp, _WORKSPACE_FILE)
     except Exception:
         pass  # best-effort — don't crash if persistence fails
 

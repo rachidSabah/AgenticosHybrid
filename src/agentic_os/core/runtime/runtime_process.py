@@ -76,11 +76,14 @@ class SubprocessManager:
     Spawns, tracks, and signals OS processes. Thread-safe via asyncio.Lock.
     """
 
+    _instances: set[SubprocessManager] = set()
+
     def __init__(self) -> None:
         self._lock: asyncio.Lock = asyncio.Lock()
         self._handles: dict[int, SubprocessHandle] = {}
         # name -> set[pids]
         self._by_name: dict[str, set[int]] = {}
+        SubprocessManager._instances.add(self)
 
     # ── Spawn ─────────────────────────────────────────────────────────────────
 
@@ -248,34 +251,36 @@ class SubprocessManager:
     ) -> bool:
         """Windows kill via ``taskkill``."""
         sig_upper = signal_name.upper()
-        if sig_upper in ("SIGKILL", "KILL"):
-            taskkill_flag = "/F"
-        elif sig_upper in ("SIGTERM", "TERM", "TERMINATE"):
-            taskkill_flag = "/F"  # Windows needs /F to actually terminate
+        if sig_upper in ("SIGKILL", "KILL", "SIGTERM", "TERM", "TERMINATE"):
+            taskkill_flags = ["/F", "/T"]
         else:
-            taskkill_flag = ""  # try gentle first
+            taskkill_flags = []
 
-        proc = await asyncio.create_subprocess_exec(
-            "taskkill",
-            "/PID",
-            str(pid),
-            taskkill_flag,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        await proc.wait()
-
-        # If gentle failed, force kill
-        if proc.returncode != 0 and not taskkill_flag:
-            proc2 = await asyncio.create_subprocess_exec(
+        try:
+            proc = await asyncio.create_subprocess_exec(
                 "taskkill",
-                "/F",
+                *taskkill_flags,
                 "/PID",
                 str(pid),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            await proc2.wait()
+            await proc.wait()
+
+            # If gentle failed, force kill
+            if proc.returncode != 0 and not taskkill_flags:
+                proc2 = await asyncio.create_subprocess_exec(
+                    "taskkill",
+                    "/F",
+                    "/T",
+                    "/PID",
+                    str(pid),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc2.wait()
+        except Exception as exc:
+            log.warning("error executing taskkill", pid=pid, error=str(exc))
 
         async with self._lock:
             handle.status = ProcessStatus.STOPPED
@@ -296,6 +301,15 @@ class SubprocessManager:
             pids = list(self._handles.keys())
         for pid in pids:
             await self.terminate(pid)
+
+    @classmethod
+    async def terminate_all_active(cls) -> None:
+        """Terminate all processes across all active SubprocessManager instances."""
+        for mgr in list(cls._instances):
+            try:
+                await mgr.terminate_all()
+            except Exception as exc:
+                log.warning("error terminating subprocesses on shutdown", error=str(exc))
 
     # ── Status ────────────────────────────────────────────────────────────────
 

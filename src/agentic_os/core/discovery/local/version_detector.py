@@ -100,11 +100,17 @@ class VersionDetector:
             List of ``(tool_type, executable_path, version)`` tuples.
             Version is ``""`` when detection fails.
         """
-        results: list[tuple[str, str, str]] = []
-        for tool_type, exe_path in executables:
-            version = await self.get_version(exe_path, tool_type)
-            results.append((tool_type, exe_path, version))
-        return results
+        if not executables:
+            return []
+
+        sem = asyncio.Semaphore(6)
+
+        async def _probe(tool_type: str, exe_path: str) -> tuple[str, str, str]:
+            async with sem:
+                version = await self.get_version(exe_path, tool_type)
+                return (tool_type, exe_path, version)
+
+        return list(await asyncio.gather(*(_probe(t, p) for t, p in executables)))
 
     def clear_cache(self) -> None:
         """Reset the version cache."""

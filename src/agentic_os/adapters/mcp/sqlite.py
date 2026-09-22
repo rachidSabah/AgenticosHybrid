@@ -235,6 +235,16 @@ class SQLiteAdapter(BaseMCPAdapter):
 
     # ── Tool implementations ──────────────────────────────────────────────────
 
+    @staticmethod
+    def _open_connection(db_path: str, row_factory: bool = False) -> sqlite3.Connection:
+        conn = sqlite3.connect(db_path)
+        if row_factory:
+            conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
+        return conn
+
     async def _execute_query(self, args: dict[str, Any]) -> list[dict[str, Any]]:
         sql = args["sql"]
         db_path = self._resolve_db(args["db_path"])
@@ -247,8 +257,7 @@ class SQLiteAdapter(BaseMCPAdapter):
 
         # Run the query in a thread pool to avoid blocking the event loop
         def _query() -> list[dict[str, Any]]:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
+            conn = self._open_connection(db_path, row_factory=True)
             try:
                 cursor = conn.execute(sql)
                 rows = cursor.fetchall()
@@ -268,7 +277,7 @@ class SQLiteAdapter(BaseMCPAdapter):
         db_path = self._resolve_db(args["db_path"])
 
         def _statement() -> dict[str, Any]:
-            conn = sqlite3.connect(db_path)
+            conn = self._open_connection(db_path)
             try:
                 cursor = conn.execute(sql)
                 conn.commit()
@@ -287,7 +296,7 @@ class SQLiteAdapter(BaseMCPAdapter):
         db_path = self._resolve_db(args["db_path"])
 
         def _tables() -> list[str]:
-            conn = sqlite3.connect(db_path)
+            conn = self._open_connection(db_path)
             try:
                 cursor = conn.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -305,8 +314,7 @@ class SQLiteAdapter(BaseMCPAdapter):
         db_path = self._resolve_db(args["db_path"])
 
         def _describe() -> list[dict[str, Any]]:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
+            conn = self._open_connection(db_path, row_factory=True)
             try:
                 cursor = conn.execute(f"PRAGMA table_info({table!r})")
                 return [dict(row) for row in cursor.fetchall()]

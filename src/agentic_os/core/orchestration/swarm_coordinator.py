@@ -16,6 +16,7 @@ OrchestrationFramework are unchanged.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
@@ -146,36 +147,33 @@ class SharedMissionMemory:
       - decision_memory: recorded decisions
     """
 
-    def __init__(self, mission_id: str = "") -> None:
+    def __init__(self, mission_id: str = "", max_decisions: int = 1000) -> None:
         self.mission_id: str = mission_id
         self._lock = asyncio.Lock()
         self._shared_context: dict[str, Any] = {}
         self._working_memory: dict[str, Any] = {}
-        self._decision_memory: list[dict[str, Any]] = []
+        self._decision_memory: deque[dict[str, Any]] = deque(maxlen=max_decisions)
 
     async def set_context(self, key: str, value: Any) -> None:
         async with self._lock:
             self._shared_context[key] = value
 
     async def get_context(self, key: str, default: Any = None) -> Any:
-        async with self._lock:
-            return self._shared_context.get(key, default)
+        return self._shared_context.get(key, default)
 
     async def set_working(self, key: str, value: Any) -> None:
         async with self._lock:
             self._working_memory[key] = value
 
     async def get_working(self, key: str, default: Any = None) -> Any:
-        async with self._lock:
-            return self._working_memory.get(key, default)
+        return self._working_memory.get(key, default)
 
     async def record_decision(self, decision: dict[str, Any]) -> None:
         async with self._lock:
             self._decision_memory.append(decision)
 
     async def get_decisions(self) -> list[dict[str, Any]]:
-        async with self._lock:
-            return list(self._decision_memory)
+        return list(self._decision_memory)
 
     def to_dict(self) -> dict[str, Any]:
         return {

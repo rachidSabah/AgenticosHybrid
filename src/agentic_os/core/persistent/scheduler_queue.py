@@ -268,6 +268,7 @@ class DurableTaskQueue:
         self._bus = bus
         self._persistence = persistence
         self._queues: dict[str, list[QueueTask]] = {}  # queue_name → tasks
+        self._leased: dict[str, QueueTask] = {}  # task_id → leased task
         self._dead_letter: list[QueueTask] = []
         self._stats: dict[str, int] = {
             "enqueued": 0,
@@ -282,6 +283,7 @@ class DurableTaskQueue:
         return {
             **self._stats,
             "queue_count": len(self._queues),
+            "leased_count": len(self._leased),
             "dead_letter_count": len(self._dead_letter),
         }
 
@@ -330,6 +332,7 @@ class DurableTaskQueue:
 
         lease_expires = datetime.now(UTC) + timedelta(seconds=lease_s)
         task.lease_expires = lease_expires.isoformat()
+        self._leased[task.id] = task
         await self._persistence.save_queue_task(task)
         return task
 
@@ -337,63 +340,79 @@ class DurableTaskQueue:
         self, task_id: str, worker_id: str = "", result: dict[str, Any] | None = None
     ) -> bool:
         """Acknowledge a task as completed."""
-        # Find the task in persistence
-        for queue_tasks in self._queues.values():
-            for t in queue_tasks:
-                if t.id == task_id:
-                    t.status = QueueTaskStatus.COMPLETED
-                    t.ack_count += 1
-                    t.result = result or {}
-                    t.completed_at = datetime.now(UTC).isoformat()
-                    self._stats["completed"] += 1
-                    await self._persistence.save_queue_task(t)
-                    await self._publish(
-                        "runtime.queue.updated", {"task_id": task_id, "action": "ack"}
-                    )
-                    return True
+        task = self._leased.pop(task_id, None)
+        if task is None:
+            for queue_tasks in self._queues.values():
+                for t in queue_tasks:
+                    if t.id == task_id:
+                        task = t
+                        break
+                if task:
+                    break
+
+        if task is not None:
+            task.status = QueueTaskStatus.COMPLETED
+            task.ack_count += 1
+            task.result = result or {}
+            task.completed_at = datetime.now(UTC).isoformat()
+            self._stats["completed"] += 1
+            await self._persistence.save_queue_task(task)
+            await self._publish("runtime.queue.updated", {"task_id": task_id, "action": "ack"})
+            return True
         return False
 
     async def nack(self, task_id: str, worker_id: str = "", error: str = "") -> bool:
         """Negative acknowledge — task failed, retry or dead-letter."""
-        for queue_tasks in self._queues.values():
-            for t in queue_tasks:
-                if t.id == task_id:
-                    t.nack_count += 1
-                    t.error = error
-                    if t.attempts >= t.max_attempts:
-                        t.status = QueueTaskStatus.DEAD_LETTER
-                        self._dead_letter.append(t)
-                        self._stats["dead_lettered"] += 1
-                    else:
-                        t.status = QueueTaskStatus.QUEUED
-                        t.lease_owner = ""
-                        t.lease_expires = ""
-                    await self._persistence.save_queue_task(t)
-                    await self._publish(
-                        "runtime.queue.updated", {"task_id": task_id, "action": "nack"}
-                    )
-                    return True
+        task = self._leased.pop(task_id, None)
+        if task is None:
+            for queue_tasks in self._queues.values():
+                for t in queue_tasks:
+                    if t.id == task_id:
+                        task = t
+                        break
+                if task:
+                    break
+
+        if task is not None:
+            task.nack_count += 1
+            task.error = error
+            if task.attempts >= task.max_attempts:
+                task.status = QueueTaskStatus.DEAD_LETTER
+                self._dead_letter.append(task)
+                self._stats["dead_lettered"] += 1
+            else:
+                task.status = QueueTaskStatus.QUEUED
+                task.lease_owner = ""
+                task.lease_expires = ""
+                self._queues.setdefault(task.queue, []).append(task)
+            await self._persistence.save_queue_task(task)
+            await self._publish("runtime.queue.updated", {"task_id": task_id, "action": "nack"})
+            return True
         return False
 
     async def check_timeouts(self) -> int:
         """Check for timed-out leases. Returns count of timed out."""
         now = datetime.now(UTC)
         count = 0
-        for queue_tasks in self._queues.values():
-            for t in queue_tasks:
-                if t.status != QueueTaskStatus.LEASED or not t.lease_expires:
-                    continue
-                try:
-                    expires = datetime.fromisoformat(t.lease_expires)
-                except (ValueError, TypeError):
-                    continue
-                if now > expires:
-                    t.status = QueueTaskStatus.TIMED_OUT
-                    t.lease_owner = ""
-                    t.lease_expires = ""
-                    self._stats["timed_out"] += 1
-                    count += 1
-                    await self._persistence.save_queue_task(t)
+        timed_out_ids = []
+        for task_id, t in list(self._leased.items()):
+            if t.status != QueueTaskStatus.LEASED or not t.lease_expires:
+                continue
+            try:
+                expires = datetime.fromisoformat(t.lease_expires)
+            except (ValueError, TypeError):
+                continue
+            if now > expires:
+                t.status = QueueTaskStatus.TIMED_OUT
+                t.lease_owner = ""
+                t.lease_expires = ""
+                self._stats["timed_out"] += 1
+                count += 1
+                timed_out_ids.append(task_id)
+                self._queues.setdefault(t.queue, []).append(t)
+                await self._persistence.save_queue_task(t)
+        for tid in timed_out_ids:
+            self._leased.pop(tid, None)
         return count
 
     async def _publish(self, topic: str, payload: dict[str, Any]) -> None:

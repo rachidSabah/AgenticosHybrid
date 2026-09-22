@@ -145,7 +145,8 @@ async def benchmark_omniroute_speed() -> dict[str, Any]:
 
 async def benchmark_ast_parsing() -> dict[str, Any]:
     """Compare synchronous AST parsing vs offloaded thread-pool parsing."""
-    code_sample = """
+    code_sample = (
+        """
 import os, sys, asyncio
 
 class DemoService:
@@ -153,7 +154,9 @@ class DemoService:
         self.name = name
     async def run(self) -> dict:
         return {"status": "ok", "name": self.name}
-""" * 50
+"""
+        * 50
+    )
 
     # Test sync in event loop
     t0 = time.perf_counter()
@@ -178,9 +181,7 @@ class DemoService:
 async def benchmark_worktree_isolation() -> dict[str, Any]:
     """Verify git status isolation speed without blocking the loop."""
     t0 = time.perf_counter()
-    res = await asyncio.to_thread(
-        os.path.isdir, os.path.join(os.getcwd(), ".git")
-    )
+    res = await asyncio.to_thread(os.path.isdir, os.path.join(os.getcwd(), ".git"))
     duration_ms = round((time.perf_counter() - t0) * 1000, 3)
     return {
         "subsystem": "Worktree Isolation",

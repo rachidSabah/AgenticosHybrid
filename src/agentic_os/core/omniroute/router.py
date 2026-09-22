@@ -968,8 +968,10 @@ class RouterEngineImpl:
         return decision
 
     async def route_many(self, requests: list[RoutingRequest]) -> list[RoutingDecision]:
-        """Route multiple requests sequentially and return decisions in order."""
-        return [await self.route(r) for r in requests]
+        """Route multiple requests concurrently and return decisions in order."""
+        if not requests:
+            return []
+        return list(await asyncio.gather(*(self.route(r) for r in requests)))
 
     async def best_model(self, request: RoutingRequest, top_k: int = 1) -> list[RoutingDecision]:
         """Return the top-k best models. Accepts streaming=False (no full scoring)."""
@@ -1273,16 +1275,13 @@ class RouterEngineImpl:
         valid_models = [m for m in models if m.enabled]
 
         candidates: list[_Candidate] = []
-        provider_map: dict[str, OmniRouteProvider] = {p.id: p for p in valid_providers}
+        provider_id_map: dict[str, OmniRouteProvider] = {p.id: p for p in valid_providers}
+        provider_name_map: dict[str, OmniRouteProvider] = {p.name: p for p in valid_providers}
 
         for m in valid_models:
-            provider = provider_map.get(m.provider_id)
-            if provider is None:
-                # Try to find by name
-                for p in valid_providers:
-                    if p.name == m.provider:
-                        provider = p
-                        break
+            provider = provider_id_map.get(m.provider_id)
+            if provider is None and m.provider:
+                provider = provider_name_map.get(m.provider)
             if provider is not None:
                 candidates.append(_Candidate(provider=provider, model=m))
 

@@ -182,7 +182,11 @@ CLOUD_PROVIDERS: list[dict[str, Any]] = [
         "display_name": "Groq LPU Acceleration",
         "vendor": "groq",
         "runtime": "cloud",
-        "models": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768", "deepseek-r1-distill-llama-70b"],
+        "models": [
+            "llama-3.3-70b-versatile",
+            "mixtral-8x7b-32768",
+            "deepseek-r1-distill-llama-70b",
+        ],
         "capabilities": ["ultra_fast_inference", "chat", "low_latency"],
     },
     {
