@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 from agentic_os.core.brains.schema import (
@@ -201,6 +203,51 @@ async def probe_health(path: str) -> ProbeResult:
     return ProbeResult("health", False, f"exit {rc}", "")
 
 
+# ── Loop-agnostic execution ─────────────────────────────────────────────────
+# The AgenticOS backend runs on WindowsSelectorEventLoop, where
+# asyncio.create_subprocess_exec raises NotImplementedError — subprocesses are
+# only supported by ProactorEventLoop. Probing therefore runs in a dedicated
+# worker thread owning a Proactor loop, so discovery works under ANY event
+# loop policy the host app chooses. This is why 47/48 candidates silently
+# failed when called from the API but succeeded standalone.
+_PROBE_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-probe")
+
+
+def _run_probe_loop(coro_fn):
+    """Run a probe coroutine on a thread with a subprocess-capable loop."""
+    asyncio.set_event_loop_policy(_probe_policy())
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro_fn())
+    finally:
+        loop.close()
+
+
+def _probe_policy():
+    if os.name == "nt":
+        # Proactor supports subprocesses on Windows.
+        return asyncio.WindowsProactorEventLoopPolicy()
+    return asyncio.DefaultEventLoopPolicy()
+
+
+def _in_probe_thread(fn):
+    """Execute ``fn`` in the probe thread; returns an awaitable."""
+    running = asyncio.get_running_loop()
+    return running.run_in_executor(_PROBE_EXECUTOR, lambda: _run_probe_loop(fn))
+
+
+async def _probe_version_async(path: str) -> ProbeResult:
+    return await _in_probe_thread(lambda: probe_version(path))
+
+
+async def _probe_identity_async(path: str) -> tuple[ProbeResult, str]:
+    return await _in_probe_thread(lambda: probe_identity(path))
+
+
+async def _probe_health_async(path: str) -> ProbeResult:
+    return await _in_probe_thread(lambda: probe_health(path))
+
+
 async def run_probe_sequence(name: str, path: str) -> DiscoveredAgent:
     """Full probe lifecycle for one candidate."""
     agent = DiscoveredAgent(
@@ -219,9 +266,9 @@ async def run_probe_sequence(name: str, path: str) -> DiscoveredAgent:
     # Probes are independent — run them concurrently. Sequential probing made
     # a full scan take >80s on a large PATH.
     version_probe, (identity_probe, help_text), health_probe = await asyncio.gather(
-        probe_version(path),
-        probe_identity(path),
-        probe_health(path),
+        _probe_version_async(path),
+        _probe_identity_async(path),
+        _probe_health_async(path),
     )
 
     agent.probes.extend([version_probe, identity_probe, health_probe])

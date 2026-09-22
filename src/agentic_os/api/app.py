@@ -66,6 +66,7 @@ from agentic_os.audit.benchmarks import run_all_micro_benchmarks
 from agentic_os.audit.blueprints import get_architectural_blueprints
 from agentic_os.audit.bottlenecks import audit_subsystem_bottlenecks
 from agentic_os.config import settings
+from agentic_os.core.brains.discovery_engine import agent_discovery_engine
 from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.omniroute.engine import omniroute_engine
 from agentic_os.discovery.service import discovery_service
@@ -1605,6 +1606,34 @@ def create_app(platform: Platform) -> FastAPI:
         if brain is None:
             raise HTTPException(status_code=404, detail=f"Brain {brain_id} not found")
         return _serialize_brain_record(brain)
+
+    @app.get("/api/discovery/agents")
+    async def discovery_agents() -> dict:
+        """Single source of truth for every agent surface (spec §1).
+
+        Returns only agents proven by a real executable + successful probe.
+        """
+        snap = agent_discovery_engine.snapshot
+        if not snap.agents:
+            snap = await agent_discovery_engine.scan()
+        return snap.to_dict()
+
+    @app.post("/api/discovery/rescan")
+    async def discovery_rescan() -> dict:
+        """Manual rescan (spec §13). No restart required."""
+        snap = await agent_discovery_engine.scan()
+        return snap.to_dict()
+
+    @app.post("/api/discovery/unbind/{agent_id}")
+    async def discovery_unbind(agent_id: str) -> dict:
+        """Remove a real binding, not just hide it (spec §14)."""
+        removed = await agent_discovery_engine.unbind(agent_id)
+        return {"removed": removed, "agent_id": agent_id}
+
+    @app.get("/api/discovery/history")
+    async def discovery_history() -> list[dict]:
+        """Historical records — never rendered as active (spec §9)."""
+        return [a.to_dict() for a in agent_discovery_engine.get_history()]
 
     @app.post("/api/brains/refresh")
     async def refresh_brains() -> dict:
