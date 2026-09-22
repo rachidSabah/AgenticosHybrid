@@ -982,12 +982,10 @@ class Orchestrator:
         await self._execute_autonomous_fallback(agent, task, start_time)
 
     async def _execute_autonomous_fallback(self, agent: Agent, task: Task, start_time: float) -> None:
-        """Autonomous fail-safe execution engine.
+        """Fail-safe terminal state when no provider could execute the task.
 
-        When host CLIs fail to run or lack external API keys, the Kernel
-        Autonomous Synthesizer executes the task deliverable directly, writing
-        real architectural specifications, reports, and code to the target workspace
-        so the mission completes to 100%.
+        This does NOT synthesize deliverables. It records an honest failure so
+        the mission is reported FAILED rather than masquerading as complete.
         """
         import os
 
@@ -998,6 +996,7 @@ class Orchestrator:
             "execution.autonomous_engine_activated",
             task=task.id,
             agent=agent.id,
+            elapsed_s=round(elapsed, 3),
             role=task.role,
             title=task.title,
         )
