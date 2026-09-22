@@ -117,15 +117,22 @@ BACKEND_PID=$!
 
 # Start frontend
 cd apps/mission-control
-npm run start -- -p 3000 > "${HOME}/.agentic_os/logs/frontend.log" 2>&1 &
+npm run start -- -p 3001 > "${HOME}/.agentic_os/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
+echo "${FRONTEND_PID}" > "${PID_DIR}/frontend.pid"
 cd "${INSTALL_DIR}"
 
-echo -e "  Waiting for backend health check on http://127.0.0.1:8080/healthz..."
+# Give services a moment to spin up
+sleep 3
+
+# Verify backend health
 for i in {1..30}; do
-    if curl -s http://127.0.0.1:8080/healthz | grep -q "ok"; then
-        echo -e "  ${GREEN}✓ Backend is Healthy! (PID: ${BACKEND_PID})${NC}"
+    if curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
+        echo -e "${GREEN}  FastAPI Control Plane    : http://localhost:8000 (HEALTHY)   ${NC}"
+        echo -e "${GREEN}  Mission Control Frontend : http://localhost:3001                ${NC}"
         break
+    else
+        echo -e "${YELLOW}  FastAPI Control Plane    : http://localhost:8000 (STARTING)  ${NC}"
     fi
     sleep 1
 done

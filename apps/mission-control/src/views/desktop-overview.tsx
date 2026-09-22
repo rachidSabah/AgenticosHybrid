@@ -7,15 +7,17 @@ import { api } from "@/lib/api";
 import type { DesktopRuntimeState } from "@/lib/desktop-types";
 
 function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
+  const sec = Number(seconds);
+  if (!Number.isFinite(sec) || sec <= 0) return "0s";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
   const parts: string[] = [];
   if (d > 0) parts.push(`${d}d`);
   if (h > 0) parts.push(`${h}h`);
   if (m > 0) parts.push(`${m}m`);
-  parts.push(`${s}s`);
+  if (s > 0 || parts.length === 0) parts.push(`${s}s`);
   return parts.join(" ");
 }
 
@@ -37,16 +39,17 @@ function KpiCard({ label, value, tone = "default" }: { label: string; value: str
 }
 
 function ProgressBar({ value, label, tone }: { value: number; label: string; tone?: "ok" | "warn" | "danger" | "accent" }) {
+  const numVal = Number(value) || 0;
   const colorMap: Record<string, string> = { ok: "bg-ok", warn: "bg-warn", danger: "bg-danger", accent: "bg-accent" };
   const barColor = colorMap[tone ?? "accent"] ?? "bg-accent";
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
         <span className="text-faint">{label}</span>
-        <span className="font-mono tabular-nums text-muted">{value.toFixed(1)}%</span>
+        <span className="font-mono tabular-nums text-muted">{numVal.toFixed(1)}%</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-surface/50">
-        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(value, 100)}%` }} />
+        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${Math.min(Math.max(numVal, 0), 100)}%` }} />
       </div>
     </div>
   );

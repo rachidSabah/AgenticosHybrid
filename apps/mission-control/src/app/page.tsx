@@ -12,9 +12,15 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   return lazy(async () => {
     try {
       return await factory();
-    } catch {
-      await new Promise((r) => setTimeout(r, 400));
-      return await factory();
+    } catch (firstErr) {
+      console.warn("[Mission Control] Chunk load error, retrying import...", firstErr);
+      await new Promise((r) => setTimeout(r, 600));
+      try {
+        return await factory();
+      } catch (retryErr) {
+        console.error("[Mission Control] Chunk load retry failed:", retryErr);
+        throw retryErr;
+      }
     }
   });
 }
@@ -164,8 +170,18 @@ const GPUAcceleration = lazyWithRetry(() =>
 const CollaborativeWorkspace = lazyWithRetry(() =>
   import("@/views/collaborative-workspace").then((m) => ({ default: m.CollaborativeWorkspace }))
 );
+const AuditBenchmarks = lazyWithRetry(() =>
+  import("@/views/audit-benchmarks").then((m) => ({ default: m.AuditBenchmarks }))
+);
 
 const VIEWS: Record<string, () => ReactNode> = {
+  audit: () => (
+    <ErrorBoundary viewName="Kernel Forensic Audit & Benchmarks" fallback={<ViewSkeleton title="Kernel Forensic Audit & Benchmarks" />}>
+      <Suspense fallback={<ViewSkeleton title="Kernel Forensic Audit & Benchmarks" />}>
+        <AuditBenchmarks />
+      </Suspense>
+    </ErrorBoundary>
+  ),
   governance: () => (
     <ErrorBoundary viewName="AI Governance Center" fallback={<ViewSkeleton title="AI Governance Center" />}>
       <Suspense fallback={<ViewSkeleton title="AI Governance Center" />}>

@@ -45,6 +45,7 @@ describe("Mission Control — E2E Smoke", () => {
       { path: "@/views/provider-control-center", name: "ProviderControlCenter" },
       { path: "@/views/system-monitor", name: "SystemMonitor" },
       { path: "@/views/desktop-diagnostics", name: "DesktopDiagnostics" },
+      { path: "@/views/audit-benchmarks", name: "AuditBenchmarks" },
     ];
 
     for (const { path, name } of viewModules) {

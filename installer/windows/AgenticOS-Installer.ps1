@@ -67,32 +67,55 @@ if ($LASTEXITCODE -ge 8) {
     Write-Warning "Robocopy encountered issues (Exit Code: $LASTEXITCODE)"
 }
 
-Write-Host "[3/6] Setting up launchers and startup scripts..." -ForegroundColor Green
+Write-Host "[3/7] Installing dependencies (Baileys WhatsApp Gateway & Python)..." -ForegroundColor Green
+if (Test-Path "$InstallDir\package.json") {
+    Push-Location $InstallDir
+    try {
+        Write-Host "  + Installing Node.js root dependencies (@whiskeysockets/baileys)..." -ForegroundColor Gray
+        & npm.cmd install --no-audit --no-fund | Out-Null
+    } catch {
+        Write-Warning "Could not run npm install automatically: $_"
+    } finally {
+        Pop-Location
+    }
+}
+
+Write-Host "[4/7] Setting up launchers and startup scripts..." -ForegroundColor Green
 $LauncherBatContent = @"
 @echo off
 setlocal
-title AgenticOS Hybrid Engine & Mission Control
+title AgenticOS Hybrid Engine - Mission Control
 cd /d "%~dp0"
 
-echo [AgenticOS] Starting Backend on http://127.0.0.1:8080 ...
-start /b "" uv run python -m agentic_os serve --host 127.0.0.1 --port 8080 > logs\backend.log 2>&1
+if not exist "logs" mkdir logs
 
-echo [AgenticOS] Starting Mission Control on http://localhost:3000 ...
-cd apps\mission-control
-start /b "" npm run dev > ..\..\logs\frontend.log 2>&1
+rem Verify and install root dependencies for WhatsApp gateway
+if not exist "node_modules\@whiskeysockets\baileys" (
+    echo [AgenticOS] Installing WhatsApp gateway dependencies...
+    call npm.cmd install --no-audit --no-fund
+)
+
+echo [AgenticOS] Starting Backend on http://127.0.0.1:8001 ...
+start "AgenticOS Backend" /b uv run python -m agentic_os serve --host 127.0.0.1 --port 8001 > logs\backend.log 2>&1
+
+echo [AgenticOS] Starting Mission Control on http://localhost:3001 ...
+start "AgenticOS Mission Control" /b cmd /c "cd /d ""%~dp0apps\mission-control"" && npm.cmd run dev > ""%~dp0logs\frontend.log"" 2>&1"
 
 echo [AgenticOS] Waiting for services to initialize...
-timeout /t 3 /nobreak >nul
+timeout /t 4 /nobreak >nul
 
 echo [AgenticOS] Launching Mission Control UI in default browser...
-start http://localhost:3000
+start http://localhost:3001
 
 echo ==========================================================
 echo AgenticOS is running live!
-echo Backend:         http://127.0.0.1:8080
-echo Mission Control: http://localhost:3000
+echo Backend:         http://127.0.0.1:8001
+echo Mission Control: http://localhost:3001
 echo Logs directory:  %~dp0logs
 echo ==========================================================
+echo Keep this window open or minimize it. Press Ctrl+C to stop.
+echo.
+pause
 "@
 Set-Content -Path "$InstallDir\start-agenticos.bat" -Value $LauncherBatContent -Encoding ASCII
 
@@ -103,7 +126,7 @@ WshShell.Run "cmd /c """ & "$InstallDir\start-agenticos.bat"""", 0, False
 "@
 Set-Content -Path "$InstallDir\start-agenticos-silent.vbs" -Value $LauncherVbsContent -Encoding ASCII
 
-Write-Host "[4/6] Creating Desktop and Start Menu shortcuts..." -ForegroundColor Green
+Write-Host "[5/7] Creating Desktop and Start Menu shortcuts..." -ForegroundColor Green
 $WshShell = New-Object -ComObject WScript.Shell
 
 if ($CreateDesktopShortcut) {
@@ -139,7 +162,7 @@ if ($CreateStartMenuShortcut) {
     Write-Host "  + Start menu group created: $AgenticOSStartFolder" -ForegroundColor Gray
 }
 
-Write-Host "[5/6] Registering Uninstaller in Windows Registry..." -ForegroundColor Green
+Write-Host "[6/7] Registering Uninstaller in Windows Registry..." -ForegroundColor Green
 $UninstallerScript = @"
 param([switch]`$Silent)
 Write-Host "Uninstalling AgenticOS..." -ForegroundColor Yellow
@@ -175,7 +198,7 @@ Set-ItemProperty -Path $RegPath -Name "UninstallString" -Value "powershell.exe -
 Set-ItemProperty -Path $RegPath -Name "NoModify" -Value 1 -Type DWord
 Set-ItemProperty -Path $RegPath -Name "NoRepair" -Value 1 -Type DWord
 
-Write-Host "[6/6] Installation Complete!" -ForegroundColor Green
+Write-Host "[7/7] Installation Complete!" -ForegroundColor Green
 Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host "  AgenticOS Hybrid was successfully installed to: $InstallDir" -ForegroundColor Green
 Write-Host "  Launch via Desktop Shortcut or run: $InstallDir\start-agenticos.bat" -ForegroundColor Cyan

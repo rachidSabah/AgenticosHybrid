@@ -6,7 +6,10 @@ const {
 } = require('@whiskeysockets/baileys');
 const readline = require('readline');
 
-const SESSION_PATH = process.env.WA_SESSION_PATH || 'C:\\Users\\InGodWeTrust\\.agentic_os\\whatsapp_session';
+const path = require('path');
+const os = require('os');
+
+const SESSION_PATH = process.env.WA_SESSION_PATH || path.join(os.homedir(), '.agentic_os', 'whatsapp_session');
 const MAX_RETRIES = 5;
 
 let sock = null;

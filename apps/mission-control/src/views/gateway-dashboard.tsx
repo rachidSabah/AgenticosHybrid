@@ -190,6 +190,7 @@ function WhatsAppPanel() {
   const [error, setError] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const [qrNonce, setQrNonce] = useState(0);
+  const [svgData, setSvgData] = useState<string | null>(null);
   const [allowedNumbers, setAllowedNumbers] = useState("");
   const [sendTo, setSendTo] = useState("");
   const [sendText, setSendText] = useState("");
@@ -207,6 +208,31 @@ function WhatsAppPanel() {
     const t = setInterval(loadStatus, 3000);
     return () => clearInterval(t);
   }, [loadStatus]);
+
+  useEffect(() => {
+    if (!status?.has_qr) {
+      setSvgData(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(api.whatsappQrUrl());
+        if (res.ok) {
+          const text = await res.text();
+          if (!cancelled && text.includes("<svg")) {
+            setSvgData(text);
+            setQrError(null);
+          }
+        }
+      } catch {
+        if (!cancelled) setQrError("Could not render QR code.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status?.has_qr, qrNonce]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -281,17 +307,23 @@ function WhatsAppPanel() {
         <div className="mb-3 flex flex-col items-center gap-2">
           <div className="text-[10px] text-faint">Scan with WhatsApp → Linked Devices → Link a Device</div>
           <div className="rounded-xl border-2 border-emerald-500/40 bg-white p-3 shadow-lg shadow-emerald-500/10">
-            {/* Live pairing QR rendered by OUR backend — no external image
-                service, no static/cached asset. Refreshes on every poll. */}
-            <img
-              src={api.whatsappQrUrl()}
-              alt="WhatsApp QR Code"
-              width={200}
-              height={200}
-              className="block"
-              key={qrNonce}
-              onError={() => setQrError("QR could not be rendered. Reconnect to generate a fresh code.")}
-            />
+            {svgData ? (
+              <div
+                className="w-[200px] h-[200px] flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                dangerouslySetInnerHTML={{ __html: svgData }}
+              />
+            ) : (
+              <img
+                src={api.whatsappQrUrl()}
+                alt="WhatsApp QR Code"
+                width={200}
+                height={200}
+                className="block w-[200px] h-[200px]"
+                key={qrNonce}
+                onLoad={() => setQrError(null)}
+                onError={() => setQrError("QR could not be rendered. Reconnect to generate a fresh code.")}
+              />
+            )}
           </div>
           {qrError && <div className="text-[10px] text-red-300">{qrError}</div>}
           <div className="flex items-center gap-1.5 text-[10px] text-amber-400">

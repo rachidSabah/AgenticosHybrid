@@ -117,7 +117,7 @@ BACKEND_PID=$!
 
 # Start frontend
 cd apps/mission-control
-npm run start -- -p 3000 > "${HOME}/.agentic_os/logs/frontend.log" 2>&1 &
+npm run start -- -p 3001 > "${HOME}/.agentic_os/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 cd "${INSTALL_DIR}"
 
@@ -130,10 +130,11 @@ for i in {1..30}; do
     sleep 1
 done
 
-echo -e "\n${GREEN}==================================================================${NC}"
-echo -e "${GREEN}  AGENTICOS HYBRID IS LIVE AND READY!                             ${NC}"
-echo -e "${GREEN}  Mission Control Frontend : http://localhost:3000                ${NC}"
-echo -e "${GREEN}  Backend Control Plane    : http://127.0.0.1:8080                ${NC}"
-echo -e "${GREEN}  Active Workspace Root    : ${WORKSPACE_DIR}                     ${NC}"
+echo ""
+echo -e "${GREEN}================================================================${NC}"
+echo -e "${GREEN}  AgenticOS Deployment Complete!                                ${NC}"
+echo -e "${GREEN}================================================================${NC}"
+echo -e "${GREEN}  FastAPI Control Plane    : http://127.0.0.1:8080              ${NC}"
+echo -e "${GREEN}  Mission Control Frontend : http://localhost:3001                ${NC}"
 echo -e "${GREEN}  Logs Directory           : ${HOME}/.agentic_os/logs             ${NC}"
 echo -e "${GREEN}==================================================================${NC}"
