@@ -23,9 +23,12 @@ import type {
 // by the Tauri runtime) and fall back to the build-time env var otherwise.
 function resolveBase(): string {
   if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__) {
-    return "http://127.0.0.1:8000";
+    return "http://127.0.0.1:8001";
   }
-  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    return `http://${window.location.hostname}:8001`;
+  }
+  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8001";
 }
 
 const BASE = resolveBase();
@@ -650,7 +653,7 @@ export const api = {
   whatsappSend: (body: { to: string; text: string }) =>
     postThrow<{ sent: boolean }>("/api/gateway/whatsapp/send", body),
   /** Live pairing QR rendered by our own backend (SVG) — never an external service. */
-  whatsappQrUrl: () => `/api/gateway/whatsapp/qr?t=${Date.now()}`,
+  whatsappQrUrl: () => `${resolveBase()}/api/gateway/whatsapp/qr?t=${Date.now()}`,
   createMission: (body: Record<string, unknown>) =>
     post<MissionType>("/api/missions", body),
   getMission: (id: string) => get<MissionType>(`/api/missions/${id}`),
@@ -793,4 +796,57 @@ export const api = {
   omnirouteReload: () => post<{ reloaded: boolean }>("/omniroute/reload"),
   omnirouteRoute: (prompt: string, policy?: string) => post<{ target_provider: string; model: string; latency_ms: number }>("/omniroute/route", { prompt, policy }),
   omnirouteCompress: (text: string) => post<{ original_tokens: number; compressed_tokens: number; compressed_text: string }>("/omniroute/compress", { text }),
+  // ── Forensic Audit, Bottlenecks & Micro-Benchmarks API ──
+  auditBottlenecks: () =>
+    get<{
+      timestamp: number;
+      total_subsystems: number;
+      healthy_count: number;
+      critical_bottlenecks: number;
+      subsystems: Record<string, {
+        name: string;
+        diagnostic_status: string;
+        severity: string;
+        current_architecture: string;
+        optimized_architecture: string;
+        expected_speedup: string;
+        risk_mitigated: string;
+      }>;
+    }>("/api/audit/bottlenecks"),
+  auditRunBenchmarks: () =>
+    post<{
+      timestamp: number;
+      duration_total_ms: number;
+      benchmarks_run: number;
+      all_passed: boolean;
+      results: Array<{
+        subsystem: string;
+        name: string;
+        status: string;
+        legacy_latency_ms: number;
+        optimized_latency_ms: number;
+        speedup_factor: number;
+        iterations: number;
+        details: Record<string, unknown>;
+      }>;
+    }>("/api/audit/benchmarks/run"),
+  auditBlueprints: () =>
+    get<Array<{
+      subsystem: string;
+      title: string;
+      description: string;
+      complexity_reduction: string;
+      before_code: string;
+      after_code: string;
+    }>>("/api/audit/blueprints"),
+  // ── Workspace Apply Artifact ──
+  workspaceApplyArtifact: (data: { file_path: string; content: string; create_backup?: boolean }) =>
+    post<{
+      success: boolean;
+      file_path: string;
+      full_path: string;
+      backup_path: string | null;
+      bytes_written: number;
+      timestamp: number;
+    }>("/api/workspace/apply-artifact", data),
 };
