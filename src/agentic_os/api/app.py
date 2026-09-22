@@ -13,7 +13,6 @@ import asyncio
 import collections.abc
 import dataclasses
 import json
-import re
 import subprocess
 import time
 from collections import deque
@@ -1248,52 +1247,39 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/agents")
     async def list_agents() -> list[dict]:
-        """List all registered agents (Orchestrator agents + discovered brains)."""
-        # Primary: Orchestrator-registered agents (task workers)
+        """List all registered agents (Orchestrator agents + discovered agents)."""
         agents = [a.model_dump(mode="json") for a in orch.registry.agents()]
+        known = {a.get("id") or a.get("name") for a in agents}
 
-        # Discovered brains supplement the list, but ONLY agents the discovery
-        # engine actually proved — the brain registry still carries static
-        # entries (Gemini CLI, Git, Python, Node.js) reported as "healthy"
-        # without any probe. Those must never reach a UI surface (§2, §8).
+        # Single source of truth: Agent Discovery Engine (spec §1)
         snapshot = agent_discovery_engine.snapshot
         if not snapshot.agents:
             snapshot = await agent_discovery_engine.scan()
-        proven_tokens = {a.command.lower() for a in snapshot.agents if a.is_agent()}
-        proven_tokens |= {a.name.lower() for a in snapshot.agents if a.is_agent()}
-
-        def _proven(*parts: str) -> bool:
-            if not proven_tokens:
-                return False
-            words = set(re.split(r"[^a-z0-9]+", " ".join(parts).lower()))
-            return bool(words & proven_tokens)
-
-        if platform.brain_registry is not None:
-            brains = await platform.brain_registry.list_all()
-            known = {a.get("id") or a.get("name") for a in agents}
-            for b in brains:
-                if b.id in known:
-                    continue
-                # Skip anything the runtime could not validate: a registry row
-                # alone is not evidence that the agent exists or runs.
-                if not _proven(str(b.vendor), str(b.display_name)):
-                    continue
-                agents.append(
-                    {
-                        "id": b.id,
-                        "name": b.display_name,
-                        "provider": b.display_name,
-                        "role": "assistant",
-                        "status": b.status.value if hasattr(b.status, "value") else str(b.status),
-                        "capabilities": list(b.capabilities),
-                        "health": "healthy"
-                        if b.health >= 80
-                        else "degraded"
-                        if b.health >= 50
-                        else "unknown",
-                        "latency_ms": b.latency,
-                    }
-                )
+        for a in snapshot.active_agents():
+            if a.id in known or a.name in known:
+                continue
+            caps = [c.capability if hasattr(c, "capability") else str(c) for c in a.capabilities]
+            health_str = (
+                "healthy"
+                if (a.health_score is not None and a.health_score >= 80) or a.status == "healthy"
+                else "degraded"
+                if (a.health_score is not None and a.health_score >= 50) or a.status == "degraded"
+                else "unknown"
+            )
+            agents.append(
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "provider": a.name,
+                    "role": "assistant",
+                    "status": "idle" if a.status in ("bound", "healthy", "degraded") else a.status,
+                    "capabilities": caps,
+                    "health": health_str,
+                    "latency_ms": a.latency_ms or 0.0,
+                }
+            )
+            known.add(a.id)
+            known.add(a.name)
 
         return agents
 
@@ -1456,56 +1442,47 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/brains")
     async def list_brains() -> list[dict]:
-        """List all registered AI brains (local + cloud)."""
-        # Evidence gate (§2, §8): only brains the discovery engine actually
-        # probed may reach the UI. The registry and the runtime scanner both
-        # still carry static rows (Gemini CLI, Git, Python, Node.js) marked
-        # "healthy" with no version and no probe.
-        #
-        # Registry display names ("Codex CLI", "Python Runtime") never match
-        # discovered binary names ("codex", "python") exactly, so compare on
-        # tokens: a brain is proven when a discovered agent name is one of the
-        # words inside the brain's own name/vendor.
+        """List all discovered AI brains (single source of truth: agent_discovery_engine, spec §1, §11)."""
         snapshot = agent_discovery_engine.snapshot
         if not snapshot.agents:
             snapshot = await agent_discovery_engine.scan()
-        proven_tokens = {a.command.lower() for a in snapshot.agents if a.is_agent()} | {
-            a.name.lower() for a in snapshot.agents if a.is_agent()
-        }
-
-        def _is_proven(vendor: str, display_name: str) -> bool:
-            if not proven_tokens:
-                return False
-            haystack = f"{vendor} {display_name}".lower()
-            words = set(re.split(r"[^a-z0-9]+", haystack))
-            return bool(words & proven_tokens)
-
         brains = []
-        if platform.brain_registry is not None:
-            raw_brains = await platform.brain_registry.list_all()
-
-            for b in raw_brains:
-                if not _is_proven(str(b.vendor), str(b.display_name)):
-                    continue
-                brains.append(_serialize_brain_record(b))
-
-        # Merge dynamically discovered host runtimes and cloud API models
-        try:
-            disc_brains = await discovery_service.get_brains()
-            known_ids = {b["id"] for b in brains}
-            for db in disc_brains:
-                if db.id in known_ids or db.id == "agentic-orchestrator":
-                    continue
-                # Same evidence rule applies here: a runtime/scan row for
-                # Gemini CLI, Git, Python or Node.js is not an AI agent and
-                # must not reach the UI (§4, §8).
-                name = str(getattr(db, "display_name", "") or "")
-                vendor = str(getattr(db, "vendor", "") or "")
-                if not _is_proven(vendor, name):
-                    continue
-                brains.append(db.model_dump(mode="json"))
-        except Exception:
-            pass
+        for a in snapshot.active_agents():
+            status_map = {
+                "bound": "connected",
+                "healthy": "connected",
+                "degraded": "idle",
+            }
+            health_str = (
+                "healthy"
+                if (a.health_score is not None and a.health_score >= 80) or a.status == "healthy"
+                else "degraded"
+                if (a.health_score is not None and a.health_score >= 50) or a.status == "degraded"
+                else "unknown"
+            )
+            caps = [c.capability if hasattr(c, "capability") else str(c) for c in a.capabilities]
+            brains.append(
+                {
+                    "id": a.id,
+                    "display_name": a.name,
+                    "brain_type": "local_cli",
+                    "vendor": a.kind,
+                    "runtime": "native",
+                    "version": a.version or "",
+                    "status": status_map.get(a.status, "idle"),
+                    "health": health_str,
+                    "capabilities": caps,
+                    "supported_models": [],
+                    "supported_tools": [a.command] if a.command else [],
+                    "memory_usage": 0.0,
+                    "cpu_usage": 0.0,
+                    "latency": a.latency_ms or 0.0,
+                    "throughput": a.throughput or 0.0,
+                    "workspace": a.executable_path,
+                    "current_tasks": a.session_count or 0,
+                    "tags": [a.kind, "discovered"],
+                }
+            )
 
         return brains
 
@@ -2070,33 +2047,35 @@ def create_app(platform: Platform) -> FastAPI:
     async def list_providers() -> list[dict]:
         """List all registered providers (from ProviderManager + discovered brains)."""
         providers: list[dict] = [p.model_dump(mode="json") for p in pm.list_providers()]
-        # Include discovered brains as providers so Mission Overview shows them.
-        # All discovered brains are included regardless of health — "discovered"
-        # means "installed on this machine", which is what the Fleet/Constellation/
-        # Gateway views need. The health filter (>= 50) was removed because it
-        # caused count mismatches: brains appeared in /api/brains but not in
-        # /api/providers or /api/agents.
-        if platform.brain_registry is not None:
-            brains = await platform.brain_registry.list_all()
-            known = {p.get("provider") or p.get("name") for p in providers}
-            for b in brains:
-                if b.display_name not in known:
-                    providers.append(
-                        {
-                            "provider": b.display_name,
-                            "name": b.display_name,
-                            "vendor": str(b.vendor),
-                            "status": "healthy"
-                            if b.health >= 80
-                            else "degraded"
-                            if b.health >= 50
-                            else "unknown",
-                            "latency_ms": b.latency,
-                            "health": b.health,
-                            "brain_id": b.id,
-                            "description": f"Discovered brain: {b.display_name}",
-                        }
-                    )
+        # Include proven discovered agents from discovery engine (single source of truth)
+        snapshot = agent_discovery_engine.snapshot
+        if not snapshot.agents:
+            snapshot = await agent_discovery_engine.scan()
+        known = {p.get("provider") or p.get("name") for p in providers}
+        for a in snapshot.active_agents():
+            if a.name not in known:
+                health_str = (
+                    "healthy"
+                    if (a.health_score is not None and a.health_score >= 80)
+                    or a.status == "healthy"
+                    else "degraded"
+                    if (a.health_score is not None and a.health_score >= 50)
+                    or a.status == "degraded"
+                    else "unknown"
+                )
+                providers.append(
+                    {
+                        "provider": a.name,
+                        "name": a.name,
+                        "vendor": a.kind,
+                        "status": health_str,
+                        "latency_ms": a.latency_ms or 0.0,
+                        "health": a.health_score or 100.0,
+                        "brain_id": a.id,
+                        "description": f"Discovered agent: {a.name}",
+                    }
+                )
+                known.add(a.name)
         return providers
 
     @app.get("/api/provider-configs")

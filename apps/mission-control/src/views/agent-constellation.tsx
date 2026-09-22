@@ -919,6 +919,24 @@ export function AgentConstellation() {
             );
           })}
 
+          {constellationNodes.filter((n) => !n.isCore).length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20">
+              <div className="pointer-events-auto bg-[#0a0f1d]/90 border border-indigo-500/30 rounded-xl p-6 text-center shadow-[0_0_40px_rgba(0,0,0,0.8)] max-w-sm mt-24 backdrop-blur-md">
+                <div className="text-indigo-300 font-mono text-xs font-bold uppercase tracking-wider mb-2">No AI agents detected</div>
+                <p className="text-slate-400 text-[11px] mb-4">Discovery engine found 0 validated active agents in the environment.</p>
+                <button
+                  onClick={() => {
+                    void useStore.getState().hydrate();
+                    void useBrainsStore.getState().fetchBrains();
+                  }}
+                  className="px-3 py-1.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 font-mono text-xs transition"
+                >
+                  Trigger Discovery Rescan
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Constellation Metrics Overview Overlay (Top-Left) */}
           <div className="absolute top-3 left-3 z-20 glass rounded-xl p-3 backdrop-blur-md w-52 font-mono text-[10px]">
             <div className="text-faint text-[9px] uppercase tracking-wider mb-2 font-bold flex items-center justify-between">

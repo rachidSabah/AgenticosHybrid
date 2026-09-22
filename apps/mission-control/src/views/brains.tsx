@@ -386,7 +386,10 @@ export function Brains() {
         {viewMode === "table" && (
           <Panel title="Brains" subtitle="Table view" className="flex-1 min-h-0">
             {filteredBrains.length === 0 ? (
-              <Empty title="No brains match filters" hint="Try adjusting your filters or search query" />
+              <Empty
+                title={brainList.length === 0 ? "No AI agents detected" : "No brains match filters"}
+                hint={brainList.length === 0 ? "Run a discovery scan to detect agents installed in your environment." : "Try adjusting your filters or search query"}
+              />
             ) : (
               <div className="overflow-auto h-full">
                 <table className="w-full text-xs block overflow-x-auto">
@@ -422,7 +425,7 @@ export function Brains() {
         {viewMode === "graph" && (
           <Panel title="Constellation" subtitle="Graph view" className="flex-1 min-h-0" contentClassName="p-2">
             {brainList.length === 0 ? (
-              <Empty title="No brains to display" hint="Run a discovery scan to find brains" />
+              <Empty title="No AI agents detected" hint="Run a discovery scan to detect agents installed in your environment." />
             ) : (
               <BrainConstellation
                 brains={brainList}
@@ -438,7 +441,10 @@ export function Brains() {
           <Panel title="Brains" subtitle="Card view" className="flex-1 min-h-0">
             {filteredBrains.length === 0 ? (
               <div className="p-4">
-                <Empty title="No brains match filters" hint="Try adjusting your filters or search query" />
+                <Empty
+                  title={brainList.length === 0 ? "No AI agents detected" : "No brains match filters"}
+                  hint={brainList.length === 0 ? "Run a discovery scan to detect agents installed in your environment." : "Try adjusting your filters or search query"}
+                />
               </div>
             ) : (
               <div className="overflow-y-auto h-full p-2">

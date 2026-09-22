@@ -508,6 +508,21 @@ export function AIBrain() {
               </div>
             );
           })}
+
+          {brainNodes.filter((n) => !n.isCore).length === 0 && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              <div className="pointer-events-auto bg-[#050a1c]/90 border border-cyan-500/30 rounded-xl p-6 text-center shadow-[0_0_40px_rgba(0,0,0,0.8)] max-w-sm mt-32 backdrop-blur-md">
+                <div className="text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider mb-2">No AI agents detected</div>
+                <p className="text-slate-400 text-[11px] mb-4">No validated AI agents are currently bound to the OS runtime.</p>
+                <button
+                  onClick={handleRefresh}
+                  className="px-3 py-1.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-mono text-xs transition"
+                >
+                  Trigger Discovery Rescan
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

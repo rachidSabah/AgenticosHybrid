@@ -750,108 +750,85 @@ export const useStore = create<StoreState>((set, get) => ({
   clearNotifications: () => set({ notifications: [] }),
   hydrate: async () => {
     try {
-      // Fetch all snapshot sources in parallel — never block on any single failure.
-      const [rawAgents, rawProviders, rawBrains, rawLocalAgents] = await Promise.allSettled([
+      // Fetch all snapshot sources in parallel — discovery engine is single source of truth.
+      const [rawDiscovery, rawAgents, rawProviders, rawBrains, rawLocalAgents] = await Promise.allSettled([
+        api.get<{ active_agents?: Array<Record<string, unknown>>; agents?: Array<Record<string, unknown>> }>(
+          "/api/discovery/agents",
+        ),
         api.get<Array<Record<string, unknown>>>("/api/agents"),
         api.providerHealth(),
         api.get<Array<Record<string, unknown>>>("/api/brains"),
         api.get<Array<Record<string, unknown>>>("/api/local-agents"),
       ]);
 
-      // ── Agents ──────────────────────────────────────────────────────────────
       const agentsMap: Record<string, AgentNode> = {};
-      if (rawAgents.status === "fulfilled" && Array.isArray(rawAgents.value)) {
-        for (const a of rawAgents.value) {
+      let providersMap: Record<string, ProviderHealthRecord> = {};
+
+      if (rawDiscovery.status === "fulfilled" && rawDiscovery.value) {
+        // Authoritative single source of truth (spec §1).
+        // Only active AI agents validated by the discovery engine appear.
+        const activeRows = rawDiscovery.value.active_agents ?? [];
+        for (const a of activeRows) {
           const id = String(a.id ?? a.name ?? "");
           if (!id) continue;
-          const rawStatus = String(a.status ?? "idle");
-          const isHealthy = a.health === "healthy" || rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "idle" || rawStatus === "running";
-          const status =
-            rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "busy" ? "running"
-            : rawStatus === "unhealthy" || rawStatus === "error" || rawStatus === "failed" ? "failed"
-            : (rawStatus as AgentNode["status"]) || "idle";
-          const aName = a.name ? String(a.name) : "";
-          const aRole = a.role ? String(a.role) : "";
-          const displayName = aName || aRole || id;
-          const roleStr = (aRole === "assistant" || aRole === "agent") && aName ? aName : displayName;
+          const aName = a.name ? String(a.name) : id;
+          const status = a.status === "healthy" || a.status === "bound" ? "running" : "idle";
+          const health = (a.status === "healthy" || a.status === "bound" ? "healthy" : "degraded") as AgentNode["health"];
+          const caps = Array.isArray(a.capabilities)
+            ? a.capabilities.map((c: unknown) =>
+                typeof c === "string" ? c : String((c as { capability?: unknown })?.capability ?? ""),
+              ).filter(Boolean)
+            : [];
           agentsMap[id] = {
             id,
-            role: roleStr,
-            capabilities: (a.capabilities as string[]) ?? [],
+            role: aName,
+            capabilities: caps,
             status,
-            health: isHealthy ? "healthy" : (a.health as AgentNode["health"]) ?? "healthy",
-            provider: a.provider ? String(a.provider) : displayName,
+            health,
+            provider: aName,
+          };
+          providersMap[aName] = {
+            provider: aName,
+            status: health === "healthy" ? "healthy" : "degraded",
+            latency_ms: Number(a.latency_ms ?? 0),
           };
         }
-      }
-
-      // ── Providers (from health endpoint — has .provider field) ────────────
-      let providersMap: Record<string, ProviderHealthRecord> = {};
-      if (rawProviders.status === "fulfilled" && Array.isArray(rawProviders.value)) {
-        for (const p of rawProviders.value) {
-          const name = String(p.provider ?? "");
-          if (!name || ["mock", "Mock"].includes(name)) continue;
-          providersMap[name] = {
-            provider: name,
-            status: (p.status as ProviderHealthStatus) ?? "unknown",
-            latency_ms: Number(p.latency_ms ?? 0),
-            error: p.error as string | undefined,
-          };
-        }
-      }
-
-      // ── Brains → also surface as provider entries so AI Brain shows them ──
-      if (rawBrains.status === "fulfilled" && Array.isArray(rawBrains.value)) {
-        for (const b of rawBrains.value) {
-          const name = String(b.display_name ?? b.id ?? "");
-          if (!name) continue;
-          // Add as provider entry so AI Brain / Agent Constellation renders them
-          if (!providersMap[name]) {
-            providersMap[name] = {
-              provider: name,
-              status: b.health != null && Number(b.health) >= 80 ? "healthy"
-                : b.health != null && Number(b.health) >= 50 ? "degraded" : "unknown",
-              latency_ms: Number(b.latency ?? 0),
-            };
-          }
-          // Also add as agent entry
-          const id = String(b.id ?? b.display_name ?? "");
-          if (id && !agentsMap[id]) {
+      } else {
+        // Fallback only if /api/discovery/agents failed entirely
+        if (rawAgents.status === "fulfilled" && Array.isArray(rawAgents.value)) {
+          for (const a of rawAgents.value) {
+            const id = String(a.id ?? a.name ?? "");
+            if (!id) continue;
+            const rawStatus = String(a.status ?? "idle");
+            const isHealthy = a.health === "healthy" || rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "idle" || rawStatus === "running";
+            const status =
+              rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "busy" ? "running"
+              : rawStatus === "unhealthy" || rawStatus === "error" || rawStatus === "failed" ? "failed"
+              : (rawStatus as AgentNode["status"]) || "idle";
+            const aName = a.name ? String(a.name) : "";
+            const aRole = a.role ? String(a.role) : "";
+            const displayName = aName || aRole || id;
+            const roleStr = (aRole === "assistant" || aRole === "agent") && aName ? aName : displayName;
             agentsMap[id] = {
               id,
-              role: name,
-              capabilities: (b.capabilities as string[]) ?? [],
-              status: providersMap[name].status === "healthy" ? "running" : "idle",
-              health: providersMap[name].status as AgentNode["health"] ?? "healthy",
-              provider: name,
-            };
-          }
-        }
-      }
-
-      // ── Local Agents → surface as providers + agents ──────────────────────
-      if (rawLocalAgents.status === "fulfilled" && Array.isArray(rawLocalAgents.value)) {
-        for (const a of rawLocalAgents.value) {
-          const name = String(a.name ?? "");
-          if (!name) continue;
-          const status = String(a.status ?? "unknown");
-          const isHealthy = status === "running" || status === "idle" || status === "busy" || status === "discovered" || status === "connected";
-          if (!providersMap[name]) {
-            providersMap[name] = {
-              provider: name,
-              status: isHealthy ? "healthy" : "degraded",
-              latency_ms: Number(a.latency_ms ?? 0),
-            };
-          }
-          const id = String(a.id ?? a.name ?? "");
-          if (id && !agentsMap[id]) {
-            agentsMap[id] = {
-              id,
-              role: name,
+              role: roleStr,
               capabilities: (a.capabilities as string[]) ?? [],
-              status: isHealthy ? "running" : "idle",
-              health: isHealthy ? "healthy" : "degraded",
+              status,
+              health: isHealthy ? "healthy" : (a.health as AgentNode["health"]) ?? "healthy",
+              provider: a.provider ? String(a.provider) : displayName,
+            };
+          }
+        }
+
+        if (rawProviders.status === "fulfilled" && Array.isArray(rawProviders.value)) {
+          for (const p of rawProviders.value) {
+            const name = String(p.provider ?? "");
+            if (!name || ["mock", "Mock"].includes(name)) continue;
+            providersMap[name] = {
               provider: name,
+              status: (p.status as ProviderHealthStatus) ?? "unknown",
+              latency_ms: Number(p.latency_ms ?? 0),
+              error: p.error as string | undefined,
             };
           }
         }

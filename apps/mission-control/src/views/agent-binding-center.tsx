@@ -174,7 +174,7 @@ export function AgentBindingCenter() {
           } satisfies BoundAgent;
         });
 
-      if (discoveryRows.length > 0) {
+      if (discRes.status === "fulfilled" && discRes.value) {
         for (const agent of discoveryRows) upsert(agent);
         setAgents(merged);
         if (merged.length > 0) {
