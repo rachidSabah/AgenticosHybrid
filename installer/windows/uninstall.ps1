@@ -49,8 +49,8 @@ Get-Process | Where-Object {
     } catch {}
 }
 
-# Also gracefully release any processes holding port 8001 or 3001 if spawned by AgenticOS
-Get-NetTCPConnection -LocalPort 8001, 3001 -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -gt 0 } | ForEach-Object {
+# Also gracefully release any processes holding port 8000, 3000, 8001, or 3001 if spawned by AgenticOS
+Get-NetTCPConnection -LocalPort 8000, 3000, 8001, 3001 -ErrorAction SilentlyContinue | Where-Object { $_.OwningProcess -gt 0 } | ForEach-Object {
     try {
         $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
         if ($p -and ($p.Path -like "*$TargetDir*" -or $p.Path -like "*AOS*")) {

@@ -112,18 +112,18 @@ pkill -f "agentic_os serve" || true
 pkill -f "next start" || true
 
 # Start backend
-uv run python -m agentic_os serve --host 0.0.0.0 --port 8080 > "${HOME}/.agentic_os/logs/backend.log" 2>&1 &
+uv run python -m agentic_os serve --host 0.0.0.0 --port 8000 > "${HOME}/.agentic_os/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
 
 # Start frontend
 cd apps/mission-control
-npm run start -- -p 3001 > "${HOME}/.agentic_os/logs/frontend.log" 2>&1 &
+npm run start -- -p 3000 > "${HOME}/.agentic_os/logs/frontend.log" 2>&1 &
 FRONTEND_PID=$!
 cd "${INSTALL_DIR}"
 
-echo -e "  Waiting for backend health check on http://127.0.0.1:8080/healthz..."
+echo -e "  Waiting for backend health check on http://127.0.0.1:8000/healthz..."
 for i in {1..30}; do
-    if curl -s http://127.0.0.1:8080/healthz | grep -q "ok"; then
+    if curl -s http://127.0.0.1:8000/healthz | grep -q "ok"; then
         echo -e "  ${GREEN}✓ Backend is Healthy! (PID: ${BACKEND_PID})${NC}"
         break
     fi
@@ -134,7 +134,7 @@ echo ""
 echo -e "${GREEN}================================================================${NC}"
 echo -e "${GREEN}  AgenticOS Deployment Complete!                                ${NC}"
 echo -e "${GREEN}================================================================${NC}"
-echo -e "${GREEN}  FastAPI Control Plane    : http://127.0.0.1:8080              ${NC}"
-echo -e "${GREEN}  Mission Control Frontend : http://localhost:3001                ${NC}"
+echo -e "${GREEN}  FastAPI Control Plane    : http://127.0.0.1:8000              ${NC}"
+echo -e "${GREEN}  Mission Control Frontend : http://localhost:3000                ${NC}"
 echo -e "${GREEN}  Logs Directory           : ${HOME}/.agentic_os/logs             ${NC}"
 echo -e "${GREEN}==================================================================${NC}"

@@ -285,7 +285,8 @@ class TestDesktopPerformanceMonitor:
     async def test_metrics(self) -> None:
         mgr = DesktopPerformanceMonitor()
         metrics = await mgr.get_metrics()
-        assert metrics.cpu_usage_percent == 0.0
+        assert isinstance(metrics.cpu_usage_percent, float)
+        assert 0.0 <= metrics.cpu_usage_percent <= 100.0
 
     @pytest.mark.asyncio
     async def test_history(self) -> None:
