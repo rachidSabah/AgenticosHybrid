@@ -49,6 +49,15 @@ def _run_version_capture(
         return subprocess.CompletedProcess([executable_path, flag], 127, b"", b"invalid executable")
     if os.path.exists(executable_path) and os.path.isdir(executable_path):
         return subprocess.CompletedProcess([executable_path, flag], 127, b"", b"path is directory")
+    # On Windows, reject non-executable file extensions before Popen to prevent
+    # ShellExecute from opening .png/.jpg/.lnk etc. via file association handlers.
+    if os.name == "nt":
+        import pathlib
+        ext = pathlib.Path(executable_path).suffix.lower()
+        if ext and ext not in (".exe", ".cmd", ".bat", ".ps1", ".com"):
+            return subprocess.CompletedProcess(
+                [executable_path, flag], 127, b"", b"non-executable extension"
+            )
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     proc = subprocess.Popen(
         [executable_path, flag],

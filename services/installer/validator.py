@@ -126,7 +126,9 @@ class ValidationPipeline:
         result.executable_exists = os.path.exists(exe)
         result.executable_is_file = os.path.isfile(exe)
         result.executable_executable = (
-            os.access(exe, os.X_OK) if platform.system() != "Windows" else True
+            os.path.splitext(exe)[1].lower() in (".exe", ".cmd", ".bat", ".ps1", ".com")
+            if platform.system() == "Windows"
+            else os.access(exe, os.X_OK)
         )
 
         if not result.executable_exists:
@@ -189,8 +191,20 @@ class ValidationPipeline:
         if not cmd or not cmd[0]:
             return "", "EMPTY_CMD", None, 0.0
         exe = cmd[0]
+        # Reject flag-like executables (e.g. --help passed as path)
+        if exe.startswith("-"):
+            return "", "INVALID_EXE_FLAG", None, 0.0
         if os.path.exists(exe) and os.path.isdir(exe):
             return "", "PATH_IS_DIR", None, 0.0
+        # On Windows, only allow proper executable extensions to prevent
+        # ShellExecute from opening .png/.jpg files with associated programs.
+        if os.name == "nt":
+            ext = os.path.splitext(exe)[1].lower()
+            _WIN_EXE_EXTS = {".exe", ".cmd", ".bat", ".ps1", ".com"}
+            # If exe has an extension and it's not a permitted one, reject it.
+            if ext and ext not in _WIN_EXE_EXTS:
+                return "", f"NON_EXECUTABLE_EXTENSION:{ext}", None, 0.0
+
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         t0 = time.perf_counter()
         try:

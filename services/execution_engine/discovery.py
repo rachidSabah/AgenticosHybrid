@@ -115,7 +115,7 @@ def _check_common_dirs(
     for directory in dirs:
         for name in binary_names:
             for entry in directory.iterdir() if directory.is_dir() else []:
-                if entry.name.startswith(name) and (entry.is_file() or _is_executable(entry)):
+                if entry.name.startswith(name) and _is_executable(entry):
                     version = _get_version(entry, engine_type)
                     return EngineDiscoveryResult(
                         engine_type=engine_type,
@@ -142,11 +142,23 @@ def _get_version(binary_path: Path, engine_type: EngineType) -> str | None:
             EngineType.OLLAMA: ["--version"],
         }
         flags = version_flags.get(engine_type, ["--version"])
-        if not binary_path or os.path.isdir(str(binary_path)):
+        if not binary_path:
             return None
+        path_str = str(binary_path)
+        # Reject flag-like paths (e.g. "--help" treated as executable)
+        if path_str.startswith("-"):
+            return None
+        if os.path.isdir(path_str):
+            return None
+        # On Windows, only launch files with proper executable extensions.
+        # This prevents ShellExecute from opening .png/.jpg via file association.
+        if os.name == "nt":
+            ext = binary_path.suffix.lower()
+            if ext and ext not in (".exe", ".cmd", ".bat", ".ps1", ".com"):
+                return None
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         result = subprocess.run(
-            [str(binary_path), *flags],
+            [path_str, *flags],
             capture_output=True,
             text=True,
             timeout=10,

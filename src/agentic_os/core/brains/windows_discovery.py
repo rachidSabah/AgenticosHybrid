@@ -19,12 +19,11 @@ _WIN_EXTS = (".exe", ".cmd", ".bat", ".ps1", ".com")
 # Name fragments that plausibly indicate an agentic tool. These only GENERATE
 # CANDIDATES from real files on disk; every candidate is then probed. A false
 # positive cannot become an agent because validation rejects it (§4, §21 T6).
+#
+# IMPORTANT: Avoid single-character or very short hints like "ai" that match
+# common Windows system binaries (mspaint, aitstatic, pairtool, etc.).
+# Prefer precise tool names or longer unambiguous fragments only.
 _AGENT_HINTS = (
-    "agent",
-    "ai",
-    "assistant",
-    "llm",
-    "copilot",
     "claude",
     "codex",
     "gemini",
@@ -32,27 +31,34 @@ _AGENT_HINTS = (
     "antigravity",
     "opencode",
     "aider",
-    "continue",
     "cline",
     "cursor",
     "windsurf",
-    "roo",
-    "kilo",
     "qwen",
     "hermes",
     "goose",
     "openhands",
-    "glm",
     "deepseek",
+    "copilot",
+    "agent-nexus",
+    "agent-zero",
+    "open-agent",
+    "llm-agent",
+    "ai-agent",
+    "glm",
 )
 
 # File-name noise: OS/CLI plumbing that merely contains a hint word.
+# Any binary whose lower-cased stem contains one of these substrings is
+# excluded from the candidate list immediately — before any subprocess call.
 _NOISE_SUBSTRINGS = (
     "ssh-agent",
     "gpg-agent",
     "gpg-connect",
     "medicagent",
     "agentpolicy",
+    "agentservice",
+    "agentactivation",
     "policygenerator",
     "waasmedic",
     "code-mode-host",
@@ -63,6 +69,22 @@ _NOISE_SUBSTRINGS = (
     "setup",
     "unins",
     "crashhandler",
+    # Windows system utilities falsely matched by "agent" or "ai" fragments.
+    "mspaint",
+    "spaceagent",
+    "logagent",
+    "reagent",
+    "mdmagent",
+    "waitfor",
+    "repair-bde",
+    "pairtool",
+    "aitstatic",
+    "lsaiso",
+    "pinenrollment",
+    "thumbnailextraction",
+    "shellmcpservers",
+    "nvcontainer",
+    "microsoft.data",
     # Vendor bloatware that merely contains "ai" — never an AI agent.
     "asus",
     "b9eced6f",
@@ -74,10 +96,27 @@ _NOISE_SUBSTRINGS = (
     "converter",  # ct2-*-converter: model file converters, not agents
     "chrome-native-host",
     "theme",
+    "gemini-delay",       # local utility wrapper, not the gemini CLI agent
 )
 
 # Known non-agent tooling we deliberately surface as Runtimes (§4).
 _KNOWN_TOOLING = ("git", "node", "python", "python3", "npm", "pnpm", "uv", "bun", "deno")
+
+# Directory path fragments that should NEVER be scanned for agent candidates.
+# These contain OS system binaries, store app stubs, and other non-agent executables.
+_EXCLUDED_DIR_FRAGMENTS = (
+    os.path.normcase("windowsapps"),     # Microsoft Store stubs (mspaint stub, etc.)
+    os.path.normcase("system32"),        # Windows system binaries
+    os.path.normcase("syswow64"),        # 32-bit system binaries
+    os.path.normcase("\\windows\\"),     # Windows root
+    os.path.normcase("/windows/"),
+)
+
+
+def _is_excluded_dir(directory: str) -> bool:
+    """Return True if this directory should be excluded from candidate scanning."""
+    normed = os.path.normcase(directory)
+    return any(frag in normed for frag in _EXCLUDED_DIR_FRAGMENTS)
 
 
 class WindowsAgentDiscovery(BaseAgentDiscovery):
@@ -104,11 +143,17 @@ class WindowsAgentDiscovery(BaseAgentDiscovery):
         return sorted(names)
 
     def _scan_dirs(self) -> list[str]:
-        """Directories to scan: PATH, PATHEXT-aware, user-local, npm-global."""
+        """Directories to scan: PATH, PATHEXT-aware, user-local, npm-global.
+
+        Windows system directories (system32, WindowsApps, etc.) are explicitly
+        excluded to prevent OS stub launchers from being enumerated as candidates.
+        """
         dirs: list[str] = []
 
-        # 1. Everything on PATH.
-        dirs.extend(p for p in os.environ.get("PATH", "").split(os.pathsep) if p)
+        # 1. Everything on PATH — excluding system directories.
+        for p in os.environ.get("PATH", "").split(os.pathsep):
+            if p and not _is_excluded_dir(p):
+                dirs.append(p)
 
         # 2. User-local and package-manager install roots (§3).
         home = Path.home()
@@ -126,7 +171,7 @@ class WindowsAgentDiscovery(BaseAgentDiscovery):
             os.path.join(appdata, "npm"),
             os.path.join(localappdata, "Programs", "OpenAI", "Codex", "bin"),
         ]
-        dirs.extend(p for p in extra if p)
+        dirs.extend(p for p in extra if p and not _is_excluded_dir(p))
 
         seen: set[str] = set()
         unique: list[str] = []
