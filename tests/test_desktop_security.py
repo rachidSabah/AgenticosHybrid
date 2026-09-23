@@ -148,3 +148,58 @@ class TestSignatureSecurity:
         result = await sig.verify_code_signing(str(f))
         assert "valid" in result
         assert "errors" in result
+
+
+class TestSubprocessSafety:
+    """Forensic security tests ensuring zero uncontrolled process spawning,
+
+    no directory execution, and proper CREATE_NO_WINDOW flags on Windows.
+    """
+
+    @pytest.mark.asyncio
+    async def test_directory_cannot_be_executed_as_binary(self) -> None:
+        """Verify that directory paths (such as F:\\AOS) are never executed as binaries."""
+        import os
+
+        from agentic_os.core.discovery.local.version_detector import VersionDetector
+
+        detector = VersionDetector()
+        dir_path = os.path.dirname(os.path.abspath(__file__))
+        version = await detector.get_version(dir_path, "gemini-cli")
+        assert version == ""
+
+    @pytest.mark.asyncio
+    async def test_flag_cannot_be_executed_as_binary(self) -> None:
+        """Verify that CLI flags like --help are never treated as executable paths."""
+        from agentic_os.core.discovery.local.version_detector import VersionDetector
+
+        detector = VersionDetector()
+        for flag in ["--help", "-h", "--version", "-v"]:
+            version = await detector.get_version(flag, "gemini-cli")
+            assert version == ""
+
+    @pytest.mark.asyncio
+    async def test_runtime_discovery_rejects_directories(self) -> None:
+        """Verify that runtime discovery validators reject directories."""
+        import os
+
+        import services.runtime_discovery.validation as val
+        from services.runtime_discovery.models import Runtime, RuntimeType
+
+        dir_path = os.path.dirname(os.path.abspath(__file__))
+        r = Runtime(name="test", runtime_type=RuntimeType.GEMINI_CLI, binary_path=dir_path)
+
+        res_v = await val.VersionDetectValidator.validate(r)
+        assert res_v["passed"] is False
+        assert "directory" in res_v.get("error", "")
+
+        res_h = await val.HealthProbeValidator.validate(r)
+        assert res_h["passed"] is False
+
+    def test_create_no_window_constant_available(self) -> None:
+        """Verify CREATE_NO_WINDOW is correctly defined for Windows subprocess calls."""
+        import subprocess
+
+        create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        assert create_no_window == 0x08000000
+

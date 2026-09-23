@@ -45,11 +45,17 @@ def _run_version_capture(
     executable_path: str, flag: str, timeout: float
 ) -> subprocess.CompletedProcess[bytes]:
     """Run *executable_path flag*, capturing output (typed for ty)."""
+    if not executable_path or executable_path.startswith("-"):
+        return subprocess.CompletedProcess([executable_path, flag], 127, b"", b"invalid executable")
+    if os.path.exists(executable_path) and os.path.isdir(executable_path):
+        return subprocess.CompletedProcess([executable_path, flag], 127, b"", b"path is directory")
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     proc = subprocess.Popen(
         [executable_path, flag],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL,
+        creationflags=creationflags,
     )
     try:
         out, err = proc.communicate(timeout=timeout)

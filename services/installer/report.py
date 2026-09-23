@@ -267,14 +267,20 @@ class InstallReportGenerator:
     @staticmethod
     def _check_runtime(name: str, flag: str) -> str | None:
         """Check if a runtime is available and return its version."""
+        import os
         import shutil
         import subprocess
         exe = shutil.which(name)
-        if not exe:
+        if not exe or os.path.isdir(exe):
             return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
-                [exe, flag], capture_output=True, text=True, timeout=5
+                [exe, flag],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 return result.stdout.strip().split("\n")[0][:60]

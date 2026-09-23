@@ -157,6 +157,7 @@ class KnownInstallDirDiscovery(DiscoveryProvider):
                 capture_output=True,
                 text=True,
                 timeout=5.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode == 0:
                 first_line = result.stdout.strip().split("\n")[0]

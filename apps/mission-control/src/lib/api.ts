@@ -23,12 +23,12 @@ import type {
 // by the Tauri runtime) and fall back to the build-time env var otherwise.
 function resolveBase(): string {
   if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__) {
-    return "http://127.0.0.1:8001";
+    return "http://127.0.0.1:8000";
   }
   if (typeof window !== "undefined" && window.location?.hostname) {
-    return `http://${window.location.hostname}:8001`;
+    return `http://${window.location.hostname}:8000`;
   }
-  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8001";
+  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
 }
 
 const BASE = resolveBase();

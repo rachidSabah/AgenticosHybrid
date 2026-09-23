@@ -128,12 +128,19 @@ class VersionDetectValidator:
     @staticmethod
     async def validate(runtime: Runtime) -> dict[str, Any]:
         binary = runtime.binary_path or runtime.name
-        if not binary:
-            return {"passed": False, "error": "no binary path"}
+        if not binary or (os.path.exists(binary) and os.path.isdir(binary)):
+            return {"passed": False, "error": "no binary path or path is directory"}
 
         flags = VersionDetectValidator._VERSION_FLAGS.get(runtime.runtime_type, ["--version"])
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
-            result = subprocess.run([binary, *flags], capture_output=True, text=True, timeout=10)
+            result = subprocess.run(
+                [binary, *flags],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=creationflags,
+            )
             output = (result.stdout or result.stderr).strip()
             if output:
                 runtime.version = output.split("\n")[0].strip()
@@ -206,8 +213,8 @@ class PermissionValidator:
         if not binary:
             return {"passed": False, "error": "no binary path"}
 
-        if not os.path.exists(binary):
-            return {"passed": False, "error": "binary does not exist"}
+        if not os.path.exists(binary) or os.path.isdir(binary):
+            return {"passed": False, "error": "binary does not exist or is directory"}
 
         readable = os.access(binary, os.R_OK)
         executable = os.access(binary, os.X_OK)
@@ -224,8 +231,8 @@ class IntegrityValidator:
         binary = runtime.binary_path
         if not binary:
             return {"passed": False, "error": "no binary path"}
-        if not os.path.exists(binary):
-            return {"passed": False, "error": "binary does not exist"}
+        if not os.path.exists(binary) or os.path.isdir(binary):
+            return {"passed": False, "error": "binary does not exist or is directory"}
 
         if known_hash:
             try:
@@ -245,15 +252,17 @@ class HealthProbeValidator:
     @staticmethod
     async def validate(runtime: Runtime) -> dict[str, Any]:
         binary = runtime.binary_path or runtime.name
-        if not binary:
-            return {"passed": False, "error": "no binary path"}
+        if not binary or (os.path.exists(binary) and os.path.isdir(binary)):
+            return {"passed": False, "error": "no binary path or path is directory"}
 
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [binary, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 return {"passed": True}

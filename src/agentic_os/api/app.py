@@ -14,6 +14,7 @@ import collections.abc
 import dataclasses
 import json
 import subprocess
+import sys
 import time
 from collections import deque
 from contextlib import asynccontextmanager
@@ -258,12 +259,14 @@ class _UnavailableSentinel:
 
 def _run_git_text(args: list[str], cwd: str, timeout: int) -> subprocess.CompletedProcess[str]:
     """Run ``git args`` synchronously, returning typed text output."""
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     return subprocess.run(
         ["git", *args],
         capture_output=True,
         text=True,
         cwd=cwd,
         timeout=timeout,
+        creationflags=creationflags,
     )
 
 
@@ -6414,11 +6417,13 @@ def create_app(platform: Platform) -> FastAPI:
             import asyncio
 
             async def _run(args: list[str], cwd: str | None = None) -> str:
+                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 proc = await asyncio.create_subprocess_exec(
                     *args,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=cwd,
+                    creationflags=creationflags,
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
                 return stdout.decode("utf-8", errors="replace").strip()
@@ -6487,11 +6492,13 @@ def create_app(platform: Platform) -> FastAPI:
             repo_root = _os_mod.path.dirname(_os_mod.path.dirname(_os_mod.path.dirname(__file__)))
 
             async def _run(args: list[str]) -> str:
+                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 proc = await asyncio.create_subprocess_exec(
                     *args,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=repo_root,
+                    creationflags=creationflags,
                 )
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
                 return stdout.decode("utf-8", errors="replace").strip()
@@ -6538,11 +6545,13 @@ def create_app(platform: Platform) -> FastAPI:
             repo_root = _os_mod.path.dirname(_os_mod.path.dirname(_os_mod.path.dirname(__file__)))
 
             async def _run(args: list[str]) -> tuple[str, str, int]:
+                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 proc = await asyncio.create_subprocess_exec(
                     *args,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=repo_root,
+                    creationflags=creationflags,
                 )
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
                 return (
@@ -7220,11 +7229,15 @@ def create_app(platform: Platform) -> FastAPI:
                                 break
                     if found:
                         executable_path = found
+                if os.path.isdir(executable_path):
+                    return -1
+                creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 proc = subprocess.Popen(
                     [executable_path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     stdin=subprocess.DEVNULL,
+                    creationflags=creationflags,
                 )
                 LAUNCHED_PIDS[runtime_id] = proc.pid
                 return proc.pid
@@ -7525,6 +7538,7 @@ def create_app(platform: Platform) -> FastAPI:
             shell = _os_mod.environ.get("SHELL", "/bin/bash")
 
         try:
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             proc = await asyncio.create_subprocess_exec(
                 shell,
                 stdin=asyncio.subprocess.PIPE,
@@ -7532,6 +7546,7 @@ def create_app(platform: Platform) -> FastAPI:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=worktree_path,
                 env={**_os_mod.environ, "TERM": "xterm-256color"},
+                creationflags=creationflags,
             )
         except Exception as exc:
             await websocket.send_text(f"\r\n\x1b[31m✗ Failed to spawn shell: {exc}\x1b[0m\r\n")

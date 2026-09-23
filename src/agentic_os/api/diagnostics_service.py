@@ -12,6 +12,7 @@ import gc
 import inspect
 import os
 import platform as os_platform
+import subprocess
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -51,6 +52,7 @@ class RuntimeDiagnosticsService:
         Uses ``asyncio.create_subprocess_exec`` so the event loop is not blocked
         while git runs.
         """
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             proc = await asyncio.create_subprocess_exec(
                 "git",
@@ -58,6 +60,7 @@ class RuntimeDiagnosticsService:
                 "HEAD",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                creationflags=creationflags,
             )
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
@@ -71,6 +74,7 @@ class RuntimeDiagnosticsService:
 
     @staticmethod
     async def _git_branch() -> str:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             proc = await asyncio.create_subprocess_exec(
                 "git",
@@ -79,6 +83,7 @@ class RuntimeDiagnosticsService:
                 "HEAD",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                creationflags=creationflags,
             )
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
@@ -96,12 +101,14 @@ class RuntimeDiagnosticsService:
 
         Uses ``asyncio.create_subprocess_exec`` so the event loop is not blocked.
         """
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             proc = await asyncio.create_subprocess_exec(
                 "node",
                 "--version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
+                creationflags=creationflags,
             )
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)

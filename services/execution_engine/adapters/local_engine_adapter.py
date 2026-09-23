@@ -42,10 +42,16 @@ class LocalEngineAdapter(BaseExecutionEngineAdapter):
         _log.info("Executing locally: %s", goal[:100])
         if isinstance(goal, str) and goal.startswith(("ls", "echo", "pwd", "whoami")):
             try:
+                import os
                 import shlex
                 cmd_list = shlex.split(goal)
+                creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
                 result = subprocess.run(
-                    cmd_list, capture_output=True, text=True, timeout=30
+                    cmd_list,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    creationflags=creationflags,
                 )
                 return {
                     "stdout": result.stdout,

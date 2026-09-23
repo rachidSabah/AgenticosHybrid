@@ -246,12 +246,18 @@ class InstallerIntelligence:
             return
 
         import subprocess
+        if os.path.isdir(exe):
+            return
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         for pkg in pkg_names:
             try:
                 if pkg_type == "npm":
                     result = subprocess.run(
                         [exe, "list", "-g", pkg],
-                        capture_output=True, text=True, timeout=5
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        creationflags=creationflags,
                     )
                     if result.returncode == 0 and pkg in result.stdout:
                         # Find the actual executable

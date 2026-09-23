@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +37,14 @@ class GeminiCliAdapter(BaseExecutionEngineAdapter):
         try:
             import subprocess
 
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             for name in ("gemini", "gemini-cli"):
                 result = subprocess.run(
-                    [name, "--version"], capture_output=True, text=True, timeout=10
+                    [name, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    creationflags=creationflags,
                 )
                 if result.returncode == 0:
                     return result.stdout.strip() or result.stderr.strip() or "unknown"
@@ -63,11 +69,13 @@ class GeminiCliAdapter(BaseExecutionEngineAdapter):
 
     async def _on_initialize(self) -> None:
         if self._binary_path:
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             self._process = await asyncio.create_subprocess_exec(
                 self._binary_path,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                creationflags=creationflags,
             )
 
     async def _on_shutdown(self) -> None:

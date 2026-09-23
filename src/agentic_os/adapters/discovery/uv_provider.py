@@ -55,7 +55,12 @@ class UvDiscovery(DiscoveryProvider):
     async def discover(self) -> list[EngineRegistration]:
         results: list[EngineRegistration] = []
         try:
-            result = subprocess.run(["uv", "tool", "list"], capture_output=True, timeout=15.0)
+            result = subprocess.run(
+                ["uv", "tool", "list"],
+                capture_output=True,
+                timeout=15.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
             if result.returncode != 0:
                 return results
             text = result.stdout.decode("utf-8", errors="replace")

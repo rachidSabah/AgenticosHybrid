@@ -197,6 +197,7 @@ class WhatsAppGateway:
         # Use subprocess.Popen (not asyncio.create_subprocess_exec) so this
         # works under WindowsSelectorEventLoopPolicy which doesn't support
         # asyncio subprocesses on Windows.
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             self._process = subprocess.Popen(
                 ["node", str(bridge_path)],
@@ -208,6 +209,7 @@ class WhatsAppGateway:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                creationflags=creationflags,
             )
         except FileNotFoundError:
             raise RuntimeError(

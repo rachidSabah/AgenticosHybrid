@@ -158,6 +158,7 @@ async def _run_powershell(script: str, timeout: float = 10.0) -> str:
 
     Handles the Windows PowerShell execution environment.
     """
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:
         proc = await asyncio.create_subprocess_exec(
             "powershell",
@@ -167,6 +168,7 @@ async def _run_powershell(script: str, timeout: float = 10.0) -> str:
             script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            creationflags=creationflags,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -188,12 +190,14 @@ async def _run_powershell(script: str, timeout: float = 10.0) -> str:
 
 async def _where_exe(name: str) -> str:
     """Find an executable via where.exe, returning full path or empty string."""
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:
         proc = await asyncio.create_subprocess_exec(
             "where.exe",
             name,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
+            creationflags=creationflags,
         )
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3.0)
@@ -220,12 +224,16 @@ async def _get_version(
     timeout: float = 5.0,
 ) -> str:
     """Get version string from an executable."""
+    if not exe_path or os.path.isdir(exe_path):
+        return ""
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:
         proc = await asyncio.create_subprocess_exec(
             exe_path,
             *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            creationflags=creationflags,
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -237,6 +245,9 @@ async def _get_version(
                 pass
             return ""
         output = (stdout or stderr).decode("utf-8", errors="replace").strip()
+        lowered = output.lower()
+        if any(sig in lowered for sig in ("invalid configuration", "expected object, received array", "error in:", "broken configuration")):
+            return ""
         # Extract semantic version (first match)
         m = re.search(r"(\d+\.\d+\.\d+[a-zA-Z0-9._-]*)", output)
         return m.group(1) if m else output[:50]
@@ -394,11 +405,12 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
         exe_path = await _where_exe(exe_name)
         installed = bool(exe_path)
         version = ""
-        running_proc: DetectedProcess | None = None
-
+        is_broken = False
         if exe_path:
             version = await _get_version(exe_path)
             running_proc = await _check_process_running(exe_name)
+            if not version:
+                is_broken = True
 
         records.append(
             BrainRecord(
@@ -409,18 +421,18 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
                 runtime=info["runtime"],
                 version=version or "",
                 status=(
-                    BrainStatus.CONNECTED
+                    BrainStatus.REMOVED
+                    if (not installed or is_broken)
+                    else BrainStatus.CONNECTED
                     if running_proc
                     else BrainStatus.DISCOVERED
-                    if installed
-                    else BrainStatus.REMOVED
                 ),
-                health=100.0 if installed else 0.0,
+                health=0.0 if (not installed or is_broken) else (100.0 if running_proc else 60.0),
                 memory_usage=running_proc.memory_mb if running_proc else 0.0,
                 cpu_usage=running_proc.cpu_percent if running_proc else 0.0,
                 latency=5.0 if running_proc else 0.0,
                 current_tasks=1 if running_proc else 0,
-                error_count=0,
+                error_count=1 if is_broken else 0,
                 capabilities=(
                     f"cli:{info['key']}",
                     info["runtime"].value,

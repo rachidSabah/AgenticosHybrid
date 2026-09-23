@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import subprocess
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -175,13 +176,15 @@ class RuntimeWatcher:
 
     async def _get_version(self, provider: ProviderDef, exe: str) -> str | None:
         """Get the version of a provider's executable."""
-        if not provider.version_flags or not exe:
+        if not provider.version_flags or not exe or os.path.isdir(exe):
             return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             proc = await asyncio.create_subprocess_exec(
                 exe, *provider.version_flags,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                creationflags=creationflags,
             )
             try:
                 stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)

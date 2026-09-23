@@ -90,10 +90,20 @@ class PathDiscoveryProvider:
         return DiscoveryProviderType.PATH
 
     async def _detect_version(self, path: str) -> str | None:
+        import os
         import subprocess
 
+        if not path or os.path.isdir(path):
+            return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
-            result = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(
+                [path, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=creationflags,
+            )
             output = (result.stdout or result.stderr).strip().split("\n")[0]
             return output if output else None
         except Exception:

@@ -100,7 +100,12 @@ class ScoopDiscovery(DiscoveryProvider):
     @staticmethod
     async def _get_version(path: str) -> str | None:
         try:
-            result = subprocess.run([path, "--version"], capture_output=True, timeout=5.0)
+            result = subprocess.run(
+                [path, "--version"],
+                capture_output=True,
+                timeout=5.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
             return (
                 result.stdout.decode("utf-8", errors="replace").strip().split("\n")[0][:100]
                 if result.returncode == 0

@@ -625,21 +625,33 @@ function AgentStatusList() {
     return counts;
   }, [events]);
 
-  const agents = Object.values(providers)
-    .filter((p) => p.provider && p.provider.toLowerCase() !== "mock")
-    .map((p, idx) => {
-      const id = (p.provider ?? "").toLowerCase().replace(/\s+/g, "-");
-      const q = queueDepth[id] ?? 0;
-      return {
-        id,
-        label: p.provider ?? "unknown",
-        color: providerColor(p.provider ?? "", idx),
-        role: p.provider ?? "agent",
-        status: p.status ?? "unknown",
-        latency: p.latency_ms ?? 0,
-        queue: q,
-      };
-    });
+  const agents = useMemo(() => {
+    const raw = Object.values(providers)
+      .filter((p) => p.provider && p.provider.toLowerCase() !== "mock")
+      .map((p, idx) => {
+        const id = (p.provider ?? "").toLowerCase().replace(/\s+/g, "-");
+        const q = queueDepth[id] ?? 0;
+        return {
+          id,
+          label: p.provider ?? "unknown",
+          color: providerColor(p.provider ?? "", idx),
+          role: p.provider ?? "agent",
+          status: p.status ?? "unknown",
+          latency: p.latency_ms ?? 0,
+          queue: q,
+        };
+      });
+
+    // Deduplicate by ID to eliminate duplicate React keys
+    const seen = new Set<string>();
+    const unique: typeof raw = [];
+    for (const a of raw) {
+      if (!a.id || seen.has(a.id)) continue;
+      seen.add(a.id);
+      unique.push(a);
+    }
+    return unique;
+  }, [providers, queueDepth]);
 
   const online = agents.filter((a) => a.status === "healthy" || a.status === "degraded").length;
   const busy = agents.filter((a) => a.queue > 0).length;
@@ -657,9 +669,9 @@ function AgentStatusList() {
             No agents discovered
           </div>
         ) : (
-          agents.map((a) => (
+          agents.map((a, idx) => (
             <motion.div
-              key={a.id}
+              key={`${a.id}-${idx}`}
               layout
               className="flex items-center gap-2.5 rounded-xl px-3 py-2 hover:bg-white/[0.03] transition-colors"
             >

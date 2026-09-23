@@ -77,7 +77,10 @@ class NpmDiscovery(DiscoveryProvider):
         results: list[EngineRegistration] = []
         try:
             result = subprocess.run(
-                ["npm", "list", "-g", "--json", "--depth=0"], capture_output=True, timeout=15.0
+                ["npm", "list", "-g", "--json", "--depth=0"],
+                capture_output=True,
+                timeout=15.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode != 0:
                 return results

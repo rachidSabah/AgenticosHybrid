@@ -548,6 +548,29 @@ def auto_discover_and_bind(
             log.debug("auto_bind.skipping", binary=binary, reason="not found on PATH or disk")
             continue
 
+        # Quick preflight probe: ensure binary is usable and not failing configuration checks
+        try:
+            test_proc = subprocess.run(
+                [binary, "--version"],
+                capture_output=True,
+                timeout=3,
+                creationflags=_SUBPROCESS_WINDOW_FLAGS,
+            )
+            out_text = (
+                (test_proc.stdout or b"") + (test_proc.stderr or b"")
+            ).decode("utf-8", errors="replace").lower()
+            broken_sigs = (
+                "invalid configuration",
+                "expected object, received array",
+                "error in:",
+                "broken configuration",
+            )
+            if any(sig in out_text for sig in broken_sigs):
+                log.info("auto_bind.skipping_broken", binary=binary, reason="broken configuration")
+                continue
+        except Exception:
+            pass
+
         try:
             name = f"auto:{binary}"
             # Use the ProviderFactory to create the correct adapter

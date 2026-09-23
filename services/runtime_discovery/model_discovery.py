@@ -131,12 +131,14 @@ class ModelDiscovery:
         if binary is None:
             return []
 
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [binary, "list"],
                 capture_output=True,
                 text=True,
                 timeout=30,
+                creationflags=creationflags,
             )
             if result.returncode != 0:
                 return []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 import time
 from typing import Any
@@ -267,12 +268,14 @@ class RuntimeDiscoveryManager:
 
     async def _discover_builtin(self, runtime_type: RuntimeType) -> RuntimeDiscoveryResult | None:
         binary_name = runtime_type.value
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["where", binary_name] if binary_name == "python" else [binary_name, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 binary_path = None

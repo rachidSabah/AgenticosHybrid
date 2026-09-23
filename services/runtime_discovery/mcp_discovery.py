@@ -314,13 +314,19 @@ class MCPDiscovery:
     async def _detect_transport(binary_path: str) -> MCPTransportType:
         """Detect the MCP transport type from a binary's --help output."""
         import asyncio
+        import os
+        import subprocess
 
+        if not binary_path or os.path.isdir(binary_path):
+            return MCPTransportType.STDIO
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             proc = await asyncio.create_subprocess_exec(
                 binary_path,
                 "--help",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                creationflags=creationflags,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
             output = (stdout.decode() + stderr.decode()).lower()

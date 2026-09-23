@@ -117,6 +117,12 @@ _KNOWN_NON_AGENT = {
 
 async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
     """Run a command; return (returncode, stdout, stderr)."""
+    if not cmd or not cmd[0]:
+        return 127, "", "empty command"
+    exe = cmd[0]
+    if os.path.exists(exe) and os.path.isdir(exe):
+        return 127, "", "path is a directory, not executable"
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -126,6 +132,7 @@ async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
             # the full timeout each (observed as exit 124). DEVNULL makes the
             # probe terminate immediately on such binaries.
             stdin=asyncio.subprocess.DEVNULL,
+            creationflags=creationflags,
         )
     except (OSError, ValueError):
         return 127, "", "spawn failed"

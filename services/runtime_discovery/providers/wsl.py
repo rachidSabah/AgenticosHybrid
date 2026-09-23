@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 import subprocess
 
@@ -44,12 +45,14 @@ class WSLDiscoveryProvider:
         results: list[RuntimeDiscoveryResult] = []
         if platform.system() != "Windows":
             return results
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["wsl.exe", "--list", "--quiet"],
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             if result.returncode != 0:
                 return results
@@ -67,6 +70,7 @@ class WSLDiscoveryProvider:
                             capture_output=True,
                             text=True,
                             timeout=5,
+                            creationflags=creationflags,
                         )
                         if check.returncode == 0:
                             wsl_path = check.stdout.strip()

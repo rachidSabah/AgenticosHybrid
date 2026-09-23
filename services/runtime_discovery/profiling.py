@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import platform
 import subprocess
 import time
@@ -112,9 +113,15 @@ class ProfilingEngine:
     async def profile(self, runtime: Runtime) -> RuntimeProfile:
         executable_path = runtime.binary_path or ""
         start = time.monotonic()
-        if executable_path:
+        if executable_path and not os.path.isdir(executable_path):
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             try:
-                subprocess.run([executable_path, "--version"], capture_output=True, timeout=5)
+                subprocess.run(
+                    [executable_path, "--version"],
+                    capture_output=True,
+                    timeout=5,
+                    creationflags=creationflags,
+                )
             except Exception:
                 pass
         measured_latency = (time.monotonic() - start) * 1000

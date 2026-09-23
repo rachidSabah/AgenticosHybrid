@@ -292,10 +292,9 @@ export function normalizeBrainRecord(raw: unknown): BrainRecord {
 /** Origin of the AgenticOS backend (no path). */
 function apiOrigin(): string {
   if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__TAURI__) {
-    return "http://127.0.0.1:8080";
+    return "http://127.0.0.1:8000";
   }
-  // The dev backend serves on 8001; 8080 is the legacy/Tauri default.
-  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://127.0.0.1:8001";
+  return process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://127.0.0.1:8000";
 }
 
 function brainsApiBase(): string {

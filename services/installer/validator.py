@@ -186,6 +186,12 @@ class ValidationPipeline:
         not support ``asyncio`` subprocesses (``create_subprocess_exec``
         raises ``NotImplementedError`` there).
         """
+        if not cmd or not cmd[0]:
+            return "", "EMPTY_CMD", None, 0.0
+        exe = cmd[0]
+        if os.path.exists(exe) and os.path.isdir(exe):
+            return "", "PATH_IS_DIR", None, 0.0
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         t0 = time.perf_counter()
         try:
             result = await asyncio.to_thread(
@@ -194,6 +200,7 @@ class ValidationPipeline:
                 capture_output=True,
                 stdin=subprocess.DEVNULL,
                 timeout=timeout or self._timeout,
+                creationflags=creationflags,
             )
             elapsed = (time.perf_counter() - t0) * 1000
             return (

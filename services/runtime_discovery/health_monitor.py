@@ -32,15 +32,17 @@ class RuntimeHealthMonitor:
         self._on_status_change.append(callback)
 
     async def check(self, runtime: Runtime) -> RuntimeHealth:
+        import os
         import subprocess
 
         health = RuntimeHealth(runtime_id=runtime.runtime_id)
         binary = runtime.binary_path or runtime.name
 
-        if not binary:
-            health.record_failure("no binary path")
+        if not binary or (os.path.exists(binary) and os.path.isdir(binary)):
+            health.record_failure("no binary path or path is directory")
             return self._update(runtime, health)
 
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         start = time.monotonic()
         try:
             result = subprocess.run(
@@ -48,6 +50,7 @@ class RuntimeHealthMonitor:
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             response_time = (time.monotonic() - start) * 1000
             if result.returncode == 0:

@@ -5,6 +5,7 @@ and SDK installations. Uses ``winreg`` on Windows, falls back to ``reg query``
 for WSL cross-compile scenarios.
 """
 
+import os
 import platform
 import subprocess
 from dataclasses import dataclass, field
@@ -194,12 +195,16 @@ class WindowsRegistryDiscovery(DiscoveryProvider):
     @staticmethod
     async def _get_version(executable: str) -> str | None:
         """Try to get the version of an executable."""
+        if not executable or os.path.isdir(executable):
+            return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [executable, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5.0,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 first_line = result.stdout.strip().split("\n")[0]

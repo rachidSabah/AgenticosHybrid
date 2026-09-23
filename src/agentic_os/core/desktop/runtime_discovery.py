@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
+import subprocess
 from collections.abc import Sequence
 from typing import Any
 
@@ -90,12 +92,16 @@ class RuntimeDiscoveryManager:
     @staticmethod
     async def _get_version(path: str, flag: str) -> str:
         """Probe ``path --flag`` for a version string without blocking the loop."""
+        if not path or os.path.isdir(path):
+            return "unknown"
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             proc = await asyncio.create_subprocess_exec(
                 path,
                 flag,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                creationflags=creationflags,
             )
             try:
                 stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)

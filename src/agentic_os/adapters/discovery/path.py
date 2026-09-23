@@ -307,6 +307,7 @@ class PathDiscovery(DiscoveryProvider):
                 [path, *shlex.split(flag)],
                 capture_output=True,
                 timeout=5.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode == 0:
                 raw = result.stdout

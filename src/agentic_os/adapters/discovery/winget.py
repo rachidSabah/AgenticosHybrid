@@ -65,6 +65,7 @@ class WingetDiscovery(DiscoveryProvider):
                 capture_output=True,
                 timeout=30.0,
                 text=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode not in (0, 1):
                 return results

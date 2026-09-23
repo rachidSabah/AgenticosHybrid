@@ -129,6 +129,7 @@ class DockerDiscovery(DiscoveryProvider):
                 capture_output=True,
                 text=True,
                 timeout=10.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode == 0:
                 return result.stdout.strip()[:50]
@@ -145,6 +146,7 @@ class DockerDiscovery(DiscoveryProvider):
                 capture_output=True,
                 text=True,
                 timeout=15.0,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             if result.returncode != 0:
                 return []

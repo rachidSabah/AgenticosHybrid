@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 
 from core.logging import get_logger
@@ -31,12 +32,14 @@ class DockerDiscoveryProvider:
         self, runtime_type: RuntimeType | None = None
     ) -> list[RuntimeDiscoveryResult]:
         results: list[RuntimeDiscoveryResult] = []
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             info = subprocess.run(
                 ["docker", "info"],
                 capture_output=True,
                 text=True,
                 timeout=5,
+                creationflags=creationflags,
             )
             if info.returncode != 0:
                 return results
@@ -113,12 +116,14 @@ class DockerDiscoveryProvider:
         return DiscoveryProviderType.DOCKER
 
     async def _list_images(self) -> dict[str, str]:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["docker", "images", "--format", "{{.Repository}}:{{.Tag}}"],
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             if result.returncode != 0:
                 return {}
@@ -133,12 +138,14 @@ class DockerDiscoveryProvider:
             return {}
 
     async def _list_containers(self) -> list[dict[str, str]]:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["docker", "ps", "--format", "{{json .}}"],
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             if result.returncode != 0:
                 return []

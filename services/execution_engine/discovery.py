@@ -142,11 +142,15 @@ def _get_version(binary_path: Path, engine_type: EngineType) -> str | None:
             EngineType.OLLAMA: ["--version"],
         }
         flags = version_flags.get(engine_type, ["--version"])
+        if not binary_path or os.path.isdir(str(binary_path)):
+            return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         result = subprocess.run(
             [str(binary_path), *flags],
             capture_output=True,
             text=True,
             timeout=10,
+            creationflags=creationflags,
         )
         output = (result.stdout or result.stderr).strip()
         return output if output else None
@@ -212,6 +216,7 @@ class EngineDiscovery:
     async def _check_wsl(
         self, engine_type: EngineType, binary_names: list[str]
     ) -> EngineDiscoveryResult | None:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             for name in binary_names:
                 result = subprocess.run(
@@ -219,6 +224,7 @@ class EngineDiscovery:
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    creationflags=creationflags,
                 )
                 if result.returncode == 0:
                     wsl_path = result.stdout.strip()
@@ -229,6 +235,7 @@ class EngineDiscovery:
                             capture_output=True,
                             text=True,
                             timeout=10,
+                            creationflags=creationflags,
                         )
                         version = (v.stdout or v.stderr).strip()
                     except Exception:
@@ -251,12 +258,14 @@ class EngineDiscovery:
     async def _check_docker(
         self, engine_type: EngineType, binary_names: list[str]
     ) -> EngineDiscoveryResult | None:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["docker", "ps", "--format", "{{.Names}}"],
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             if result.returncode != 0:
                 return None

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import subprocess
 from typing import Any
 
 from core.contracts.execution_engine import (
@@ -28,11 +30,13 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
 
     async def _on_initialize(self) -> None:
         if self._binary_path:
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             self._process = await asyncio.create_subprocess_exec(
                 self._binary_path,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                creationflags=creationflags,
             )
 
     async def _on_shutdown(self) -> None:

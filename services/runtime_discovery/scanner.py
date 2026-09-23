@@ -229,12 +229,16 @@ class Scanner:
     @staticmethod
     def detect_version(binary_path: str, flag: str = "--version") -> str | None:
         """Run the binary with ``--version`` and return the first output line."""
+        if not binary_path or os.path.isdir(binary_path):
+            return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [binary_path, flag],
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             output = (result.stdout or result.stderr).strip()
             return output.split("\n")[0] if output else None
