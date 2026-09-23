@@ -19,6 +19,25 @@ class DesktopPerformanceMonitor:
         self._monitoring = False
 
     async def get_metrics(self) -> DesktopPerformanceMetrics:
+        try:
+            import os
+
+            import psutil
+
+            cpu = float(psutil.cpu_percent(interval=None))
+            mem = float(psutil.virtual_memory().percent)
+            root_path = os.path.abspath(os.sep)
+            disk = float(psutil.disk_usage(root_path).percent)
+            self._metrics = DesktopPerformanceMetrics(
+                cpu_usage_percent=cpu,
+                memory_usage_percent=mem,
+                disk_usage_percent=disk,
+            )
+            self._record_metric("cpu", cpu)
+            self._record_metric("memory", mem)
+            self._record_metric("disk", disk)
+        except Exception:
+            pass
         return self._metrics
 
     async def update_metrics(self, metrics: DesktopPerformanceMetrics) -> None:

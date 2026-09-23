@@ -267,12 +267,16 @@ class VSCodeDiscovery(DiscoveryProvider):
     @staticmethod
     async def _get_version(executable: str) -> str | None:
         """Get the VS Code version."""
+        if not executable or executable.startswith("-") or (os.path.exists(executable) and os.path.isdir(executable)):
+            return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [executable, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5.0,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 first_line = result.stdout.strip().split("\n")[0]

@@ -140,12 +140,24 @@ class VersionDetectValidator:
                 warnings=("Remote endpoint — using registration version",),
             )
 
+        if not binary or binary.startswith("-") or (
+            os.path.exists(binary) and os.path.isdir(binary)
+        ):
+            return ValidationResult.failed(
+                engine_id,
+                engine_name,
+                "Invalid binary path or path is directory",
+                version_detected=None,
+            )
+
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [binary, self.version_flag],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_seconds,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 first_line = result.stdout.strip().split("\n")[0]

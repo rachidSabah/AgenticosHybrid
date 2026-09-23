@@ -6,6 +6,7 @@ defaults. These profiles can be converted into domain ExecutionProfile objects
 for registration with the RuntimeManager.
 """
 
+import os
 import platform as platform_mod
 import shutil
 import subprocess
@@ -147,18 +148,22 @@ class ProfilingEngine:
         self, executable: str | None, registration: EngineRegistration
     ) -> float:
         """Run a quick probe and measure approximate response time."""
-        if executable is None:
-            return 50.0  # default estimate for remote engines
+        if not executable or executable.startswith("-") or (
+            os.path.exists(executable) and os.path.isdir(executable)
+        ):
+            return 100.0
 
         try:
             import time
 
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             start = time.perf_counter()
             result = subprocess.run(
                 [executable, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5.0,
+                creationflags=creationflags,
             )
             elapsed = (time.perf_counter() - start) * 1000  # ms
             if result.returncode == 0:

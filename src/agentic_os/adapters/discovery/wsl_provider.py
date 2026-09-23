@@ -5,6 +5,7 @@ executables. Runs ``wsl.exe --list --verbose`` to find distros, then
 probes each for known binaries.
 """
 
+import os
 import platform
 import re
 import subprocess
@@ -102,12 +103,14 @@ class WslDiscovery(DiscoveryProvider):
     @staticmethod
     def _list_distros() -> list[str]:
         """Run ``wsl.exe --list --verbose`` and parse distro names."""
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["wsl.exe", "--list", "--verbose"],
                 capture_output=True,
                 text=True,
                 timeout=30.0,
+                creationflags=creationflags,
             )
             if result.returncode != 0:
                 return []
@@ -166,12 +169,14 @@ class WslDiscovery(DiscoveryProvider):
     @staticmethod
     def _which_in_wsl(distro: str, binary: str) -> str | None:
         """Run ``which <binary>`` inside a WSL distro."""
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["wsl.exe", "-d", distro, "--", "which", binary],
                 capture_output=True,
                 text=True,
                 timeout=15.0,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 path = result.stdout.strip()
@@ -183,12 +188,14 @@ class WslDiscovery(DiscoveryProvider):
     @staticmethod
     def _get_version_in_wsl(distro: str, binary_path: str) -> str | None:
         """Get the version of a binary inside a WSL distro."""
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 ["wsl.exe", "-d", distro, "--", binary_path, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=15.0,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 first_line = result.stdout.strip().split("\n")[0]

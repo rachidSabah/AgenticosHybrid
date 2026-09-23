@@ -71,12 +71,14 @@ class WorktreeManager:
         """
 
         def _capture() -> subprocess.CompletedProcess[str]:
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             return subprocess.run(
                 ["git", *args],
                 capture_output=True,
                 text=True,
                 cwd=cwd or self._workspace_root,
                 timeout=30,
+                creationflags=creationflags,
             )
 
         try:

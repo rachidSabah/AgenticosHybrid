@@ -43,6 +43,19 @@ fn configure_dll_directory(res_dir: &Path) {
 #[cfg(not(target_os = "windows"))]
 fn configure_dll_directory(_res_dir: &Path) {}
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn create_hidden_command<P: AsRef<std::ffi::OsStr>>(program: P) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
 fn log_startup_event(log_path: &Path, message: &str) {
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
@@ -113,7 +126,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
                 &format!("✓ Bundled backend source found — pyproject: {}", pyproject_path.exists()),
             );
             // Check if uv is available
-            let uv_check = Command::new("uv")
+            let uv_check = create_hidden_command("uv")
                 .arg("--version")
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -213,7 +226,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
             Ok(res_dir) => {
                 let pyproject = res_dir.join("backend").join("pyproject.toml");
                 if pyproject.exists() {
-                    let uv_check = Command::new("uv")
+                    let uv_check = create_hidden_command("uv")
                         .arg("--version")
                         .stdout(Stdio::null())
                         .stderr(Stdio::null())
@@ -238,7 +251,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
     // Strategy 4: Try system python -m agentic_os serve
     if launch_method.is_none() {
         for python_cmd in &["python", "python3"] {
-            let check = Command::new(python_cmd)
+            let check = create_hidden_command(python_cmd)
                 .args(["-c", "import agentic_os; print('ok')"])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -288,14 +301,14 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
 
     let mut cmd = if launch_method.starts_with("uv::") {
         let backend_dir = &launch_method[4..];
-        let mut c = Command::new("uv");
+        let mut c = create_hidden_command("uv");
         c.args(["--project", backend_dir, "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
         c.current_dir(backend_dir);
         c
     } else {
         match launch_method.as_str() {
             "uv" => {
-                let mut c = Command::new("uv");
+                let mut c = create_hidden_command("uv");
                 c.args(["--project", "backend", "run", "python", "-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
                 if let Some(ref dir) = exe_dir {
                     c.current_dir(dir);
@@ -303,7 +316,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
                 c
             }
             "python" | "python3" => {
-                let mut c = Command::new(&launch_method);
+                let mut c = create_hidden_command(&launch_method);
                 c.args(["-m", "agentic_os", "serve", "--host", "127.0.0.1", "--port", "8000"]);
                 if let Some(ref dir) = exe_dir {
                     c.current_dir(dir);
@@ -313,7 +326,7 @@ fn launch_backend(app: &tauri::AppHandle) -> (Option<Child>, PathBuf, PathBuf) {
             _ => {
                 // Binary path (PyInstaller or other EXE)
                 let exe_path = PathBuf::from(&launch_method);
-                let mut c = Command::new(&exe_path);
+                let mut c = create_hidden_command(&exe_path);
                 c.args(["serve", "--host", "127.0.0.1", "--port", "8000"]);
                 if let Some(ref dir) = exe_dir {
                     c.current_dir(dir);

@@ -283,11 +283,13 @@ class RuntimeController:
 
         try:
             if platform.system() == "Windows":
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
                 result = subprocess.run(
                     ["taskkill", "/F", "/PID", str(runtime.pid)],
                     capture_output=True,
                     text=True,
                     timeout=10,
+                    creationflags=creationflags,
                 )
             else:
                 result = subprocess.run(

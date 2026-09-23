@@ -34,11 +34,17 @@ class ContinueAdapter(BaseExecutionEngineAdapter):
     @staticmethod
     def _detect_version() -> str:
         try:
+            import os
             import subprocess
 
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             for name in ("continue", "continue-cli"):
                 result = subprocess.run(
-                    [name, "--version"], capture_output=True, text=True, timeout=10
+                    [name, "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    creationflags=creationflags,
                 )
                 if result.returncode == 0:
                     return result.stdout.strip() or result.stderr.strip() or "unknown"

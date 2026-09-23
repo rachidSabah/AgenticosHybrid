@@ -42,10 +42,12 @@ def _kill_tree(pid: int) -> None:
     """
     if sys.platform == "win32":
         try:
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
             subprocess.run(
                 ["taskkill", "/F", "/T", "/PID", str(pid)],
                 capture_output=True,
                 timeout=10,
+                creationflags=creationflags,
             )
         except Exception:
             pass
@@ -72,6 +74,11 @@ def _run_sync(
     Returns ``(returncode, stdout, stderr)``. On timeout, returns
     ``(-999, b"", b"<timeout marker>")``.
     """
+    if not args or not args[0] or args[0].startswith("-"):
+        return -1, b"", b"invalid executable argument"
+    if os.path.exists(args[0]) and os.path.isdir(args[0]):
+        return -1, b"", b"cannot execute directory"
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
     stdin = subprocess.PIPE if input_data is not None else subprocess.DEVNULL
 
     if on_output is not None:
@@ -83,6 +90,7 @@ def _run_sync(
             stderr=subprocess.PIPE,
             env=env,
             cwd=cwd,
+            creationflags=creationflags,
         )
 
         out_q: queue.Queue[tuple[str, str] | object] = queue.Queue()
@@ -172,6 +180,7 @@ def _run_sync(
                 env=env,
                 cwd=cwd,
                 timeout=timeout,
+                creationflags=creationflags,
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:

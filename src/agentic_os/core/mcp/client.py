@@ -100,9 +100,13 @@ class MCPClient:
         env = os.environ.copy()
         env.update(self.config.env)
 
+        if os.path.exists(self.config.command) and os.path.isdir(self.config.command):
+            raise ValueError(f"MCP command cannot be a directory: {self.config.command}")
+
         cmd = [self.config.command, *self.config.args]
         _shell_cmds = ("npx", "npm", "cmd", "npx.cmd")
         use_shell = sys.platform == "win32" and self.config.command.lower() in _shell_cmds
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
 
         self._process = subprocess.Popen(
             cmd,
@@ -113,6 +117,7 @@ class MCPClient:
             text=True,
             bufsize=0,
             shell=use_shell,
+            creationflags=creationflags,
         )
         self.process_id = self._process.pid
 

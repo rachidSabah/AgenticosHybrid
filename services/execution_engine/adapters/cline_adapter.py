@@ -34,10 +34,16 @@ class ClineAdapter(BaseExecutionEngineAdapter):
     @staticmethod
     def _detect_version() -> str:
         try:
+            import os
             import subprocess
 
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
             result = subprocess.run(
-                ["cline", "--version"], capture_output=True, text=True, timeout=10
+                ["cline", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                creationflags=creationflags,
             )
             return result.stdout.strip() or result.stderr.strip() or "unknown"
         except Exception:

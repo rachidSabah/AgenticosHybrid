@@ -203,3 +203,45 @@ class TestSubprocessSafety:
         create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
         assert create_no_window == 0x08000000
 
+    @pytest.mark.asyncio
+    async def test_probes_run_rejects_non_executables_and_directories(self) -> None:
+        """Verify probes._run rejects .png, .jpg, directories, and flags without spawning."""
+        import os
+
+        from agentic_os.core.brains.probes import _run
+
+        dir_path = os.path.dirname(os.path.abspath(__file__))
+        rc, out, err = await _run([dir_path, "--help"], 2.0)
+        assert rc == 127
+        assert "directory" in err
+
+        for bad in ["F:\\AOS\\help.png", "help.png", "--help", "-v", "test.html"]:
+            rc, out, err = await _run([bad], 2.0)
+            assert rc == 127
+
+    def test_run_cli_rejects_directories_and_flags(self) -> None:
+        """Verify run_cli._run_sync rejects directories and flags."""
+        import os
+
+        from agentic_os.adapters.providers.run_cli import _run_sync
+
+        dir_path = os.path.dirname(os.path.abspath(__file__))
+        rc, out, err = _run_sync([dir_path], None, {}, None, 5.0, None)
+        assert rc == -1
+        assert b"cannot execute directory" in err
+
+        rc, out, err = _run_sync(["--help"], None, {}, None, 5.0, None)
+        assert rc == -1
+        assert b"invalid executable argument" in err
+
+    @pytest.mark.asyncio
+    async def test_performance_monitor_returns_real_os_metrics(self) -> None:
+        """Verify DesktopPerformanceMonitor queries real OS metrics via psutil."""
+        from agentic_os.core.desktop.performance import DesktopPerformanceMonitor
+
+        monitor = DesktopPerformanceMonitor()
+        metrics = await monitor.get_metrics()
+        assert metrics.cpu_usage_percent >= 0.0
+        assert metrics.memory_usage_percent > 0.0
+        assert metrics.disk_usage_percent > 0.0
+

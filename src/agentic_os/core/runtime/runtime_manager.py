@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -174,24 +176,36 @@ class RuntimeManager:
         if launcher is not None and hasattr(launcher, "execute"):
             return await launcher.execute(runtime, command)
 
+        if not command or not command.strip():
+            return "Command is empty"
+
+        import shlex
+
         try:
-            # Run via the shell for backward compatibility (the upstream
-            # contract accepts a single command string), but do so without
-            # blocking the event loop.
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60.0)
-            except TimeoutError:
-                proc.kill()
-                await proc.wait()
-                return "Command timed out after 60s"
-            return (stdout or b"").decode(errors="replace") + (stderr or b"").decode(
-                errors="replace"
-            )
+            tokens = shlex.split(command, posix=(os.name != "nt"))
+            if not tokens:
+                return "Command is empty"
+            exe = tokens[0]
+            if exe.startswith("-"):
+                return "Invalid command flag as binary"
+            if os.path.exists(exe) and os.path.isdir(exe):
+                return f"Cannot execute directory: {exe}"
+
+            def _sync_run() -> str:
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
+                res = subprocess.run(
+                    tokens,
+                    capture_output=True,
+                    timeout=60.0,
+                    creationflags=creationflags,
+                )
+                return (res.stdout or b"").decode(errors="replace") + (res.stderr or b"").decode(
+                    errors="replace"
+                )
+
+            return await asyncio.wait_for(asyncio.to_thread(_sync_run), timeout=65.0)
+        except (TimeoutError, subprocess.TimeoutExpired):
+            return "Command timed out after 60s"
         except Exception as exc:
             return f"Command failed: {exc}"
 

@@ -573,6 +573,11 @@ class StrategyBasedProvider:
         if not shutil.which(self._config.bin_path):
             return False
 
+        if not self._config.bin_path or (
+            os.path.exists(self._config.bin_path) and os.path.isdir(self._config.bin_path)
+        ):
+            return False
+
         health_cmd = self._strategy.health_command(self._config.bin_path)
         if health_cmd is None:
             return True  # Binary exists, that's sufficient
@@ -580,13 +585,18 @@ class StrategyBasedProvider:
         import asyncio
         import subprocess
 
-        try:
-            result = await asyncio.to_thread(
-                subprocess.run,
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+        def _run_health():
+            return subprocess.run(
                 health_cmd,
                 capture_output=True,
                 timeout=12,
+                creationflags=creationflags,
             )
+
+        try:
+            result = await asyncio.to_thread(_run_health)
             return result.returncode == 0
         except Exception:
             return False

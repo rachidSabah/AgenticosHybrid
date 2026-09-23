@@ -153,11 +153,13 @@ class SignatureVerification:
             try:
                 import subprocess
 
+                creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
                 proc = subprocess.run(
                     ["signtool", "verify", "/pa", file_path],
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    creationflags=creationflags,
                 )
                 result["valid"] = proc.returncode == 0
                 if result["valid"]:

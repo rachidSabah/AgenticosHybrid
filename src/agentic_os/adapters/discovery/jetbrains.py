@@ -265,12 +265,14 @@ class JetBrainsDiscovery(DiscoveryProvider):
         if toolbox is None:
             return []
 
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [toolbox, "list", "--format", "json"],
                 capture_output=True,
                 text=True,
                 timeout=15.0,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 data = json.loads(result.stdout)
@@ -388,12 +390,16 @@ class JetBrainsDiscovery(DiscoveryProvider):
     @staticmethod
     async def _get_version(executable: str) -> str | None:
         """Get the IDE version."""
+        if not executable or executable.startswith("-") or (os.path.exists(executable) and os.path.isdir(executable)):
+            return None
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:
             result = subprocess.run(
                 [executable, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5.0,
+                creationflags=creationflags,
             )
             if result.returncode == 0:
                 first_line = result.stdout.strip().split("\n")[0]

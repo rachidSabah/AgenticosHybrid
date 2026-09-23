@@ -120,8 +120,13 @@ async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
     if not cmd or not cmd[0]:
         return 127, "", "empty command"
     exe = cmd[0]
+    if exe.startswith("-"):
+        return 127, "", "flag cannot be executable"
     if os.path.exists(exe) and os.path.isdir(exe):
         return 127, "", "path is a directory, not executable"
+    lower_exe = exe.lower()
+    if lower_exe.endswith((".png", ".jpg", ".jpeg", ".html", ".lnk", ".url", ".vbs", ".txt", ".md", ".pdf")):
+        return 127, "", "file is not an executable candidate"
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -145,6 +150,7 @@ async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
                     ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    creationflags=creationflags,
                 )
             else:
                 proc.kill()
