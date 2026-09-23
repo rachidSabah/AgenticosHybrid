@@ -16,6 +16,7 @@ import contextlib
 import os
 import re
 import shutil
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
@@ -132,7 +133,14 @@ async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
         with contextlib.suppress(Exception):
-            proc.kill()
+            if os.name == "nt" and proc.pid:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                proc.kill()
         return 124, "", "timeout"
     decode = lambda b: (b or b"").decode("utf-8", errors="replace")  # noqa: E731
     return proc.returncode or 0, decode(out), decode(err)

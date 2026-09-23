@@ -8,7 +8,9 @@ expensive subprocess calls.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import os
 import re
 import subprocess
 
@@ -43,12 +45,28 @@ def _run_version_capture(
     executable_path: str, flag: str, timeout: float
 ) -> subprocess.CompletedProcess[bytes]:
     """Run *executable_path flag*, capturing output (typed for ty)."""
-    return subprocess.run(
+    proc = subprocess.Popen(
         [executable_path, flag],
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         stdin=subprocess.DEVNULL,
-        timeout=timeout,
     )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(proc.args, proc.returncode, out, err)
+    except subprocess.TimeoutExpired:
+        if os.name == "nt" and proc.pid:
+            with contextlib.suppress(Exception):
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        else:
+            proc.kill()
+        with contextlib.suppress(Exception):
+            proc.communicate()
+        raise
 
 
 class VersionDetector:

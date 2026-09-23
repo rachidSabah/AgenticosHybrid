@@ -37,6 +37,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     const hydrateTimer = setInterval(() => {
       void useStore.getState().hydrate();
     }, 30_000);
+    // Cleanly unregister any stale service workers without reloading
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const r of registrations) {
+          void r.unregister();
+        }
+      }).catch(() => {});
+    }
     const timer = setTimeout(() => setConnectingDismissed(true), 1200);
     return () => {
       storeDisconnect();
