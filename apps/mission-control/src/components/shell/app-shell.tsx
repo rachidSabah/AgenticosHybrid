@@ -85,17 +85,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     setActive(id);
   }, []);
 
-  if (!mounted) return (
-    <LayoutProvider>
-      <div className="grid h-[100dvh] w-screen grid-cols-1 md:grid-cols-[auto_1fr] overflow-hidden bg-surface text-text">
-        <aside className="hidden md:block w-14" aria-label="sidebar-skeleton" />
-        <main className="flex items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-        </main>
-      </div>
-    </LayoutProvider>
-  );
-
   return (
     <LayoutProvider>
       <ActiveViewCtx.Provider value={{ active, setActive: open }}>

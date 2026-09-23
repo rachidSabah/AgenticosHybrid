@@ -9,9 +9,12 @@ if not exist "logs" mkdir logs
 rem ── Write generated files directly into the workspace root ───────────────
 set AGENTICOS_DIRECT_WORKSPACE=1
 
-rem ── Kill any stale processes from a previous run ─────────────────────────
-echo [AgenticOS] Stopping any existing backend on port 8000...
+rem ── Kill any stale processes on port 8000 and 3000 ──────────────────────
+echo [AgenticOS] Clearing ports 8000 and 3000...
 for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%p >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":3000 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%p >nul 2>&1
 )
 
@@ -44,37 +47,42 @@ goto wait_backend
 echo [AgenticOS] Backend is READY on http://127.0.0.1:8000
 
 :start_frontend
-rem ── Start Frontend (dev mode — no output:export restriction) ─────────────
-echo [AgenticOS] Starting Mission Control on http://localhost:3000 ...
-start "AgenticOS Mission Control" /min cmd /c "cd /d ""%~dp0apps\mission-control"" && npm.cmd run dev > ""%~dp0logs\frontend.log"" 2>&1"
+rem ── Start Frontend ───────────────────────────────────────────────────────
+if exist "%~dp0apps\mission-control\out\index.html" (
+    echo [AgenticOS] Starting Mission Control (Production Bundle) on http://127.0.0.1:3000 ...
+    start "AgenticOS Mission Control" /min cmd /c "cd /d ""%~dp0apps\mission-control"" && npx.cmd serve -s out -l 3000 > ""%~dp0logs\frontend.log"" 2>&1"
+) else (
+    echo [AgenticOS] Starting Mission Control (Development Server) on http://127.0.0.1:3000 ...
+    start "AgenticOS Mission Control" /min cmd /c "cd /d ""%~dp0apps\mission-control"" && npm.cmd run dev -- -H 127.0.0.1 -p 3000 > ""%~dp0logs\frontend.log"" 2>&1"
+)
 
-rem ── Wait for frontend to be ready (up to 60 seconds) ────────────────────
-echo [AgenticOS] Waiting for frontend compiler...
+rem ── Wait for frontend to be ready (up to 90 seconds) ────────────────────
+echo [AgenticOS] Waiting for Mission Control UI to be ready...
 set /a WAITED=0
 :wait_frontend
-timeout /t 3 /nobreak >nul
-curl.exe -s -o nul -w "%%{http_code}" http://localhost:3000/ 2>nul | findstr /C:"200" >nul
+timeout /t 2 /nobreak >nul
+curl.exe -s -o nul -w "%%{http_code}" http://127.0.0.1:3000/ 2>nul | findstr /C:"200" >nul
 if !errorlevel! == 0 goto frontend_ready
-set /a WAITED+=3
+set /a WAITED+=2
 if !WAITED! GEQ 90 (
     echo [AgenticOS] WARNING: Frontend did not respond after 90s. Check logs\frontend.log
     goto open_browser
 )
-echo [AgenticOS]   ... compiling (%WAITED%s elapsed)
+echo [AgenticOS]   ... initializing UI (%WAITED%s elapsed)
 goto wait_frontend
 
 :frontend_ready
-echo [AgenticOS] Frontend is READY on http://localhost:3000
+echo [AgenticOS] Mission Control is READY on http://127.0.0.1:3000
 
 :open_browser
 echo [AgenticOS] Launching Mission Control in browser...
-start http://localhost:3000
+start http://127.0.0.1:3000
 
 echo.
 echo ===========================================================
 echo  AgenticOS is running!
 echo  Backend:         http://127.0.0.1:8000
-echo  Mission Control: http://localhost:3000
+echo  Mission Control: http://127.0.0.1:3000
 echo  Backend log:     %~dp0logs\backend.log
 echo  Frontend log:    %~dp0logs\frontend.log
 echo ===========================================================

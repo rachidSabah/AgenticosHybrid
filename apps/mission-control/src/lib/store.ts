@@ -231,12 +231,13 @@ export const useStore = create<StoreState>((set, get) => ({
       // and the env-var base still resolves to localhost:8000, so this is safe.
       let url: string;
       const proto = location.protocol === "https:" ? "wss" : "ws";
-      const base = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
       if (location.protocol === "tauri:") {
         // Desktop runtime: always use the embedded backend address.
         url = "ws://127.0.0.1:8000/ws/dashboard";
       } else {
-        url = `${proto}://${new URL(base).host}/ws/dashboard`;
+        const hostname = typeof window !== "undefined" && window.location?.hostname ? window.location.hostname : "127.0.0.1";
+        const host = hostname === "localhost" ? "127.0.0.1" : hostname;
+        url = `${proto}://${host}:8000/ws/dashboard`;
       }
 
       try {
@@ -766,8 +767,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
       if (rawDiscovery.status === "fulfilled" && rawDiscovery.value) {
         // Authoritative single source of truth (spec §1).
-        // Only active AI agents validated by the discovery engine appear.
-        const activeRows = rawDiscovery.value.active_agents ?? [];
+        const activeRows =
+          rawDiscovery.value.active_agents ??
+          (rawDiscovery.value.agents?.filter(
+            (a: Record<string, unknown>) => a.is_active !== false && a.is_agent !== false
+          ) ?? []);
         for (const a of activeRows) {
           const id = String(a.id ?? a.name ?? "");
           if (!id) continue;
