@@ -129,28 +129,28 @@ def _ensure_paths():
 def _print_validation_report(report):
     """Print a human-readable validation report."""
     print("=" * 56)
-    print("  Mission Control — Runtime Discovery Report")
+    print("  Mission Control -- Runtime Discovery Report")
     print("=" * 56)
     print()
 
     if report.passed:
-        print("  ✓ Found and Validated:")
+        print("  [PASS] Found and Validated:")
         print()
         for r in report.passed:
             cap_str = ", ".join(sorted(r.detected_capabilities)[:5])
             if len(r.detected_capabilities) > 5:
                 cap_str += "..."
-            print(f"    ✓ {r.provider_id:<20s} {r.version or '?':<20s} {r.launch_time_ms:5.0f}ms")
+            print(f"    [OK] {r.provider_id:<20s} {r.version or '?':<20s} {r.launch_time_ms:5.0f}ms")
             print(f"      {r.executable_path}")
             if cap_str:
                 print(f"      [{cap_str}]")
             print()
 
     if report.failed:
-        print("  ✗ Found but Validation Failed:")
+        print("  [FAIL] Found but Validation Failed:")
         print()
         for r in report.failed:
-            print(f"    ✗ {r.provider_id}: {r.errors[0] if r.errors else 'unknown error'}")
+            print(f"    [FAIL] {r.provider_id}: {r.errors[0] if r.errors else 'unknown error'}")
         print()
 
     if report.not_found:
@@ -171,12 +171,12 @@ def _print_validation_report(report):
 def _print_installer_result(result, elapsed: float):
     """Print a human-readable installer result."""
     print("=" * 56)
-    print("  Mission Control — Installation Report")
+    print("  Mission Control -- Installation Report")
     print("=" * 56)
     print()
 
     for phase in result.phases:
-        status = "✓" if phase.success else "✗"
+        status = "[OK]" if phase.success else "[FAIL]"
         print(f"  {status} {phase.phase} ({phase.duration_seconds:.1f}s)")
         if phase.details:
             print(f"     {phase.details}")
@@ -184,12 +184,12 @@ def _print_installer_result(result, elapsed: float):
 
     print(f"  Bound Providers: {len(result.bound_providers)}")
     for pid in result.bound_providers:
-        print(f"    ✓ {pid}")
+        print(f"    [OK] {pid}")
 
     if result.binding_errors:
         print("  Binding Errors:")
         for err in result.binding_errors:
-            print(f"    ✗ {err}")
+            print(f"    [FAIL] {err}")
 
     print()
     print(f"  Total: {result.total_duration_seconds:.1f}s")
