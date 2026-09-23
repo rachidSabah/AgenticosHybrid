@@ -98,8 +98,8 @@ export class AgenticExecutionBus {
       <div className="flex items-center justify-between border-b border-border/60 pb-3">
         <div className="flex items-center gap-3">
           <Stat label="Active Multiplayer Cursors" value={cursors.length} tone="ok" />
-          <Stat label="Indexed AST Symbols" value={vfsTree?.total_ast_symbols ?? 1420} />
-          <Stat label="Monorepo Modules" value={vfsTree?.total_modules ?? 48} />
+          <Stat label="Indexed AST Symbols" value={vfsTree?.total_ast_symbols ?? "—"} />
+          <Stat label="Monorepo Modules" value={vfsTree?.total_modules ?? "—"} />
         </div>
         <div className="flex items-center gap-2">
           <input

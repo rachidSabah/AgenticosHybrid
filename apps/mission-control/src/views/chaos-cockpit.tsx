@@ -11,6 +11,14 @@ export function ChaosCockpit() {
   const [injecting, setInjecting] = useState(false);
   const [selectedFault, setSelectedFault] = useState("kill_agent_worker");
 
+  // Aggregate resilience stats from real experiment results — no hardcoded values.
+  const avgRecoveryMs = experiments.length > 0
+    ? experiments.reduce((acc, e) => acc + (e.recovery_time_ms ?? 0), 0) / experiments.length
+    : null;
+  const avgResilienceScore = experiments.length > 0
+    ? experiments.reduce((acc, e) => acc + (e.resilience_score ?? 0), 0) / experiments.length
+    : null;
+
   const loadData = useCallback(async () => {
     try {
       const [exp, can] = await Promise.all([
@@ -33,19 +41,17 @@ export function ChaosCockpit() {
 
   const handleInjectFault = async () => {
     setInjecting(true);
-    // Render the optimistic experiment immediately so the UI updates
-    // without waiting for the (possibly slow / offline) API round-trip.
+    // Show a pending placeholder — NO fabricated timing or resilience values.
     const optimisticId = `chaos-${Date.now()}`;
     const optimisticExp = {
       experiment_id: optimisticId,
       fault_type: selectedFault,
-      status: "recovered_cleanly",
-      recovery_time_ms: 42.0,
-      resilience_score: 99.4,
+      status: "pending",
+      recovery_time_ms: null,
+      resilience_score: null,
       logs: [
-        `[CHAOS_INJECT] Target: agent-worker-03, Fault: ${selectedFault}`,
-        `[ISOLATION_BARRIER] Subsystem fenced within 12ms`,
-        `[AUTO_HEAL] Worker auto-spawned, recovered_cleanly in 42ms`,
+        `[CHAOS_INJECT] Submitting fault: ${selectedFault}`,
+        `[PENDING] Awaiting backend response…`,
       ],
     };
     setExperiments((prev) => [optimisticExp, ...prev]);
@@ -57,37 +63,43 @@ export function ChaosCockpit() {
       if (res && res.experiment_id && res.logs) {
         // Replace the optimistic entry with the real server response.
         setExperiments((prev) => [res, ...prev.filter((e) => e.experiment_id !== res.experiment_id && e.experiment_id !== optimisticId)]);
+      } else {
+        // Backend returned no useful data — remove optimistic entry.
+        setExperiments((prev) => prev.filter((e) => e.experiment_id !== optimisticId));
       }
       await loadData();
+    } catch {
+      // Remove the pending placeholder on error so nothing false remains.
+      setExperiments((prev) => prev.filter((e) => e.experiment_id !== optimisticId));
     } finally {
       setInjecting(false);
     }
   };
 
   const handleDeployCanary = async () => {
-    // Render the optimistic canary entry immediately so the UI updates
-    // without waiting for the (possibly slow / offline) API round-trip.
+    // Show a pending placeholder — NO fabricated incident ID, RCA, or status.
     const optimisticId = `canary-${Date.now()}`;
     const optimisticCanary = {
       deployment_id: optimisticId,
-      incident_id: "INC-LIVE-409",
-      remediation_title: "Autonomous Exponential Backoff Canary Mitigation",
-      status: "applied",
-      rca_postmortem: "ROOT CAUSE ANALYSIS (RCA) for INC-LIVE-409:\nTransient socket starvation. Auto-applied canary patch in ephemeral worktree branch.",
+      incident_id: "pending",
+      remediation_title: "Canary patch — awaiting backend response",
+      status: "pending",
+      rca_postmortem: "",
     };
     setCanaries((prev) => [optimisticCanary, ...prev]);
     try {
       const res = await api.post<any>("/api/healing/canary/deploy", {
-        incident_id: `INC-LIVE-${Math.floor(Math.random() * 900 + 100)}`,
         title: "Autonomous Exponential Backoff Canary Mitigation",
       });
       if (res && res.deployment_id) {
         // Replace the optimistic entry with the real server response.
         setCanaries((prev) => [res, ...prev.filter((c) => c.deployment_id !== res.deployment_id && c.deployment_id !== optimisticId)]);
+      } else {
+        setCanaries((prev) => prev.filter((c) => c.deployment_id !== optimisticId));
       }
       await loadData();
     } catch {
-      // Optimistic entry is already visible — nothing more to do.
+      setCanaries((prev) => prev.filter((c) => c.deployment_id !== optimisticId));
     }
   };
 
@@ -104,10 +116,18 @@ export function ChaosCockpit() {
 
   return (
     <div className="flex h-full flex-col bg-background text-text p-4 space-y-4 overflow-auto">
-      {/* Top Telemetry Stats */}
+      {/* Top Telemetry Stats — sourced from real experiment results */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Stat label="Resilience Score" value="99.4%" tone="ok" />
-        <Stat label="Avg Recovery Time" value="42ms" tone="ok" />
+        <Stat
+          label="Resilience Score"
+          value={avgResilienceScore != null ? `${avgResilienceScore.toFixed(1)}%` : "No data"}
+          tone={avgResilienceScore != null ? "ok" : "warn"}
+        />
+        <Stat
+          label="Avg Recovery Time"
+          value={avgRecoveryMs != null ? `${avgRecoveryMs.toFixed(0)}ms` : "No data"}
+          tone={avgRecoveryMs != null ? "ok" : "warn"}
+        />
         <Stat label="Chaos Experiments" value={experiments.length} />
         <Stat label="Canary Hotfixes" value={canaries.length} />
       </div>
@@ -146,10 +166,13 @@ export function ChaosCockpit() {
                   <div key={exp.experiment_id} className="rounded-xl border border-border/40 bg-surface/15 p-3 text-xs">
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="font-semibold text-accent">{exp.fault_type}</span>
-                      <Badge tone="ok">{exp.status} in {exp.recovery_time_ms}ms</Badge>
+                      <Badge tone={exp.status === "pending" ? "warn" : "ok"}>
+                        {exp.status}
+                        {exp.recovery_time_ms != null ? ` in ${exp.recovery_time_ms}ms` : ""}
+                      </Badge>
                     </div>
                     <div className="space-y-1 font-mono text-[10px] text-faint bg-surface/40 p-2 rounded-lg">
-                      {exp.logs.map((l: string, idx: number) => (
+                      {(exp.logs ?? []).map((l: string, idx: number) => (
                         <div key={idx}>{l}</div>
                       ))}
                     </div>
@@ -179,11 +202,13 @@ export function ChaosCockpit() {
                   <div key={can.deployment_id} className="rounded-xl border border-border/40 bg-surface/15 p-3 text-xs space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-text">{can.remediation_title}</span>
-                      <Badge tone={can.status === "applied" ? "ok" : "warn"}>{can.status}</Badge>
+                      <Badge tone={can.status === "applied" ? "ok" : can.status === "pending" ? "warn" : "default"}>{can.status}</Badge>
                     </div>
-                    <div className="text-[11px] text-faint font-mono whitespace-pre-line bg-surface/40 p-2 rounded-lg">
-                      {can.rca_postmortem}
-                    </div>
+                    {can.rca_postmortem ? (
+                      <div className="text-[11px] text-faint font-mono whitespace-pre-line bg-surface/40 p-2 rounded-lg">
+                        {can.rca_postmortem}
+                      </div>
+                    ) : null}
                     {can.status === "applied" && (
                       <button
                         onClick={() => handleRollbackCanary(can.deployment_id)}
