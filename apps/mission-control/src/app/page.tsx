@@ -144,6 +144,10 @@ const EgressPolicyView = lazyWithRetry(() =>
   import("@/views/egress-policy").then((m) => ({ default: m.EgressPolicyView }))
 );
 
+const CostCockpit = lazyWithRetry(() =>
+  import("@/views/cost-cockpit").then((m) => ({ default: m.CostCockpit }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -279,6 +283,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Egress Policy" fallback={<ViewSkeleton title="Egress Policy" />}>
       <Suspense fallback={<ViewSkeleton title="Egress Policy" />}>
         <EgressPolicyView />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "cost-cockpit": () => (
+    <ErrorBoundary viewName="Cost Cockpit" fallback={<ViewSkeleton title="Cost Cockpit" />}>
+      <Suspense fallback={<ViewSkeleton title="Cost Cockpit" />}>
+        <CostCockpit />
       </Suspense>
     </ErrorBoundary>
   ),

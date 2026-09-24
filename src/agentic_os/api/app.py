@@ -8429,6 +8429,59 @@ def create_app(platform: Platform) -> FastAPI:
         verdict = get_egress_policy_manager().airgap_verdict(url)
         return verdict.to_dict()
 
+    # ── Cost cockpit (measured spend, budget alerts, honest forecast) ─────
+    from agentic_os.core.costs.ledger import CostLedgerError, get_cost_ledger
+
+    @app.get("/api/costs/summary")
+    async def costs_summary(window_hours: float | None = None) -> dict:
+        ledger = await get_cost_ledger(bus=platform.bus)
+        return ledger.summary(window_hours=window_hours)
+
+    @app.get("/api/costs/ledger")
+    async def costs_ledger(limit: int = 200) -> dict:
+        ledger = await get_cost_ledger(bus=platform.bus)
+        return {"entries": ledger.ledger_rows(limit=limit)}
+
+    @app.post("/api/costs/record")
+    async def costs_record(body: dict) -> dict:
+        """Explicit accounting channel for integrations that push costs."""
+        cost = body.get("cost_usd", body.get("cost"))
+        if cost is None:
+            raise HTTPException(400, detail="cost_usd is required")
+        ledger = await get_cost_ledger(bus=platform.bus)
+        try:
+            entry = ledger.record(
+                cost_usd=float(cost),
+                agent_id=str(body.get("agent_id", "")),
+                plan_id=str(body.get("plan_id", "")),
+                task_id=str(body.get("task_id", "")),
+                model=str(body.get("model", "")),
+                source=str(body.get("source", "operator")),
+            )
+        except CostLedgerError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        return entry
+
+    @app.get("/api/costs/budget")
+    async def costs_get_budget() -> dict:
+        ledger = await get_cost_ledger(bus=platform.bus)
+        return ledger.budget_status()
+
+    @app.post("/api/costs/budget")
+    async def costs_set_budget(body: dict) -> dict:
+        ledger = await get_cost_ledger(bus=platform.bus)
+        total = body.get("total_usd")
+        try:
+            ledger.set_budget(float(total) if total is not None else None)
+        except CostLedgerError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+        return ledger.budget_status()
+
+    @app.get("/api/costs/alerts")
+    async def costs_alerts() -> dict:
+        ledger = await get_cost_ledger(bus=platform.bus)
+        return {"alerts": ledger.summary()["alerts"]}
+
     @app.get("/api/proxy/models")
     async def list_proxy_models(name: str) -> dict:
         """Real model catalog exposed by a bound proxy — live fetch, no cache."""

@@ -385,6 +385,68 @@ export interface RedactionReport {
   by_class: Record<string, number>;
 }
 
+// ── Cost cockpit types ──────────────────────────────────────────────
+
+export interface CostBreakdownRow {
+  key: string;
+  cost_usd: number;
+}
+
+export interface CostBurnRate {
+  usd_per_hour: number;
+  window_span_hours: number;
+  entries_measured: number;
+}
+
+export interface CostForecast {
+  method: string;
+  next_24h_usd: number;
+  next_7d_usd: number;
+}
+
+export interface CostBudgetStatus {
+  budget_usd: number | null;
+  spent_usd: number;
+  remaining_usd: number | null;
+  used_ratio: number | null;
+  note?: string;
+  crossed_thresholds?: number[];
+}
+
+export interface CostAlert {
+  ts: number;
+  threshold: number;
+  spent_usd: number;
+  budget_usd: number;
+  used_ratio: number;
+}
+
+export interface CostSummary {
+  has_data: boolean;
+  window_hours: number | null;
+  entries: number;
+  total_usd: number | null;
+  by_agent: CostBreakdownRow[];
+  by_plan: CostBreakdownRow[];
+  by_model: CostBreakdownRow[];
+  by_day: Array<{ day: string; cost_usd: number }>;
+  burn_rate_usd_per_hour: CostBurnRate | null;
+  forecast: CostForecast | null;
+  budget: CostBudgetStatus;
+  alerts: CostAlert[];
+}
+
+export interface CostEntry {
+  ts: number;
+  cost_usd: number;
+  agent_id: string;
+  plan_id: string;
+  task_id: string;
+  model: string;
+  source: string;
+  day: string;
+}
+
 export const api = {
   /** Generic request wrappers */
   get: <T>(path: string) => get<T>(path),
@@ -542,6 +604,33 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ url }),
     }),
+
+  /** Cost cockpit — measured spend, budget alerts, honest forecast */
+  costSummary: (windowHours?: number) =>
+    requestExact<CostSummary>(
+      `/api/costs/summary${windowHours ? `?window_hours=${windowHours}` : ""}`
+    ),
+  costLedger: (limit = 100) =>
+    requestExact<{ entries: CostEntry[] }>(`/api/costs/ledger?limit=${limit}`),
+  costRecord: (body: {
+    cost_usd: number;
+    agent_id?: string;
+    plan_id?: string;
+    task_id?: string;
+    model?: string;
+    source?: string;
+  }) =>
+    requestExact<CostEntry>("/api/costs/record", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  costGetBudget: () => requestExact<CostBudgetStatus>("/api/costs/budget"),
+  costSetBudget: (totalUsd: number | null) =>
+    requestExact<CostBudgetStatus>("/api/costs/budget", {
+      method: "POST",
+      body: JSON.stringify({ total_usd: totalUsd }),
+    }),
+  costAlerts: () => requestExact<{ alerts: CostAlert[] }>("/api/costs/alerts"),
 
   health: () => get<{ status: string; bus: string }>("/healthz"),
   eventsRecent: (limit = 100) => get<Array<Record<string, unknown>>>(`/api/events/recent?limit=${limit}`),

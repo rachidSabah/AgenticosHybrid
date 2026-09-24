@@ -94,6 +94,7 @@ export const NAV: NavItem[] = [
   { id: "fleet", label: "Agent Fleet", hint: "A", icon: Bot, group: "core" },
   { id: "agent-control", label: "Agent Cgroups & Packages", hint: "G", icon: Boxes, group: "core" },
   { id: "egress-policy", label: "Egress Policy", hint: "E", icon: Shield, group: "core" },
+  { id: "cost-cockpit", label: "Cost Cockpit", hint: "C", icon: Gauge, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [
