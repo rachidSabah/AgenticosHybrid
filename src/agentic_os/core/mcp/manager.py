@@ -345,6 +345,19 @@ class MCPManager:
         timeout: int | None = None,
     ) -> MCPToolResult:
         """Invoke a tool on an MCP server with authorization."""
+        # Egress policy tool rules (deny wins, then allow list) apply BEFORE
+        # the invocation; a refusal names the rule that matched.
+        try:
+            from agentic_os.core.security.egress_policy import get_egress_policy_manager
+
+            verdict = get_egress_policy_manager().tool_verdict(f"{server_id}/{tool}")
+            if not verdict.allowed:
+                raise PermissionError(f"Tool invocation denied: {verdict.reason}")
+        except PermissionError:
+            raise
+        except Exception:
+            pass  # policy layer unavailable: existing security checks still apply
+
         if self.security:
             decision = await self.security.authorize_tool_invoke(
                 self.default_principal,

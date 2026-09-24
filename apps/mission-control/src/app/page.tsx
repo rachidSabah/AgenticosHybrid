@@ -140,6 +140,10 @@ const AgentControl = lazyWithRetry(() =>
   import("@/views/agent-control").then((m) => ({ default: m.AgentControl }))
 );
 
+const EgressPolicyView = lazyWithRetry(() =>
+  import("@/views/egress-policy").then((m) => ({ default: m.EgressPolicyView }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -268,6 +272,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     >
       <Suspense fallback={<ViewSkeleton title="Agent Cgroups & Packages" />}>
         <AgentControl />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "egress-policy": () => (
+    <ErrorBoundary viewName="Egress Policy" fallback={<ViewSkeleton title="Egress Policy" />}>
+      <Suspense fallback={<ViewSkeleton title="Egress Policy" />}>
+        <EgressPolicyView />
       </Suspense>
     </ErrorBoundary>
   ),

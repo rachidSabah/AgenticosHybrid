@@ -74,6 +74,10 @@ from agentic_os.config import settings
 from agentic_os.core.brains.discovery_engine import agent_discovery_engine
 from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.omniroute.engine import omniroute_engine
+from agentic_os.core.security.egress_policy import (
+    PolicyViolation,
+    get_egress_policy_manager,
+)
 from agentic_os.discovery.service import discovery_service
 from agentic_os.domain.agent import Role, Task, TaskStatus
 from agentic_os.domain.events import EventEnvelope, Topic
@@ -8217,17 +8221,24 @@ def create_app(platform: Platform) -> FastAPI:
         raw = body.get("profiles")
         if not isinstance(raw, list):
             raw = [body] if body.get("base_url") else []
-        profiles = [
-            ProxyProfile(
-                name=str(p.get("name", "")) or f"proxy-{i}",
-                base_url=str(p.get("base_url", "")),
-                api_key_env=str(p.get("api_key_env", "")),
-                model=str(p.get("model", "")),
-                wire=str(p.get("wire", "chat")),
+        _egress = get_egress_policy_manager()
+        profiles = []
+        for i, p in enumerate(raw):
+            if not (isinstance(p, dict) and p.get("base_url")):
+                continue
+            base_url = str(p.get("base_url", ""))
+            verdict = _egress.airgap_verdict(base_url)
+            if not verdict.allowed:
+                raise HTTPException(403, verdict.reason)
+            profiles.append(
+                ProxyProfile(
+                    name=str(p.get("name", "")) or f"proxy-{i}",
+                    base_url=base_url,
+                    api_key_env=str(p.get("api_key_env", "")),
+                    model=str(p.get("model", "")),
+                    wire=str(p.get("wire", "chat")),
+                )
             )
-            for i, p in enumerate(raw)
-            if isinstance(p, dict) and p.get("base_url")
-        ]
         if not profiles:
             raise HTTPException(400, "at least one profile with base_url is required")
         chain = set_proxy_chain(ProxyChain(profiles=profiles))
@@ -8321,6 +8332,11 @@ def create_app(platform: Platform) -> FastAPI:
     async def add_proxy_binding(body: dict) -> dict:
         """Bind one proxy endpoint manually and persist it to the chain."""
         name, base_url, api_key_env, model = _validate_binding_payload(body)
+        # Air-gap mode refuses non-loopback bindings at bind time (defense in
+        # depth: egress is checked again at request time).
+        verdict = get_egress_policy_manager().airgap_verdict(base_url)
+        if not verdict.allowed:
+            raise HTTPException(403, verdict.reason)
         chain = get_proxy_chain()
         if any(p.name == name for p in chain.profiles):
             raise HTTPException(409, f"binding {name!r} already exists — remove it first")
@@ -8351,6 +8367,67 @@ def create_app(platform: Platform) -> FastAPI:
             "profiles": [dataclasses.asdict(p) for p in chain.profiles],
             "removed": name,
         }
+
+    # ── Egress policy (redaction, tool rules, cost caps, air-gap) ─────────
+
+    @app.get("/api/egress-policy")
+    async def get_egress_policy() -> dict:
+        """The active egress policy, exactly as persisted."""
+        return get_egress_policy_manager().get_policy().to_dict()
+
+    @app.put("/api/egress-policy")
+    async def put_egress_policy(body: dict) -> dict:
+        """Update the egress policy. Invalid custom regexes are refused."""
+        try:
+            return get_egress_policy_manager().update(**body).to_dict()
+        except PolicyViolation as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/egress-policy/inspect")
+    async def inspect_egress(body: dict) -> dict:
+        """Dry-run redaction over the given text: counts by class, no output text."""
+        text = body.get("text", "")
+        if not isinstance(text, str) or not text:
+            raise HTTPException(400, detail="text is required")
+        return get_egress_policy_manager().inspect(text)
+
+    @app.post("/api/egress-policy/redact")
+    async def redact_egress(body: dict) -> dict:
+        """Apply real redaction to the given text and return the scrubbed text."""
+        text = body.get("text", "")
+        if not isinstance(text, str) or not text:
+            raise HTTPException(400, detail="text is required")
+        mgr = get_egress_policy_manager()
+        from agentic_os.core.security.egress_policy import RedactionReport
+
+        report = RedactionReport()
+        cleaned = mgr.redact_text(text, report)
+        return {"redacted": cleaned, "report": report.to_dict()}
+
+    @app.post("/api/egress-policy/check-tool")
+    async def check_tool_egress(body: dict) -> dict:
+        tool = str(body.get("tool", ""))
+        if not tool:
+            raise HTTPException(400, detail="tool is required")
+        verdict = get_egress_policy_manager().tool_verdict(tool)
+        return verdict.to_dict()
+
+    @app.post("/api/egress-policy/check-cost")
+    async def check_cost_egress(body: dict) -> dict:
+        model = str(body.get("model", ""))
+        usage = body.get("usage")
+        if not model:
+            raise HTTPException(400, detail="model is required")
+        verdict = get_egress_policy_manager().cost_verdict(model, usage)
+        return verdict.to_dict()
+
+    @app.post("/api/egress-policy/check-url")
+    async def check_url_egress(body: dict) -> dict:
+        url = str(body.get("url", ""))
+        if not url:
+            raise HTTPException(400, detail="url is required")
+        verdict = get_egress_policy_manager().airgap_verdict(url)
+        return verdict.to_dict()
 
     @app.get("/api/proxy/models")
     async def list_proxy_models(name: str) -> dict:

@@ -39,6 +39,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from agentic_os.core.providers.manager import ProviderManagerImpl
+from agentic_os.core.security.egress_policy import (
+    PolicyViolation,
+    get_egress_policy_manager,
+)
 from agentic_os.domain.agent import Agent, Task
 from agentic_os.infrastructure.logging import get_logger
 
@@ -157,11 +161,19 @@ async def _proxy_chat_completion(
 ) -> dict | AsyncGenerator[dict, None]:
     """Proxy a chat completion request to an openai_compatible provider.
 
-    Supports streaming passthrough.
+    Supports streaming passthrough. The egress policy applies BEFORE any
+    byte leaves the machine: air-gap check on the endpoint, then redaction
+    of every message string. The cost cap is checked against the usage the
+    endpoint actually reports.
     """
     base_url: str = getattr(adapter, "_base_url", "")
     api_key: str = getattr(adapter, "_api_key", "")
     timeout: float = getattr(adapter, "_timeout", 120.0)
+
+    policy = get_egress_policy_manager()
+    airgap = policy.airgap_verdict(base_url)
+    if not airgap.allowed:
+        raise PolicyViolation(airgap.reason)
 
     url = f"{base_url.rstrip('/')}/v1/chat/completions"
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
@@ -182,6 +194,20 @@ async def _proxy_chat_completion(
     if body.stop is not None:
         payload["stop"] = body.stop
 
+    # Egress redaction: every string that would leave the machine is scrubbed
+    # first; the report is logged with the real counts.
+    from agentic_os.core.security.egress_policy import RedactionReport
+
+    report = RedactionReport()
+    payload["messages"] = policy.redact_payload(payload["messages"], report)
+    if report.replacements:
+        log.info(
+            "egress.redacted",
+            replacements=report.replacements,
+            by_class=report.to_dict()["by_class"],
+            base_url=base_url,
+        )
+
     client = httpx.AsyncClient(timeout=timeout)
 
     if not body.stream:
@@ -189,6 +215,9 @@ async def _proxy_chat_completion(
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
+            verdict = policy.cost_verdict(model, data.get("usage"))
+            if not verdict.allowed:
+                raise PolicyViolation(verdict.reason)
             return data
         finally:
             await client.aclose()
@@ -223,6 +252,12 @@ async def _adapter_chat_completion(
         role = msg.role.upper()
         prompt_parts.append(f"<{role}>\n{msg.content}\n</{role}>")
     prompt = "\n\n".join(prompt_parts)
+
+    # Egress redaction applies to the adapter path too.
+    from agentic_os.core.security.egress_policy import RedactionReport as _RR
+
+    _report = _RR()
+    prompt = get_egress_policy_manager().redact_text(prompt, _report)
 
     agent = Agent(
         id="gateway",

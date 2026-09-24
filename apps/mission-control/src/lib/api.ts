@@ -360,6 +360,31 @@ export interface VerifyResult {
   problems: string[];
 }
 
+// ── Egress policy types ───────────────────────────────────────────────
+
+export interface EgressPolicy {
+  redact_secrets: boolean;
+  redact_pii: boolean;
+  custom_redactions: Record<string, string>;
+  tools_deny: string[];
+  tools_allow: string[];
+  max_cost_per_call_usd: number | null;
+  price_per_1k_tokens: Record<string, number>;
+  air_gap: boolean;
+}
+
+export interface EgressVerdict {
+  allowed: boolean;
+  reason: string;
+  measured_cost_usd?: number | null;
+  tokens?: number;
+}
+
+export interface RedactionReport {
+  replacements: number;
+  by_class: Record<string, number>;
+}
+
 export const api = {
   /** Generic request wrappers */
   get: <T>(path: string) => get<T>(path),
@@ -480,6 +505,42 @@ export const api = {
     requestExact<Record<string, unknown>>("/api/packages/rollback", {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+
+  /** Egress policy — redaction, tool rules, cost caps, air-gap */
+  egressPolicy: () => requestExact<EgressPolicy>("/api/egress-policy"),
+  egressPolicyUpdate: (changes: Partial<EgressPolicy>) =>
+    requestExact<EgressPolicy>("/api/egress-policy", {
+      method: "PUT",
+      body: JSON.stringify(changes),
+    }),
+  egressInspect: (text: string) =>
+    requestExact<RedactionReport>("/api/egress-policy/inspect", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  egressRedact: (text: string) =>
+    requestExact<{ redacted: string; report: RedactionReport }>(
+      "/api/egress-policy/redact",
+      {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      }
+    ),
+  egressCheckTool: (tool: string) =>
+    requestExact<EgressVerdict>("/api/egress-policy/check-tool", {
+      method: "POST",
+      body: JSON.stringify({ tool }),
+    }),
+  egressCheckCost: (model: string, usage: Record<string, unknown> | null) =>
+    requestExact<EgressVerdict>("/api/egress-policy/check-cost", {
+      method: "POST",
+      body: JSON.stringify({ model, usage }),
+    }),
+  egressCheckUrl: (url: string) =>
+    requestExact<EgressVerdict>("/api/egress-policy/check-url", {
+      method: "POST",
+      body: JSON.stringify({ url }),
     }),
 
   health: () => get<{ status: string; bus: string }>("/healthz"),
