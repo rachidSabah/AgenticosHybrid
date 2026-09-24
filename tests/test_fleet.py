@@ -311,3 +311,39 @@ def test_fleet_event_loop_safe_concurrent_dispatch(tmp_path: Path):
     else:
         results = asyncio.run(scenario())
     assert all(r["status"] == "completed" for r in results)
+
+
+# ── Windows shebang honoring ─────────────────────────────────────────────────
+
+
+def test_windows_shebang_resolution(monkeypatch, tmp_path):
+    """On Windows a python script is driven under the running interpreter."""
+    import agentic_os.core.fleet.driver as driver
+
+    script = tmp_path / "cli.py"
+    script.write_text("#!/usr/bin/env python3\nprint('x')\n", encoding="utf-8")
+    monkeypatch.setattr(driver.sys, "platform", "win32")
+    argv = driver._argv_with_shebang([str(script), "--flag", "prompt"])
+    assert argv[0] == driver.sys.executable
+    assert argv[1:] == [str(script), "--flag", "prompt"]
+
+
+def test_windows_non_script_passthrough(monkeypatch, tmp_path):
+    """A native executable passes through unchanged (CreateProcess handles it)."""
+    import agentic_os.core.fleet.driver as driver
+
+    exe = tmp_path / "tool.exe"
+    exe.write_bytes(b"MZ\x90\x00")
+    monkeypatch.setattr(driver.sys, "platform", "win32")
+    argv = driver._argv_with_shebang([str(exe), "x"])
+    assert argv == [str(exe), "x"]
+
+
+def test_posix_shebang_untouched(tmp_path):
+    """On POSIX the kernel honors shebangs; argv passes through untouched."""
+    import agentic_os.core.fleet.driver as driver
+
+    script = tmp_path / "cli.py"
+    script.write_text("#!/usr/bin/env python3\nprint('x')\n", encoding="utf-8")
+    argv = driver._argv_with_shebang([str(script), "prompt"])
+    assert argv == [str(script), "prompt"]

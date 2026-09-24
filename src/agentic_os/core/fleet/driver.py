@@ -70,6 +70,39 @@ def _creation_flags() -> int:
     return 0
 
 
+def _argv_with_shebang(argv: list[str]) -> list[str]:
+    """Honor a POSIX shebang on Windows, where exec() ignores it.
+
+    On POSIX the kernel executes ``#!`` scripts natively, so argv passes
+    through untouched. On Windows CreateProcess cannot execute a script
+    directly; when argv[0] is a script file whose first line is a shebang
+    naming a python interpreter, run it under the interpreter that is
+    actually running AgenticOS. Anything else passes through unchanged and
+    a real exec failure is reported honestly via exit status.
+    """
+    if sys.platform != "win32":
+        return argv
+    try:
+        exe = Path(argv[0])
+        if not exe.is_file():
+            return argv
+        with exe.open("rb") as f:
+            head = f.read(160)
+        if not head.startswith(b"#!"):
+            return argv
+        first = head.split(b"\n", 1)[0].decode("utf-8", "replace").strip()
+        parts = first[2:].strip().split()
+        if parts and Path(parts[0]).name.lower() == "env":
+            parts = parts[1:]
+        if not parts:
+            return argv
+        if "python" in Path(parts[0]).name.lower():
+            return [sys.executable, *argv]
+    except Exception:
+        return argv
+    return argv
+
+
 class FleetError(ValueError):
     """Operator-facing fleet error (mapped to HTTP 400/404)."""
 
@@ -319,6 +352,7 @@ class FleetManager:
                 "this entry has no headless adapter and is not an agent - dispatch refused"
             )
         argv = self._argv_for(agent, adapter, prompt)
+        argv = _argv_with_shebang(argv)
 
         record = FleetRunRecord(
             agent_id=agent_id,
