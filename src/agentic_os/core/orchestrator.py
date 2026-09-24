@@ -102,7 +102,7 @@ def _build_failure_report(
     )
 
 
-def _is_unusable_output(text: str) -> bool:
+def _is_unusable_output(text: str | None) -> bool:
     """Heuristic: provider output that must not be persisted as a task report.
 
     Guards against two failure modes observed with bound agent CLIs:
@@ -161,7 +161,7 @@ _ERROR_SIGNATURES = (
 )
 
 
-def _is_error_output(text: str) -> bool:
+def _is_error_output(text: str | None) -> bool:
     """True when ``text`` is an error/diagnostic, not real execution output.
 
     Used to prevent a failed agent run (auth error, crashed CLI, unsupported
@@ -1129,7 +1129,7 @@ class Orchestrator:
         self,
         agent: Agent,
         task: Task,
-        result: str,
+        result: str | None,
         elapsed: float,
     ) -> None:
         """Publish task.plan_generated / agent.completed-with-caveat events.
@@ -1273,7 +1273,7 @@ class Orchestrator:
         self,
         agent: Agent,
         task: Task,
-        result: str,
+        result: str | None,
         elapsed: float,
         recovered: bool = False,
         fallback: bool = False,

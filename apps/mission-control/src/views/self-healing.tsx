@@ -237,6 +237,19 @@ export function SelfHealingPanel() {
   const autoRepair = useCallback(async (subsystem: string) => {
     try {
       const res = await api.repairSystem([subsystem]);
+      // Honest gate: api.post returns {success:false,status:"offline",...} when
+      // the control plane is unreachable. No repair actually happened —
+      // nothing may be marked as fixed (spec absolute rule: no fabricated
+      // repair results). `status` is only present on transport-level failures.
+      const raw = res as unknown as Record<string, unknown> | null;
+      if (res && res.success === false) {
+        setError(
+          raw?.status === "offline"
+            ? "Backend offline — repair did NOT run; issue remains unresolved."
+            : `Repair failed: ${res.error ?? "backend returned an error"}`
+        );
+        return;
+      }
       const failedList = res?.failed ?? [];
       const cleanSub = subsystem.replace("provider:", "");
       setResolvedIds((prev) => new Set([...prev, subsystem, cleanSub, `provider:${cleanSub}`, `provider-${cleanSub}`]));
@@ -296,6 +309,20 @@ export function SelfHealingPanel() {
               setRunning(true);
               try {
                 const res = await api.repairSystem();
+                // Honest gate: api.post returns {success:false,...} when the
+                // control plane is unreachable. No repair actually happened —
+                // nothing may be marked as fixed (spec absolute rule: no
+                // fabricated repair results). `status` is only present on
+                // transport-level failures.
+                const raw = res as unknown as Record<string, unknown> | null;
+                if (res && res.success === false) {
+                  setError(
+                    raw?.status === "offline"
+                      ? "Backend offline — Repair All did NOT run; issues remain unresolved."
+                      : `Repair All failed: ${res.error ?? "backend returned an error"}`
+                  );
+                  return;
+                }
                 const failedList = res?.failed ?? [];
                 setResolvedIds((prev) => {
                   const next = new Set(prev);

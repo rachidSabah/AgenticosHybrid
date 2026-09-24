@@ -209,3 +209,94 @@ New regression coverage maps directly to the brief's critical tests:
 §35 markdown-only ≠ completed (2) · §41 independent artifact verification (5) ·
 §8/§15 retry-path guard + no fabricated completion string (2) · §9/§24 installed ≠ active (1) ·
 §39 missing binary → raise (1) · mock-results-fail contract (1).
+
+## H. CI Remediation Round (post-push)
+
+The first CI run on the remediated HEAD reported 9 failing checks. Forensic
+reproduction of every failing step locally identified **three independent
+root causes** — none of them test-infra flake, all of them real defects:
+
+### H.1 Python lint/type regressions from the rebase merge (8 of 9 failures)
+
+`src/agentic_os/api/app.py` carried an unused `BrainStatus` import (F401) and
+`src/agentic_os/core/orchestrator.py` had one formatting violation plus four
+`ty` type errors: `_is_error_output` / `_is_unusable_output` /
+`_publish_completed` / `_publish_plan_generated` were annotated
+`result: str` although `parse_output` legitimately produces `str | None`
+and every one of these functions already None-guards its body.
+
+*Failure cascade*: `ruff-check`, `ruff-format`, `ty`, `lint-and-test (3.13)`
+(with fail-fast cancelling the 3.12 leg), the `CI` gate, plus the early
+`ruff check src/` step of `NVIDIA full-system-test`, `test-wsl` and
+`test-windows` — i.e. **8 of the 9 red checks shared this single root cause**.
+
+*Fix*: remove the dead import; widen the four signatures to `str | None`
+(truthful annotation of existing None-safe bodies — the error guard treats
+`None` output as "agent produced no stdout" and records an honest FAILED);
+apply ruff formatting to the merged region. No behavioral change.
+
+### H.2 Fabrication RE-INTRODUCED for E2E (spec violation — removed again)
+
+Commit `bf45a70` ("restore offline fallback simulation … for standalone
+Playwright E2E") had planted offline-fabrication fallbacks so the old
+dishonest e2e specs would pass without a backend:
+
+* `chaos-cockpit.tsx`: offline fault injection synthesized
+  `status:"recovered_cleanly"`, `recovery_time_ms:42.0`,
+  `resilience_score:99.0` and fake `[AUTONOMOUS_HEAL]` logs; offline canary
+  deployment synthesized incident `INC-88912` with a full fake
+  "ROOT CAUSE ANALYSIS (RCA) … 100% ephemeral worktree validation pass".
+* `swarm-studio.tsx`: offline debate synthesized 3 agents and
+  `approval_rating:0.96` (this one had already been re-removed during the
+  rebase; verified still absent).
+
+Removed again per the absolute rule (no simulated fault injection results,
+no synthetic RCA, no invented recovery metrics). The views now state the
+honest fact via a visible operator notice — "Backend offline — fault was
+NOT injected; no experiment recorded." / "Backend offline — canary was NOT
+deployed; no deployment recorded." — and keep the empty states.
+
+Additional honesty defect fixed in `self-healing.tsx`: `Repair All` /
+per-issue repair marked every issue "Auto-repaired" even when
+`api.repairSystem` returned `{success:false, status:"offline"}` — i.e. the
+UI claimed repairs that never ran. Both handlers now gate on
+`success === false` (transport-level failure) and render
+"Backend offline — Repair All did NOT run; issues remain unresolved.",
+leaving issues unresolved. `handleRollbackCanary` likewise only marks
+`rolled_back` when the backend actually accepted the rollback.
+
+### H.3 e2e specs asserting removed fabrications (frontend job failure)
+
+`ci.yml frontend` failed in its Playwright step: 3 specs still asserted the
+deleted fabricated UI. They are rewritten to assert the **honest offline
+behavior** — the same contract the views now implement:
+
+| spec | old (fabricated) expectation | new (honest) expectation |
+|------|------------------------------|--------------------------|
+| chaos-cockpit | "recovered_cleanly" appears after Inject Fault; "ROOT CAUSE ANALYSIS (RCA)" + rollback after canary click | notice "fault was NOT injected" / "canary was NOT deployed"; empty states persist; `recovered_cleanly`, synthetic RCA, rollback control all `toHaveCount(0)` |
+| gpu-acceleration | "DeepSeek Coder 6.7B" + "Qwen 2.5 Coder 7B" model cards | "No models detected" empty state; both fabricated names `toHaveCount(0)` |
+| self-healing | "0 unresolved" + "No active issues" after offline Repair All | "EventBus WebSocket disconnected" issue is detected; notice "Repair All did NOT run"; issue stays unresolved; "No active issues" `toHaveCount(0)` |
+
+Also fixed: `self-healing.spec.ts` hardcoded `http://localhost:3000`
+(bypassed `baseURL`); all specs now use relative `page.goto("/")`, and
+`playwright.config.ts` accepts `E2E_PORT` (CI default remains 3000 +
+`npm run start`, behavior unchanged). During local verification the dev
+sandbox was observed forcibly reclaiming port 3000 (~20-30 s into a run,
+server process killed → `ERR_CONNECTION_REFUSED` cascade); `E2E_PORT=3100`
+was used locally — the full 27-test suite passes deterministically there,
+including a `mission-control.spec.ts` suite that previously failed purely
+on that port interference.
+
+### H.4 Verification after this round
+
+| Suite | Result |
+|-------|--------|
+| `uv run ruff check` (CI scope, repo-wide) | **All checks passed** |
+| `uv run ruff format --check` | 610 files already formatted |
+| `uv run ty check src/` | **All checks passed** (0 diagnostics) |
+| `uv run pytest … -x -q` (CI exact command) | **5045 passed**, 5 deselected, 0 failed (7 m 35 s) |
+| `npx tsc --noEmit` | 0 errors |
+| `npx next lint` | clean (1 pre-existing warning, unrelated file) |
+| `npx vitest run` | 30 / 30 passed |
+| `npx next build` | static export OK |
+| `npx playwright test --project=chromium` | **27 / 27 passed** |

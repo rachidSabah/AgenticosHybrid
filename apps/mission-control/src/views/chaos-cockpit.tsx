@@ -10,6 +10,9 @@ export function ChaosCockpit() {
   const [canaries, setCanaries] = useState<any[]>([]);
   const [injecting, setInjecting] = useState(false);
   const [selectedFault, setSelectedFault] = useState("kill_agent_worker");
+  // Honest operator notice — set when an action could not reach the backend.
+  // Never fabricated results; only facts about what did NOT happen.
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Aggregate resilience stats from real experiment results — no hardcoded values.
   const avgRecoveryMs = experiments.length > 0
@@ -41,6 +44,7 @@ export function ChaosCockpit() {
 
   const handleInjectFault = async () => {
     setInjecting(true);
+    setNotice(null);
     // Show a pending placeholder — NO fabricated timing or resilience values.
     const optimisticId = `chaos-${Date.now()}`;
     const optimisticExp = {
@@ -64,47 +68,28 @@ export function ChaosCockpit() {
         // Replace the optimistic entry with the real server response.
         setExperiments((prev) => [res, ...prev.filter((e) => e.experiment_id !== res.experiment_id && e.experiment_id !== optimisticId)]);
       } else {
-        // Offline fallback simulation for Playwright E2E standalone mode
-        setExperiments((prev) => [
-          {
-            experiment_id: optimisticId,
-            fault_type: selectedFault,
-            status: "recovered_cleanly",
-            recovery_time_ms: 42.0,
-            resilience_score: 99.0,
-            logs: [
-              `[CHAOS_INJECT] Submitting fault: ${selectedFault}`,
-              `[AUTONOMOUS_HEAL] Fault contained. Circuit breaker tripped.`,
-              `[STATUS] recovered_cleanly`,
-            ],
-          },
-          ...prev.filter((e) => e.experiment_id !== optimisticId),
-        ]);
+        // Backend unreachable or returned no experiment data — nothing was
+        // injected and nothing was measured. Remove the optimistic entry and
+        // report the fact (spec absolute rule: never simulate fault results).
+        setExperiments((prev) => prev.filter((e) => e.experiment_id !== optimisticId));
+        setNotice(
+          res?.status === "offline"
+            ? "Backend offline — fault was NOT injected; no experiment recorded."
+            : "Backend returned no experiment data — nothing recorded."
+        );
       }
       await loadData();
     } catch {
-      // Offline fallback simulation for Playwright E2E standalone mode
-      setExperiments((prev) => [
-        {
-          experiment_id: optimisticId,
-          fault_type: selectedFault,
-          status: "recovered_cleanly",
-          recovery_time_ms: 42.0,
-          resilience_score: 99.0,
-          logs: [
-            `[CHAOS_INJECT] Submitting fault: ${selectedFault}`,
-            `[AUTONOMOUS_HEAL] Fault contained. Circuit breaker tripped.`,
-            `[STATUS] recovered_cleanly`,
-          ],
-        },
-        ...prev.filter((e) => e.experiment_id !== optimisticId),
-      ]);
+      // Network-layer rejection — nothing was injected or measured.
+      setExperiments((prev) => prev.filter((e) => e.experiment_id !== optimisticId));
+      setNotice("Backend unreachable — fault was NOT injected; no experiment recorded.");
     } finally {
       setInjecting(false);
     }
   };
 
   const handleDeployCanary = async () => {
+    setNotice(null);
     // Show a pending placeholder — NO fabricated incident ID, RCA, or status.
     const optimisticId = `canary-${Date.now()}`;
     const optimisticCanary = {
@@ -123,44 +108,43 @@ export function ChaosCockpit() {
         // Replace the optimistic entry with the real server response.
         setCanaries((prev) => [res, ...prev.filter((c) => c.deployment_id !== res.deployment_id && c.deployment_id !== optimisticId)]);
       } else {
-        // Offline fallback simulation for Playwright E2E standalone mode
-        setCanaries((prev) => [
-          {
-            deployment_id: optimisticId,
-            incident_id: "INC-88912",
-            remediation_title: "Autonomous Exponential Backoff Canary Mitigation",
-            status: "applied",
-            rca_postmortem:
-              "ROOT CAUSE ANALYSIS (RCA) for INC-88912:\n- Anomaly: Transient latency spike & socket timeout.\n- Mitigation: Automatic retry backoff with exponential jitter applied.\n- Verification: 100% ephemeral worktree validation pass.",
-          },
-          ...prev.filter((c) => c.deployment_id !== optimisticId),
-        ]);
+        // Backend unreachable or no deployment was created — remove the
+        // optimistic entry and report the fact. Never fabricate an incident
+        // ID, RCA, or validation result offline (spec absolute rule).
+        setCanaries((prev) => prev.filter((c) => c.deployment_id !== optimisticId));
+        setNotice(
+          res?.status === "offline"
+            ? "Backend offline — canary was NOT deployed; no deployment recorded."
+            : "Backend returned no deployment data — nothing recorded."
+        );
       }
       await loadData();
     } catch {
-      // Offline fallback simulation for Playwright E2E standalone mode
-      setCanaries((prev) => [
-        {
-          deployment_id: optimisticId,
-          incident_id: "INC-88912",
-          remediation_title: "Autonomous Exponential Backoff Canary Mitigation",
-          status: "applied",
-          rca_postmortem:
-            "ROOT CAUSE ANALYSIS (RCA) for INC-88912:\n- Anomaly: Transient latency spike & socket timeout.\n- Mitigation: Automatic retry backoff with exponential jitter applied.\n- Verification: 100% ephemeral worktree validation pass.",
-        },
-        ...prev.filter((c) => c.deployment_id !== optimisticId),
-      ]);
+      // Network-layer rejection — no deployment was created.
+      setCanaries((prev) => prev.filter((c) => c.deployment_id !== optimisticId));
+      setNotice("Backend unreachable — canary was NOT deployed; no deployment recorded.");
     }
   };
 
   const handleRollbackCanary = async (id: string) => {
     try {
-      await api.post("/api/healing/canary/rollback", { deployment_id: id });
-    } finally {
+      const res = await api.post<{ success?: boolean; status?: string }>(
+        "/api/healing/canary/rollback",
+        { deployment_id: id },
+      );
+      // api.post never throws for HTTP/network errors — it returns
+      // {success:false,...}. Only mark rolled_back when the backend actually
+      // accepted the rollback; otherwise report the honest failure.
+      if (res && res.success === false) {
+        setNotice("Rollback failed — backend unreachable; deployment status unchanged.");
+        return;
+      }
       setCanaries((prev) =>
         prev.map((c) => (c.deployment_id === id ? { ...c, status: "rolled_back" } : c))
       );
       await loadData();
+    } catch {
+      setNotice("Rollback failed — backend unreachable; deployment status unchanged.");
     }
   };
 
@@ -181,6 +165,17 @@ export function ChaosCockpit() {
         <Stat label="Chaos Experiments" value={experiments.length} />
         <Stat label="Canary Hotfixes" value={canaries.length} />
       </div>
+
+      {/* Honest operator notice — facts about what could NOT be done. */}
+      {notice && (
+        <div
+          role="status"
+          data-testid="chaos-notice"
+          className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-300"
+        >
+          {notice}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4">
         {/* Chaos Engineering Studio */}
