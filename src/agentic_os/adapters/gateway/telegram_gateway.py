@@ -87,12 +87,17 @@ class TelegramGateway:
         self._recent_messages: list[dict] = []
         self._chat_missions: dict[int, list[str]] = {}
         self._mission_chats: dict[str, int] = {}
+        self._mobile_approvals: Any = None  # MobileApprovalBridge (optional)
 
     # ── configuration accessors (encapsulation) ──────────────────────────────
 
     def set_remote_service(self, remote: RemotePromptService) -> None:
         """Inject the shared remote prompt service (called by app wiring)."""
         self._remote = remote
+
+    def set_mobile_approval_bridge(self, bridge: Any) -> None:
+        """Inject the mobile approval bridge for /approve and /reject."""
+        self._mobile_approvals = bridge
 
     def set_bot_token(self, token: str) -> None:
         self._bot_token = (token or "").strip()
@@ -159,6 +164,8 @@ class TelegramGateway:
         self._app.add_handler(CommandHandler("cancel", self._on_cancel))
         self._app.add_handler(CommandHandler("stop", self._on_cancel))
         self._app.add_handler(CommandHandler("retry", self._on_retry))
+        self._app.add_handler(CommandHandler("approve", self._on_approve))
+        self._app.add_handler(CommandHandler("reject", self._on_reject))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._on_text))
 
         # Subscribe to mission/task events for progress + result streaming
@@ -507,6 +514,43 @@ class TelegramGateway:
             await self.send_message(chat_id, "Original mission has no prompt to retry.")
             return
         await self._submit_prompt(update, chat_id, prompt, message_id=f"retry:{mission_id}")
+
+    async def _on_approve(self, update: Any, context: Any) -> None:
+        """Approve a pending operation by its one-time token."""
+        await self._decide_approval(update, context, approved=True)
+
+    async def _on_reject(self, update: Any, context: Any) -> None:
+        """Reject a pending operation by its one-time token."""
+        await self._decide_approval(update, context, approved=False)
+
+    async def _decide_approval(self, update: Any, context: Any, approved: bool) -> None:
+        if not self._check_user(update):
+            await self._reject_unauthorized(update)
+            return
+        chat_id = update.effective_chat.id
+        token = " ".join(context.args) if context.args else ""
+        if not token:
+            await self.send_message(
+                chat_id,
+                f"Usage: /{'approve' if approved else 'reject'} <token from the approval message>",
+            )
+            return
+        if not self._mobile_approvals:
+            await self.send_message(chat_id, "Approval service is not available yet.")
+            return
+        username = (update.effective_user.username or "") or str(
+            update.effective_user.id if update.effective_user else ""
+        )
+        try:
+            result = self._mobile_approvals.decide_by_token(token, approved, by=username)
+        except Exception as exc:
+            await self.send_message(chat_id, f"Not decided: {exc}")
+            return
+        state = result["state"]
+        await self.send_message(
+            chat_id,
+            f"{result['request_id']}: {state.upper()} ({result['operation']})",
+        )
 
     async def _on_text(self, update: Any, context: Any) -> None:
         if not self._check_user(update):

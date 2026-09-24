@@ -148,6 +148,10 @@ const CostCockpit = lazyWithRetry(() =>
   import("@/views/cost-cockpit").then((m) => ({ default: m.CostCockpit }))
 );
 
+const MobileApprovals = lazyWithRetry(() =>
+  import("@/views/mobile-approvals").then((m) => ({ default: m.MobileApprovals }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -290,6 +294,16 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Cost Cockpit" fallback={<ViewSkeleton title="Cost Cockpit" />}>
       <Suspense fallback={<ViewSkeleton title="Cost Cockpit" />}>
         <CostCockpit />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "mobile-approvals": () => (
+    <ErrorBoundary
+      viewName="Mobile Approvals"
+      fallback={<ViewSkeleton title="Mobile Approvals" />}
+    >
+      <Suspense fallback={<ViewSkeleton title="Mobile Approvals" />}>
+        <MobileApprovals />
       </Suspense>
     </ErrorBoundary>
   ),

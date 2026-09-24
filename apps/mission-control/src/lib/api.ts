@@ -447,6 +447,32 @@ export interface CostEntry {
   day: string;
 }
 
+// ── Mobile approvals types ──────────────────────────────────────────
+
+export interface ApprovalRequest {
+  request_id: string;
+  operation: string;
+  detail: string;
+  principal: string;
+  risk: string;
+  state: string;
+  created_at: number;
+  expires_at: number;
+  decided_by?: string;
+  decision_via?: string;
+  token?: string;
+}
+
+export interface ApprovalAuditEntry {
+  ts: number;
+  action: string;
+  request_id: string;
+  operation: string;
+  state: string;
+  by: string;
+  via: string;
+}
+
 export const api = {
   /** Generic request wrappers */
   get: <T>(path: string) => get<T>(path),
@@ -631,6 +657,39 @@ export const api = {
       body: JSON.stringify({ total_usd: totalUsd }),
     }),
   costAlerts: () => requestExact<{ alerts: CostAlert[] }>("/api/costs/alerts"),
+
+  /** Mobile approvals — Telegram + QR, one-time decision tokens */
+  approvals: () =>
+    requestExact<{ pending: ApprovalRequest[]; history: ApprovalRequest[] }>(
+      "/api/approvals"
+    ),
+  approvalCreate: (body: {
+    operation: string;
+    detail?: string;
+    principal?: string;
+    risk?: string;
+    ttl_s?: number;
+  }) =>
+    requestExact<ApprovalRequest>("/api/approvals", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  approvalDecide: (requestId: string, approved: boolean) =>
+    requestExact<ApprovalRequest>(`/api/approvals/${encodeURIComponent(requestId)}/decide`, {
+      method: "POST",
+      body: JSON.stringify({ approved }),
+    }),
+  approvalQr: (requestId: string, baseUrl: string) =>
+    requestExact<{ svg: string }>(
+      `/api/approvals/${encodeURIComponent(requestId)}/qr?base_url=${encodeURIComponent(baseUrl)}`
+    ),
+  approvalTelegramPush: (requestId: string) =>
+    requestExact<{ pushed_to: number[]; not_pushed: number[] }>(
+      `/api/approvals/${encodeURIComponent(requestId)}/telegram-push`,
+      { method: "POST" }
+    ),
+  approvalAudit: (limit = 30) =>
+    requestExact<{ entries: ApprovalAuditEntry[] }>(`/api/approvals/audit/tail?limit=${limit}`),
 
   health: () => get<{ status: string; bus: string }>("/healthz"),
   eventsRecent: (limit = 100) => get<Array<Record<string, unknown>>>(`/api/events/recent?limit=${limit}`),

@@ -1180,6 +1180,19 @@ def create_app(platform: Platform) -> FastAPI:
     _telegram_gateway = TelegramGateway(platform.bus)
     _whatsapp_gateway = WhatsAppGateway(platform.bus)
 
+    # Mobile approval bridge: dangerous operations pause here until a human
+    # decides via Telegram reply or the local QR link.
+    from agentic_os.core.security.mobile_approval import (
+        MobileApprovalError,
+        decision_page_html,
+        get_mobile_approval_bridge,
+    )
+
+    async def _approvals():
+        bridge = await get_mobile_approval_bridge(bus=platform.bus)
+        _telegram_gateway.set_mobile_approval_bridge(bridge)
+        return bridge
+
     # Telegram endpoints
     @app.get("/api/gateway/telegram/status")
     async def telegram_status() -> dict:
@@ -8428,6 +8441,140 @@ def create_app(platform: Platform) -> FastAPI:
             raise HTTPException(400, detail="url is required")
         verdict = get_egress_policy_manager().airgap_verdict(url)
         return verdict.to_dict()
+
+    # ── Mobile approvals (Telegram + QR, one-time decision tokens) ────────
+
+    @app.get("/api/approvals")
+    async def approvals_list() -> dict:
+        bridge = await _approvals()
+        return {"pending": bridge.pending(), "history": bridge.history(limit=30)}
+
+    @app.post("/api/approvals")
+    async def approvals_create(body: dict) -> dict:
+        """Create a pending approval. The one-time token is returned ONCE."""
+        bridge = await _approvals()
+        try:
+            return bridge.create(
+                operation=str(body.get("operation", "")),
+                detail=str(body.get("detail", "")),
+                principal=str(body.get("principal", "")),
+                risk=str(body.get("risk", "")),
+                ttl_s=float(body["ttl_s"]) if body.get("ttl_s") is not None else None,
+            )
+        except MobileApprovalError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.get("/api/approvals/{request_id}")
+    async def approvals_get(request_id: str) -> dict:
+        bridge = await _approvals()
+        try:
+            return bridge.get(request_id)
+        except MobileApprovalError as exc:
+            raise HTTPException(404, detail=str(exc)) from exc
+
+    @app.post("/api/approvals/{request_id}/decide")
+    async def approvals_decide(request_id: str, body: dict) -> dict:
+        """Decide from Mission Control (no token needed behind the console)."""
+        bridge = await _approvals()
+        try:
+            return bridge.decide(
+                request_id,
+                approved=bool(body.get("approved", False)),
+                by=str(body.get("by", "mission-control")),
+            )
+        except MobileApprovalError as exc:
+            raise HTTPException(404, detail=str(exc)) from exc
+
+    @app.get("/api/approvals/{request_id}/qr")
+    async def approvals_qr(request_id: str, base_url: str = "") -> dict:
+        """Locally rendered SVG QR linking to the decision page."""
+        bridge = await _approvals()
+        try:
+            return {"svg": bridge.qr_svg(request_id, base_url)}
+        except MobileApprovalError as exc:
+            status = 400 if "base_url" in str(exc) or "QR" in str(exc) else 404
+            raise HTTPException(status, detail=str(exc)) from exc
+
+    @app.post("/api/approvals/{request_id}/telegram-push")
+    async def approvals_telegram_push(request_id: str) -> dict:
+        """Push the approval message via the Telegram gateway (real send)."""
+        bridge = await _approvals()
+        try:
+            text = bridge.telegram_text(request_id)
+        except MobileApprovalError as exc:
+            raise HTTPException(404, detail=str(exc)) from exc
+        if not _telegram_gateway.is_running:
+            raise HTTPException(
+                400,
+                detail=(
+                    "the Telegram gateway is not running - start it in Messaging "
+                    "Gateways first; nothing was pushed"
+                ),
+            )
+        chats = _telegram_gateway.get_recent_chats()
+        targets = sorted({int(c.get("chat_id", 0)) for c in chats if c.get("chat_id")})
+        if not targets:
+            raise HTTPException(
+                400,
+                detail=(
+                    "no Telegram chat has started the bot yet - message the bot "
+                    "once, then push again; nothing was pushed"
+                ),
+            )
+        sent = [cid for cid in targets if await _telegram_gateway.send_message(cid, text)]
+        return {"pushed_to": sent, "not_pushed": [c for c in targets if c not in sent]}
+
+    @app.get("/api/approvals/audit/tail")
+    async def approvals_audit(limit: int = 50) -> dict:
+        bridge = await _approvals()
+        return {"entries": bridge.audit_tail(limit=limit)}
+
+    @app.get("/approve/{request_id}")
+    async def approval_page(request_id: str, token: str = "") -> HTMLResponse:
+        """Decision page opened by scanning the QR code (phone, same network)."""
+        bridge = await _approvals()
+        try:
+            req = bridge.get(request_id)
+        except MobileApprovalError:
+            req = None
+        valid = bool(req and req["state"] == "pending" and token)
+        return HTMLResponse(
+            decision_page_html(
+                request_id,
+                req["operation"] if req else "",
+                req["detail"] if req else "",
+                valid,
+            )
+        )
+
+    @app.post("/approve/{request_id}")
+    async def approval_page_decide(
+        request_id: str, request: Request, token: str = ""
+    ) -> HTMLResponse:
+        """Form submission from the decision page (one-time token)."""
+        bridge = await _approvals()
+        try:
+            form = await request.form()
+            decision = str(form.get("decision", ""))
+        except Exception:
+            decision = ""
+        approved = decision == "approve"
+        try:
+            result = bridge.decide_by_token(token, approved, by="qr-link")
+            outcome = "APPROVED" if approved else "REJECTED"
+            msg = f"Decision recorded: {result['request_id']} {outcome}"
+            color = "#059669" if approved else "#dc2626"
+        except MobileApprovalError as exc:
+            msg = f"Not decided: {exc}"
+            color = "#dc2626"
+        return HTMLResponse(
+            f"<html><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+            f"<title>AgenticOS approval</title></head>"
+            f"<body style='font-family:sans-serif;background:#0b0d12;color:#e5e7eb;"
+            f"text-align:center;padding-top:4em'><h2 style='color:{color}'>{msg}</h2>"
+            f"<p>You can close this page.</p></body></html>"
+        )
 
     # ── Cost cockpit (measured spend, budget alerts, honest forecast) ─────
     from agentic_os.core.costs.ledger import CostLedgerError, get_cost_ledger
