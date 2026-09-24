@@ -260,9 +260,14 @@ class AgentPackageManager:
 
     # ── installed tree ───────────────────────────────────────────────────
 
+    # Characters illegal in Windows filenames.
+    _UNSAFE_FILENAME = set(':*?"<>|\\/')
+
     def _installed_root(self, name: str) -> Path:
-        safe = name.replace("/", "_").replace("\\", "_")
-        return self._installed_dir / safe
+        safe = "".join(
+            "_" if (c in self._UNSAFE_FILENAME or ord(c) < 32) else c for c in name
+        ).strip(". ")
+        return self._installed_dir / (safe or "unknown")
 
     def list_installed(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []

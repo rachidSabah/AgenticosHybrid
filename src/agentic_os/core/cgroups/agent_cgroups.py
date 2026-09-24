@@ -114,26 +114,31 @@ class AgentCgroupManager:
 
     # ── persistence (append-only measurement ledger) ─────────────────────
 
+    # Characters illegal in Windows filenames (':' would break "agent:id").
+    _UNSAFE_FILENAME = set(':*?"<>|\\/')
+
     def _ledger_path(self, agent_id: str) -> Path:
-        safe = agent_id.replace("/", "_").replace("\\", "_") or "unknown"
+        safe = "".join("_" if (c in self._UNSAFE_FILENAME or ord(c) < 32) else c for c in agent_id)
+        safe = safe.strip(". ") or "unknown"
         return self._dir / f"{safe}.jsonl"
 
     def _load_ledgers(self) -> None:
         for p in self._dir.glob("*.jsonl"):
-            rows: list[dict[str, Any]] = []
             try:
                 for line in p.read_text(encoding="utf-8").splitlines():
-                    if line.strip():
-                        try:
-                            rows.append(json.loads(line))
-                        except Exception:
-                            continue
+                    if not line.strip():
+                        continue
+                    try:
+                        d = json.loads(line)
+                    except Exception:
+                        continue
+                    key = str(d.get("agent_id") or p.stem)
+                    self._ledgers.setdefault(key, []).append(d)
             except Exception:
                 continue
-            self._ledgers[p.stem] = rows
 
     def _append(self, agent_id: str, kind: str, **fields: Any) -> None:
-        entry = {"ts": time.time(), "kind": kind, **fields}
+        entry = {"ts": time.time(), "kind": kind, "agent_id": agent_id, **fields}
         self._ledgers.setdefault(agent_id, []).append(entry)
         try:
             with self._ledger_path(agent_id).open("a", encoding="utf-8") as f:
