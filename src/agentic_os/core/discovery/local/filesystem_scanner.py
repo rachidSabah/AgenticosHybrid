@@ -30,7 +30,7 @@ _TOOL_FS_PATTERNS: dict[str, tuple[list[str], list[str]]] = {
     "continue": (["Continue", ".continue"], ["continue", "continue.exe"]),
     "openhands": (["OpenHands", "openhands"], ["openhands", "openhands.exe"]),
     "vscode-cli": (["Visual Studio Code", "VS Code", "VSCode"], ["code", "code.exe"]),
-    "gemini-cli": (["Gemini"], ["gemini", "gemini.exe"]),
+    # "gemini-cli" REMOVED — retired provider (spec §2/§36).
     "vllm": (["vLLM", "vllm"], ["vllm", "vllm.exe"]),
 }
 

@@ -72,6 +72,7 @@ from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.omniroute.engine import omniroute_engine
 from agentic_os.discovery.service import discovery_service
 from agentic_os.domain.agent import Role, Task, TaskStatus
+from agentic_os.domain.brains import BrainStatus
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
@@ -761,14 +762,21 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/swarm/agents")
     async def swarm_agents() -> list[dict]:
-        """Return genuine active AI agents from the authoritative discovery engine."""
+        """Return REAL detected AI agents from the authoritative discovery engine.
+
+        Spec §9/§24: a merely-installed, probed agent is NOT "active".
+          running — the agent currently has a real IN_PROGRESS orchestrator task
+          ready   — installed and probe-verified (default for detected agents)
+        "active" is reserved for real process executions and is never produced
+        by this endpoint. No fabricated capability defaults.
+        """
         snap = agent_discovery_engine.snapshot
         if not snap.agents:
             snap = await agent_discovery_engine.scan()
         active = snap.active_agents()
         agents: list[dict] = []
         for a in active:
-            # Check if this agent currently has a running task
+            # "running" only when the agent has a real in-flight task.
             is_running = any(
                 t.status == TaskStatus.IN_PROGRESS and t.assigned_agent_id == a.id
                 for t in orch.registry.tasks()
@@ -779,12 +787,15 @@ def create_app(platform: Platform) -> FastAPI:
                     "name": a.name,
                     "role": a.kind,
                     "status": "running" if is_running else "ready",
-                    "health": "healthy"
-                    if (a.health_score is not None and a.health_score >= 80)
-                    else "ready",
+                    "health": (
+                        "healthy"
+                        if (a.health_score is not None and a.health_score >= 80)
+                        else "degraded"
+                    ),
+                    # No fabricated capability defaults — empty stays empty.
                     "capabilities": [c.capability for c in a.capabilities]
                     if a.capabilities
-                    else ["coding", "reasoning"],
+                    else [],
                 }
             )
         return agents
@@ -807,7 +818,11 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.get("/api/swarm/tasks")
     async def swarm_tasks() -> list[dict]:
-        """Return real task list from orchestrator task registry & active missions."""
+        """Return the REAL task list from the orchestrator task registry.
+
+        No fabricated fallback rows: if no tasks have been created, this
+        returns an empty list (spec §13/§38 — the UI must show zero).
+        """
         tasks: list[dict] = []
         for t in orch.registry.tasks():
             tasks.append(
@@ -822,20 +837,6 @@ def create_app(platform: Platform) -> FastAPI:
                     "pid": getattr(t, "pid", None),
                 }
             )
-        if not tasks:
-            for m in _missions.values():
-                tasks.append(
-                    {
-                        "id": f"mission-{m.id}",
-                        "goal": m.title,
-                        "status": m.status.value if hasattr(m.status, "value") else str(m.status),
-                        "pattern": "hierarchical",
-                        "agent_id": "Swarm Orchestrator",
-                        "dependencies": [],
-                        "artifacts": [],
-                        "pid": None,
-                    }
-                )
         return tasks
 
     @app.get("/api/swarm/plans")
@@ -925,13 +926,16 @@ def create_app(platform: Platform) -> FastAPI:
     async def omniroute_routes() -> list[dict]:
         routes: list[dict] = []
         for p in platform.providers.list_providers():
+            # "ready" = passed bind-time preflight; never "active" without a
+            # real execution (spec §9/§24). No invented latency fallback.
+            latency = getattr(p, "latency_ms", None)
             routes.append(
                 {
                     "id": f"route-{p.name}",
                     "provider": p.name,
                     "kind": getattr(p, "kind", "generic"),
-                    "status": "active",
-                    "latency_ms": getattr(p, "latency_ms", 12.5),
+                    "status": "ready",
+                    "latency_ms": latency if latency is not None else 0.0,
                 }
             )
         return routes
@@ -1325,13 +1329,55 @@ def create_app(platform: Platform) -> FastAPI:
 
     # ── Local Agent Discovery API (Phase 6.1) ──────────────────────────────
 
+    # Developer runtimes / system tools that are NOT AI agents (spec §4/§31).
+    # They may be fetched explicitly via ?include_tools=true (each tagged
+    # "kind": "tool") but are never listed as agents by default.
+    _DISCOVERY_NON_AGENT_TOOLS = frozenset(
+        {
+            "git",
+            "python",
+            "python3",
+            "node",
+            "nodejs",
+            "bun",
+            "docker",
+            "vscode-cli",
+            "npm",
+            "npx",
+            "uv",
+            "pip",
+            "cargo",
+        }
+    )
+
+    def _tag_local_agent(a) -> dict:
+        d = a.to_dict()
+        d["kind"] = (
+            "tool"
+            if str(getattr(a, "tool_type", "")).lower() in _DISCOVERY_NON_AGENT_TOOLS
+            else "ai_agent"
+        )
+        return d
+
     @app.get("/api/local-agents")
-    async def list_local_agents() -> list[dict]:
-        """List all locally discovered AI agents."""
+    async def list_local_agents(include_tools: bool = False) -> list[dict]:
+        """List locally discovered AI agents.
+
+        Spec §31: Python/Node/Git/Docker are runtimes and developer tools —
+        NOT AI agents. By default only AI-agent tool types are returned;
+        pass ``?include_tools=true`` to additionally receive the developer
+        runtimes/tools, each tagged ``"kind": "tool"``.
+        """
         if platform.local_discovery is None:
             return []
         agents = await platform.local_discovery.get_agents()
-        return [a.to_dict() for a in agents]
+        out: list[dict] = []
+        for a in agents:
+            d = _tag_local_agent(a)
+            if d.get("kind") == "tool" and not include_tools:
+                continue
+            out.append(d)
+        return out
 
     @app.get("/api/local-agents/sse")
     async def local_agents_sse(request: Request):
@@ -1378,6 +1424,21 @@ def create_app(platform: Platform) -> FastAPI:
                         event = await asyncio.wait_for(queue.get(), timeout=15.0)
                         topic = event.get("topic", "unknown")
                         payload = event.get("payload", {})
+                        # Spec §4/§31: never stream developer runtimes/tools
+                        # (python/node/git/docker/...) as "agent" events.
+                        tool_type = str(
+                            payload.get("tool_type", "") or payload.get("name", "")
+                        ).lower()
+                        if (
+                            topic
+                            in (
+                                Topic.AGENT_DISCOVERED.value,
+                                Topic.AGENT_REGISTERED.value,
+                                Topic.AGENT_UPDATED.value,
+                            )
+                            and tool_type in _DISCOVERY_NON_AGENT_TOOLS
+                        ):
+                            continue
                         sse_type = topic.replace(".", "-")
                         yield f"event: {sse_type}\ndata: {json.dumps(payload)}\n\n"
                     except TimeoutError:
@@ -2577,18 +2638,29 @@ def create_app(platform: Platform) -> FastAPI:
                 m = _missions.get(mission_id)
                 if m is None:
                     return
-                if m.status in (_MS.COMPLETED, _MS.FAILED, _MS.CANCELLED):
+                if m.status in (_MS.COMPLETED, _MS.FAILED, _MS.CANCELLED, _MS.PARTIAL):
                     return
                 # Check orchestrator tasks for this mission
                 mission_tasks = [t for t in orch.registry.tasks() if t.mission_id == mission_id]
                 if not mission_tasks:
                     continue
                 all_done = all(
-                    t.status.value in ("completed", "failed", "cancelled") for t in mission_tasks
+                    t.status.value in ("completed", "failed", "cancelled", "plan_generated")
+                    for t in mission_tasks
                 )
                 if all_done:
                     any_failed = any(t.status.value == "failed" for t in mission_tasks)
-                    m.status = _MS.FAILED if any_failed else _MS.COMPLETED
+                    # A task that finished as plan_generated ran for real but
+                    # produced NO independently verified artifact (e.g. only
+                    # a Markdown plan). The mission is then PARTIAL — never
+                    # COMPLETED (spec §34/§35: honest outcome reporting).
+                    any_plan_only = any(t.status.value == "plan_generated" for t in mission_tasks)
+                    if any_failed:
+                        m.status = _MS.FAILED
+                    elif any_plan_only:
+                        m.status = _MS.PARTIAL
+                    else:
+                        m.status = _MS.COMPLETED
                     m.updated_at = datetime.now(UTC)
                     # Transition the mission-triggered swarm to the same
                     # outcome so swarm state never stays 'executing' forever.
@@ -2598,15 +2670,21 @@ def create_app(platform: Platform) -> FastAPI:
                             sc_w.complete_mission(mission_id, failed=any_failed)
                         except Exception:
                             log.warning("swarm.complete_mission_failed", mission_id=mission_id)
+                    if any_failed:
+                        outcome_topic = Topic.MISSION_FAILED.value
+                    elif any_plan_only:
+                        outcome_topic = (
+                            Topic.MISSION_PARTIAL.value
+                            if hasattr(Topic, "MISSION_PARTIAL")
+                            else "mission.partial"
+                        )
+                    else:
+                        outcome_topic = Topic.MISSION_COMPLETED.value
                     await orch.bus.publish(
                         EventEnvelope(
-                            type="mission.completed",
+                            type=outcome_topic,
                             source="api",
-                            topic=(
-                                Topic.MISSION_COMPLETED.value
-                                if any_failed is False
-                                else Topic.MISSION_FAILED.value
-                            ),
+                            topic=outcome_topic,
                             payload=m.to_dict(),
                         )
                     )
@@ -8475,14 +8553,20 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/omniroute/compress")
     async def omniroute_compress(body: dict) -> dict:
+        """Accept a compression request.
+
+        spec §18: no compression engine is wired to this endpoint, so the text
+        is returned unchanged and no compressed-token count or savings
+        percentage is invented.
+        """
         text = body.get("text", "")
-        orig_tokens = max(1, len(text) // 4)
-        comp_tokens = max(1, int(orig_tokens * 0.58))
+        orig_tokens = len(text) // 4
         return {
-            "original_tokens": orig_tokens,
-            "compressed_tokens": comp_tokens,
-            "compressed_text": text[: int(len(text) * 0.6)] + "...",
-            "savings_pct": 42.0,
+            "orig_tokens": orig_tokens,
+            "compressed_text": text,
+            "note": "no compression engine wired — text returned unchanged; no savings claimed",
+            "comp_tokens": None,
+            "savings_pct": None,
         }
 
     # ── OpenAI-compatible /v1 API Gateway ─────────────────────────────────
@@ -9558,13 +9642,19 @@ def create_app(platform: Platform) -> FastAPI:
 
     @app.post("/api/collab/execute")
     async def collab_execute_code(body: dict) -> dict:
+        """Accept a code-execution request.
+
+        spec §18: no execution engine is wired to this endpoint, so the code
+        is NOT executed and no fabricated execution results are returned.
+        """
         _code = str(body.get("code", ""))
         return {
-            "status": "executed",
-            "syntax_valid": True,
-            "symbols_parsed": 12,
-            "execution_time_ms": 24.5,
-            "stdout": "[AGENTICOS BUS] Hexagonal Kernel subscription validated. 0 errors detected.",
+            "executed": False,
+            "reason": "no execution engine is wired to this endpoint — code was NOT executed",
+            "syntax_valid": None,
+            "symbols_parsed": 0,
+            "execution_time_ms": 0.0,
+            "stdout": "",
         }
 
     @app.post("/api/desktop/hud/query")

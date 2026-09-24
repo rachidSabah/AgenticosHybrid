@@ -28,6 +28,7 @@ export function ProviderDetailPanel({ providerId, onClose }: { providerId: strin
   const agent = useStore(state => state.agents?.[providerId]);
   const tasks = useStore(state => state.tasks) || {};
   const perf = useStore(state => state.performance);
+  const connected = useStore(state => state.connected);
   
   const [history, setHistory] = useState<number[]>([]);
 
@@ -74,8 +75,9 @@ export function ProviderDetailPanel({ providerId, onClose }: { providerId: strin
         <div>
           <h2 className="text-xl font-mono text-white font-bold tracking-wider">{agent?.role || provider?.provider || "Unknown Provider"}</h2>
           <div className="flex items-center space-x-2 mt-1">
-            <span className="flex h-2 w-2 rounded-full bg-green-400 shadow-[0_0_8px_rgba(34,197,94,0.8)]"></span>
-            <span className="text-[10px] font-mono uppercase text-green-400">{provider?.status || agent?.status || "Online"}</span>
+            {/* Status dot tied to the real connection state — neutral gray when offline. */}
+            <span className={`flex h-2 w-2 rounded-full ${connected ? "bg-green-400 shadow-[0_0_8px_rgba(34,197,94,0.8)]" : "bg-gray-500"}`}></span>
+            <span className={`text-[10px] font-mono uppercase ${connected ? "text-green-400" : "text-gray-400"}`}>{provider?.status || agent?.status || "unknown"}</span>
             <span className="text-[10px] font-mono text-gray-500 border-l border-gray-600 pl-2">v1.0.0</span>
           </div>
         </div>
@@ -96,11 +98,11 @@ export function ProviderDetailPanel({ providerId, onClose }: { providerId: strin
         </div>
       </div>
 
-      {/* Hardware Utilization */}
+      {/* Hardware Utilization — "—" until the backend reports real metrics */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <CircularGauge value={perf?.cpu_usage_percent ?? 0} max={100} label="CPU Usage" color="#00f0ff" size={70} />
-        <CircularGauge value={perf?.memory_usage_percent ?? 0} max={100} label="Memory" color="#a855f7" size={70} />
-        <CircularGauge value={perf?.gpu_usage_percent ?? 0} max={100} label="GPU" color="#22c55e" size={70} />
+        <CircularGauge value={perf?.cpu_usage_percent ?? null} max={100} label="CPU Usage" color="#00f0ff" size={70} />
+        <CircularGauge value={perf?.memory_usage_percent ?? null} max={100} label="Memory" color="#a855f7" size={70} />
+        <CircularGauge value={perf?.gpu_usage_percent ?? null} max={100} label="GPU" color="#22c55e" size={70} />
       </div>
 
       {/* Latency History */}
@@ -199,7 +201,7 @@ export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceI
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
             />
           </div>
-          <span className="text-[8px] font-mono text-cyan-500 mt-1">{events.length > 0 ? `${(events.length * 0.12).toFixed(1)} MB/s` : "0 MB/s"}</span>
+          <span className="text-[8px] font-mono text-cyan-500 mt-1">—</span>
         </div>
         <div className="flex flex-col items-center">
           <HardDrive className="w-5 h-5 text-purple-400 mb-1" />
@@ -214,7 +216,7 @@ export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceI
         </div>
         <div className="bg-white/5 p-3 rounded border border-white/10 flex justify-between items-center">
           <span className="text-[10px] font-mono text-gray-400 uppercase">Avg Latency</span>
-          <span className="text-sm font-mono text-orange-400">{events.length > 0 ? `${(events.length * 0.6).toFixed(0)}ms` : "0ms"}</span>
+          <span className="text-sm font-mono text-orange-400">—</span>
         </div>
         <div className="bg-white/5 p-3 rounded border border-white/10 flex justify-between items-center">
           <span className="text-[10px] font-mono text-gray-400 uppercase">Errors (1h)</span>
@@ -225,7 +227,7 @@ export function ConnectionDetailPanel({ sourceId, targetId, onClose }: { sourceI
       </div>
 
       <div className="mt-auto">
-        <div className="text-[10px] font-mono uppercase tracking-widest text-gray-400 mb-2">Throughput History</div>
+        <div className="text-[10px] font-mono uppercase tracking-widest text-gray-400 mb-2">Recent Event Activity</div>
         <MiniSparkline data={traffic} color="#00f0ff" height={40} />
       </div>
     </motion.div>

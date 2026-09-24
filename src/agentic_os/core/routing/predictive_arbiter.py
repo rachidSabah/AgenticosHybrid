@@ -13,7 +13,10 @@ from typing import Any
 class ProviderMetrics:
     provider_id: str
     alpha: float = 0.2  # EWMA decay factor
-    ewma_latency_ms: float = 120.0
+    # Spec §16: no seeded latency. A provider with zero recorded requests has
+    # NO measured latency — it is excluded from ranking until real telemetry
+    # arrives via record_request().
+    ewma_latency_ms: float = 0.0
     error_rate: float = 0.00
     requests_count: int = 0
     consecutive_failures: int = 0
@@ -23,8 +26,13 @@ class ProviderMetrics:
     def record_request(self, latency_ms: float, success: bool) -> None:
         self.requests_count += 1
         self.last_updated = time.time()
-        # Update EWMA
-        self.ewma_latency_ms = (self.alpha * latency_ms) + ((1 - self.alpha) * self.ewma_latency_ms)
+        # Update EWMA (first sample seeds it directly, not from the zero default)
+        if self.requests_count == 1:
+            self.ewma_latency_ms = latency_ms
+        else:
+            self.ewma_latency_ms = (self.alpha * latency_ms) + (
+                (1 - self.alpha) * self.ewma_latency_ms
+            )
         if success:
             self.consecutive_failures = 0
             self.error_rate = (self.alpha * 0.0) + ((1 - self.alpha) * self.error_rate)
@@ -40,22 +48,19 @@ class PredictiveRoutingArbiter:
     """Calculates multi-objective routing scores and handles non-breaking mid-stream failovers."""
 
     def __init__(self) -> None:
-        self._providers: dict[str, ProviderMetrics] = {
-            "claude_code": ProviderMetrics("claude_code", ewma_latency_ms=177.0),
-            "hermes": ProviderMetrics("hermes", ewma_latency_ms=774.0),
-            "auto:codex": ProviderMetrics("auto:codex", ewma_latency_ms=55.0),
-            "auto:agy": ProviderMetrics("auto:agy", ewma_latency_ms=156.0),
-            "Codex CLI": ProviderMetrics("Codex CLI", ewma_latency_ms=45.0),
-            "auto:opencode": ProviderMetrics("auto:opencode", ewma_latency_ms=95.0),
-        }
+        # Spec §16: no fabricated seed latencies (177/774/55/156/45/95ms) and
+        # no invented spend (was $2.45). Rankings contain only providers with
+        # REAL recorded telemetry; spend starts at $0.00.
+        self._providers: dict[str, ProviderMetrics] = {}
         self.budget_threshold_usd: float = 50.0
-        self.current_spend_usd: float = 2.45
+        self.current_spend_usd: float = 0.0
 
     def get_ranked_providers(self, max_latency_ms: float = 2000.0) -> list[dict[str, Any]]:
+        # Providers with no recorded requests have no evidence — exclude them.
         healthy = [
             p
             for p in self._providers.values()
-            if p.is_healthy and p.ewma_latency_ms <= max_latency_ms
+            if p.requests_count > 0 and p.is_healthy and p.ewma_latency_ms <= max_latency_ms
         ]
         ranked = sorted(healthy, key=lambda x: (x.error_rate * 1000) + x.ewma_latency_ms)
         return [

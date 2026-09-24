@@ -68,11 +68,13 @@ class TestBrainCatalogToolMappings:
         assert mapping.default_runtime == BrainRuntime.PYTHON
 
     def test_get_mapping_all_known(self, catalog: BrainCatalog) -> None:
-        known = ["claude-code", "hermes", "gemini-cli", "codex", "opencode", "aider", "continue"]
+        # gemini-cli is a retired provider — it must NOT have a mapping.
+        known = ["claude-code", "hermes", "codex", "opencode", "aider", "continue"]
         for tool_type in known:
             mapping = catalog.get_mapping(tool_type)
             assert mapping is not None, f"Expected mapping for {tool_type}"
             assert mapping.tool_type == tool_type
+        assert catalog.get_mapping("gemini-cli") is None
 
     def test_get_mapping_returns_none_for_unknown(self, catalog: BrainCatalog) -> None:
         mapping = catalog.get_mapping("nonexistent-tool")
@@ -85,11 +87,9 @@ class TestBrainCatalogToolMappings:
         assert mapping.default_runtime == BrainRuntime.NATIVE
         assert "Claude Code" in mapping.description
 
-    def test_get_mapping_gemini_cli(self, catalog: BrainCatalog) -> None:
-        mapping = catalog.get_mapping("gemini-cli")
-        assert mapping is not None
-        assert mapping.default_vendor == BrainVendor.GEMINI_CLI
-        assert mapping.default_runtime == BrainRuntime.NATIVE
+    def test_get_mapping_retired_gemini_is_gone(self, catalog: BrainCatalog) -> None:
+        """Retired provider has no tool mapping (spec §2/§36)."""
+        assert catalog.get_mapping("gemini-cli") is None
 
     def test_get_mapping_continue(self, catalog: BrainCatalog) -> None:
         mapping = catalog.get_mapping("continue")
@@ -123,8 +123,9 @@ class TestBrainCatalogToolMappings:
         mappings = catalog.list_mappings()
         assert len(mappings) == count_mappings
         tool_types = {m.tool_type for m in mappings}
-        expected = {"claude-code", "hermes", "gemini-cli", "codex", "opencode", "aider", "continue"}
+        expected = {"claude-code", "hermes", "codex", "opencode", "aider", "continue"}
         assert expected.issubset(tool_types)
+        assert "gemini-cli" not in tool_types
 
     def test_resolve_returns_classification(self, catalog: BrainCatalog) -> None:
         result = catalog.resolve("hermes")
@@ -139,10 +140,12 @@ class TestBrainCatalogToolMappings:
         assert result is None
 
     def test_resolve_all_known(self, catalog: BrainCatalog) -> None:
-        known = ["claude-code", "hermes", "gemini-cli", "codex", "opencode", "aider", "continue"]
+        # gemini-cli is retired — no mapping, resolve returns None.
+        known = ["claude-code", "hermes", "codex", "opencode", "aider", "continue"]
         for t in known:
             result = catalog.resolve(t)
             assert result is not None, f"Expected resolve to succeed for {t}"
+        assert catalog.resolve("gemini-cli") is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

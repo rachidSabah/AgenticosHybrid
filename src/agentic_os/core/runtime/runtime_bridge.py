@@ -25,7 +25,7 @@ _TYPE_MAP: dict[str, str] = {
     "node": "node",
     "claude_code": "claude_code",
     "opencode": "opencode",
-    "gemini_cli": "gemini_cli",
+    # "gemini_cli" REMOVED — retired provider (spec §2/§36).
     "codex_cli": "codex_cli",
     "ollama": "custom",
     "lm_studio": "custom",

@@ -80,11 +80,13 @@ class TestCapabilityDetector:
         assert AgentCapability.TERMINAL_OPS in caps
         assert AgentCapability.FILE_OPS in caps
 
-    def test_detect_gemini_cli(self, detector: CapabilityDetector) -> None:
-        caps = detector.detect("gemini-cli")
-        assert AgentCapability.CODE_GENERATION in caps
-        assert AgentCapability.CHAT in caps
-        assert AgentCapability.REASONING in caps
+    def test_detect_retired_gemini_has_no_caps(self, detector: CapabilityDetector) -> None:
+        """gemini-cli is retired — no capability table entry (spec §2/§36)."""
+        from agentic_os.core.discovery.local.capability_detector import (
+            _CAPABILITY_MAP,
+        )
+
+        assert "gemini-cli" not in _CAPABILITY_MAP
 
     def test_detect_batch(self, detector: CapabilityDetector) -> None:
         tools = [("hermes", "1.0"), ("ollama", "0.1"), ("unknown", "")]

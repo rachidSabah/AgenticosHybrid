@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 
 from core.logging import get_logger
+
 from services.runtime_discovery.models import (
     DiscoveryProviderType,
     RuntimeDiscoveryResult,
@@ -13,7 +14,7 @@ _log = get_logger(__name__)
 
 _KNOWN_BINARIES: dict[str, RuntimeType] = {
     "claude": RuntimeType.CLAUDE_CODE,
-    "gemini": RuntimeType.GEMINI_CLI,
+    # "gemini" REMOVED — retired provider (spec §2/§36).
     "codex": RuntimeType.CODEX_CLI,
     "hermes": RuntimeType.HERMES,
     "openhands": RuntimeType.OPENHANDS,
@@ -33,7 +34,6 @@ _KNOWN_BINARIES: dict[str, RuntimeType] = {
 
 _DISPLAY_NAMES: dict[RuntimeType, str] = {
     RuntimeType.CLAUDE_CODE: "Claude Code",
-    RuntimeType.GEMINI_CLI: "Gemini CLI",
     RuntimeType.CODEX_CLI: "Codex CLI",
     RuntimeType.HERMES: "Hermes",
     RuntimeType.OPENHANDS: "OpenHands",

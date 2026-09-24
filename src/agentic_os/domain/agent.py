@@ -82,6 +82,10 @@ class TaskStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     RECOVERED = "recovered"
+    # The agent returned only a plan/report (e.g. a Markdown document) with
+    # no independently verified workspace artifact. Never rendered as a
+    # successful build: "PLAN GENERATED — DELIVERABLE NOT VERIFIED".
+    PLAN_GENERATED = "plan_generated"
 
 
 class Task(BaseModel):
@@ -130,6 +134,9 @@ class Task(BaseModel):
     verification_status: str | None = None
     verification_reason: str | None = None
     failure_reason: str | None = None
+    # Independent artifact verification result (artifact_verification module).
+    # Populated by the orchestrator after real execution — never fabricated.
+    verification: dict = Field(default_factory=dict)
 
     @property
     def task_id(self) -> str:
@@ -138,6 +145,8 @@ class Task(BaseModel):
     @property
     def prompt(self) -> str:
         return self.user_prompt or self.description
+
+
 
     def touch(self) -> None:
         self.updated_at = _utcnow()

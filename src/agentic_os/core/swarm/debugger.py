@@ -137,18 +137,23 @@ class SwarmDebuggerManager:
             new_mission_id = f"{mission_id}-fork-{uuid.uuid4().hex[:6]}"
             new_session = SwarmDebugSession(mission_id=new_mission_id)
             old_session = self.get_or_create_session(mission_id)
+            # spec §18: the fork is created, not running — no execution has
+            # happened in it. Only real frames previously captured in the
+            # parent session (step_index <= target_step) are carried over;
+            # nothing is fabricated and the session is not marked RUNNING.
             for f in old_session.frames:
                 if f.step_index <= target_step:
                     new_session.frames.append(f)
-            new_session.current_step = target_step
-            new_session.state = ExecutionState.RUNNING
+            new_session.current_step = target_step if new_session.frames else 0
+            new_session.state = ExecutionState.IDLE
             self._sessions[new_mission_id] = new_session
             return {
                 "parent_mission_id": mission_id,
                 "forked_mission_id": new_mission_id,
                 "fork_step": target_step,
                 "adjusted_prompt": adjusted_prompt,
-                "status": "forked_successfully",
+                "status": "created",
+                "state": new_session.state.value,
             }
 
 
@@ -239,47 +244,39 @@ class SwarmTeamComposer:
     def conduct_debate(
         self, debate_topic: str, proposed_change: str, team: list[AgentRoleSpec]
     ) -> dict[str, Any]:
+        """Record a consensus-debate REQUEST for the proposed team.
+
+        spec §18: no fabricated debate outcomes. No member has actually
+        deliberated here, so every member's vote is left empty, no argument or
+        confidence/approval number is invented, and consensus_reached is
+        always False. The returned record reflects the request only.
+        """
         debate_id = f"debate-{uuid.uuid4().hex[:8]}"
         contributions: list[DebateContribution] = []
 
         for member in team:
-            if "Architect" in member.name:
-                arg = f"Verified architectural boundaries for '{debate_topic}'. Decoupled interfaces maintained."
-                vote = "approve"
-                conf = 0.95
-            elif "QA" in member.name:
-                arg = "Simulated test suite against proposed change. All invariant contracts hold."
-                vote = "approve"
-                conf = 0.98
-            elif "Security" in member.name:
-                arg = "Audited payload against injection vectors and privilege escalation risks."
-                vote = "approve"
-                conf = 0.99
-            else:
-                arg = f"Implementation feasibility validated for {member.name}."
-                vote = "approve"
-                conf = 0.92
-
+            # spec §18: members have not deliberated — the request is recorded
+            # with empty votes; no synthesized arguments or approval numbers.
             contributions.append(
                 DebateContribution(
                     agent_id=member.role_id,
                     role_name=member.name,
-                    argument=arg,
-                    vote=vote,
-                    confidence=conf,
+                    argument="",
+                    vote="",
+                    confidence=0.0,
                 )
             )
 
         self._debates[debate_id] = contributions
-        approve_count = sum(1 for c in contributions if c.vote == "approve")
-        consensus_reached = approve_count == len(contributions)
 
         return {
             "debate_id": debate_id,
             "topic": debate_topic,
             "proposed_change": proposed_change,
-            "consensus_reached": consensus_reached,
-            "approval_rating": approve_count / len(contributions) if contributions else 1.0,
+            "status": "not_executed",
+            "consensus_reached": False,
+            "votes": [],
+            "approval_rating": None,
             "contributions": [c.__dict__ for c in contributions],
         }
 

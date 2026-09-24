@@ -33,18 +33,18 @@ class NativeProcessManager:
     async def spawn_process(
         self, command: str, args: list[str] | None = None, cwd: str | None = None
     ) -> ProcessInfo:
-        import random
+        """Spawn is NOT implemented here — refuse to fabricate a PID.
 
-        pid = random.randint(10000, 99999)
-        info = ProcessInfo(
-            pid=pid,
-            name=command.split("/")[-1].split("\\")[-1],
-            command=f"{command} {' '.join(args or [])}".strip(),
-            cwd=cwd or "",
+        The previous implementation returned a random PID (10000–99999)
+        without creating any OS process — a fabricated execution. Real
+        spawning belongs to the runtime supervisor / Tauri layer, which
+        capture real PIDs.
+        """
+        raise NotImplementedError(
+            "NativeProcessManager.spawn_process is not wired to a real OS "
+            "spawn; no process was created and no PID was fabricated. Use "
+            "the runtime supervisor (/api/runtimes) for real process launches."
         )
-        self._processes[pid] = info
-        log.info("Process spawned", pid=pid, command=command)
-        return info
 
     async def get_process_count(self) -> int:
         return len(self._processes)

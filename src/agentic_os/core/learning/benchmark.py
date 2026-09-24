@@ -1,6 +1,5 @@
 """Benchmark manager — runs benchmarks, compares results, determines winners."""
 
-import random
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -270,20 +269,15 @@ class BenchmarkManager(BenchmarkPort):
 
     @staticmethod
     def _simulate_metric(metric: LearningMetric) -> float:
-        """Generate a simulated metric value within realistic bounds."""
-        ranges = {
-            LearningMetric.EXECUTION_LATENCY: (50.0, 2000.0),
-            LearningMetric.FAILURE_RATE: (0.0, 0.3),
-            LearningMetric.RESOURCE_USAGE: (10.0, 90.0),
-            LearningMetric.TASK_SUCCESS_RATE: (0.7, 1.0),
-            LearningMetric.RETRY_COUNT: (0.0, 5.0),
-            LearningMetric.CAPABILITY_UTILIZATION: (0.1, 1.0),
-            LearningMetric.COST_PER_EXECUTION: (0.001, 0.1),
-            LearningMetric.RESPONSE_QUALITY: (0.3, 1.0),
-            LearningMetric.USER_SATISFACTION: (0.5, 1.0),
-        }
-        lo, hi = ranges.get(metric, (0.0, 1.0))
-        return random.uniform(lo, hi)
+        """Placeholder metric source — DISABLED (spec §16).
+
+        The previous implementation returned random.uniform(lo, hi) values
+        presented as benchmark measurements (e.g. TASK_SUCCESS_RATE as a
+        random 0.7–1.0). Benchmarks without a real measurement source must
+        not report numbers at all: this now returns 0.0 and the caller
+        records the sample as unmeasured.
+        """
+        return 0.0
 
     @staticmethod
     def _get_all_metric_names(

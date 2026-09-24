@@ -33,8 +33,7 @@ log = get_logger("brains.bridge")
 _BUILTIN_VENDOR_MAP: dict[str, BrainVendor] = {
     "claude-code": BrainVendor.CLAUDE_CODE,
     "hermes": BrainVendor.HERMES,
-    "gemini-cli": BrainVendor.GEMINI_CLI,
-    "gemini": BrainVendor.GEMINI_CLI,
+    # "gemini-cli"/"gemini" REMOVED — retired provider, never re-aliased.
     "codex": BrainVendor.CODEX,
     "opencode": BrainVendor.OPENCODE,
     "aider": BrainVendor.AIDER,
@@ -51,8 +50,6 @@ _TOOL_TYPE_TO_BRAIN_TYPE: dict[str, BrainType] = {
 _LOCAL_CLI_TOOL_TYPES = {
     "claude-code",
     "hermes",
-    "gemini-cli",
-    "gemini",
     "codex",
     "opencode",
     "aider",
@@ -61,6 +58,27 @@ _LOCAL_CLI_TOOL_TYPES = {
     "lm-studio",
     "vllm",
 }
+
+# Developer runtimes / system tools that must NEVER be converted into AI
+# brains, no matter what discovery reports (spec §4/§22/§37). They may appear
+# under /api/discovery/tools or /api/runtimes — never in the AI Brain view.
+_NON_AGENT_TOOL_TYPES = frozenset(
+    {
+        "git",
+        "python",
+        "python3",
+        "node",
+        "nodejs",
+        "bun",
+        "docker",
+        "vscode-cli",
+        "npm",
+        "npx",
+        "uv",
+        "pip",
+        "cargo",
+    }
+)
 
 
 class BrainDiscoveryBridge:
@@ -199,6 +217,12 @@ class BrainDiscoveryBridge:
         """
         tool_type = payload.get("tool_type", "") or payload.get("name", "")
         if not tool_type:
+            return None
+
+        # Runtime/tool gate (spec §4/§22/§37): developer runtimes and system
+        # tools (python/node/git/docker/...) never become AI brains.
+        if str(tool_type).lower() in _NON_AGENT_TOOL_TYPES:
+            log.debug("Skipping non-agent tool %s — not an AI agent", tool_type)
             return None
 
         vendor = self._resolve_vendor(tool_type)

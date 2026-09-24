@@ -211,13 +211,13 @@ class BrainHealthMonitor:
                     )
                 continue
 
-            # Auto-heartbeat local CLI and tool agents so active system brains remain healthy
+            # Spec §16/§17: NO synthetic heartbeats. The previous code
+            # auto-heartbeated every local_cli/custom brain every 30s, which
+            # fabricated liveness for static CLIs and made the stale path
+            # unreachable. Installed CLIs are not daemons: heartbeat-based
+            # staleness does not apply to them. Their health comes from real
+            # probes at discovery time (windows_detector / discovery engine).
             if brain.brain_type.value in ("local_cli", "custom", "native"):
-                async with self._lock:
-                    self._brains[brain.id] = _BrainHeartbeat(
-                        brain_id=brain.id,
-                        last_heartbeat=now,
-                    )
                 continue
 
             age = now - hb.last_heartbeat

@@ -44,7 +44,7 @@ class TestEngineTypeEnum:
             "hermes",
             "opencode",
             "codex",
-            "gemini_cli",
+            # "gemini_cli" removed — retired provider (spec §2/§36).
             "openhands",
             "continue",
             "aider",

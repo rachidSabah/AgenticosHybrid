@@ -1,52 +1,47 @@
 """
 Phase 4 — Zero-Config Local GPU Hub & Hardware Profiling.
+
+Spec §16/§17 remediation: this hub previously reported a hardcoded
+"NVIDIA GeForce RTX 4090", 24 GB VRAM, 48.0 °C and a canned list of
+"downloaded" models with invented tokens_per_sec values. None of that was
+measured. Until real hardware enumeration is wired (e.g. nvidia-smi /
+psutil / Metal), the telemetry endpoint reports NO DATA (zeros / empty
+model list) instead of invented hardware.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass
-class LocalModelProfile:
-    model_id: str
-    name: str
-    size_gb: float
-    vram_required_gb: float
-    tokens_per_sec: float
-    is_downloaded: bool
-    is_active: bool
-
-
 class LocalGPUHub:
-    """Discovers local inference engines (Ollama, vLLM, llama.cpp) and profiles GPU acceleration."""
+    """GPU/local-model telemetry. Reports NO DATA until real probes exist."""
 
     def __init__(self) -> None:
-        self.device_name = "NVIDIA GeForce RTX 4090 (DirectML / CUDA 12.4)"
-        self.total_vram_gb = 24.0
-        self.allocated_vram_gb = 5.2
-        self.gpu_temp_c = 48.0
+        # No fabricated device identity: empty means "not detected".
+        self.device_name = ""
+        self.total_vram_gb = 0.0
+        self.allocated_vram_gb = 0.0
+        self.gpu_temp_c = 0.0
         self.is_offline_mode = False
-        self._models: list[LocalModelProfile] = [
-            LocalModelProfile(
-                "deepseek-coder:6.7b", "DeepSeek Coder 6.7B", 4.1, 5.2, 88.5, True, True
-            ),
-            LocalModelProfile("qwen2.5-coder:7b", "Qwen 2.5 Coder 7B", 4.7, 5.8, 74.2, True, False),
-            LocalModelProfile(
-                "llama3.3:70b-q4", "Llama 3.3 70B (Q4_K_M)", 40.2, 22.0, 32.0, False, False
-            ),
-        ]
+        # No fabricated model catalog: only models actually registered by a
+        # real inference engine (Ollama/vLLM/llama.cpp) would appear here.
+        self._models: list[dict[str, Any]] = []
 
     def get_gpu_telemetry(self) -> dict[str, Any]:
         return {
-            "device_name": self.device_name,
+            "device_name": self.device_name or None,
             "total_vram_gb": self.total_vram_gb,
-            "allocated_vram_gb": round(self.allocated_vram_gb, 1),
-            "vram_utilization_pct": round((self.allocated_vram_gb / self.total_vram_gb) * 100, 1),
-            "gpu_temp_c": self.gpu_temp_c,
+            "allocated_vram_gb": self.allocated_vram_gb,
+            "vram_utilization_pct": (
+                round((self.allocated_vram_gb / self.total_vram_gb) * 100, 1)
+                if self.total_vram_gb > 0
+                else 0.0
+            ),
+            "gpu_temp_c": self.gpu_temp_c or None,
             "is_offline_mode": self.is_offline_mode,
-            "models": [m.__dict__ for m in self._models],
+            "hardware_detected": bool(self.device_name),
+            "models": list(self._models),
         }
 
     def toggle_offline(self, offline: bool) -> dict[str, Any]:
@@ -54,38 +49,30 @@ class LocalGPUHub:
         return {"is_offline_mode": self.is_offline_mode}
 
     def load_model(self, model_id: str) -> dict[str, Any]:
-        for m in self._models:
-            if m.model_id == model_id:
-                m.is_downloaded = True
-                m.is_active = True
-                self.allocated_vram_gb = min(
-                    self.total_vram_gb, self.allocated_vram_gb + m.vram_required_gb
-                )
-                return {
-                    "model_id": model_id,
-                    "status": "loaded",
-                    "allocated_vram_gb": self.allocated_vram_gb,
-                }
-        return {"model_id": model_id, "status": "not_found"}
+        # No real inference engine is wired, so no model can be loaded.
+        return {
+            "model_id": model_id,
+            "status": "unavailable",
+            "reason": "no local inference engine detected",
+        }
 
     def unload_model(self, model_id: str) -> dict[str, Any]:
-        for m in self._models:
-            if m.model_id == model_id:
-                m.is_active = False
-                self.allocated_vram_gb = max(0.0, self.allocated_vram_gb - m.vram_required_gb)
-                return {
-                    "model_id": model_id,
-                    "status": "unloaded",
-                    "allocated_vram_gb": self.allocated_vram_gb,
-                }
-        return {"model_id": model_id, "status": "not_found"}
+        return {
+            "model_id": model_id,
+            "status": "unavailable",
+            "reason": "no local inference engine detected",
+        }
 
     def download_model(self, model_id: str) -> dict[str, Any]:
-        for m in self._models:
-            if m.model_id == model_id:
-                m.is_downloaded = True
-                return {"model_id": model_id, "status": "downloaded", "size_gb": m.size_gb}
-        return {"model_id": model_id, "status": "not_found"}
+        # No real inference engine / registry is wired, so no model can be
+        # downloaded. Honest refusal instead of a fake "downloading" state.
+        return {
+            "model_id": model_id,
+            "status": "unavailable",
+            "reason": "no local inference engine detected",
+        }
 
 
+# Honest singleton: all telemetry is zero/NO-DATA until real hardware
+# probes are wired (see module docstring).
 gpu_hub = LocalGPUHub()

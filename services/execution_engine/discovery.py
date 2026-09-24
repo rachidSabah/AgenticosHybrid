@@ -18,7 +18,6 @@ __all__ = [
 # Mapping of EngineType to known binary names to search for
 _ENGINE_BINARIES: dict[EngineType, list[str]] = {
     EngineType.CLAUDE_CODE: ["claude"],
-    EngineType.GEMINI_CLI: ["gemini", "gemini-cli"],
     EngineType.CODEX_CLI: ["codex", "openai-codex"],
     EngineType.HERMES: ["hermes", "hermes-daemon"],
     EngineType.OPENHANDS: ["openhands", "openhands-cli"],
@@ -133,7 +132,6 @@ def _get_version(binary_path: Path, engine_type: EngineType) -> str | None:
     try:
         version_flags = {
             EngineType.CLAUDE_CODE: ["--version"],
-            EngineType.GEMINI_CLI: ["--version"],
             EngineType.CODEX_CLI: ["--version"],
             EngineType.HERMES: ["--version"],
             EngineType.AIDER: ["--version"],
@@ -330,8 +328,7 @@ class EngineDiscovery:
     def _check_env_vars(self, engine_type: EngineType) -> EngineDiscoveryResult | None:
         env_keys = {
             EngineType.CLAUDE_CODE: ["CLAUDE_BINARY_PATH", "CLAUDE_CLI_PATH"],
-            EngineType.GEMINI_CLI: ["GEMINI_BINARY_PATH", "GEMINI_CLI_PATH"],
-            EngineType.CODEX_CLI: ["CODEX_BINARY_PATH"],
+            EngineType.CODEX_CLI: ["CODEX_BINARY_PATH", "CODEX_CLI_PATH"],
             EngineType.HERMES: ["HERMES_DAEMON_PATH"],
             EngineType.AIDER: ["AIDER_BINARY_PATH"],
         }

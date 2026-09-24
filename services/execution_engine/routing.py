@@ -31,7 +31,6 @@ __all__ = [
 # Engine quality scores (higher = better) based on known model/engine quality
 _QUALITY_SCORES: dict[EngineType, float] = {
     EngineType.CLAUDE_CODE: 0.95,
-    EngineType.GEMINI_CLI: 0.88,
     EngineType.CODEX_CLI: 0.90,
     EngineType.HERMES: 0.75,
     EngineType.OPENHANDS: 0.85,
@@ -46,7 +45,6 @@ _QUALITY_SCORES: dict[EngineType, float] = {
 # Per-token cost estimates (USD) for each engine
 _COST_PER_TOKEN: dict[EngineType, float] = {
     EngineType.CLAUDE_CODE: 0.000015,
-    EngineType.GEMINI_CLI: 0.000005,
     EngineType.CODEX_CLI: 0.000010,
     EngineType.HERMES: 0.0,
     EngineType.OPENHANDS: 0.000008,
@@ -61,7 +59,6 @@ _COST_PER_TOKEN: dict[EngineType, float] = {
 # Estimated average latency (seconds) per task for each engine
 _AVG_LATENCY_S: dict[EngineType, float] = {
     EngineType.CLAUDE_CODE: 15.0,
-    EngineType.GEMINI_CLI: 10.0,
     EngineType.CODEX_CLI: 20.0,
     EngineType.HERMES: 2.0,
     EngineType.OPENHANDS: 25.0,

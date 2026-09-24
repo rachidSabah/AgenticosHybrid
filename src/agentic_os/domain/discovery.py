@@ -606,7 +606,7 @@ class AgentDiscoveryConfig:
             "hermes",
             "claude-code",
             "codex",
-            "gemini-cli",
+            # "gemini-cli" REMOVED — retired provider (spec §2/§36).
             "opencode",
             "aider",
             "continue",

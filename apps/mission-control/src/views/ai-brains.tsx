@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { safeFixed, safeNum } from "@/lib/safe";
+import { safeFixed } from "@/lib/safe";
 import { motion, AnimatePresence } from "framer-motion";
 import { Panel, Stat, Empty } from "@/components/ui/primitives";
 import { useStore } from "@/lib/store";
@@ -13,12 +13,12 @@ interface BrainNode {
   agentId: string;
   agentRole: string;
   status: "idle" | "thinking" | "coding" | "failed" | "completed";
-  energy: number;
-  neurons: number;
-  synapses: number;
-  cpu: number;
-  memory: number;
-  temperature: number;
+  energy: number | null;
+  neurons: number | null;
+  synapses: number | null;
+  cpu: number | null;
+  memory: number | null;
+  temperature: number | null;
   lastPulse: number;
   pulses: { topic: string; at: number }[];
 }
@@ -40,8 +40,8 @@ export function AIBrains() {
     sort: "energy",
   });
 
-  const brainNodes = useMemo(() => {
-    return Object.values(agents).map((agent) => {
+  const brainNodes = useMemo<BrainNode[]>(() => {
+    return Object.values(agents).map((agent): BrainNode => {
       const statusMap: Record<string, BrainNode["status"]> = {
         running: "thinking",
         completed: "completed",
@@ -55,31 +55,21 @@ export function AIBrains() {
       };
 
       const status = statusMap[agent.status] || "idle";
-      // Derive display metrics from REAL agent signals — no synthetic/random
-      // values. latency_ms is real when present; otherwise we fall back to a
-      // status-based baseline rather than inventing numbers.
-      const latency = safeNum((agent as unknown as { latency_ms?: number }).latency_ms);
-      const loadBase =
-        status === "thinking" ? 75 : status === "coding" ? 55 : status === "failed" ? 30 : 20;
-      const energy = Math.min(100, loadBase + Math.round(latency));
-      const cpu = Math.min(100, loadBase + Math.round(latency * 0.5));
-      const temperature = Math.min(95, loadBase + Math.round(latency * 0.3));
-      const memory = 256 + (agent.capabilities?.length ?? 0) * 64; // MB, from real capability count
-      const neurons = 500 + (agent.capabilities?.length ?? 0) * 120;
-      const synapses = neurons * 5;
-      const healthNum = agent.health === "healthy" ? 1 : agent.health === "degraded" ? 0.5 : 0;
 
+      // Only REAL signals are rendered. The backend exposes no per-agent energy/
+      // neuron/synapse/cpu/memory/temperature metrics, so they stay null and the
+      // UI shows "—" instead of inventing numbers.
       return {
         id: `brain-${agent.id}`,
         agentId: agent.id,
         agentRole: agent.role,
         status,
-        energy: Math.round(energy * (0.6 + 0.4 * healthNum)),
-        neurons,
-        synapses,
-        cpu: Math.round(cpu * (0.6 + 0.4 * healthNum)),
-        memory,
-        temperature: Math.round(temperature * (0.6 + 0.4 * healthNum)),
+        energy: null,
+        neurons: null,
+        synapses: null,
+        cpu: null,
+        memory: null,
+        temperature: null,
         lastPulse: Date.now(),
         pulses: telemetry.pulses.filter((p) => p.topic.includes(agent.id)).slice(0, 5),
       };
@@ -95,12 +85,14 @@ export function AIBrains() {
         : true;
       return statusMatch && searchMatch;
     }).sort((a, b) => {
-      if (filters.sort === "energy") return b.energy - a.energy;
-      if (filters.sort === "neurons") return b.neurons - a.neurons;
-      if (filters.sort === "synapses") return b.synapses - a.synapses;
-      if (filters.sort === "cpu") return b.cpu - a.cpu;
-      if (filters.sort === "memory") return b.memory - a.memory;
-      if (filters.sort === "temperature") return b.temperature - a.temperature;
+      // Null metrics (unknown) sort last — never invented.
+      const num = (v: number | null) => (v === null ? -1 : v);
+      if (filters.sort === "energy") return num(b.energy) - num(a.energy);
+      if (filters.sort === "neurons") return num(b.neurons) - num(a.neurons);
+      if (filters.sort === "synapses") return num(b.synapses) - num(a.synapses);
+      if (filters.sort === "cpu") return num(b.cpu) - num(a.cpu);
+      if (filters.sort === "memory") return num(b.memory) - num(a.memory);
+      if (filters.sort === "temperature") return num(b.temperature) - num(a.temperature);
       return b.lastPulse - a.lastPulse;
     });
   }, [brainNodes, filters]);
@@ -294,30 +286,32 @@ export function AIBrains() {
                       <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] text-faint">
                         <div className="flex items-center gap-1.5">
                           <Zap size={12} />
-                          <span>{safeFixed(brain?.energy, 0)}%</span>
+                          <span>{typeof brain.energy === "number" ? `${safeFixed(brain.energy, 0)}%` : "—"}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Cpu size={12} />
-                          <span>{safeFixed(brain?.cpu, 0)}%</span>
+                          <span>{typeof brain.cpu === "number" ? `${safeFixed(brain.cpu, 0)}%` : "—"}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <MemoryStick size={12} />
-                          <span>{safeFixed((safeNum(brain?.memory) / 1000), 1)}GB</span>
+                          <span>{typeof brain.memory === "number" ? `${safeFixed(brain.memory / 1000, 1)}GB` : "—"}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Thermometer size={12} />
-                          <span>{safeFixed(brain?.temperature, 0)}°C</span>
+                          <span>{typeof brain.temperature === "number" ? `${safeFixed(brain.temperature, 0)}°C` : "—"}</span>
                         </div>
                       </div>
 
                       <div className="mt-3 flex items-center gap-2">
                         <div className="h-1 flex-1 rounded-full bg-surface/50">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${brain.energy}%`, backgroundColor: statusColor }}
-                          />
+                          {typeof brain.energy === "number" && (
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${brain.energy}%`, backgroundColor: statusColor }}
+                            />
+                          )}
                         </div>
-                        <span className="text-[9px] font-medium">{safeFixed(brain?.energy, 0)}%</span>
+                        <span className="text-[9px] font-medium">{typeof brain.energy === "number" ? `${safeFixed(brain.energy, 0)}%` : "—"}</span>
                       </div>
 
                       {isExpanded && (
@@ -330,11 +324,11 @@ export function AIBrains() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[9px] text-faint">
                             <div>
                               <div className="font-medium">Neurons</div>
-                              <div>{brain.neurons.toLocaleString()}</div>
+                              <div>{typeof brain.neurons === "number" ? brain.neurons.toLocaleString() : "—"}</div>
                             </div>
                             <div>
                               <div className="font-medium">Synapses</div>
-                              <div>{brain.synapses.toLocaleString()}</div>
+                              <div>{typeof brain.synapses === "number" ? brain.synapses.toLocaleString() : "—"}</div>
                             </div>
                             <div>
                               <div className="font-medium">Last Pulse</div>
@@ -398,27 +392,27 @@ function BrainDetails({ brain }: { brain?: BrainNode }) {
         </div>
         <div>
           <div className="font-medium">Energy</div>
-          <div>{safeFixed(brain?.energy, 0)}%</div>
+          <div>{typeof brain.energy === "number" ? `${safeFixed(brain.energy, 0)}%` : "—"}</div>
         </div>
         <div>
           <div className="font-medium">Neurons</div>
-          <div>{brain.neurons.toLocaleString()}</div>
+          <div>{typeof brain.neurons === "number" ? brain.neurons.toLocaleString() : "—"}</div>
         </div>
         <div>
           <div className="font-medium">Synapses</div>
-          <div>{brain.synapses.toLocaleString()}</div>
+          <div>{typeof brain.synapses === "number" ? brain.synapses.toLocaleString() : "—"}</div>
         </div>
         <div>
           <div className="font-medium">CPU</div>
-          <div>{safeFixed(brain?.cpu, 0)}%</div>
+          <div>{typeof brain.cpu === "number" ? `${safeFixed(brain.cpu, 0)}%` : "—"}</div>
         </div>
         <div>
           <div className="font-medium">Memory</div>
-          <div>{safeFixed((safeNum(brain?.memory) / 1000), 1)}GB</div>
+          <div>{typeof brain.memory === "number" ? `${safeFixed(brain.memory / 1000, 1)}GB` : "—"}</div>
         </div>
         <div>
           <div className="font-medium">Temperature</div>
-          <div>{safeFixed(brain?.temperature, 0)}°C</div>
+          <div>{typeof brain.temperature === "number" ? `${safeFixed(brain.temperature, 0)}°C` : "—"}</div>
         </div>
         <div>
           <div className="font-medium">Last Pulse</div>

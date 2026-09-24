@@ -15,6 +15,7 @@ from core.contracts.execution_engine import (
     EngineType,
 )
 from core.logging import get_logger
+
 from services.execution_engine.adapters.base import BaseExecutionEngineAdapter
 
 _log = get_logger(__name__)
@@ -95,10 +96,12 @@ class HermesAdapter(BaseExecutionEngineAdapter):
         if not self._process:
             return {"goal": goal, "result": "mock_hermes_execution", "mock": True}
         request = json.dumps({"method": "execute_task", "params": {"goal": goal}}) + "\n"
-        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
+        if self._process.stdin is None:
+            raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(request.encode())
         await self._process.stdin.drain()
-        if self._process.stdout is None: raise RuntimeError("Process stdout is not available")
+        if self._process.stdout is None:
+            raise RuntimeError("Process stdout is not available")
         response = await asyncio.wait_for(
             self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 120)
         )
@@ -110,7 +113,8 @@ class HermesAdapter(BaseExecutionEngineAdapter):
         cancel_request = (
             json.dumps({"method": "cancel_task", "params": {"task_id": task_id}}) + "\n"
         )
-        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
+        if self._process.stdin is None:
+            raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(cancel_request.encode())
         await self._process.stdin.drain()
         return True
@@ -145,10 +149,11 @@ class HermesAdapter(BaseExecutionEngineAdapter):
         )
 
     async def _on_estimate_latency(self, task: Any) -> EngineLatencyEstimate:
+        """Latency estimate — honest zeros (no measurement source wired). spec §18."""
         return EngineLatencyEstimate(
-            estimated_duration_s=2.0,
-            p50_latency_s=1.0,
-            p95_latency_s=5.0,
-            p99_latency_s=10.0,
-            based_on_samples=100,
+            estimated_duration_s=0.0,
+            p50_latency_s=0.0,
+            p95_latency_s=0.0,
+            p99_latency_s=0.0,
+            based_on_samples=0,
         )

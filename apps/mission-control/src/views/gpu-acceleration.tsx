@@ -63,19 +63,26 @@ export function GPUAcceleration() {
     }
   };
 
-  const models = telemetry?.models ?? [
-    { model_id: "deepseek-coder:6.7b", name: "DeepSeek Coder 6.7B", size_gb: 4.1, vram_required_gb: 5.2, tokens_per_sec: 88.5, is_downloaded: true, is_active: true },
-    { model_id: "qwen2.5-coder:7b", name: "Qwen 2.5 Coder 7B", size_gb: 4.7, vram_required_gb: 5.8, tokens_per_sec: 74.2, is_downloaded: true, is_active: false },
-    { model_id: "llama3.3:70b-q4", name: "Llama 3.3 70B (Q4_K_M)", size_gb: 40.2, vram_required_gb: 22.0, tokens_per_sec: 32.0, is_downloaded: false, is_active: false },
-  ];
+  // Only models actually reported by the backend — never a fabricated catalog.
+  const models: any[] = Array.isArray(telemetry?.models) ? telemetry.models : [];
 
   return (
     <div className="flex h-full flex-col bg-background text-text p-4 space-y-4 overflow-auto">
       {/* Telemetry Header */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <Stat label="Hardware Acceleration" value="RTX 4090 (CUDA 12.4)" tone="ok" />
-        <Stat label="VRAM Allocated" value={`${telemetry?.allocated_vram_gb ?? 5.2} / ${telemetry?.total_vram_gb ?? 24.0} GB`} />
-        <Stat label="GPU Temperature" value={`${telemetry?.gpu_temp_c ?? 48.0}°C`} tone="ok" />
+        <Stat label="Hardware Acceleration" value={telemetry?.device_name || "—"} />
+        <Stat
+          label="VRAM Allocated"
+          value={
+            telemetry?.hardware_detected && telemetry?.total_vram_gb > 0
+              ? `${telemetry.allocated_vram_gb} / ${telemetry.total_vram_gb} GB`
+              : "—"
+          }
+        />
+        <Stat
+          label="GPU Temperature"
+          value={telemetry?.gpu_temp_c != null ? `${telemetry.gpu_temp_c}°C` : "—"}
+        />
         <div className="rounded-xl border border-border/60 bg-surface/20 p-3 flex items-center justify-between">
           <div>
             <div className="text-[11px] text-faint">Air-Gapped Mode</div>
@@ -94,6 +101,11 @@ export function GPUAcceleration() {
 
       {/* Local Model Discovery Matrix */}
       <Panel title="Zero-Config Local Model Hub (Ollama / vLLM / llama.cpp)" subtitle="Auto-discovered weights with DirectML / CUDA tensor acceleration">
+        {models.length === 0 ? (
+          <div className="p-2">
+            <Empty title="No models detected" hint="No local inference engine has registered any models yet" />
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {models.map((m: any) => (
             <div key={m.model_id} className="rounded-xl border border-border/60 bg-surface/20 p-4 space-y-3">
@@ -137,6 +149,7 @@ export function GPUAcceleration() {
             </div>
           ))}
         </div>
+        )}
       </Panel>
     </div>
   );

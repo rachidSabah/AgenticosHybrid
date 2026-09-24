@@ -8,6 +8,7 @@ from typing import Any
 
 from core.event_bus.bus import EventBus
 from core.logging import get_logger
+
 from services.execution_engine.discovery import EngineDiscovery
 from services.execution_engine.manager import ExecutionEngineManager
 from services.runtime_discovery.binding import RuntimeBindingManager
@@ -69,8 +70,7 @@ _SOURCE_TO_PROVIDER_TYPE: dict[str, DiscoveryProviderType] = {
 # Map discovered binary names to RuntimeType
 _BINARY_TO_RUNTIME: dict[str, RuntimeType] = {
     "claude": RuntimeType.CLAUDE_CODE,
-    "gemini": RuntimeType.GEMINI_CLI,
-    "gemini-cli": RuntimeType.GEMINI_CLI,
+    # "gemini"/"gemini-cli" REMOVED — retired provider (spec §2/§36).
     "codex": RuntimeType.CODEX_CLI,
     "openai-codex": RuntimeType.CODEX_CLI,
     "hermes": RuntimeType.HERMES,
@@ -112,7 +112,6 @@ _BINARY_TO_RUNTIME: dict[str, RuntimeType] = {
 
 _RUNTIME_DISPLAY_NAMES: dict[RuntimeType, str] = {
     RuntimeType.CLAUDE_CODE: "Claude Code",
-    RuntimeType.GEMINI_CLI: "Gemini CLI",
     RuntimeType.CODEX_CLI: "OpenAI Codex CLI",
     RuntimeType.HERMES: "Hermes Desktop Agent",
     RuntimeType.OPENHANDS: "OpenHands",
@@ -143,7 +142,6 @@ _RUNTIME_DISPLAY_NAMES: dict[RuntimeType, str] = {
 
 _RUNTIME_VENDORS: dict[RuntimeType, str] = {
     RuntimeType.CLAUDE_CODE: "Anthropic",
-    RuntimeType.GEMINI_CLI: "Google",
     RuntimeType.CODEX_CLI: "OpenAI",
     RuntimeType.HERMES: "AAiOS",
     RuntimeType.OPENHANDS: "All Hands AI",
@@ -225,9 +223,11 @@ class RuntimeDiscoveryManager:
 
         for result in results:
             runtime_type = _BINARY_TO_RUNTIME.get(result.name, RuntimeType.CUSTOM)
-            provider_type = _SOURCE_TO_PROVIDER_TYPE.get(
-                result.source, DiscoveryProviderType.CUSTOM
-            ) if result.source else DiscoveryProviderType.PATH
+            provider_type = (
+                _SOURCE_TO_PROVIDER_TYPE.get(result.source, DiscoveryProviderType.CUSTOM)
+                if result.source
+                else DiscoveryProviderType.PATH
+            )
             runtime_result = RuntimeDiscoveryResult(
                 runtime_type=runtime_type,
                 name=result.name,
@@ -251,12 +251,11 @@ class RuntimeDiscoveryManager:
                     result.source,
                 )
 
-        # Add built-in runtimes that discovery may not find
-        for rt in (RuntimeType.PYTHON, RuntimeType.NODEJS, RuntimeType.GIT, RuntimeType.DOCKER):
-            if not any(r.runtime_type == rt for r in discovered_runtimes):
-                rr = await self._discover_builtin(rt)
-                if rr:
-                    discovered_runtimes.append(rr)
+        # Spec §4/§31: do NOT force-inject built-in runtimes that discovery
+        # did not find, and do NOT bind them as ACTIVE. The previous code
+        # injected PYTHON/NODEJS/GIT/DOCKER unconditionally and flipped them
+        # to ACTIVE, which surfaced Python/Git/Node as active swarm agents.
+        # Real discovery results only — what is not detected is not present.
 
         duration_ms = (time.monotonic() - start) * 1000
         if self._bus:
@@ -419,13 +418,6 @@ class RuntimeDiscoveryManager:
                 "code.read",
                 "code.write",
                 "code.refactor",
-                "code.review",
-                "test.run",
-                "shell.execute",
-            ],
-            RuntimeType.GEMINI_CLI: [
-                "code.read",
-                "code.write",
                 "code.review",
                 "test.run",
                 "shell.execute",

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from core.logging import get_logger
+
 from services.runtime_discovery.models import (
     DiscoveryProviderType,
     RuntimeDiscoveryResult,
@@ -18,7 +19,7 @@ _ENV_VAR_MAP: dict[str, tuple[str, RuntimeType]] = {
     "GIT_HOME": ("git", RuntimeType.GIT),
     "OLLAMA_HOST": ("ollama", RuntimeType.OLLAMA),
     "ANTHROPIC_API_KEY": ("claude", RuntimeType.CLAUDE_CODE),
-    "GEMINI_API_KEY": ("gemini", RuntimeType.GEMINI_CLI),
+    # GEMINI_API_KEY mapping REMOVED — retired Gemini CLI (spec §2/§36).
     "OPENAI_API_KEY": ("codex", RuntimeType.CODEX_CLI),
 }
 
@@ -29,7 +30,6 @@ _DISPLAY_NAMES: dict[RuntimeType, str] = {
     RuntimeType.GIT: "Git",
     RuntimeType.OLLAMA: "Ollama",
     RuntimeType.CLAUDE_CODE: "Claude Code",
-    RuntimeType.GEMINI_CLI: "Gemini CLI",
     RuntimeType.CODEX_CLI: "Codex CLI",
 }
 

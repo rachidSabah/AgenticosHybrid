@@ -320,7 +320,8 @@ class TestBrainDiscoveryBridgeResolveVendor:
     def test_known_tool_types(self, bridge: BrainDiscoveryBridge) -> None:
         assert bridge._resolve_vendor("claude-code") == BrainVendor.CLAUDE_CODE
         assert bridge._resolve_vendor("hermes") == BrainVendor.HERMES
-        assert bridge._resolve_vendor("gemini-cli") == BrainVendor.GEMINI_CLI
+        # gemini-cli is retired — must NOT resolve to a vendor (spec §2/§36).
+        assert bridge._resolve_vendor("gemini-cli") == BrainVendor.CUSTOM
         assert bridge._resolve_vendor("codex") == BrainVendor.CODEX
         assert bridge._resolve_vendor("opencode") == BrainVendor.OPENCODE
         assert bridge._resolve_vendor("aider") == BrainVendor.AIDER
@@ -334,8 +335,9 @@ class TestBrainDiscoveryBridgeResolveVendor:
     def test_unknown_tool_type_returns_custom(self, bridge: BrainDiscoveryBridge) -> None:
         assert bridge._resolve_vendor("unknown") == BrainVendor.CUSTOM
 
-    def test_resolve_gemini_alias(self, bridge: BrainDiscoveryBridge) -> None:
-        assert bridge._resolve_vendor("gemini") == BrainVendor.GEMINI_CLI
+    def test_retired_gemini_alias_is_gone(self, bridge: BrainDiscoveryBridge) -> None:
+        """No alias may resurrect the retired provider (spec §2/§7/§36)."""
+        assert bridge._resolve_vendor("gemini") == BrainVendor.CUSTOM
 
 
 class TestBrainDiscoveryBridgeResolveBrainType:

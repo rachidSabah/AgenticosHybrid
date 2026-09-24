@@ -24,7 +24,7 @@ export type BrainType = (typeof BRAIN_TYPES)[number];
 export const BRAIN_VENDORS = [
   "openai", "anthropic", "google", "mistral", "groq", "azure", "aws", "vertex",
   "openrouter", "cohere", "deepseek", "qwen", "moonshot", "together", "fireworks",
-  "replicate", "ollama", "lm_studio", "vllm", "hermes", "claude_code", "gemini_cli",
+  "replicate", "ollama", "lm_studio", "vllm", "hermes", "claude_code",
   "codex", "opencode", "aider", "continue", "github_copilot", "cursor", "custom",
   "python", "node", "git", "bun",
 ] as const;
@@ -772,7 +772,6 @@ export const VENDOR_ICON_MAP: Record<string, string> = {
   vllm: "#06b6d4",
   hermes: "#00f0ff",
   claude_code: "#d980ff",
-  gemini_cli: "#4285f4",
   codex: "#818cf8",
   opencode: "#38bdf8",
   aider: "#10b981",

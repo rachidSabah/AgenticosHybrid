@@ -87,6 +87,8 @@ class PathDiscovery(DiscoveryProvider):
                     EngineCapability.REASONING,
                 ],
             },
+            # "gemini" provider REMOVED — retired Gemini CLI (spec §2).
+
             {
                 "name": "aider",
                 "binary": "aider",

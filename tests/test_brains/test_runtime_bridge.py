@@ -12,7 +12,6 @@ from agentic_os.core.brains.runtime_bridge import (
     ClaudeCodeConnector,
     CodexConnector,
     ContinueConnector,
-    GeminiCliConnector,
     HermesConnector,
     OpenCodeConnector,
     RuntimeBridge,
@@ -77,7 +76,8 @@ class TestRuntimeBridgeInit:
     def test_registers_default_connectors(self, bridge: RuntimeBridge) -> None:
         assert bridge.get_connector("claude-code") is not None
         assert bridge.get_connector("hermes") is not None
-        assert bridge.get_connector("gemini-cli") is not None
+        # gemini-cli is a RETIRED provider — no connector may exist (spec §2).
+        assert bridge.get_connector("gemini-cli") is None
         assert bridge.get_connector("codex") is not None
         assert bridge.get_connector("opencode") is not None
         assert bridge.get_connector("aider") is not None
@@ -86,7 +86,6 @@ class TestRuntimeBridgeInit:
     def test_default_connectors_are_correct_types(self, bridge: RuntimeBridge) -> None:
         assert isinstance(bridge.get_connector("claude-code"), ClaudeCodeConnector)
         assert isinstance(bridge.get_connector("hermes"), HermesConnector)
-        assert isinstance(bridge.get_connector("gemini-cli"), GeminiCliConnector)
         assert isinstance(bridge.get_connector("codex"), CodexConnector)
         assert isinstance(bridge.get_connector("opencode"), OpenCodeConnector)
         assert isinstance(bridge.get_connector("aider"), AiderConnector)
@@ -95,7 +94,6 @@ class TestRuntimeBridgeInit:
     def test_default_vendors(self, bridge: RuntimeBridge) -> None:
         assert bridge.get_connector("claude-code").vendor == BrainVendor.CLAUDE_CODE
         assert bridge.get_connector("hermes").vendor == BrainVendor.HERMES
-        assert bridge.get_connector("gemini-cli").vendor == BrainVendor.GEMINI_CLI
         assert bridge.get_connector("codex").vendor == BrainVendor.CODEX
         assert bridge.get_connector("opencode").vendor == BrainVendor.OPENCODE
         assert bridge.get_connector("aider").vendor == BrainVendor.AIDER
@@ -124,7 +122,7 @@ class TestRuntimeBridgeConnectorManagement:
 
     def test_list_connectors_returns_all(self, bridge: RuntimeBridge) -> None:
         conns = bridge.list_connectors()
-        assert len(conns) == 11
+        assert len(conns) == 10
 
     def test_list_tool_types(self, bridge: RuntimeBridge) -> None:
         types = bridge.list_tool_types()
@@ -135,7 +133,7 @@ class TestRuntimeBridgeConnectorManagement:
         assert "node" in types
         assert "bun" in types
         assert "git" in types
-        assert len(types) == 11
+        assert len(types) == 10
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -146,7 +144,7 @@ class TestRuntimeBridgeConnectorManagement:
 class TestRuntimeBridgeDetection:
     async def test_detect_all_runs_on_all_connectors(self, bridge: RuntimeBridge) -> None:
         results = await bridge.detect_all(use_cache=False)
-        assert len(results) == 11
+        assert len(results) == 10
 
     async def test_detect_all_uses_cache(
         self, bridge: RuntimeBridge, mock_connector: MagicMock
@@ -310,7 +308,12 @@ class TestRuntimeBridgeConversion:
 
     async def test_to_brain_records(self, bridge: RuntimeBridge) -> None:
         records = await bridge.to_brain_records()
-        assert len(records) == 11  # One per default connector
+        # Only AI agents become brain records — runtimes (python/node/bun/git)
+        # are excluded (spec §22/§37).
+        assert len(records) == 6
+        names = {r.display_name for r in records}
+        for runtime_name in ("Python", "Node.js", "Bun", "Git"):
+            assert runtime_name not in names
         for r in records:
             assert isinstance(r, BrainRecord)
 
@@ -319,7 +322,7 @@ class TestRuntimeBridgeConversion:
     ) -> None:
         bridge.register_connector(mock_connector)
         records = await bridge.to_brain_records()
-        assert len(records) == 12
+        assert len(records) == 7
         mock_tool_records = [r for r in records if r.display_name == "Mock Tool"]
         assert len(mock_tool_records) == 1
 

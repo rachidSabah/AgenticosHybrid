@@ -28,7 +28,6 @@ const PROVIDER_COLORS: Record<string, string> = {
   hermes: "#00f0ff",
   opencode: "#38bdf8",
   agy: "#f472b6",
-  gemini: "#f97316",
   codex: "#818cf8",
   cursor: "#38bdf8",
   ollama: "#f97316",

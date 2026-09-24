@@ -855,13 +855,22 @@ class SwarmCoordinator:
         if swarm_id not in self._swarm_phases:
             self._swarm_phases[swarm_id] = SwarmPhase.EXECUTING
         if swarm_id not in self._swarm_members:
-            self._swarm_members[swarm_id] = [{"id": name, "role": "member"} for name in agents]
+            # Spec §13: do NOT synthesize swarm members from the mission's
+            # preferred-agent name list. A swarm row with fabricated members
+            # made the UI show agent participation that never happened.
+            # Members start empty; only a real swarm composition populates
+            # them (preferred_agents are a routing preference, not evidence
+            # of participation).
+            self._swarm_members[swarm_id] = []
         if swarm_id not in self._swarm_roles:
             self._swarm_roles[swarm_id] = {}
         self._swarm_mission_meta[swarm_id] = {
             "title": title,
             "source": "mission",
             "created_at": _now_iso(),
+            # Preferred agents recorded as METADATA (a routing preference),
+            # never rendered as swarm members.
+            "preferred_agents": agents,
         }
         entry = {
             "swarm_id": swarm_id,

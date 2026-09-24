@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.logging import get_logger
+
 from services.runtime_discovery.models import (
     Runtime,
     RuntimeCapability,
@@ -113,7 +114,6 @@ class ExecutableExistsValidator:
 class VersionDetectValidator:
     _VERSION_FLAGS: dict[RuntimeType, list[str]] = {
         RuntimeType.CLAUDE_CODE: ["--version"],
-        RuntimeType.GEMINI_CLI: ["--version"],
         RuntimeType.CODEX_CLI: ["--version"],
         RuntimeType.HERMES: ["--version"],
         RuntimeType.AIDER: ["--version"],
@@ -160,13 +160,6 @@ class CapabilityMatchValidator:
             "code.read",
             "code.write",
             "code.refactor",
-            "code.review",
-            "test.run",
-            "shell.execute",
-        ],
-        RuntimeType.GEMINI_CLI: [
-            "code.read",
-            "code.write",
             "code.review",
             "test.run",
             "shell.execute",

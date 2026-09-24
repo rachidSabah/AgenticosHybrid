@@ -27,7 +27,7 @@ class RuntimeType(StrEnum):
     CLAUDE_CODE = "claude_code"
     HERMES = "hermes"
     CODEX_CLI = "codex_cli"
-    GEMINI_CLI = "gemini_cli"
+    # GEMINI_CLI REMOVED — retired provider (spec §2/§36).
     AIDER = "aider"
     OPENCODE = "opencode"
     OPENHANDS = "openhands"

@@ -4,7 +4,7 @@ An execution-engine-neutral AI Operating System that discovers, manages,
 benchmarks, orchestrates, and routes work across multiple execution engines
 through a unified abstraction layer.
 
-Every execution engine — Claude Code, Gemini CLI, Codex CLI, Hermes,
+Every execution engine — Claude Code, Codex CLI, Hermes,
 OpenHands, Aider, Continue, Cline, Roo Code, Local Engines, Custom Engines —
 is treated as an interchangeable runtime provider, integrated exclusively
 through the ``ExecutionEnginePort`` protocol (12-method universal interface).
@@ -19,7 +19,7 @@ Components:
     dirs, WSL, Docker, environment variables, Windows Registry, binary signatures
   - routing: RouterRegistry — 6 built-in strategies (fastest, lowest cost,
     highest quality, capability-based, load balancing, failover) + custom
-  - adapters: 11 adapter implementations (Claude Code, Gemini CLI, Codex CLI,
+  - adapters: 10 adapter implementations (Claude Code, Codex CLI,
     Hermes, OpenHands, Aider, Continue, Cline, Roo Code, Local, Custom)
   - manager: ExecutionEngineManager — facade that orchestrates discovery,
     registration, routing, execution, sessions, benchmarks, telemetry
@@ -36,7 +36,6 @@ from services.execution_engine.adapters import (
     CodexCliAdapter,
     ContinueAdapter,
     CustomEngineAdapter,
-    GeminiCliAdapter,
     HermesAdapter,
     LocalEngineAdapter,
     OpenHandsAdapter,
@@ -90,7 +89,6 @@ __all__ = [
     "ExecutionTaskStatus",
     "FailoverRouter",
     "FastestRouter",
-    "GeminiCliAdapter",
     "HermesAdapter",
     "HighestQualityRouter",
     "LoadBalancingRouter",

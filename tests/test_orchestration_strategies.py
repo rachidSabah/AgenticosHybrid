@@ -16,7 +16,6 @@ from agentic_os.domain.orchestration import (
     ConsensusResult,
     ConsensusStatus,
     OrchestrationGoal,
-    VoteValue,
 )
 
 
@@ -143,7 +142,7 @@ class TestSimpleMajorityConsensus:
         assert result.status == ConsensusStatus.FAILED
         assert not result.outcome
 
-    async def test_majority_yes(self, strategy, bus) -> None:
+    async def test_no_synthesized_votes(self, strategy, bus) -> None:
         agents = [
             AgentDescriptor(
                 agent_id="a1",
@@ -178,7 +177,12 @@ class TestSimpleMajorityConsensus:
             bus=bus,
         )
         assert isinstance(result, ConsensusResult)
-        assert len(result.votes) == 3
+        # spec §18: agents cannot vote through this interface — no votes are
+        # synthesized from latency, so the vote set stays empty.
+        assert len(result.votes) == 0
+        assert result.outcome is False
+        assert result.yea_count == 0
+        assert result.nay_count == 0
 
     async def test_single_agent(self, strategy, bus) -> None:
         agents = [
@@ -198,9 +202,10 @@ class TestSimpleMajorityConsensus:
             agents=agents,
             bus=bus,
         )
-        assert len(result.votes) == 1
+        # spec §18: no vote is synthesized for the single agent either.
+        assert len(result.votes) == 0
 
-    async def test_all_votes_are_vote_objects(self, strategy, bus) -> None:
+    async def test_no_votes_are_vote_objects(self, strategy, bus) -> None:
         agents = [
             AgentDescriptor(
                 agent_id="a1",
@@ -226,9 +231,9 @@ class TestSimpleMajorityConsensus:
             agents=agents,
             bus=bus,
         )
-        for vote in result.votes:
-            assert vote.voter_id in ("a1", "a2")
-            assert vote.value in (VoteValue.YES, VoteValue.NO)
+        # spec §18: no synthesized votes — the vote set is empty, so there is
+        # no fabricated ballot attributed to any agent.
+        assert result.votes == ()
 
 
 class TestWeightedConsensus:
@@ -273,11 +278,13 @@ class TestWeightedConsensus:
             bus=bus,
         )
         assert isinstance(result, ConsensusResult)
-        assert result.total_weight > 0
-        # a1 has low latency -> higher weight -> greater say
-        assert result.yea_weight <= result.total_weight
+        # spec §18: no synthesized votes/weights — zero real ballots means
+        # zero weight and no consensus.
+        assert result.total_weight == 0.0
+        assert result.yea_weight == 0.0
+        assert result.outcome is False
 
-    async def test_weights_differ_by_latency(self, strategy, bus) -> None:
+    async def test_no_latency_derived_votes(self, strategy, bus) -> None:
         agents = [
             AgentDescriptor(
                 agent_id="fast",
@@ -303,5 +310,7 @@ class TestWeightedConsensus:
             agents=agents,
             bus=bus,
         )
-        votes = {v.voter_id: v.weight for v in result.votes}
-        assert votes.get("fast", 0) > votes.get("slow", 0)
+        # spec §18: latency must not produce votes or weights — the vote set
+        # stays empty regardless of agent latency.
+        assert result.votes == ()
+        assert result.outcome is False

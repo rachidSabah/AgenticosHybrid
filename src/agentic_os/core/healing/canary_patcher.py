@@ -33,23 +33,30 @@ class CanaryPatcher:
     def simulate_and_deploy_patch(
         self, incident_id: str, title: str, patch_diff: str
     ) -> CanaryDeployment:
+        """Record a canary deployment REQUEST without fabricating results.
+
+        Spec §15/§16: no worktree is created, no patch is applied and no
+        tests are run here. The previous stub returned tests_total=48 /
+        tests_passed=48, canary_passed=True and a templated RCA — fabricated
+        evidence of a deployment that never happened. Honest zeros only.
+        """
         dep_id = f"canary-{uuid.uuid4().hex[:8]}"
         rca = (
-            f"ROOT CAUSE ANALYSIS (RCA) for {incident_id}:\n"
-            f"- Anomaly: Transient latency spike & socket timeout.\n"
-            f"- Mitigation: Automatic retry backoff with exponential jitter applied in patch {dep_id}.\n"
-            f"- Verification: 100% ephemeral worktree validation pass."
+            f"CANARY REQUEST RECORDED for {incident_id}:\n"
+            f"- Requested remediation: {title}\n"
+            "- NOT EXECUTED: no ephemeral worktree was created and no patch was applied.\n"
+            "- NO DATA: no test suite was run; pass counts are 0, not evidence of success."
         )
         dep = CanaryDeployment(
             deployment_id=dep_id,
             incident_id=incident_id,
             remediation_title=title,
-            worktree_path=f"/ephemeral/canary-{dep_id}",
-            tests_total=48,
-            tests_passed=48,
-            status="applied",
+            worktree_path="",
+            tests_total=0,
+            tests_passed=0,
+            status="not_executed",
             rca_postmortem=rca,
-            canary_passed=True,
+            canary_passed=False,
         )
         self._deployments.append(dep)
         return dep

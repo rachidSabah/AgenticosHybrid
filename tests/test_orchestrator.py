@@ -14,8 +14,12 @@ async def test_full_slice_success(orchestrator, providers):
     task = await orchestrator.create_task("Write a hello-world function", "coding")
     await anyio.sleep(0.5)
     stored = orchestrator.registry.get_task(task.id)
-    assert stored.status == TaskStatus.COMPLETED
+    # The mock provider returns prose only — no real workspace artifact. Per
+    # spec §14/§35 that is recorded as PLAN_GENERATED, never COMPLETED. The
+    # pipeline (plan → dispatch → execute → verify) still ran end-to-end.
+    assert stored.status == TaskStatus.PLAN_GENERATED
     assert stored.result
+    assert stored.verification.get("ok") is False
     assert any(a.status.value == "completed" for a in orchestrator.registry.agents())
 
 

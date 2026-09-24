@@ -45,7 +45,12 @@ class SwarmIntelligenceEngine:
         agents: list[AgentDescriptor],
         quorum: float | None = None,
     ) -> ConsensusResult:
-        """Start a consensus round and collect initial votes."""
+        """Start a consensus round and collect any real votes.
+
+        spec §18: no fabricated consensus votes — agents that have not cast a
+        real vote produce NO vote, so the round may legitimately end with
+        votes=[] and outcome=False until real ballots arrive via ``cast_vote``.
+        """
         # Create the consensus result
         result = ConsensusResult(
             swarm_id=swarm_id,
@@ -66,9 +71,14 @@ class SwarmIntelligenceEngine:
             },
         )
 
-        # Collect votes from each agent
+        # Collect votes from each agent.
+        # spec §18: no fabricated consensus votes — an agent that has not cast
+        # a real vote yields None (no synthesized VoteValue), so it is skipped:
+        # no vote is recorded and no vote_cast event is published for it.
         for agent in agents:
             vote = await self._collect_vote(agent, topic, proposals)
+            if vote is None:
+                continue
             result = result.with_vote(vote)
             self._consensus_rounds[result.id] = result
 
@@ -191,6 +201,7 @@ class SwarmIntelligenceEngine:
             return result
 
         # Score each agent: more capabilities + lower latency = better leader
+        # (deterministic ranking — no ballots are claimed for this selection).
         scored = []
         for agent in agents:
             score = len(agent.capabilities) * 10.0
@@ -202,9 +213,9 @@ class SwarmIntelligenceEngine:
         scored.sort(key=lambda x: x[0], reverse=True)
         winner = scored[0][1]
 
+        # spec §18: no fabricated consensus votes — no real ballots were cast
+        # in this selection, so vote_counts stays empty and total_votes is 0.
         vote_counts: dict[str, int] = {}
-        for _, agent in scored:
-            vote_counts[agent.agent_id] = max(1, int(len(agent.capabilities)))
 
         result = LeaderElectionResult(
             swarm_id=swarm_id,
@@ -240,52 +251,16 @@ class SwarmIntelligenceEngine:
         agent: AgentDescriptor,
         topic: str,
         proposals: list[dict[str, Any]],
-    ) -> Vote:
-        """Collect a vote from a single agent based on its capabilities.
+    ) -> Vote | None:
+        """Collect a real vote from a single agent, or None if it has not voted.
 
-        The vote decision uses a simple heuristic:
-        - Agents with more capabilities tend to vote YES
-        - Agents with higher latency tend to vote NO (conservative)
-        - Agents with no capabilities ABSTAIN
+        spec §18: no fabricated consensus votes. There is currently no channel
+        through which agents submit ballots, so no VoteValue is ever
+        synthesized from capability/latency heuristics — this method returns
+        None and the round simply records no vote for the agent. Real votes
+        can only enter a round via ``cast_vote``.
         """
-        if not agent.capabilities:
-            return Vote(
-                voter_id=agent.agent_id,
-                value=VoteValue.ABSTAIN,
-                rationale="No capabilities to evaluate proposal",
-            )
-
-        # Heuristic: capability_count * 10 > latency_ms means likely YES
-        capability_score = len(agent.capabilities) * 10.0
-        latency_penalty = agent.latency_ms / 20.0
-        net_score = capability_score - latency_penalty
-
-        if net_score > 5.0:
-            rationale = (
-                f"Capability score {capability_score:.0f} exceeds "
-                f"latency penalty {latency_penalty:.0f}"
-            )
-            return Vote(
-                voter_id=agent.agent_id,
-                value=VoteValue.YES,
-                rationale=rationale,
-            )
-        elif net_score < -5.0:
-            rationale = (
-                f"Latency penalty {latency_penalty:.0f} exceeds "
-                f"capability score {capability_score:.0f}"
-            )
-            return Vote(
-                voter_id=agent.agent_id,
-                value=VoteValue.NO,
-                rationale=rationale,
-            )
-        else:
-            return Vote(
-                voter_id=agent.agent_id,
-                value=VoteValue.ABSTAIN,
-                rationale="Net score too close to call",
-            )
+        return None
 
     async def _publish_intelligence_event(
         self,

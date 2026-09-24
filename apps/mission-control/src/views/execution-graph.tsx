@@ -146,13 +146,14 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
 
   const isActive = data.status === "running" || data.status === "in_progress" || data.status === "dispatched";
 
-  // Calculate actual progress percentage or estimate from status
+  // Progress is only known when completed (or explicitly reported by the backend).
+  // No invented 65/25 estimators — running tasks show 0 done and unknown remainder.
   const progressPct = data.progressPct !== undefined
     ? data.progressPct
     : data.status === "completed" ? 100
-    : data.status === "running" || data.status === "in_progress" ? 65
-    : data.status === "assigned" || data.status === "dispatched" ? 25
     : 0;
+
+  const progressKnown = data.status === "completed" || (data.progressPct !== undefined && data.progressPct > 0);
 
   const remainingPct = 100 - progressPct;
 
@@ -203,7 +204,7 @@ function TaskNode({ data }: { data: ExecutionNode["data"] }) {
 
           <div className="mt-1 flex items-center justify-between text-[9px] font-mono text-white/40">
             <span>Done: <strong className="text-white/80">{progressPct}%</strong></span>
-            <span>Remain: <strong className="text-amber-400/80">{remainingPct}%</strong></span>
+            <span>Remain: <strong className="text-amber-400/80">{progressKnown ? `${remainingPct}%` : "—"}</strong></span>
           </div>
 
           {/* Progress bar */}
@@ -409,7 +410,7 @@ export function ExecutionGraph() {
       if (isRun) runningCount++;
       if (isFail) failedCount++;
 
-      const progressPct = isDone ? 100 : isRun ? 60 : task.status === "assigned" || task.status === "dispatched" ? 25 : 0;
+      const progressPct = isDone ? 100 : 0;
       totalProgressSum += progressPct;
 
       executionNodes.push({
@@ -488,6 +489,23 @@ export function ExecutionGraph() {
       }
     });
 
+    // Nodes come ONLY from real agents/tasks/telemetry — no synthetic "System Health" node.
+
+    if (telemetry.errors > 0) {
+      executionNodes.push({
+        id: `system-error`,
+        type: "system",
+        position: { x: 320, y: 500 },
+        data: {
+          label: `System Error (${telemetry.errors})`,
+          status: "failed",
+          type: "system",
+          tags: ["error"],
+        },
+      });
+    }
+
+
     // ── Truthful Real Progress Calculation ──
     let overallProgressPct = 0;
     let totalWorkUnits = taskList.length;
@@ -501,7 +519,8 @@ export function ExecutionGraph() {
       const execRunning = executionList.filter((e) => e.status === "running").length;
       runningCount = execRunning;
       completedCount = execCompleted;
-      overallProgressPct = Math.round(((execCompleted * 100) + (execRunning * 50)) / totalWorkUnits);
+      // Completed-only math: running units contribute no invented progress.
+      overallProgressPct = Math.round((execCompleted * 100) / totalWorkUnits);
     } else if (activeMission) {
       overallProgressPct =
         activeMission.status === "completed"
@@ -511,6 +530,7 @@ export function ExecutionGraph() {
           : activeMission.status === "in_progress" || activeMission.status === "running"
           ? 5
           : 0;
+
     } else if (agentList.length > 0) {
       const activeAgents = agentList.filter((a) => a.status === "running").length;
       const completedAgents = agentList.filter((a) => a.status === "completed").length;

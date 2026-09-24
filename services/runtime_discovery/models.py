@@ -50,7 +50,8 @@ class RuntimeStatus(StrEnum):
 
 class RuntimeType(StrEnum):
     CLAUDE_CODE = "claude_code"
-    GEMINI_CLI = "gemini_cli"
+    # GEMINI_CLI REMOVED — retired provider (spec §2/§36). Never re-add an
+    # alias; Antigravity (AGY_CLI) is the canonical Google CLI agent.
     CODEX_CLI = "codex_cli"
     HERMES = "hermes"
     OPENHANDS = "openhands"

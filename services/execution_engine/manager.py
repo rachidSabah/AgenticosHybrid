@@ -16,6 +16,7 @@ from core.contracts.execution_engine import (
 )
 from core.event_bus.bus import EventBus
 from core.logging import get_logger
+
 from services.execution_engine.adapters import (
     AiderAdapter,
     ClaudeCodeAdapter,
@@ -23,7 +24,6 @@ from services.execution_engine.adapters import (
     CodexCliAdapter,
     ContinueAdapter,
     CustomEngineAdapter,
-    GeminiCliAdapter,
     HermesAdapter,
     LocalEngineAdapter,
     OpenHandsAdapter,
@@ -70,7 +70,6 @@ __all__ = ["ExecutionEngineManager"]
 
 _ENGINE_ADAPTER_MAP: dict[EngineType, type] = {
     EngineType.CLAUDE_CODE: ClaudeCodeAdapter,
-    EngineType.GEMINI_CLI: GeminiCliAdapter,
     EngineType.CODEX_CLI: CodexCliAdapter,
     EngineType.HERMES: HermesAdapter,
     EngineType.OPENHANDS: OpenHandsAdapter,
@@ -325,13 +324,34 @@ class ExecutionEngineManager:
             task.duration_s = time.monotonic() - (
                 task.started_at.timestamp() if task.started_at else 0
             )
-            task.status = ExecutionTaskStatus.COMPLETED
-            task.output = result
-            task.completed_at = datetime.now(UTC)
-            if self._bus:
-                await publish_task_completed(
-                    self._bus, task.task_id, task.engine_type.value, task.duration_s
+            # Spec §15/§16: a mock/simulated adapter result is NOT a task
+            # completion. The previous code marked any dict result COMPLETED,
+            # so adapters whose CLI binary was absent ("mock": True) produced
+            # fabricated successful executions.
+            if isinstance(result, dict) and (
+                result.get("mock") or "mock" in str(result.get("result", "")).lower()
+            ):
+                task.status = ExecutionTaskStatus.FAILED
+                task.error = (
+                    "adapter returned a mock/simulated result — the real "
+                    f"{task.engine_type.value} CLI binary is not available"
                 )
+                task.output = result
+                task.completed_at = datetime.now(UTC)
+                if self._bus:
+                    await publish_task_failed(
+                        self._bus, task.task_id, task.engine_type.value, task.error
+                    )
+                # Fall through to the metrics bookkeeping below via the
+                # shared block; do NOT publish task_completed.
+            else:
+                task.status = ExecutionTaskStatus.COMPLETED
+                task.output = result
+                task.completed_at = datetime.now(UTC)
+                if self._bus:
+                    await publish_task_completed(
+                        self._bus, task.task_id, task.engine_type.value, task.duration_s
+                    )
         except TimeoutError:
             task.status = ExecutionTaskStatus.TIMEOUT
             task.error = f"Task timed out after {task.timeout_s}s"

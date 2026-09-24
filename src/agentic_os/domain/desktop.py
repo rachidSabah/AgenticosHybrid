@@ -223,7 +223,7 @@ class RuntimeType(StrEnum):
     NODE = "node"
     CLAUDE_CODE = "claude_code"
     OPENCODE = "opencode"
-    GEMINI_CLI = "gemini_cli"
+    # GEMINI_CLI REMOVED — retired provider (spec §2/§36).
     CODEX_CLI = "codex_cli"
     OLLAMA = "ollama"
     LM_STUDIO = "lm_studio"

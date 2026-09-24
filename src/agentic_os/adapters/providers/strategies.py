@@ -23,8 +23,7 @@ Architecture:
     OpenCodeExecutionStrategy    — opencode run "{prompt}"
     CodexExecutionStrategy       — codex --prompt "{prompt}"
     AiderExecutionStrategy       — aider --message "{prompt}" --no-auto-commits
-    GeminiExecutionStrategy      — gemini -p "{prompt}"
-    AGYExecutionStrategy         — agy run "{prompt}"
+    AGYExecutionStrategy         — agy (prompt via stdin, --output-format text)
     OllamaExecutionStrategy      — ollama run llama3 (stdin: prompt)
     GenericExecutionStrategy     — {binary} (stdin: prompt) [fallback]
 """
@@ -322,33 +321,6 @@ class AiderExecutionStrategy(ProviderExecutionStrategy):
         return [bin_path, "--version"]
 
 
-class GeminiExecutionStrategy(ProviderExecutionStrategy):
-    """Gemini CLI: ``gemini -p "" --output-format text`` (prompt via stdin).
-
-    Gemini appends stdin input when ``-p`` has an empty value. The prompt
-    is sent via **stdin** to avoid the Windows ``cmd.exe`` 8191-char limit.
-    """
-
-    @property
-    def kind(self) -> str:
-        return "gemini_cli"
-
-    @property
-    def timeout_s(self) -> float:
-        return 180.0  # Gemini CLI can be slow to initialize
-
-    def build_command(self, task: Task, bin_path: str) -> list[str]:
-        return [bin_path, "-p", "", "--output-format", "text"]
-
-    def build_stdin(self, task: Task) -> bytes | None:
-        return self.build_prompt(task).encode("utf-8")
-
-    def health_command(self, bin_path: str) -> list[str] | None:
-        # Use --version (exits in ~6s on Windows). --help triggers interactive
-        # auth/OAuth flow on first run and can hang indefinitely in a subprocess.
-        return [bin_path, "--version"]
-
-
 class AGYExecutionStrategy(ProviderExecutionStrategy):
     """AGY CLI: prompt via **stdin** (no `run` subcommand).
 
@@ -433,7 +405,7 @@ _STRATEGY_REGISTRY: dict[str, type[ProviderExecutionStrategy]] = {
     "opencode": OpenCodeExecutionStrategy,
     "codex": CodexExecutionStrategy,
     "aider": AiderExecutionStrategy,
-    "gemini_cli": GeminiExecutionStrategy,
+    # "gemini_cli" strategy REMOVED — retired provider, never re-aliased.
     "antigravity": AGYExecutionStrategy,
     "ollama": OllamaExecutionStrategy,
     "nvidia_nim": GenericExecutionStrategy,

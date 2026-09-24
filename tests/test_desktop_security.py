@@ -165,7 +165,7 @@ class TestSubprocessSafety:
 
         detector = VersionDetector()
         dir_path = os.path.dirname(os.path.abspath(__file__))
-        version = await detector.get_version(dir_path, "gemini-cli")
+        version = await detector.get_version(dir_path, "some-tool")
         assert version == ""
 
     @pytest.mark.asyncio
@@ -175,7 +175,7 @@ class TestSubprocessSafety:
 
         detector = VersionDetector()
         for flag in ["--help", "-h", "--version", "-v"]:
-            version = await detector.get_version(flag, "gemini-cli")
+            version = await detector.get_version(flag, "some-tool")
             assert version == ""
 
     @pytest.mark.asyncio
@@ -187,7 +187,7 @@ class TestSubprocessSafety:
         from services.runtime_discovery.models import Runtime, RuntimeType
 
         dir_path = os.path.dirname(os.path.abspath(__file__))
-        r = Runtime(name="test", runtime_type=RuntimeType.GEMINI_CLI, binary_path=dir_path)
+        r = Runtime(name="test", runtime_type=RuntimeType.CODEX_CLI, binary_path=dir_path)
 
         res_v = await val.VersionDetectValidator.validate(r)
         assert res_v["passed"] is False

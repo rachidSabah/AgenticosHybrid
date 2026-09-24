@@ -32,7 +32,8 @@ class TestMapType:
         assert _map_type("claude_code") == RuntimeType.CLAUDE_CODE
         assert _map_type("opencode") == RuntimeType.OPENCODE
         assert _map_type("codex_cli") == RuntimeType.CODEX_CLI
-        assert _map_type("gemini_cli") == RuntimeType.GEMINI_CLI
+        # gemini_cli is retired — maps to CUSTOM like any unknown type.
+        assert _map_type("gemini_cli") == RuntimeType.CUSTOM
         assert _map_type("mcp_server") == RuntimeType.MCP_SERVER
 
     def test_map_unknown_types_to_custom(self) -> None:

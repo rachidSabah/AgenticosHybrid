@@ -21,7 +21,7 @@ _AGENT_HINTS = (
     "copilot",
     "claude",
     "codex",
-    "gemini",
+    # "gemini" hint REMOVED — retired provider (spec §2/§36).
     "agy",
     "antigravity",
     "opencode",

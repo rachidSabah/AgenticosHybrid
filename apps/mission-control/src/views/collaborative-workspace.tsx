@@ -3,30 +3,19 @@
 import { useState, useEffect, useCallback } from "react";
 import { Panel, Stat, Badge, Empty } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import { Mic, MicOff, Volume2, FolderTree, Code, Users, Play, Send, CheckCircle2 } from "lucide-react";
+import { Mic, MicOff, Volume2, FolderTree, Play, CheckCircle2 } from "lucide-react";
 
 export function CollaborativeWorkspace() {
-  const [cursors, setCursors] = useState<any[]>([
-    { client_id: "operator-main", username: "Principal Engineer (You)", color: "#6366f1", cursor_line: 42, cursor_column: 10 },
-    { client_id: "agent-architect", username: "AI Architect Subagent", color: "#10b981", cursor_line: 45, cursor_column: 4 },
-  ]);
+  // Presence is rendered ONLY from real backend cursor data.
+  const [cursors, setCursors] = useState<any[]>([]);
   const [transcripts, setTranscripts] = useState<any[]>([]);
   const [vfsTree, setVfsTree] = useState<any | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceInput, setVoiceInput] = useState("AgenticOS, run full regression check on all subsystems and report readiness score.");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [executionResult, setExecutionResult] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [activeCode, setActiveCode] = useState(
-`// Live Hexagonal Kernel Synchronization
-export class AgenticExecutionBus {
-  private subscribers = new Map<string, Function[]>();
-
-  public dispatch(event: string, payload: any): void {
-    console.log(\`[DISPATCH] \${event}\`, payload);
-    this.subscribers.get(event)?.forEach(fn => fn(payload));
-  }
-}`
-  );
+  const [activeCode, setActiveCode] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -35,12 +24,10 @@ export class AgenticExecutionBus {
         api.get<any[]>("/api/voice/transcripts").catch(() => []),
         api.get<any>("/api/vfs/ast-tree").catch(() => null),
       ]);
-      // Note: api.get returns [] when the backend is offline. An empty array is
-      // truthy, so guard on length — otherwise an offline poll would wipe the
-      // optimistic local entries produced by the voice/dispatch handlers.
-      if (cur && cur.length > 0) setCursors(cur);
-      if (tran && tran.length > 0) setTranscripts(tran);
-      if (vfs) setVfsTree(vfs);
+      // Render exactly what the backend returns — no optimistic local entries.
+      setCursors(Array.isArray(cur) ? cur : []);
+      setTranscripts(Array.isArray(tran) ? tran : []);
+      setVfsTree(vfs ?? null);
     } catch { /* ignore */ }
   }, []);
 
@@ -52,25 +39,16 @@ export class AgenticExecutionBus {
 
   const handleVoiceDispatch = async () => {
     setIsRecording(true);
-    // Render the optimistic transcript immediately so the UI updates
-    // without waiting for the (possibly slow / failing) API round-trip.
-    const optimisticId = `voice-${Date.now()}`;
-    const optimisticTranscript = {
-      transcript_id: optimisticId,
-      transcribed_text: voiceInput,
-      spoken_response: `Executing voice dispatch directive: '${voiceInput}'. All systems responsive and healthy.`,
-      confidence: 0.98,
-    };
-    setTranscripts((prev) => [optimisticTranscript, ...prev]);
+    setVoiceError(null);
     try {
       const res = await api.post<any>("/api/voice/process", { audio_label: voiceInput });
+      // Only real API responses are kept — no optimistic fabricated replies.
       if (res && res.transcript_id) {
-        // Replace the optimistic entry with the real server response.
-        setTranscripts((prev) => [res, ...prev.filter((t) => t.transcript_id !== res.transcript_id && t.transcript_id !== optimisticId)]);
+        setTranscripts((prev) => [res, ...prev]);
       }
       await loadData();
     } catch {
-      // Optimistic entry is already visible — nothing more to do.
+      setVoiceError("Voice dispatch failed: backend request error");
     } finally {
       setIsRecording(false);
     }
@@ -78,6 +56,7 @@ export class AgenticExecutionBus {
 
   const handleExecuteCode = async () => {
     setIsExecuting(true);
+    setExecutionResult(null);
     try {
       const res = await api.post<any>("/api/collab/execute", { code: activeCode });
       if (res && res.stdout) {
@@ -86,10 +65,6 @@ export class AgenticExecutionBus {
     } finally {
       setIsExecuting(false);
     }
-  };
-
-  const handleSelectModule = (symbolCode: string) => {
-    setActiveCode(symbolCode);
   };
 
   return (
@@ -122,49 +97,27 @@ export class AgenticExecutionBus {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-4">
-        {/* Monorepo AST Tree Explorer */}
+        {/* Monorepo AST Tree Explorer — rendered only from real backend data */}
         <Panel title="Monorepo AST Virtual File System (VFS)" subtitle="Streaming AST symbol navigator without disk I/O bottlenecks">
           <div className="space-y-3 font-mono text-xs">
             <div className="rounded-lg border border-border/40 bg-surface/20 p-3 space-y-2">
               <div className="flex items-center gap-1.5 text-accent font-semibold">
-                <FolderTree size={14} /> Root: E:\Agenticos
+                <FolderTree size={14} /> Root: {vfsTree?.root ?? "—"}
               </div>
-              <div className="pl-3 space-y-1.5 text-faint text-[11px]">
-                <button
-                  onClick={() => handleSelectModule(
-`// SwarmDebuggerManager Engine
-export class SwarmDebuggerManager {
-  private activeStep = 1;
-  public step(): number { return ++this.activeStep; }
-}`
-                  )}
-                  className="block text-left hover:text-accent transition"
-                >
-                  📁 src/agentic_os/core/swarm (SwarmDebuggerManager)
-                </button>
-                <button
-                  onClick={() => handleSelectModule(
-`// PredictiveRoutingArbiter EWMA Engine
-export class PredictiveRoutingArbiter {
-  public rankProviders(latencyMs: number[]): string { return "claude_code"; }
-}`
-                  )}
-                  className="block text-left hover:text-emerald-400 transition"
-                >
-                  📁 src/agentic_os/core/routing (PredictiveRoutingArbiter)
-                </button>
-                <button
-                  onClick={() => handleSelectModule(
-`// CanaryPatcher Autonomous SRE Engine
-export class CanaryPatcher {
-  public deployEphemeralWorktree(incidentId: string): boolean { return true; }
-}`
-                  )}
-                  className="block text-left hover:text-indigo-400 transition"
-                >
-                  📁 src/agentic_os/core/healing (CanaryPatcher)
-                </button>
-              </div>
+              {Array.isArray(vfsTree?.tree) && vfsTree.tree.length > 0 ? (
+                <div className="pl-3 space-y-1.5 text-faint text-[11px]">
+                  {vfsTree.tree.map((node: any, i: number) => (
+                    <div key={node.path || i} className="block">
+                      {node.is_dir ? "📁" : "📄"} {node.path || node.name}
+                      {Array.isArray(node.symbols) && node.symbols.length > 0 && (
+                        <span className="text-faint/70"> ({node.symbols.slice(0, 3).join(", ")})</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="pl-3 text-[11px] text-faint">No files shared in this session</div>
+              )}
             </div>
 
             {/* Voice Transcripts Log */}
@@ -172,6 +125,9 @@ export class CanaryPatcher {
               <div className="flex items-center gap-1.5 text-indigo-400 font-semibold">
                 <Volume2 size={14} /> Voice Command Transcripts
               </div>
+              {voiceError && (
+                <div className="text-[11px] text-rose-400">{voiceError}</div>
+              )}
               {transcripts.length === 0 ? (
                 <div className="text-[11px] text-faint">No voice commands recorded. Click &apos;Voice Command Dispatch&apos; above.</div>
               ) : (
@@ -192,16 +148,20 @@ export class CanaryPatcher {
             {/* Active Multi-User Presence Pills & Run Button */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {cursors.map((c) => (
-                  <span
-                    key={c.client_id}
-                    className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium border"
-                    style={{ borderColor: c.color, backgroundColor: `${c.color}20`, color: c.color }}
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
-                    {c.username} (L{c.cursor_line}:C{c.cursor_column})
-                  </span>
-                ))}
+                {cursors.length === 0 ? (
+                  <span className="text-[11px] text-faint">No collaborators connected</span>
+                ) : (
+                  cursors.map((c) => (
+                    <span
+                      key={c.client_id}
+                      className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium border"
+                      style={{ borderColor: c.color, backgroundColor: `${c.color}20`, color: c.color }}
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                      {c.username} (L{c.cursor_line}:C{c.cursor_column})
+                    </span>
+                  ))
+                )}
               </div>
               <button
                 onClick={handleExecuteCode}
@@ -217,6 +177,7 @@ export class CanaryPatcher {
               value={activeCode}
               onChange={(e) => setActiveCode(e.target.value)}
               rows={10}
+              placeholder="Paste or select code to execute…"
               className="w-full rounded-xl border border-border/60 bg-surface/30 p-4 font-mono text-xs text-text outline-none focus:border-accent leading-relaxed"
             />
 
