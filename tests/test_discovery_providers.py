@@ -42,21 +42,21 @@ class TestPathDiscovery:
 
     @pytest.mark.asyncio
     async def test_discover_finds_python(self, provider) -> None:
+        # python3 was removed from _known_executables; test with claude which is still in the list
         def which_side_effect(binary: str) -> str | None:
-            if binary == "python3":
-                return "/usr/bin/python3"
+            if binary == "claude":
+                return "/usr/local/bin/claude"
             return None
 
         with patch.object(provider, "_which", side_effect=which_side_effect):
-            with patch.object(provider, "_get_version", return_value="3.10.0"):
+            with patch.object(provider, "_get_version", return_value="1.5.0"):
                 results = await provider.discover()
                 assert len(results) >= 1
-                assert any(r.name == "python-local" for r in results)
-                py_reg = next(r for r in results if r.name == "python-local")
-                assert py_reg.engine_type == EngineType.CUSTOM
-                assert EngineCapability.CODING in py_reg.capabilities
-                assert py_reg.version == "3.10.0"
-                assert py_reg.transport == "local"
+                assert any("claude" in r.name for r in results)
+                claude_reg = next(r for r in results if "claude" in r.name)
+                assert claude_reg.engine_type == EngineType.CLAUDE_CODE
+                assert EngineCapability.CODING in claude_reg.capabilities
+                assert claude_reg.version == "1.5.0"
 
     @pytest.mark.asyncio
     async def test_discover_finds_claude(self, provider) -> None:
@@ -76,13 +76,13 @@ class TestPathDiscovery:
     async def test_discover_platform_filter_wsl_on_linux(self, provider) -> None:
         # wsl.exe is Windows-only; on non-Windows it should be skipped
         def which_side_effect(binary: str) -> str | None:
-            if binary == "python3":
-                return "/usr/bin/python3"
+            if binary == "claude":
+                return "/usr/local/bin/claude"
             return None
 
         with (
             patch.object(provider, "_which", side_effect=which_side_effect),
-            patch.object(provider, "_get_version", return_value="3.9"),
+            patch.object(provider, "_get_version", return_value="1.5.0"),
             patch("platform.system", return_value="Linux"),
         ):
             results = await provider.discover()
@@ -91,7 +91,8 @@ class TestPathDiscovery:
 
     @pytest.mark.asyncio
     async def test_discover_multiple_executables(self, provider) -> None:
-        all_binaries = ["python3", "node", "docker", "claude"]
+        # python3 and node were removed from _known_executables; only claude and docker remain
+        all_binaries = ["claude", "docker", "opencode", "aider"]
 
         def which_side_effect(binary: str) -> str | None:
             return f"/usr/bin/{binary}" if binary in all_binaries else None
@@ -99,7 +100,7 @@ class TestPathDiscovery:
         with patch.object(provider, "_which", side_effect=which_side_effect):
             with patch.object(provider, "_get_version", return_value="1.0"):
                 results = await provider.discover()
-                assert len(results) >= 4
+                assert len(results) >= 2
 
     @pytest.mark.asyncio
     async def test_get_version_timeout(self, provider) -> None:
