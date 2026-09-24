@@ -27,7 +27,6 @@ _AGENT_HINTS = (
     "claude",
     "codex",
     # "gemini" hint REMOVED — retired provider (spec §2/§36).
-
     "agy",
     "antigravity",
     "opencode",

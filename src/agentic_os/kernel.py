@@ -612,7 +612,8 @@ class Kernel:
                         # Strict AI agent check (spec §2, §4)
                         if (
                             not getattr(record, "is_agent", True)
-                            or record.vendor in (
+                            or record.vendor
+                            in (
                                 BrainVendor.PYTHON,
                                 BrainVendor.NODE,
                                 BrainVendor.GIT,

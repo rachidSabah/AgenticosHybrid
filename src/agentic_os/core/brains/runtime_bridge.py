@@ -240,10 +240,15 @@ class _GenericCliConnector(BrainConnector):
                 tags.append(cap)
 
         is_agent = getattr(self, "is_agent", True)
-        if (
-            self._exe_name in ("python", "python3", "node", "npx", "bun", "git", "gemini")
-            or self.tool_type in ("gemini-cli", "python", "node", "bun", "git")
-        ):
+        if self._exe_name in (
+            "python",
+            "python3",
+            "node",
+            "npx",
+            "bun",
+            "git",
+            "gemini",
+        ) or self.tool_type in ("gemini-cli", "python", "node", "bun", "git"):
             is_agent = False
 
         return BrainRecord(

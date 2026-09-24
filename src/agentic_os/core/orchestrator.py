@@ -292,13 +292,19 @@ def _extract_and_persist_files(
 
         target_filename = None
         # Check if file_meta contains a clean filename/path
-        if file_meta and not any(ch in file_meta for ch in ('"', "'", "<", ">", "|", "*", "?", "[", "]", "{", "}", "(", ")")):
+        if file_meta and not any(
+            ch in file_meta
+            for ch in ('"', "'", "<", ">", "|", "*", "?", "[", "]", "{", "}", "(", ")")
+        ):
             clean_meta = file_meta.strip().split()[-1].lstrip(":").strip()
             if (
                 "." in clean_meta
                 and len(clean_meta) < 120
                 and not clean_meta.endswith(".md")
-                and not any(bad in clean_meta.lower() for bad in ("deliverable", "verified", "status", "complete"))
+                and not any(
+                    bad in clean_meta.lower()
+                    for bad in ("deliverable", "verified", "status", "complete")
+                )
             ):
                 target_filename = clean_meta
 
@@ -313,7 +319,9 @@ def _extract_and_persist_files(
                 )
                 if fn_match:
                     found_fn = fn_match.group(1).strip()
-                    if not found_fn.endswith(".md") and not any(bad in found_fn.lower() for bad in ("deliverable", "verified")):
+                    if not found_fn.endswith(".md") and not any(
+                        bad in found_fn.lower() for bad in ("deliverable", "verified")
+                    ):
                         target_filename = found_fn
                         break
 
@@ -1074,9 +1082,9 @@ class Orchestrator:
         # Execution-tracking fields (real timestamps + verified artifacts only).
         from datetime import UTC, datetime
 
-        task.artifacts = [
-            a for a in verification.artifacts if a.get("verified")
-        ] if verification.ok else []
+        task.artifacts = (
+            [a for a in verification.artifacts if a.get("verified")] if verification.ok else []
+        )
 
         if verification.ok:
             task.status = TaskStatus.COMPLETED

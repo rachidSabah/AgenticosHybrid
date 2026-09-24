@@ -160,8 +160,12 @@ class ArtifactVerifier:
                 "cwd": directory,
                 "exit_code": 124,
                 "duration_ms": round(duration_ms, 2),
-                "stdout": (te.stdout or "").decode("utf-8", errors="replace") if isinstance(te.stdout, bytes) else (te.stdout or ""),
-                "stderr": (te.stderr or "").decode("utf-8", errors="replace") if isinstance(te.stderr, bytes) else (te.stderr or ""),
+                "stdout": (te.stdout or "").decode("utf-8", errors="replace")
+                if isinstance(te.stdout, bytes)
+                else (te.stdout or ""),
+                "stderr": (te.stderr or "").decode("utf-8", errors="replace")
+                if isinstance(te.stderr, bytes)
+                else (te.stderr or ""),
                 "passed": False,
             }
         except Exception as exc:
@@ -181,7 +185,9 @@ class ArtifactVerifier:
             task.test_results[cmd_str] = test_info
             if not test_info["passed"]:
                 task.verification_status = "FAILED_VERIFICATION"
-                task.failure_reason = f"Build/test command '{cmd_str}' failed with exit code {test_info['exit_code']}"
+                task.failure_reason = (
+                    f"Build/test command '{cmd_str}' failed with exit code {test_info['exit_code']}"
+                )
             else:
                 task.verification_status = "VERIFIED"
 
@@ -238,9 +244,7 @@ class ArtifactVerifier:
         created_or_modified: list[dict[str, Any]] = []
         created_files: list[str] = []
         modified_files: list[str] = []
-        deleted_files: list[str] = [
-            rel for rel in initial_snapshot if rel not in current_snapshot
-        ]
+        deleted_files: list[str] = [rel for rel in initial_snapshot if rel not in current_snapshot]
 
         for rel_path, mtime in current_snapshot.items():
             prev_mtime = initial_snapshot.get(rel_path)
@@ -282,15 +286,22 @@ class ArtifactVerifier:
         text_to_check = (
             f"{task.title or ''} {task.description or ''} {task.user_prompt or ''}".lower()
         )
-        is_deletion_task = any(kw in text_to_check for kw in ("delete", "remove", "clean", "drop", "unlink"))
+        is_deletion_task = any(
+            kw in text_to_check for kw in ("delete", "remove", "clean", "drop", "unlink")
+        )
         if is_deletion_task and deleted_files:
             task.verification_status = "VERIFIED"
-            task.verification_reason = f"Successfully verified deletion of {len(deleted_files)} file(s)."
+            task.verification_reason = (
+                f"Successfully verified deletion of {len(deleted_files)} file(s)."
+            )
             return ArtifactVerificationResult(
                 is_verified=True,
                 status="VERIFIED",
                 reason=task.verification_reason,
-                artifacts=[{"path": p, "type": "file", "exists": False, "change": "deleted"} for p in deleted_files],
+                artifacts=[
+                    {"path": p, "type": "file", "exists": False, "change": "deleted"}
+                    for p in deleted_files
+                ],
                 created_files=created_files,
                 modified_files=modified_files,
                 deleted_files=deleted_files,

@@ -88,7 +88,6 @@ class PathDiscovery(DiscoveryProvider):
                 ],
             },
             # "gemini" provider REMOVED — retired Gemini CLI (spec §2).
-
             {
                 "name": "aider",
                 "binary": "aider",

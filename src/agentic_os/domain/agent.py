@@ -146,8 +146,6 @@ class Task(BaseModel):
     def prompt(self) -> str:
         return self.user_prompt or self.description
 
-
-
     def touch(self) -> None:
         self.updated_at = _utcnow()
 
