@@ -38,11 +38,7 @@ _CAPABILITY_MAP: dict[str, tuple[AgentCapability, ...]] = {
         AgentCapability.REASONING,
         AgentCapability.TERMINAL_OPS,
     ),
-    "gemini-cli": (
-        AgentCapability.CODE_GENERATION,
-        AgentCapability.CHAT,
-        AgentCapability.REASONING,
-    ),
+    # "gemini-cli" REMOVED — retired provider (spec §2/§36).
     "opencode": (
         AgentCapability.CODE_GENERATION,
         AgentCapability.CHAT,

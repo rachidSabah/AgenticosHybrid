@@ -43,7 +43,6 @@ class TestRuntimeType:
         types = {e.value for e in RuntimeType}
         expected = {
             "claude_code",
-            "gemini_cli",
             "codex_cli",
             "hermes",
             "openhands",

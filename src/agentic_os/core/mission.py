@@ -37,9 +37,10 @@ DEFAULT_ROLE_MAP: dict[AgentRole, str] = {
     AgentRole.FRONTEND_ENGINEER: "opencode",
     AgentRole.SECURITY_ENGINEER: "hermes",
     AgentRole.TEST_ENGINEER: "opencode",
-    AgentRole.DOCUMENTATION_WRITER: "hermes",
+    # gemini_cli assignments REMOVED — retired provider (spec §2/§36).
+    AgentRole.DOCUMENTATION_WRITER: "opencode",
     AgentRole.RELEASE_ENGINEER: "hermes",
-    AgentRole.RESEARCHER: "claude_code",
+    AgentRole.RESEARCHER: "hermes",
     AgentRole.DEBUGGER: "hermes",
     AgentRole.VALIDATOR: "hermes",
 }

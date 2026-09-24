@@ -36,7 +36,7 @@ class EngineType(StrEnum):
     HERMES = "hermes"
     OPENCODE = "opencode"
     CODEX = "codex"
-    GEMINI_CLI = "gemini_cli"
+    # GEMINI_CLI REMOVED — retired provider (spec §2/§36).
     OPENHANDS = "openhands"
     CONTINUE = "continue"
     AIDER = "aider"

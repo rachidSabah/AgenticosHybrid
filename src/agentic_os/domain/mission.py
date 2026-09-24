@@ -50,6 +50,10 @@ class MissionStatus(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     RECOVERED = "recovered"
+    # At least one task finished as PLAN_GENERATED (report-only output, no
+    # independently verified artifacts). Rendered as
+    # "PARTIAL — PLAN GENERATED, DELIVERABLE NOT VERIFIED", never COMPLETED.
+    PARTIAL = "partial"
 
 
 class TaskStatus(StrEnum):

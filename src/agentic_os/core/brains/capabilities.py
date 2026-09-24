@@ -122,12 +122,6 @@ class BrainCapabilityAnalyzer:
             "file_editing",
             "terminal_access",
         ),
-        BrainVendor.GEMINI_CLI: (
-            "chat",
-            "vision",
-            "code_generation",
-            "tool_use",
-        ),
         BrainVendor.CODEX: (
             "chat",
             "code_generation",

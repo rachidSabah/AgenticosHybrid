@@ -15,6 +15,7 @@ from core.contracts.execution_engine import (
     EngineType,
 )
 from core.logging import get_logger
+
 from services.execution_engine.adapters.base import BaseExecutionEngineAdapter
 
 _log = get_logger(__name__)
@@ -95,10 +96,12 @@ class OpenHandsAdapter(BaseExecutionEngineAdapter):
         if not self._process:
             return {"goal": goal, "result": "mock_openhands_execution", "mock": True}
         request = json.dumps({"method": "execute_task", "params": {"goal": goal}}) + "\n"
-        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
+        if self._process.stdin is None:
+            raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(request.encode())
         await self._process.stdin.drain()
-        if self._process.stdout is None: raise RuntimeError("Process stdout is not available")
+        if self._process.stdout is None:
+            raise RuntimeError("Process stdout is not available")
         response = await asyncio.wait_for(
             self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 300)
         )
@@ -110,7 +113,8 @@ class OpenHandsAdapter(BaseExecutionEngineAdapter):
         cancel_request = (
             json.dumps({"method": "cancel_task", "params": {"task_id": task_id}}) + "\n"
         )
-        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
+        if self._process.stdin is None:
+            raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(cancel_request.encode())
         await self._process.stdin.drain()
         return True
@@ -137,18 +141,20 @@ class OpenHandsAdapter(BaseExecutionEngineAdapter):
         )
 
     async def _on_estimate_cost(self, task: Any) -> EngineCostEstimate:
+        """Cost estimate — honest zeros (no measurement source wired). spec §18."""
         return EngineCostEstimate(
-            estimated_cost_usd=0.008,
-            estimated_tokens_input=1000,
-            estimated_tokens_output=500,
-            breakdown={"per_token": 0.000008, "estimated_tokens": 1500},
+            estimated_cost_usd=0.0,
+            estimated_tokens_input=0,
+            estimated_tokens_output=0,
+            breakdown={},
         )
 
     async def _on_estimate_latency(self, task: Any) -> EngineLatencyEstimate:
+        """Latency estimate — honest zeros (no measurement source wired). spec §18."""
         return EngineLatencyEstimate(
-            estimated_duration_s=25.0,
-            p50_latency_s=20.0,
-            p95_latency_s=60.0,
-            p99_latency_s=120.0,
-            based_on_samples=100,
+            estimated_duration_s=0.0,
+            p50_latency_s=0.0,
+            p95_latency_s=0.0,
+            p99_latency_s=0.0,
+            based_on_samples=0,
         )

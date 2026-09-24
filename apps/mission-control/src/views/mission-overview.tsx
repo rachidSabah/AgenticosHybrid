@@ -302,12 +302,7 @@ function ActivityChart({ events }: { events: ReturnType<typeof useStore.getState
 // ── Event Log (Exact Match for Screenshot) ──
 function EventLogPanel({ events }: { events: ReturnType<typeof useStore.getState>["events"] }) {
   const logList = useMemo(() => {
-    if (events.length === 0) {
-      return [
-        { agent: "System Orchestrator", msg: "EventBus connected · Awaiting mission dispatches" },
-        { agent: "Runtime Registry", msg: "Background health and discovery monitors active" },
-      ];
-    }
+    // Render ONLY real events — no fabricated log rows.
     return events.slice(0, 10).map((e) => {
       const p = e.payload as Record<string, any>;
       const agentLabel = String(p.provider || p.agent_id || p.source || e.source || "EventBus");
@@ -334,13 +329,17 @@ function EventLogPanel({ events }: { events: ReturnType<typeof useStore.getState
       </div>
 
       <div className="space-y-2.5 overflow-y-auto max-h-[200px] pr-1">
-        {logList.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-3 text-xs">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
-            <span className="w-36 shrink-0 font-medium text-white/70 truncate">{item.agent}</span>
-            <span className="text-white/50 truncate">{item.msg}</span>
-          </div>
-        ))}
+        {logList.length === 0 ? (
+          <div className="py-8 text-center text-xs text-white/40">No events</div>
+        ) : (
+          logList.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-3 text-xs">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
+              <span className="w-36 shrink-0 font-medium text-white/70 truncate">{item.agent}</span>
+              <span className="text-white/50 truncate">{item.msg}</span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -376,16 +375,14 @@ export function MissionOverview() {
     return Object.values(tasksMap).filter((t) => t.status === "running" || t.status === "in_progress").length || m.tasks || 0;
   }, [tasksMap, m.tasks]);
 
-  const uptimeVal = gwHealth?.status === "active"
+  const uptimeVal = gwHealth?.status === "active" && typeof gwHealth.uptime_seconds === "number"
     ? formatUptime(gwHealth.uptime_seconds)
     : performance?.uptime_seconds
     ? formatUptime(performance.uptime_seconds)
-    : "100%";
+    : "—";
 
   const avgResponse = m.latency > 0
     ? `${Math.round(m.latency)}ms`
-    : performance?.uptime_seconds
-    ? `<1s`
     : "—";
 
   const missionList = useMemo(

@@ -29,8 +29,7 @@ __all__ = [
 _KNOWN_CLIS: dict[str, str] = {
     # AI Coding CLIs
     "claude": "ai_coding",
-    "gemini": "ai_coding",
-    "gemini-cli": "ai_coding",
+    # "gemini"/"gemini-cli" REMOVED — retired provider (spec §2/§36).
     "codex": "ai_coding",
     "opencode": "ai_coding",
     "aider": "ai_coding",

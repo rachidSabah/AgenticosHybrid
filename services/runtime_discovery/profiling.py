@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.logging import get_logger
+
 from services.runtime_discovery.models import (
     Runtime,
     RuntimeProfile,
@@ -20,7 +21,6 @@ __all__ = ["ProfilingEngine"]
 
 _RESOURCE_FOOTPRINT_MB: dict[RuntimeType, float] = {
     RuntimeType.CLAUDE_CODE: 512.0,
-    RuntimeType.GEMINI_CLI: 256.0,
     RuntimeType.CODEX_CLI: 384.0,
     RuntimeType.HERMES: 1024.0,
     RuntimeType.OPENHANDS: 768.0,
@@ -39,7 +39,6 @@ _RESOURCE_FOOTPRINT_MB: dict[RuntimeType, float] = {
 
 _LATENCY_ESTIMATE_MS: dict[RuntimeType, float] = {
     RuntimeType.CLAUDE_CODE: 15000.0,
-    RuntimeType.GEMINI_CLI: 10000.0,
     RuntimeType.CODEX_CLI: 20000.0,
     RuntimeType.HERMES: 2000.0,
     RuntimeType.OPENHANDS: 25000.0,
@@ -58,7 +57,6 @@ _LATENCY_ESTIMATE_MS: dict[RuntimeType, float] = {
 
 _COST_ESTIMATE_USD: dict[RuntimeType, float] = {
     RuntimeType.CLAUDE_CODE: 0.015,
-    RuntimeType.GEMINI_CLI: 0.005,
     RuntimeType.CODEX_CLI: 0.010,
     RuntimeType.HERMES: 0.0,
     RuntimeType.OPENHANDS: 0.008,
@@ -77,7 +75,6 @@ _COST_ESTIMATE_USD: dict[RuntimeType, float] = {
 
 _SUPPORTS_STREAMING: dict[RuntimeType, bool] = {
     RuntimeType.CLAUDE_CODE: True,
-    RuntimeType.GEMINI_CLI: True,
     RuntimeType.CODEX_CLI: True,
     RuntimeType.AIDER: True,
     RuntimeType.CONTINUE: True,
@@ -88,7 +85,6 @@ _SUPPORTS_STREAMING: dict[RuntimeType, bool] = {
 
 _MAX_CONCURRENCY: dict[RuntimeType, int] = {
     RuntimeType.CLAUDE_CODE: 1,
-    RuntimeType.GEMINI_CLI: 1,
     RuntimeType.CODEX_CLI: 1,
     RuntimeType.HERMES: 1,
     RuntimeType.PYTHON: 4,
@@ -99,7 +95,6 @@ _MAX_CONCURRENCY: dict[RuntimeType, int] = {
 
 _CONFIG_DEFAULTS: dict[RuntimeType, dict[str, Any]] = {
     RuntimeType.CLAUDE_CODE: {"timeout_s": 600, "model": "claude-sonnet-4"},
-    RuntimeType.GEMINI_CLI: {"timeout_s": 600, "model": "gemini-2.0-flash"},
     RuntimeType.CODEX_CLI: {"timeout_s": 600, "model": "gpt-4o"},
     RuntimeType.HERMES: {"timeout_s": 120},
     RuntimeType.PYTHON: {"timeout_s": 30},
@@ -139,7 +134,6 @@ class ProfilingEngine:
             supports_vision=runtime.runtime_type
             in (
                 RuntimeType.CLAUDE_CODE,
-                RuntimeType.GEMINI_CLI,
                 RuntimeType.CODEX_CLI,
                 RuntimeType.HERMES,
             ),

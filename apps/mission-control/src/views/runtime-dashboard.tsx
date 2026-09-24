@@ -142,7 +142,6 @@ const STATUS_COLORS: Record<string, string> = {
 const TYPE_COLORS: Record<string, string> = {
   claude_code: "bg-violet-500/20 text-violet-300",
   opencode: "bg-emerald-500/20 text-emerald-300",
-  gemini_cli: "bg-blue-500/20 text-blue-300",
   hermes: "bg-amber-500/20 text-amber-300",
   custom: "bg-gray-500/20 text-gray-300",
   wsl: "bg-cyan-500/20 text-cyan-300",

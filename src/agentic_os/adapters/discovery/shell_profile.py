@@ -47,12 +47,7 @@ class ShellProfileDiscovery(DiscoveryProvider):
                 "engine": EngineType.CODEX,
                 "caps": [EngineCapability.CODING, EngineCapability.REASONING],
             },
-            {
-                "name": "gemini",
-                "pattern": r"gemini",
-                "engine": EngineType.GEMINI_CLI,
-                "caps": [EngineCapability.CODING, EngineCapability.REASONING],
-            },
+            # "gemini" pattern REMOVED — retired Gemini CLI (spec §2).
             {
                 "name": "aider",
                 "pattern": r"aider",

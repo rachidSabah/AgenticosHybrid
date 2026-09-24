@@ -24,22 +24,23 @@ def _get_system_memory() -> dict[str, float]:
             "percent_used": mem.percent,
         }
     except ImportError:
+        # psutil not installed: NO invented values (was 42.5/16384/50.0).
         return {
-            "process_rss_mb": 42.5,
-            "total_system_mb": 16384.0,
-            "available_system_mb": 8192.0,
-            "percent_used": 50.0,
+            "process_rss_mb": 0.0,
+            "total_system_mb": 0.0,
+            "available_system_mb": 0.0,
+            "percent_used": 0.0,
         }
 
 
 def _get_cpu_usage() -> float:
-    """Retrieve CPU usage percent."""
+    """Retrieve CPU usage percent. 0.0 (not a fake 5%) when unavailable."""
     try:
         import psutil
 
         return float(psutil.cpu_percent(interval=None))
     except Exception:
-        return 5.0
+        return 0.0
 
 
 def collect_kernel_status(platform: Any | None = None) -> dict[str, Any]:

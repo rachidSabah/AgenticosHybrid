@@ -43,6 +43,8 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "runtime": BrainRuntime.NATIVE,
         "is_agent": True,
     },
+    # "gemini" (Gemini CLI) REMOVED — retired provider. Antigravity (agy) is
+    # the canonical Google CLI agent; no alias may resurrect Gemini.
     {
         "key": "qwen",
         "name": "Qwen CLI",
@@ -101,7 +103,9 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "runtime": BrainRuntime.CONTAINER,
         "is_agent": False,
     },
-    # ── Developer Tools & Language Runtimes (NOT AI agents) ──────────────
+    # ── Developer Tools & Language Runtimes (NOT AI agents; spec §4/§22/§37).
+    # Kept for runtime/tooling visibility with is_agent=False — the kernel
+    # and every agent endpoint filter them out of the agent registries.
     {
         "key": "python",
         "name": "Python",
@@ -369,30 +373,10 @@ async def _detect_mcp_processes() -> list[DetectedProcess]:
     return [p for p in all_procs if any(m in p.process_name.lower() for m in mcp_names)]
 
 
-async def _detect_python_agent_processes() -> list[DetectedProcess]:
-    """Detect Python processes that look like AI agents."""
-    all_procs = await _get_running_processes(timeout=5.0)
-    agent_keywords = ("agent", "ai", "llm", "model", "brain", "copilot", "codex", "opencode")
-    agents = []
-    for p in all_procs:
-        pname = p.process_name.lower()
-        if pname == "python" or pname == "python3" or pname.endswith(".py"):
-            agents.append(p)
-        elif any(kw in pname for kw in agent_keywords):
-            if pname not in ("python.exe", "python3.exe", "node.exe", "conhost.exe", "svchost.exe"):
-                agents.append(p)
-    return agents
-
-
-async def _detect_node_agent_processes() -> list[DetectedProcess]:
-    """Detect Node.js processes running agent-related scripts."""
-    all_procs = await _get_running_processes(timeout=5.0)
-    agents = []
-    for p in all_procs:
-        if p.process_name.lower() == "node" or p.process_name.lower() == "npx":
-            agents.append(p)
-    return agents
-
+# _detect_python_agent_processes / _detect_node_agent_processes REMOVED
+# (spec §4/§22): every running python/node process was being reported as an
+# "AI agent brain" with fabricated health=95. A runtime process is not an
+# agent; only validated AI-agent CLIs may enter the brain registry.
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
@@ -441,11 +425,14 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
                     if running_proc
                     else BrainStatus.DISCOVERED
                 ),
-                health=0.0 if (not installed or is_broken) else (100.0 if running_proc else 60.0),
+                # Health reflects REAL evidence only: a successful version
+                # probe (and, additionally, a live process). No invented 60/95
+                # baselines (spec §16/§17).
+                health=100.0 if (installed and not is_broken) else 0.0,
                 memory_usage=running_proc.memory_mb if running_proc else 0.0,
                 cpu_usage=running_proc.cpu_percent if running_proc else 0.0,
-                latency=5.0 if running_proc else 0.0,
-                current_tasks=1 if running_proc else 0,
+                latency=0.0,
+                current_tasks=0,
                 error_count=1 if is_broken else 0,
                 capabilities=(
                     f"cli:{info['key']}",
@@ -469,17 +456,19 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
                 runtime=BrainRuntime.NATIVE,
                 version=await _get_version(lm_path) if lm_path else "",
                 status=BrainStatus.CONNECTED if lm_running else BrainStatus.DISCOVERED,
-                health=100.0 if lm_running else 50.0,
+                # Real evidence only: probe succeeded (health 100) or not.
+                health=100.0 if (lm_path or lm_running) else 0.0,
                 memory_usage=lm_running.memory_mb if lm_running else 0.0,
                 cpu_usage=lm_running.cpu_percent if lm_running else 0.0,
-                latency=5.0 if lm_running else 0.0,
-                current_tasks=1 if lm_running else 0,
+                latency=0.0,
+                current_tasks=0,
                 error_count=0,
                 capabilities=("local_model_server", "native"),
             )
         )
 
-    # 3. MCP servers (running processes)
+    # 3. MCP servers (running processes) — a real running process is real
+    # evidence; no invented health/latency/task numbers (spec §16/§17).
     mcp_procs = await _detect_mcp_processes()
     for i, mcp in enumerate(mcp_procs):
         records.append(
@@ -491,59 +480,19 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
                 runtime=BrainRuntime.NATIVE,
                 version="",
                 status=BrainStatus.CONNECTED,
-                health=95.0,
+                health=100.0,
                 memory_usage=mcp.memory_mb,
                 cpu_usage=mcp.cpu_percent,
-                latency=10.0,
-                current_tasks=1,
+                latency=0.0,
+                current_tasks=0,
                 error_count=0,
                 capabilities=("mcp", "server"),
             )
         )
 
-    # 4. Python agent processes
-    py_agents = await _detect_python_agent_processes()
-    for i, agent in enumerate(py_agents):
-        records.append(
-            BrainRecord(
-                id=f"python-agent-{i}",
-                display_name=f"Python Agent ({agent.process_name})",
-                brain_type=BrainType.ORCHESTRATOR,
-                vendor=BrainVendor.CUSTOM,
-                runtime=BrainRuntime.PYTHON,
-                version="",
-                status=BrainStatus.CONNECTED,
-                health=95.0,
-                memory_usage=agent.memory_mb,
-                cpu_usage=agent.cpu_percent,
-                latency=15.0,
-                current_tasks=1,
-                error_count=0,
-                capabilities=("python", "agent"),
-            )
-        )
-
-    # 5. Node agent processes
-    node_agents = await _detect_node_agent_processes()
-    for i, agent in enumerate(node_agents):
-        records.append(
-            BrainRecord(
-                id=f"node-agent-{i}",
-                display_name=f"Node Agent ({agent.process_name})",
-                brain_type=BrainType.ORCHESTRATOR,
-                vendor=BrainVendor.CUSTOM,
-                runtime=BrainRuntime.NODE,
-                version="",
-                status=BrainStatus.CONNECTED,
-                health=95.0,
-                memory_usage=agent.memory_mb,
-                cpu_usage=agent.cpu_percent,
-                latency=15.0,
-                current_tasks=1,
-                error_count=0,
-                capabilities=("node", "agent"),
-            )
-        )
+    # Sections 4/5 (python/node "agent" process brains) REMOVED — every
+    # python/node process was registered as an ORCHESTRATOR brain with
+    # fabricated health=95 (spec §4/§22/§37: runtimes are not agents).
 
     return records
 

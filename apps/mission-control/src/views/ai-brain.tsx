@@ -13,7 +13,6 @@ const PROVIDER_COLORS: Record<string, string> = {
   hermes: "#00f0ff",
   opencode: "#38bdf8",
   agy: "#f472b6",
-  gemini: "#f97316",
   codex: "#818cf8",
   cursor: "#38bdf8",
   ollama: "#f97316",
@@ -147,10 +146,10 @@ export function AIBrain() {
       id: "mission_control",
       name: "MISSION CONTROL",
       sub: "AI CORE BRAIN",
-      load: "100%",
+      load: "—",
       status: "ACTIVE",
-      cpu: performance?.cpu_usage_percent ?? 0,
-      ram: performance?.memory_usage_percent ?? 0,
+      cpu: performance?.cpu_usage_percent ?? null,
+      ram: performance?.memory_usage_percent ?? null,
       tasks: Object.values(storeTasks).filter(t => t.status === "running" || t.status === "in_progress").length,
       color: "#00f0ff",
       isCore: true,
@@ -186,8 +185,9 @@ export function AIBrain() {
         name: p.provider.toUpperCase(),
         sub: p.status === "healthy" ? "Active Provider" : p.status,
         status: p.status.toUpperCase(),
-        cpu: Math.max(12, Math.round(p.latency_ms / 10) % 60),
-        ram: Math.max(20, Math.round((p.latency_ms * 1.5) % 80)),
+        // Provider records expose no real cpu/ram metrics — never derive them from latency.
+        cpu: null as number | null,
+        ram: null as number | null,
         tasks: agentCount,
         color: getProviderColor(p.provider),
         isCore: false,
@@ -265,21 +265,8 @@ export function AIBrain() {
     return [];
   }, [storeEvents]);
 
-  const commPairs = useMemo(() => {
-    const providerSet = new Set<string>();
-    Object.values(storeProviders).forEach((p) => {
-      if (p.provider && p.provider.toLowerCase() !== "mock") providerSet.add(p.provider);
-    });
-    const providers = Array.from(providerSet);
-    if (providers.length < 2) return [];
-    const pairs: { pair: string; rate: string }[] = [];
-    for (let i = 0; i < providers.length && pairs.length < 8; i++) {
-      for (let j = i + 1; j < providers.length && pairs.length < 8; j++) {
-        pairs.push({ pair: `${providers[i]} ↔ ${providers[j]}`, rate: "0 msg/min" });
-      }
-    }
-    return pairs;
-  }, [storeProviders]);
+  // No real inter-provider communication telemetry exists — never fabricate pairs/rates.
+  const commPairs: { pair: string; rate: string }[] = [];
 
   const overallProgress = useMemo(() => {
     const total = runningTasksCount + completedTasksCount;
@@ -497,10 +484,10 @@ export function AIBrain() {
                       <div className="text-[8px] font-bold tracking-wider text-white drop-shadow-[0_0_4px_rgba(0,240,255,0.5)]">{node.name}</div>
                       <div className="text-[7px] text-cyan-400/70">{node.status}</div>
                     </div>
-                    {/* Hover telemetry chip */}
+                    {/* Hover telemetry chip — shows only real metrics */}
                     <div className="absolute top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-[#050a1c]/95 border border-slate-700 rounded-md px-2 py-1.5 font-mono text-[7px] text-slate-300 shadow-xl whitespace-nowrap z-20">
-                      <div>CPU <span className="text-white">{node.cpu}%</span></div>
-                      <div>RAM <span className="text-white">{node.ram}%</span></div>
+                      <div>CPU <span className="text-white">{typeof node.cpu === "number" ? `${node.cpu}%` : "—"}</span></div>
+                      <div>RAM <span className="text-white">{typeof node.ram === "number" ? `${node.ram}%` : "—"}</span></div>
                       <div>Tasks <span className="text-white">{node.tasks}</span></div>
                     </div>
                   </div>
@@ -689,7 +676,7 @@ export function AIBrain() {
         <div className="font-bold text-white uppercase tracking-wider text-[8px] mb-1.5">Agent Communication</div>
         <div className="space-y-1 max-h-[25vh] overflow-y-auto pr-1">
           {commPairs.length === 0 ? (
-            <div className="text-slate-500 text-center py-1.5">No inter-agent communication yet</div>
+            <div className="text-slate-500 text-center py-1.5">No coordination telemetry</div>
           ) : (
             commPairs.map((c, i) => (
               <div key={i} className="flex justify-between items-center text-slate-300 border-b border-slate-800/40 pb-0.5 hover:bg-cyan-500/5 transition-colors rounded-sm px-1">
@@ -706,8 +693,8 @@ export function AIBrain() {
         {/* System Telemetry */}
         <div className="flex items-center gap-3">
           {[
-            { label: "CPU", val: `${Math.round(performance?.cpu_usage_percent ?? 42)}%`, color: "text-cyan-400" },
-            { label: "RAM", val: `${Math.round(performance?.memory_usage_percent ?? 68)}%`, color: "text-emerald-400" },
+            { label: "CPU", val: typeof performance?.cpu_usage_percent === "number" ? `${Math.round(performance.cpu_usage_percent)}%` : "—", color: "text-cyan-400" },
+            { label: "RAM", val: typeof performance?.memory_usage_percent === "number" ? `${Math.round(performance.memory_usage_percent)}%` : "—", color: "text-emerald-400" },
             { label: "GPU", val: performance?.gpu_usage_percent ?? "—", color: "text-indigo-400" },
             { label: "NET", val: performance?.network_throughput_bytes_per_sec ? `${safeFixed((safeNum(performance?.network_throughput_bytes_per_sec) / 1024), 0)}KB/s` : "—", color: "text-pink-400" },
           ].map((m) => (
@@ -724,7 +711,7 @@ export function AIBrain() {
         <div className="flex items-center gap-4">
           <div className="text-center">
             <div className="text-[7px] text-slate-500">Event Bus</div>
-            <div className="text-white font-bold text-[10px]">{storeEvents.length * 120 || 0} <span className="text-[7px] text-cyan-400 font-normal">ev/s</span></div>
+            <div className="text-white font-bold text-[10px]">{storeEvents.length} <span className="text-[7px] text-cyan-400 font-normal">events</span></div>
           </div>
           <div className="text-center">
             <div className="text-[7px] text-slate-500">Tokens</div>

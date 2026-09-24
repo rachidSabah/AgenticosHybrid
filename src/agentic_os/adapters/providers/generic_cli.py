@@ -154,7 +154,13 @@ class GenericCLIProvider:
         if rc != 0:
             raise RuntimeError(f"{self._bin} exited {rc}: {stderr_str[:200]}")
 
-        return stdout_str.strip() or f"[{self._bin}] completed '{task.title}'"
+        # NEVER fabricate a completion claim for empty stdout. The previous
+        # fallback interpolated the binary name and the task title into a
+        # fake "completed" result string, which the orchestrator then
+        # recorded as a successful task and wrote into the workspace report.
+        # Empty stdout now propagates unchanged; the orchestrator's
+        # error-output guard fails the task honestly.
+        return stdout_str.strip()
 
     async def healthcheck(self) -> bool:
         return shutil.which(self._bin) is not None

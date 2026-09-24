@@ -147,24 +147,31 @@ class _BaseProviderAdapter:
         return self._healthy
 
     def _simulate_invoke(self, request: ExecutionRequest) -> ExecutionResult:
-        """Simulate a provider invocation (stub)."""
-        # Simulate latency based on provider name
-        latency = random.uniform(0.1, 2.0) if "local" not in self._name else 0.05
-        time.sleep(0)  # yield to event loop
-        tokens_out = min(request.max_tokens, random.randint(10, 200))
+        """Refuse to fabricate a provider response (spec §15/§16).
+
+        These adapters have no real SDK client wired. The previous stub
+        returned a COMPLETED result with a simulated output, random latency
+        and invented token counts — garbage that downstream aggregation then
+        reported as successful provider executions. Honest behaviour: report
+        FAILED with a clear reason so failover/aggregation reflect reality.
+        """
         return ExecutionResult(
             request_id=request.request_id,
             provider=self._name,
             model=request.model,
-            state=ExecutionState.COMPLETED,
-            output=f"[{self._name}] Simulated response for {request.model}",
-            content=f"[{self._name}] Simulated response for {request.model}",
-            finish_reason="stop",
-            tokens_in=len(request.messages),
-            tokens_out=tokens_out,
-            total_tokens=len(request.messages) + tokens_out,
-            latency_ms=latency * 1000,
-            ttfb_ms=latency * 500,
+            state=ExecutionState.FAILED,
+            output="",
+            content="",
+            error=(
+                f"provider '{self._name}' has no real SDK client configured — "
+                "invocation was NOT performed (no simulated results)"
+            ),
+            finish_reason="error",
+            tokens_in=0,
+            tokens_out=0,
+            total_tokens=0,
+            latency_ms=0.0,
+            ttfb_ms=0.0,
             attempts=1,
         )
 
@@ -177,16 +184,9 @@ class OpenAIProviderAdapter(_BaseProviderAdapter):
         return self._simulate_invoke(request)
 
     async def invoke_stream(self, request: ExecutionRequest) -> AsyncIterator[ExecutionChunk]:
-        for i in range(3):
-            yield ExecutionChunk(
-                request_id=request.request_id,
-                provider=self._name,
-                model=request.model,
-                index=i,
-                content=f"chunk-{i} ",
-                finish_reason="continue" if i < 2 else "stop",
-                timestamp=time.time(),
-            )
+        # No real SDK client: refuse to fabricate stream chunks (spec §15).
+        return
+        yield  # pragma: no cover — makes this an async generator
 
 
 class AnthropicProviderAdapter(_BaseProviderAdapter):
@@ -197,16 +197,9 @@ class AnthropicProviderAdapter(_BaseProviderAdapter):
         return self._simulate_invoke(request)
 
     async def invoke_stream(self, request: ExecutionRequest) -> AsyncIterator[ExecutionChunk]:
-        for i in range(3):
-            yield ExecutionChunk(
-                request_id=request.request_id,
-                provider=self._name,
-                model=request.model,
-                index=i,
-                content=f"claude-chunk-{i} ",
-                finish_reason="continue" if i < 2 else "stop",
-                timestamp=time.time(),
-            )
+        # No real SDK client: refuse to fabricate stream chunks (spec §15).
+        return
+        yield  # pragma: no cover — makes this an async generator
 
 
 class GeminiProviderAdapter(_BaseProviderAdapter):
@@ -217,16 +210,9 @@ class GeminiProviderAdapter(_BaseProviderAdapter):
         return self._simulate_invoke(request)
 
     async def invoke_stream(self, request: ExecutionRequest) -> AsyncIterator[ExecutionChunk]:
-        for i in range(3):
-            yield ExecutionChunk(
-                request_id=request.request_id,
-                provider=self._name,
-                model=request.model,
-                index=i,
-                content=f"gemini-chunk-{i} ",
-                finish_reason="continue" if i < 2 else "stop",
-                timestamp=time.time(),
-            )
+        # No real SDK client: refuse to fabricate stream chunks (spec §15).
+        return
+        yield  # pragma: no cover — makes this an async generator
 
 
 ProviderAdapterRegistry: dict[str, Any] = {
@@ -1250,11 +1236,15 @@ class ExecutionEngineImpl:
                 valid.append(r)
 
         if not valid:
-            return ExecutionResult(
+            failed = ExecutionResult(
                 request_id=request.request_id,
                 state=ExecutionState.FAILED,
                 error="Quorum: no successful results",
             )
+            # The quorum DID run — record the strategy counter against the
+            # honest failed result (spec §16).
+            await self._record_execution(failed, "quorum")
+            return failed
 
         aggregated = _ResponseAggregator.aggregate(valid, AggregationStrategy.CONSENSUS)
         await self._record_execution(aggregated, "quorum")
@@ -1297,13 +1287,20 @@ class ExecutionEngineImpl:
         )
 
         last_error = ""
+        final_result: ExecutionResult | None = None
         for req in requests:
             result = await self.execute(req)
             if result.state == ExecutionState.COMPLETED:
                 await self._record_execution(result, "fallback")
                 return result
             last_error = result.error
+            final_result = result
 
+        # The fallback chain DID run even though every provider failed —
+        # record the strategy counter against the honest final result
+        # (spec §16: counters reflect real events, not only successes).
+        if final_result is not None:
+            await self._record_execution(final_result, "fallback")
         return ExecutionResult(
             state=ExecutionState.FAILED,
             error=f"All fallbacks exhausted: {last_error}",

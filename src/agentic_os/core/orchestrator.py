@@ -761,101 +761,37 @@ class Orchestrator:
         exec_rec = self._start_execution(agent, task, provider, retry_count=0)
         wt_path = await self._create_worktree_for_agent(agent, task)
         exec_cwd = self._resolve_execution_cwd(wt_path)
-        is_mock = getattr(provider, "info", None) is not None and (
-            provider.info.name == "mock" or provider.info.kind == "mock"
-        )
+        # Independent artifact verification (spec §14/§41): snapshot the
+        # execution directory BEFORE the agent runs so files the agent writes
+        # directly (without echoing them on stdout) can be verified after.
+        before_snapshot = None
         try:
-            from agentic_os.core.verification import ArtifactVerifier
-            from agentic_os.domain.workspace import get_workspace_root
+            from agentic_os.core.artifact_verification import WorkspaceSnapshot
 
-            target_ws = exec_cwd or get_workspace_root() or "."
-            pre_snapshot = {} if is_mock else ArtifactVerifier.snapshot_workspace(target_ws)
-
+            before_snapshot = WorkspaceSnapshot.capture(exec_cwd)
+        except Exception:
+            before_snapshot = None
+        try:
             result = await provider.execute(
                 agent,
                 task,
                 on_output=self._make_output_callback(task),
                 cwd=exec_cwd,
             )
-            elapsed = _time.monotonic() - start_time
-            agent.mark_completed()
-            # A non-empty return does NOT mean success. Bound agent CLIs return
-            # auth errors / crash traces as their "result". If the output is an
-            # error signature or unusable, the task FAILED — never COMPLETED.
-            # (spec RULE 5/7: no success without real execution evidence.)
-            result_is_error = _is_error_output(result) or _is_unusable_output(result)
-            if result_is_error:
-                from datetime import datetime
-
-                task.status = TaskStatus.FAILED
-                task.error = (result or "agent returned an error instead of real output")[:500]
-                task.result = result
-                task.completed_at = datetime.now(UTC)
-                task.touch()
-                self._finish_execution(exec_rec, "failed", stderr=result)
-                log.warning(
-                    "execution.result_is_error",
-                    task=task.id,
-                    agent=agent.id,
-                    mission_id=task.mission_id,
-                    provider=provider.info.kind,
-                    elapsed_s=round(elapsed, 3),
-                    attempt=1,
-                )
-                await self._publish_failed(agent, task, result)
-                return
-
-            if not is_mock:
-                # Persist generated output files and extract any code blocks into target workspace root
-                try:
-                    if target_ws and _os.path.isdir(target_ws) and result and len(result) > 10:
-                        saved = _extract_and_persist_files(
-                            result, task, target_ws, provider.info.kind
-                        )
-                        log.info("task.files_persisted", count=len(saved), workspace=target_ws)
-                except Exception as e:
-                    log.warning("task.persist_output_failed", error=str(e))
-
-                # Deliverable verification
-                v_res = ArtifactVerifier.verify(target_ws, pre_snapshot, task, result)
-                task.artifacts = v_res.artifacts
-                if not v_res.is_verified:
-                    from datetime import datetime
-
-                    task.status = TaskStatus.FAILED
-                    task.error = f"Deliverable verification failed: {v_res.reason}"[:500]
-                    task.result = result
-                    task.completed_at = datetime.now(UTC)
-                    task.touch()
-                    self._finish_execution(exec_rec, "failed", stderr=task.error)
-                    log.warning(
-                        "execution.verification_failed",
-                        task=task.id,
-                        agent=agent.id,
-                        reason=v_res.reason,
-                    )
-                    await self._publish_failed(agent, task, task.error)
-                    return
-
-            from datetime import datetime
-
-            task.status = TaskStatus.COMPLETED
-            task.result = result
-            task.error = None
-            task.completed_at = datetime.now(UTC)
-            task.touch()
-            self._finish_execution(exec_rec, "completed", stdout=result)
-            log.info(
-                "execution.completed",
-                task=task.id,
-                agent=agent.id,
-                mission_id=task.mission_id,
-                elapsed_s=round(elapsed, 3),
-                result_len=len(result) if result else 0,
+            outcome = await self._finalize_attempt(
+                agent=agent,
+                task=task,
+                provider=provider,
+                exec_rec=exec_rec,
+                result=result,
+                start_time=start_time,
+                attempt=1,
+                before_snapshot=before_snapshot,
+                exec_cwd=exec_cwd,
             )
-
-            await self._publish_completed(agent, task, result, elapsed)
-            return
+            if outcome != "error":
+                return
+            task.touch()
         except Exception as exc:
             elapsed = _time.monotonic() - start_time
             self._finish_execution(exec_rec, "failed", stderr=str(exc), error=str(exc))
@@ -882,80 +818,31 @@ class Orchestrator:
                 attempt=task.attempts,
             )
             exec_rec2 = self._start_execution(agent, task, provider, retry_count=1)
-            is_mock2 = getattr(provider, "info", None) is not None and (
-                provider.info.name == "mock" or provider.info.kind == "mock"
-            )
             try:
-                from agentic_os.core.verification import ArtifactVerifier
-                from agentic_os.domain.workspace import get_workspace_root
-
-                target_ws = exec_cwd or get_workspace_root() or "."
-                pre_snapshot = {} if is_mock2 else ArtifactVerifier.snapshot_workspace(target_ws)
-
                 result = await provider.execute(
                     agent,
                     task,
                     on_output=self._make_output_callback(task),
                     cwd=exec_cwd,
                 )
-                elapsed = _time.monotonic() - start_time
-                agent.mark_completed()
-
-                result_is_error = _is_error_output(result) or _is_unusable_output(result)
-                if result_is_error:
-                    from datetime import datetime
-
-                    task.status = TaskStatus.FAILED
-                    task.error = (result or "agent returned an error instead of real output")[:500]
-                    task.result = result
-                    task.completed_at = datetime.now(UTC)
-                    task.touch()
-                    self._finish_execution(exec_rec2, "failed", stderr=result)
-                    await self._publish_failed(agent, task, result)
-                    return
-
-                if not is_mock2:
-                    # Persist generated output files into workspace root
-                    try:
-                        if target_ws and _os.path.isdir(target_ws) and result and len(result) > 10:
-                            _extract_and_persist_files(result, task, target_ws, provider.info.kind)
-                    except Exception:
-                        pass
-
-                    # Deliverable verification
-                    v_res = ArtifactVerifier.verify(target_ws, pre_snapshot, task, result)
-                    task.artifacts = v_res.artifacts
-                    if not v_res.is_verified:
-                        from datetime import datetime
-
-                        task.status = TaskStatus.FAILED
-                        task.error = f"Deliverable verification failed: {v_res.reason}"[:500]
-                        task.result = result
-                        task.completed_at = datetime.now(UTC)
-                        task.touch()
-                        self._finish_execution(exec_rec2, "failed", stderr=task.error)
-                        await self._publish_failed(agent, task, task.error)
-                        return
-
-                from datetime import datetime
-
-                task.status = TaskStatus.COMPLETED
-                task.result = result
-                task.error = None
-                task.completed_at = datetime.now(UTC)
-                task.touch()
-                self._finish_execution(exec_rec2, "completed", stdout=result)
-                log.info(
-                    "execution.completed_after_retry",
-                    task=task.id,
-                    agent=agent.id,
-                    provider=agent.provider,
-                    attempt=task.attempts,
-                    elapsed_s=round(elapsed, 3),
+                # Attempt 2 previously skipped the error-output guard, so a
+                # retry that returned an auth error / crash trace was recorded
+                # as COMPLETED. Every attempt now passes the SAME guard.
+                outcome = await self._finalize_attempt(
+                    agent=agent,
+                    task=task,
+                    provider=provider,
+                    exec_rec=exec_rec2,
+                    result=result,
+                    start_time=start_time,
+                    attempt=task.attempts + 1,
+                    recovered=True,
+                    before_snapshot=before_snapshot,
+                    exec_cwd=exec_cwd,
                 )
-
-                await self._publish_completed(agent, task, result, elapsed, recovered=True)
-                return
+                if outcome != "error":
+                    return
+                task.touch()
             except Exception as exc2:
                 self._finish_execution(exec_rec2, "failed", stderr=str(exc2), error=str(exc2))
                 log.warning(
@@ -994,84 +881,33 @@ class Orchestrator:
             )
             fallback_wt_path = await self._create_worktree_for_agent(fallback_agent, task)
             fallback_exec_cwd = self._resolve_execution_cwd(fallback_wt_path)
-            is_mock3 = getattr(fallback_provider, "info", None) is not None and (
-                fallback_provider.info.name == "mock" or fallback_provider.info.kind == "mock"
-            )
             try:
-                from agentic_os.core.verification import ArtifactVerifier
-                from agentic_os.domain.workspace import get_workspace_root
-
-                target_ws = fallback_exec_cwd or get_workspace_root() or "."
-                pre_snapshot = {} if is_mock3 else ArtifactVerifier.snapshot_workspace(target_ws)
-
                 result = await fallback_provider.execute(
                     fallback_agent,
                     task,
                     on_output=self._make_output_callback(task),
                     cwd=fallback_exec_cwd,
                 )
-                elapsed = _time.monotonic() - start_time
-                fallback_agent.mark_completed()
-
-                result_is_error = _is_error_output(result) or _is_unusable_output(result)
-                if result_is_error:
-                    from datetime import datetime
-
-                    task.status = TaskStatus.FAILED
-                    task.error = (result or "agent returned an error instead of real output")[:500]
-                    task.result = result
-                    task.completed_at = datetime.now(UTC)
-                    task.touch()
-                    self._finish_execution(exec_rec3, "failed", stderr=result)
-                    await self._publish_failed(fallback_agent, task, result)
+                # Attempt 3 previously skipped the error-output guard, so a
+                # fallback that returned an auth error / crash trace was
+                # recorded as COMPLETED. Every attempt now passes the SAME
+                # guard, then independent artifact verification.
+                outcome = await self._finalize_attempt(
+                    agent=fallback_agent,
+                    task=task,
+                    provider=fallback_provider,
+                    exec_rec=exec_rec3,
+                    result=result,
+                    start_time=start_time,
+                    attempt=task.attempts + 1,
+                    recovered=True,
+                    fallback=True,
+                    before_snapshot=before_snapshot,
+                    exec_cwd=fallback_exec_cwd,
+                )
+                if outcome != "error":
                     return
-
-                if not is_mock3:
-                    # Persist generated output files into workspace root
-                    try:
-                        if target_ws and _os.path.isdir(target_ws) and result and len(result) > 10:
-                            _extract_and_persist_files(
-                                result, task, target_ws, fallback_provider.info.kind
-                            )
-                    except Exception:
-                        pass
-
-                    # Deliverable verification
-                    v_res = ArtifactVerifier.verify(target_ws, pre_snapshot, task, result)
-                    task.artifacts = v_res.artifacts
-                    if not v_res.is_verified:
-                        from datetime import datetime
-
-                        task.status = TaskStatus.FAILED
-                        task.error = f"Deliverable verification failed: {v_res.reason}"[:500]
-                        task.result = result
-                        task.completed_at = datetime.now(UTC)
-                        task.touch()
-                        self._finish_execution(exec_rec3, "failed", stderr=task.error)
-                        await self._publish_failed(fallback_agent, task, task.error)
-                        return
-
-                from datetime import datetime
-
-                task.status = TaskStatus.COMPLETED
-                task.result = result
-                task.error = None
-                task.completed_at = datetime.now(UTC)
                 task.touch()
-                self._finish_execution(exec_rec3, "completed", stdout=result)
-                log.info(
-                    "execution.completed_after_fallback",
-                    task=task.id,
-                    agent=fallback_agent.id,
-                    provider=fallback_provider.info.name,
-                    attempt=task.attempts,
-                    elapsed_s=round(elapsed, 3),
-                )
-
-                await self._publish_completed(
-                    fallback_agent, task, result, elapsed, recovered=True, fallback=True
-                )
-                return
             except Exception as exc3:
                 self._finish_execution(exec_rec3, "failed", stderr=str(exc3), error=str(exc3))
                 log.warning(
@@ -1115,6 +951,188 @@ class Orchestrator:
 
         # All attempts failed or no external CLI configured, activate autonomous engine fallback
         await self._execute_autonomous_fallback(agent, task, start_time)
+
+    async def _finalize_attempt(
+        self,
+        *,
+        agent: Agent,
+        task: Task,
+        provider,
+        exec_rec,
+        result: str | None,
+        start_time: float,
+        attempt: int,
+        recovered: bool = False,
+        fallback: bool = False,
+        before_snapshot=None,
+        exec_cwd: str | None = None,
+    ) -> str:
+        """Shared terminal-state handler for EVERY provider attempt.
+
+        Guarantees (spec §8-§16, §41):
+
+        * The SAME error-output guard applies to all attempts. Previously only
+          attempt 1 was guarded — a retry (attempt 2) or fallback (attempt 3)
+          that returned an auth error / crash trace was recorded as COMPLETED.
+        * A provider result is never trusted as proof of work. Independent
+          artifact verification inspects the filesystem: at least one real,
+          non-empty, non-report file must have been produced (extracted code
+          file or a file the agent wrote into its cwd). Prose/report roles may
+          satisfy verification with their honest task report.
+        * Output without verified artifacts is recorded as PLAN_GENERATED
+          ("plan generated — deliverable not verified"), never COMPLETED.
+
+        Returns ``"error"`` (caller proceeds to the next attempt / honest
+        failure), or ``"completed"`` / ``"plan_generated"`` (terminal).
+        """
+        elapsed = _time.monotonic() - start_time
+
+        # A non-empty return does NOT mean success. Bound agent CLIs return
+        # auth errors / crash traces as their "result". If the output is an
+        # error signature or unusable, the attempt FAILED — never COMPLETED.
+        if _is_error_output(result) or _is_unusable_output(result):
+            self._finish_execution(exec_rec, "failed", stderr=result)
+            task.error = (
+                result.strip() if result and result.strip() else "agent produced no stdout output"
+            )[:500]
+            task.touch()
+            log.warning(
+                "execution.result_is_error",
+                task=task.id,
+                agent=agent.id,
+                mission_id=task.mission_id,
+                provider=getattr(getattr(provider, "info", None), "kind", "?"),
+                elapsed_s=round(elapsed, 3),
+                attempt=attempt,
+            )
+            return "error"
+
+        agent.mark_completed()
+        task.result = result
+        task.error = None
+        task.touch()
+
+        # Persist generated output files and extract any code blocks into the
+        # target workspace root, then INDEPENDENTLY verify what exists on disk.
+        saved: list[str] = []
+        ws_root: str | None = None
+        try:
+            from agentic_os.domain.workspace import get_workspace_root
+
+            ws_root = get_workspace_root()
+        except Exception:
+            ws_root = None
+        if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
+            try:
+                saved = _extract_and_persist_files(
+                    result,
+                    task,
+                    ws_root,
+                    getattr(getattr(provider, "info", None), "kind", "provider"),
+                )
+                log.info("task.files_persisted", count=len(saved), workspace=ws_root)
+            except Exception as e:
+                log.warning("task.persist_output_failed", error=str(e))
+
+        try:
+            from agentic_os.core.artifact_verification import (
+                WorkspaceSnapshot,
+                verify_task_execution,
+            )
+
+            after = WorkspaceSnapshot.capture(exec_cwd) if exec_cwd else None
+            verification = verify_task_execution(
+                role=task.role,
+                result=result,
+                saved_files=saved,
+                before=before_snapshot,
+                after=after,
+                ws_root=exec_cwd or "",
+            )
+        except Exception as exc:
+            # Fail-safe: if verification itself cannot run, we must NOT claim
+            # verified completion. Record the honest reason.
+            log.warning("task.verification_error", error=str(exc))
+            from agentic_os.core.artifact_verification import ArtifactVerification
+
+            verification = ArtifactVerification(
+                ok=False, reason=f"verification subsystem error: {exc}"
+            )
+
+        task.verification = verification.to_dict()
+        # Execution-tracking fields (real timestamps + verified artifacts only).
+        from datetime import UTC, datetime
+
+        task.artifacts = [
+            a for a in verification.artifacts if a.get("verified")
+        ] if verification.ok else []
+
+        if verification.ok:
+            task.status = TaskStatus.COMPLETED
+            task.completed_at = datetime.now(UTC)
+            self._finish_execution(exec_rec, "completed", stdout=result)
+            log.info(
+                "execution.completed",
+                task=task.id,
+                agent=agent.id,
+                mission_id=task.mission_id,
+                elapsed_s=round(elapsed, 3),
+                result_len=len(result) if result else 0,
+                artifact_count=len([a for a in verification.artifacts if a.get("verified")]),
+                attempt=attempt,
+            )
+            await self._publish_completed(
+                agent, task, result, elapsed, recovered=recovered, fallback=fallback
+            )
+            return "completed"
+
+        # Real execution happened (exit 0, non-error output) but NO real,
+        # non-empty workspace artifact was produced. Natural-language output
+        # is never accepted as proof of completion (spec §14/§35).
+        task.status = TaskStatus.PLAN_GENERATED
+        task.completed_at = datetime.now(UTC)
+        self._finish_execution(exec_rec, "plan_generated", stdout=result)
+        log.warning(
+            "execution.plan_generated",
+            task=task.id,
+            agent=agent.id,
+            mission_id=task.mission_id,
+            elapsed_s=round(elapsed, 3),
+            reason=verification.reason,
+            attempt=attempt,
+        )
+        await self._publish_plan_generated(agent, task, result, elapsed)
+        return "plan_generated"
+
+    async def _publish_plan_generated(
+        self,
+        agent: Agent,
+        task: Task,
+        result: str,
+        elapsed: float,
+    ) -> None:
+        """Publish task.plan_generated / agent.completed-with-caveat events.
+
+        The agent DID run (real process, exit 0) but produced no verifiable
+        deliverable. The event says exactly that — never a success claim.
+        """
+        await self.bus.publish(
+            EventEnvelope(
+                type="task.plan_generated",
+                source="orchestrator",
+                topic="task.plan_generated",
+                payload={
+                    "task_id": task.id,
+                    "agent_id": agent.id,
+                    "provider": agent.provider,
+                    "result": result[:500] if result else "",
+                    "elapsed_s": round(elapsed, 3),
+                    "mission_id": task.mission_id,
+                    "verification": task.verification,
+                    "message": "PLAN GENERATED — DELIVERABLE NOT VERIFIED",
+                },
+            )
+        )
 
     async def _execute_autonomous_fallback(
         self, agent: Agent, task: Task, start_time: float

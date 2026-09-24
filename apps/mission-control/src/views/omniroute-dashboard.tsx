@@ -482,8 +482,8 @@ export function OmniRouteDashboard() {
                 {failovers.length > 0 ? (
                   failovers.map((ev, idx) => {
                     const fromP = ev.fromProvider || ev.from_provider || "Unknown";
-                    const toP = ev.toProvider || ev.to_provider || "Codex CLI";
-                    const status = ev.status || "success";
+                    const toP = ev.toProvider || ev.to_provider || "—";
+                    const status = ev.status || "unknown";
                     return (
                       <div key={ev.id || `${fromP}-${toP}-${ev.timestamp}-${idx}`} className="flex items-center justify-between rounded-xl border border-border/40 bg-surface/20 p-3">
                         <div>
@@ -492,9 +492,9 @@ export function OmniRouteDashboard() {
                             <ArrowRight size={12} className="text-amber-400" />
                             <span className="text-accent font-semibold">{toP}</span>
                           </div>
-                          <div className="text-[11px] text-faint mt-0.5">{ev.reason || "Automatic latency-driven failover"} · {ev.timestamp || "recent"}</div>
+                          <div className="text-[11px] text-faint mt-0.5">{ev.reason || "—"} · {ev.timestamp || "—"}</div>
                         </div>
-                        <Badge tone="ok">{status}</Badge>
+                        <Badge tone={status === "success" ? "ok" : status === "unknown" ? "default" : "warn"}>{status}</Badge>
                       </div>
                     );
                   })
@@ -508,7 +508,7 @@ export function OmniRouteDashboard() {
               <div className="space-y-3 text-xs">
                 <Stat label="Local Execution Ratio" value={`${telemetry.localExecutionRatio.toFixed(1)}%`} tone="ok" />
                 <Stat label="Today's Cost Saved" value={`$${telemetry.todayCostSaved}`} tone="accent" />
-                <Stat label="Monthly Cost Savings" value={`$${(telemetry.todayCostSaved * 30).toFixed(2)}`} tone="ok" />
+                <Stat label="30-day projection (current rate × 30)" value={`$${(telemetry.todayCostSaved * 30).toFixed(2)}`} tone="ok" />
               </div>
             </Panel>
           </div>

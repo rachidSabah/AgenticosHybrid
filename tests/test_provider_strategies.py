@@ -15,7 +15,6 @@ from agentic_os.adapters.providers.strategies import (
     AiderExecutionStrategy,
     ClaudeExecutionStrategy,
     CodexExecutionStrategy,
-    GeminiExecutionStrategy,
     GenericExecutionStrategy,
     HermesExecutionStrategy,
     OllamaExecutionStrategy,
@@ -91,17 +90,11 @@ class TestStrategyCommands:
         assert "--message" in cmd
         assert "--no-auto-commits" in cmd
 
-    def test_gemini_uses_p_flag(self):
-        s = GeminiExecutionStrategy()
-        cmd = s.build_command(make_task(), "gemini")
-        assert cmd[0] == "gemini"
-        assert "-p" in cmd
-        assert "--output-format" in cmd
-        assert "text" in cmd
-        # Gemini reads prompt from stdin when -p has empty value
-        stdin = s.build_stdin(make_task())
-        assert stdin is not None
-        assert b"Write hello world" in stdin
+    def test_retired_gemini_strategy_is_gone(self):
+        """The retired Gemini CLI must have NO execution strategy (spec §2/§36)."""
+        from agentic_os.adapters.providers.strategies import _STRATEGY_REGISTRY
+
+        assert "gemini_cli" not in _STRATEGY_REGISTRY
 
     def test_agy_uses_stdin_no_run_subcommand(self):
         # agy's CLI has NO `run` subcommand — it reads the prompt from stdin
@@ -154,9 +147,6 @@ class TestStrategyProperties:
     def test_aider_has_longer_timeout(self):
         assert AiderExecutionStrategy().timeout_s == 180.0
 
-    def test_gemini_has_longer_timeout(self):
-        assert GeminiExecutionStrategy().timeout_s == 180.0
-
     def test_ollama_has_longest_timeout(self):
         assert OllamaExecutionStrategy().timeout_s == 300.0
 
@@ -179,7 +169,6 @@ class TestStrategyProperties:
             OpenCodeExecutionStrategy,
             CodexExecutionStrategy,
             AiderExecutionStrategy,
-            GeminiExecutionStrategy,
             AGYExecutionStrategy,
             OllamaExecutionStrategy,
             GenericExecutionStrategy,
@@ -199,11 +188,6 @@ class TestHealthCommands:
         """Hermes CLI --version performs a network update check — must use --help."""
         cmd = HermesExecutionStrategy().health_command("hermes")
         assert cmd == ["hermes", "--help"]
-
-    def test_gemini_health_uses_version(self):
-        """Gemini CLI --help can trigger interactive auth flow — must use --version."""
-        cmd = GeminiExecutionStrategy().health_command("gemini")
-        assert cmd == ["gemini", "--version"]
 
     def test_ollama_health_uses_list(self):
         cmd = OllamaExecutionStrategy().health_command("ollama")
@@ -233,9 +217,11 @@ class TestProviderFactory:
         adapter = ProviderFactory.create("opencode", "opencode", name="test")
         assert isinstance(adapter.strategy, OpenCodeExecutionStrategy)
 
-    def test_create_gemini(self):
-        adapter = ProviderFactory.create("gemini_cli", "gemini", name="test")
-        assert isinstance(adapter.strategy, GeminiExecutionStrategy)
+    def test_create_retired_gemini_does_not_bypass_generic(self):
+        """gemini_cli is retired: get_strategy must NOT return a Gemini strategy."""
+        from agentic_os.adapters.providers.strategies import _STRATEGY_REGISTRY
+
+        assert "gemini_cli" not in _STRATEGY_REGISTRY
 
     def test_create_unknown_kind_uses_generic(self):
         adapter = ProviderFactory.create("unknown_kind", "some-bin", name="test")
@@ -250,11 +236,12 @@ class TestProviderFactory:
             "opencode",
             "codex",
             "aider",
-            "gemini_cli",
             "antigravity",
             "ollama",
         ]:
             assert expected in kinds
+        # Retired provider must not be a supported kind.
+        assert "gemini_cli" not in kinds
 
     def test_is_supported(self):
         assert ProviderFactory.is_supported("claude_code") is True
@@ -364,7 +351,8 @@ class TestStrategyRegistry:
         assert isinstance(get_strategy("claude_code"), ClaudeExecutionStrategy)
         assert isinstance(get_strategy("hermes"), HermesExecutionStrategy)
         assert isinstance(get_strategy("opencode"), OpenCodeExecutionStrategy)
-        assert isinstance(get_strategy("gemini_cli"), GeminiExecutionStrategy)
+        # gemini_cli is retired — no registered strategy, generic fallback.
+        assert isinstance(get_strategy("gemini_cli"), GenericExecutionStrategy)
         assert isinstance(get_strategy("ollama"), OllamaExecutionStrategy)
 
     def test_get_strategy_falls_back_to_generic(self):
@@ -390,9 +378,8 @@ class TestStrategyBasedProvider:
         assert adapter.info.supports_streaming is True
 
     def test_adapter_strategy_is_correct(self):
-        adapter = ProviderFactory.create("gemini_cli", "gemini")
-        assert isinstance(adapter.strategy, GeminiExecutionStrategy)
-        assert adapter.strategy.timeout_s == 180.0
+        adapter = ProviderFactory.create("codex", "codex")
+        assert isinstance(adapter.strategy, CodexExecutionStrategy)
 
     def test_adapter_builds_correct_env(self):
         adapter = ProviderFactory.create("claude_code", "claude", api_key="sk-test")

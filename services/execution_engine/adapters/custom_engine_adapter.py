@@ -13,6 +13,7 @@ from core.contracts.execution_engine import (
     EngineLatencyEstimate,
 )
 from core.logging import get_logger
+
 from services.execution_engine.adapters.base import BaseExecutionEngineAdapter
 
 _log = get_logger(__name__)
@@ -56,10 +57,12 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
         command = self._config.extra.get("command_template", "{goal}").format(goal=goal)
         if self._process and self._process.returncode is None:
             request = json.dumps({"method": "execute", "params": {"command": command}}) + "\n"
-            if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
+            if self._process.stdin is None:
+                raise RuntimeError("Process stdin is not available")
             self._process.stdin.write(request.encode())
             await self._process.stdin.drain()
-            if self._process.stdout is None: raise RuntimeError("Process stdout is not available")
+            if self._process.stdout is None:
+                raise RuntimeError("Process stdout is not available")
             response = await asyncio.wait_for(
                 self._process.stdout.readline(), timeout=self._config.extra.get("timeout_s", 300)
             )
@@ -70,7 +73,8 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
         if not self._process:
             return False
         cancel_request = json.dumps({"method": "cancel", "params": {"task_id": task_id}}) + "\n"
-        if self._process.stdin is None: raise RuntimeError("Process stdin is not available")
+        if self._process.stdin is None:
+            raise RuntimeError("Process stdin is not available")
         self._process.stdin.write(cancel_request.encode())
         await self._process.stdin.drain()
         return True
@@ -88,19 +92,29 @@ class CustomEngineAdapter(BaseExecutionEngineAdapter):
         )
 
     async def _on_estimate_cost(self, task: Any) -> EngineCostEstimate:
-        custom_cost = self._config.extra.get("estimated_cost_usd", 0.01)
+        """Cost estimate from operator-provided config only.
+
+        spec §18: no fabricated defaults — when the operator has not supplied
+        real numbers via ``config.extra``, every estimate is an honest zero.
+        """
+        custom_cost = self._config.extra.get("estimated_cost_usd", 0.0)
         return EngineCostEstimate(
             estimated_cost_usd=custom_cost,
-            estimated_tokens_input=self._config.extra.get("estimated_tokens_input", 1000),
-            estimated_tokens_output=self._config.extra.get("estimated_tokens_output", 500),
+            estimated_tokens_input=self._config.extra.get("estimated_tokens_input", 0),
+            estimated_tokens_output=self._config.extra.get("estimated_tokens_output", 0),
             breakdown={"custom_estimate": custom_cost},
         )
 
     async def _on_estimate_latency(self, task: Any) -> EngineLatencyEstimate:
+        """Latency estimate from operator-provided config only.
+
+        spec §18: no fabricated defaults — when the operator has not supplied
+        real samples via ``config.extra``, every estimate is an honest zero.
+        """
         return EngineLatencyEstimate(
-            estimated_duration_s=self._config.extra.get("estimated_latency_s", 10.0),
-            p50_latency_s=self._config.extra.get("p50_latency_s", 8.0),
-            p95_latency_s=self._config.extra.get("p95_latency_s", 20.0),
-            p99_latency_s=self._config.extra.get("p99_latency_s", 40.0),
-            based_on_samples=self._config.extra.get("latency_samples", 50),
+            estimated_duration_s=self._config.extra.get("estimated_latency_s", 0.0),
+            p50_latency_s=self._config.extra.get("p50_latency_s", 0.0),
+            p95_latency_s=self._config.extra.get("p95_latency_s", 0.0),
+            p99_latency_s=self._config.extra.get("p99_latency_s", 0.0),
+            based_on_samples=self._config.extra.get("latency_samples", 0),
         )

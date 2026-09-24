@@ -57,11 +57,13 @@ export function MiniSparkline({ data, color = "#818cf8", height = 30 }: { data: 
 }
 
 // --- CIRCULAR GAUGE ---
-export function CircularGauge({ value, max, label, color = "#818cf8", size = 64 }: { value: number, max: number, label: string, color?: string, size?: number }) {
+// value === null means "no real data reported" — renders an empty ring with "—".
+export function CircularGauge({ value, max, label, color = "#818cf8", size = 64 }: { value: number | null, max: number, label: string, color?: string, size?: number }) {
   const strokeWidth = 4;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const safeValue = Math.min(Math.max(value, 0), max);
+  const hasValue = typeof value === "number" && Number.isFinite(value);
+  const safeValue = hasValue ? Math.min(Math.max(value, 0), max) : 0;
   const percentage = max > 0 ? safeValue / max : 0;
   const strokeDashoffset = circumference - percentage * circumference;
 
@@ -93,7 +95,7 @@ export function CircularGauge({ value, max, label, color = "#818cf8", size = 64 
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-[10px] font-mono text-gray-200">
-            {Math.round(percentage * 100)}%
+            {hasValue ? `${Math.round(percentage * 100)}%` : "—"}
           </span>
         </div>
       </div>
@@ -159,10 +161,13 @@ export function ConnectionStatusPanel() {
   const providerCount = Object.keys(providers).length;
   const activeProviders = Object.values(providers).filter(p => p.status === "healthy").length;
 
-  const statuses = [
+  type SysStatus = boolean | "unknown";
+  const statuses: { label: string; status: SysStatus; icon: typeof Globe; detail?: string }[] = [
+    // EventBus rides the same socket as the WebSocket — real connection state.
     { label: "WebSocket", status: connected, icon: Globe },
-    { label: "EventBus", status: true, icon: Activity },
-    { label: "Database", status: true, icon: Database },
+    { label: "EventBus", status: connected, icon: Activity },
+    // No database probe exists — report unknown, never always-green.
+    { label: "Database", status: "unknown", icon: Database },
     { label: "Providers", status: activeProviders > 0, icon: Server, detail: `${activeProviders}/${providerCount}` }
   ];
 
@@ -172,7 +177,7 @@ export function ConnectionStatusPanel() {
       <div className="grid grid-cols-2 gap-2">
         {statuses.map((sys) => (
           <div key={sys.label} className="flex items-center space-x-2 bg-white/5 border border-white/10 rounded px-2 py-1.5">
-            <sys.icon className={`w-3 h-3 ${sys.status ? "text-green-400" : "text-red-400"}`} />
+            <sys.icon className={`w-3 h-3 ${sys.status === "unknown" ? "text-gray-500" : sys.status ? "text-green-400" : "text-red-400"}`} />
             <div className="flex flex-col">
               <span className="text-[9px] font-mono text-gray-300">{sys.label}</span>
               {sys.detail && <span className="text-[8px] font-mono text-gray-500">{sys.detail}</span>}
@@ -237,10 +242,13 @@ export function TelemetryPanel({ className = "" }: { className?: string }) {
 
   useEffect(() => {
     if (!perf) return;
+    // Plot the REAL network metric when the backend reports one (KB/s, scaled);
+    // no more process_count × 10 fabrication.
+    const netBps = typeof perf.network_throughput_bytes_per_sec === "number" ? perf.network_throughput_bytes_per_sec : 0;
     history.current = {
       cpu: [...history.current.cpu.slice(1), perf.cpu_usage_percent],
       mem: [...history.current.mem.slice(1), perf.memory_usage_percent],
-      net: [...history.current.net.slice(1), Math.min(perf.process_count * 10, 100)],
+      net: [...history.current.net.slice(1), netBps > 0 ? Math.min(netBps / 1024, 100) : 0],
     };
   }, [perf]);
 
@@ -256,8 +264,8 @@ export function TelemetryPanel({ className = "" }: { className?: string }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <CircularGauge value={history.current.cpu[29] || 0} max={100} label="CPU" color="#00f0ff" size={50} />
-        <CircularGauge value={history.current.mem[29] || 0} max={100} label="MEM" color="#a855f7" size={50} />
+        <CircularGauge value={perf ? history.current.cpu[29] || 0 : null} max={100} label="CPU" color="#00f0ff" size={50} />
+        <CircularGauge value={perf ? history.current.mem[29] || 0 : null} max={100} label="MEM" color="#a855f7" size={50} />
         <CircularGauge value={telemetry?.latency || 0} max={1000} label="LATENCY" color="#f97316" size={50} />
       </div>
 

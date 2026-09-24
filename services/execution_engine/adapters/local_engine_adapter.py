@@ -12,6 +12,7 @@ from core.contracts.execution_engine import (
     EngineType,
 )
 from core.logging import get_logger
+
 from services.execution_engine.adapters.base import BaseExecutionEngineAdapter
 
 _log = get_logger(__name__)
@@ -44,6 +45,7 @@ class LocalEngineAdapter(BaseExecutionEngineAdapter):
             try:
                 import os
                 import shlex
+
                 cmd_list = shlex.split(goal)
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
                 result = subprocess.run(
@@ -88,10 +90,11 @@ class LocalEngineAdapter(BaseExecutionEngineAdapter):
         )
 
     async def _on_estimate_latency(self, task: Any) -> EngineLatencyEstimate:
+        """Latency estimate — honest zeros (no measurement source wired). spec §18."""
         return EngineLatencyEstimate(
-            estimated_duration_s=1.0,
-            p50_latency_s=0.5,
-            p95_latency_s=2.0,
-            p99_latency_s=5.0,
-            based_on_samples=1000,
+            estimated_duration_s=0.0,
+            p50_latency_s=0.0,
+            p95_latency_s=0.0,
+            p99_latency_s=0.0,
+            based_on_samples=0,
         )

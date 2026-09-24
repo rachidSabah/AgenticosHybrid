@@ -141,6 +141,8 @@ KNOWN_AGENTS: list[dict] = [
         "capabilities": ["coding", "reasoning", "research", "planning"],
         "description": "Agentic — general-purpose AI agent CLI",
     },
+    # "gemini" (Gemini CLI) REMOVED from KNOWN_AGENTS — retired provider.
+    # It must never be auto-bound or re-aliased (spec §2/§7/§36).
     {
         "binary": "nvidia-nim",
         "kind": "nvidia_nim",

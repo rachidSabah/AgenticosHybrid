@@ -87,17 +87,7 @@ class PathDiscovery(DiscoveryProvider):
                     EngineCapability.REASONING,
                 ],
             },
-            {
-                "name": "gemini",
-                "binary": "gemini",
-                "type": EngineType.GEMINI_CLI,
-                "vendor": "Google",
-                "capabilities": [
-                    EngineCapability.CODING,
-                    EngineCapability.REASONING,
-                    EngineCapability.RESEARCH,
-                ],
-            },
+            # "gemini" provider REMOVED — retired Gemini CLI (spec §2).
             {
                 "name": "aider",
                 "binary": "aider",

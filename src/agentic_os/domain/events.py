@@ -115,6 +115,7 @@ class Topic(StrEnum):
     MISSION_RESUMED = "mission.resumed"
     MISSION_COMPLETED = "mission.completed"
     MISSION_FAILED = "mission.failed"
+    MISSION_PARTIAL = "mission.partial"
     MISSION_CANCELLED = "mission.cancelled"
     MISSION_TASK_STARTED = "mission.task_started"
     MISSION_TASK_ASSIGNED = "mission.task_assigned"

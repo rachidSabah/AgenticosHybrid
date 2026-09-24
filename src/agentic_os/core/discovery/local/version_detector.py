@@ -28,7 +28,7 @@ _VERSION_STRATEGIES: dict[str, tuple[str, list[str]]] = {
     ),
     "claude-code": ("--version", [r"Claude(?:\s+Code)?\s+v?(\d[\w.]*)", r"v?(\d+\.\d+\.\d+)"]),
     "codex": ("--version", [r"Codex(?:\s+CLI)?\s+v?(\d[\w.]*)", r"v?(\d+\.\d+\.\d+)"]),
-    "gemini-cli": ("--version", [r"gemini(?:\s+CLI)?\s+v?(\d[\w.]*)", r"v?(\d+\.\d+\.\d+)"]),
+    # "gemini-cli" REMOVED — retired provider (spec §2/§36).
     "opencode": ("--version", [r"opencode\s+v?(\d[\w.]*)", r"v?(\d+\.\d+\.\d+)"]),
     "aider": ("--version", [r"aider\s+v?(\d[\w.]*)", r"v?(\d+\.\d+\.\d+)"]),
     "ollama": ("--version", [r"ollama\s+(?:version\s+is\s+)?v?(\d[\w.]*)", r"v?(\d+\.\d+\.\d+)"]),

@@ -29,20 +29,27 @@ class ChaosEngine:
         self._experiments: list[ChaosExperiment] = []
 
     def inject_fault(self, fault_type: str, target_component: str) -> ChaosExperiment:
+        """Record a chaos experiment REQUEST.
+
+        Spec §16/§17: this engine does NOT actually inject faults into live
+        components, so it must NOT fabricate recovery times, resilience
+        scores, or "recovered cleanly" narratives (the previous hardcoded
+        42ms / 0.99 / fake log lines made a no-op look like a real drill).
+        The experiment is recorded with honest zero evidence.
+        """
         exp_id = f"chaos-{uuid.uuid4().hex[:8]}"
         logs = [
-            f"[INJECT] Fault '{fault_type}' targeted at '{target_component}'",
-            "[OBSERVE] SRE Self-Healing bus detected heartbeat interruption",
-            "[ISOLATE] Fault domain cordoned; fallback route engaged in 42ms",
-            "[RECOVER] Ephemeral worker resurrected and state restored seamlessly",
+            f"[RECORDED] Chaos experiment requested: fault='{fault_type}' target='{target_component}'",
+            "[NOT EXECUTED] No fault was injected into any live component.",
+            "[NO DATA] No recovery time or resilience score was measured.",
         ]
         exp = ChaosExperiment(
             experiment_id=exp_id,
             fault_type=fault_type,
             target_component=target_component,
-            status="recovered_cleanly",
-            recovery_time_ms=42.0,
-            resilience_score=0.99,
+            status="not_executed",
+            recovery_time_ms=0.0,
+            resilience_score=0.0,
             logs=logs,
         )
         self._experiments.append(exp)

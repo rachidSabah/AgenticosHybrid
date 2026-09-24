@@ -104,40 +104,19 @@ export function MissionOrchestrator() {
   const missionStore = useStore((s) => s.missions);
   const missionUpdates = useStore((s) => s.missionUpdates);
 
-  const STORAGE_KEY = "mc.orchestrator.missions";
-
-  const saveMissionsLocal = (list: MissionType[]) => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
-  };
-
   const loadMissions = useCallback(async () => {
     try {
       setLoading(true);
       const data = await api.missions();
-      const validData = Array.isArray(data) && data.length > 0 ? data : [];
-      if (validData.length > 0) {
-        setMissions(validData);
-        saveMissionsLocal(validData);
-        useStore.getState().setMissions(validData);
-      } else {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as MissionType[];
-          setMissions(parsed);
-          useStore.getState().setMissions(parsed);
-        }
-      }
+      // Render ONLY what the backend returns — no localStorage resurrection.
+      const validData = Array.isArray(data) ? data : [];
+      setMissions(validData);
+      useStore.getState().setMissions(validData);
       setError(null);
     } catch {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as MissionType[];
-          setMissions(parsed);
-          useStore.getState().setMissions(parsed);
-        } catch {}
-      }
-      setError(null);
+      // Show the real error state, never cached rows.
+      setMissions([]);
+      setError("Failed to load missions from backend");
     } finally {
       setLoading(false);
     }
@@ -265,60 +244,17 @@ export function MissionOrchestrator() {
                       if (created && created.id) {
                         setMissions((prev) => {
                           const next = [created, ...prev];
-                          saveMissionsLocal(next);
                           useStore.getState().setMissions(next);
                           return next;
                         });
                         setSelectedMission(created);
+                        setError(null);
                       } else {
-                        const fallback: MissionType = {
-                          id: `msn-${Date.now()}`,
-                          title: (data.title as string) || "Untitled Mission",
-                          description: (data.description as string) || "",
-                          prompt: (data.prompt as string) || "",
-                          objectives: (data.objectives as string[]) || [],
-                          deliverables: (data.deliverables as string[]) || [],
-                          constraints: (data.constraints as string[]) || [],
-                          status: "planned",
-                          priority: (data.priority as any) || "medium",
-                          execution_mode: (data.execution_mode as any) || "hybrid",
-                          tags: (data.tags as string[]) || [],
-                          attachments: [],
-                          created_at: new Date().toISOString(),
-                          updated_at: new Date().toISOString(),
-                        };
-                        setMissions((prev) => {
-                          const next = [fallback, ...prev];
-                          saveMissionsLocal(next);
-                          useStore.getState().setMissions(next);
-                          return next;
-                        });
-                        setSelectedMission(fallback);
+                        // Backend returned no mission id — surface an error, never fabricate one client-side.
+                        setError("Mission creation failed: backend returned no mission id");
                       }
                     } catch {
-                      const fallback: MissionType = {
-                        id: `msn-${Date.now()}`,
-                        title: (data.title as string) || "Untitled Mission",
-                        description: (data.description as string) || "",
-                        prompt: (data.prompt as string) || "",
-                        objectives: (data.objectives as string[]) || [],
-                        deliverables: (data.deliverables as string[]) || [],
-                        constraints: (data.constraints as string[]) || [],
-                        status: "planned",
-                        priority: (data.priority as any) || "medium",
-                        execution_mode: (data.execution_mode as any) || "hybrid",
-                        tags: (data.tags as string[]) || [],
-                        attachments: [],
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                      };
-                      setMissions((prev) => {
-                        const next = [fallback, ...prev];
-                        saveMissionsLocal(next);
-                        useStore.getState().setMissions(next);
-                        return next;
-                      });
-                      setSelectedMission(fallback);
+                      setError("Mission creation failed: backend request error");
                     } finally {
                       setShowCreate(false);
                     }

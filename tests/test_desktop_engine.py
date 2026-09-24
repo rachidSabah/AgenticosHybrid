@@ -385,19 +385,19 @@ class TestNativeTerminalIntegration:
 
 class TestNativeProcessManager:
     @pytest.mark.asyncio
-    async def test_spawn_and_list(self) -> None:
-        mgr = NativeProcessManager()
-        info = await mgr.spawn_process("python", ["server.py"])
-        assert info.pid > 0
+    async def test_spawn_refuses_to_fabricate_pid(self) -> None:
+        """spawn_process must NOT invent a PID without a real OS process
+        (spec §10: no PID → no execution claim)."""
+        import pytest as _pytest
 
-        processes = await mgr.list_processes()
-        assert len(processes) == 1
+        mgr = NativeProcessManager()
+        with _pytest.raises(NotImplementedError):
+            await mgr.spawn_process("python", ["server.py"])
+        assert await mgr.list_processes() == []
 
     @pytest.mark.asyncio
-    async def test_kill(self) -> None:
+    async def test_kill_without_spawn_is_noop(self) -> None:
         mgr = NativeProcessManager()
-        info = await mgr.spawn_process("test")
-        assert await mgr.kill_process(info.pid) is True
         assert await mgr.kill_process(99999) is False
 
 

@@ -5,6 +5,7 @@ import platform
 import subprocess
 
 from core.logging import get_logger
+
 from services.runtime_discovery.models import (
     DiscoveryProviderType,
     RuntimeDiscoveryResult,
@@ -15,7 +16,7 @@ _log = get_logger(__name__)
 
 _WSL_BINARIES: dict[str, RuntimeType] = {
     "claude": RuntimeType.CLAUDE_CODE,
-    "gemini": RuntimeType.GEMINI_CLI,
+    # "gemini" REMOVED — retired provider (spec §2/§36).
     "codex": RuntimeType.CODEX_CLI,
     "python3": RuntimeType.PYTHON,
     "node": RuntimeType.NODEJS,
@@ -26,7 +27,6 @@ _WSL_BINARIES: dict[str, RuntimeType] = {
 
 _WSL_DISPLAY_NAMES: dict[RuntimeType, str] = {
     RuntimeType.CLAUDE_CODE: "Claude Code (WSL)",
-    RuntimeType.GEMINI_CLI: "Gemini CLI (WSL)",
     RuntimeType.CODEX_CLI: "Codex CLI (WSL)",
     RuntimeType.PYTHON: "Python (WSL)",
     RuntimeType.NODEJS: "Node.js (WSL)",

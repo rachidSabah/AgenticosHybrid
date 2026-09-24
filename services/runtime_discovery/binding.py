@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from core.contracts.execution_engine import EngineConfig, EngineType
 from core.logging import get_logger
+
 from services.execution_engine.manager import ExecutionEngineManager
 from services.runtime_discovery.models import (
     BindingStatus,
@@ -20,7 +21,7 @@ __all__ = ["RuntimeBindingManager", "BindingNotFoundError"]
 
 _ENGINE_TYPE_MAP: dict[RuntimeType, EngineType] = {
     RuntimeType.CLAUDE_CODE: EngineType.CLAUDE_CODE,
-    RuntimeType.GEMINI_CLI: EngineType.GEMINI_CLI,
+    # RuntimeType.GEMINI_CLI mapping REMOVED — retired provider (spec §2/§36).
     RuntimeType.CODEX_CLI: EngineType.CODEX_CLI,
     RuntimeType.HERMES: EngineType.HERMES,
     RuntimeType.OPENHANDS: EngineType.OPENHANDS,

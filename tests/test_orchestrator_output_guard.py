@@ -52,9 +52,11 @@ def test_null_byte_stream_is_unusable() -> None:
 
 
 def test_empty_and_short_results_are_not_flagged() -> None:
-    """Empty/None is handled by the upstream fallback, not this guard."""
+    """Empty/None is handled by the error guard (_is_error_output), not here."""
     assert _is_unusable_output("") is False
-    assert _is_unusable_output("[hermes] completed 'task'") is False
+    # The fabricated "[bin] completed 'task'" string was REMOVED from
+    # generic_cli — a silent agent run now propagates empty stdout and the
+    # orchestrator's error guard fails the task honestly (spec §8/§15).
 
 
 def test_plain_text_report_is_usable_even_if_long() -> None:

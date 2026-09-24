@@ -109,15 +109,9 @@ LOCAL_AI_TOOLS: list[dict[str, Any]] = [
         "tags": ["claude_code", "agent", "coding"],
         "models": ["claude-3-7-sonnet"],
     },
-    {
-        "exe": "gemini",
-        "display_name": "Gemini CLI",
-        "vendor": "google",
-        "runtime": "node",
-        "capabilities": ["chat", "multimodal", "code_generation"],
-        "tags": ["gemini_cli", "google", "agent"],
-        "models": ["gemini-2.5-flash"],
-    },
+    # "gemini" CLI entry REMOVED — retired provider (spec §2/§36). The
+    # cloud-google entry (GEMINI_API_KEY) below is a cloud LLM API provider,
+    # not the CLI agent, and remains supported.
     {
         "exe": "codex",
         "display_name": "OpenAI Codex CLI",

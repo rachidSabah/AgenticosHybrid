@@ -69,7 +69,6 @@ async def build_adapter(config: ProviderConfig, get_key) -> ProviderAdapter:
         "opencode",
         "aider",
         "antigravity",
-        "gemini_cli",
         "ollama",
         "nvidia_nim",
     }

@@ -58,14 +58,9 @@ _BUILTIN_TOOL_MAPPINGS: dict[str, ToolMapping] = {
         description="Hermes Agent (Nous Research)",
         known_versions=("0.x", "1.x"),
     ),
-    "gemini-cli": ToolMapping(
-        tool_type="gemini-cli",
-        brain_type=BrainType.LOCAL_CLI,
-        default_vendor=BrainVendor.GEMINI_CLI,
-        default_runtime=BrainRuntime.NATIVE,
-        description="Google Gemini CLI agent",
-        known_versions=("1.x",),
-    ),
+    # NOTE: "gemini-cli" mapping REMOVED (retired provider). The Gemini CLI is
+    # no longer part of the agent registry source of truth; Antigravity (agy)
+    # is the canonical Google CLI agent. See FORENSIC_REMEDIATION_REPORT.md.
     "codex": ToolMapping(
         tool_type="codex",
         brain_type=BrainType.LOCAL_CLI,

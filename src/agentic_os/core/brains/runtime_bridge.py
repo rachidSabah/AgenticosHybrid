@@ -101,7 +101,14 @@ class BrainConnector:
 
 
 class _GenericCliConnector(BrainConnector):
-    """Generic connector for CLI tools that respond to ``--version``."""
+    """Generic connector for CLI tools that respond to ``--version``.
+
+    ``is_ai_agent=False`` marks developer runtimes/tools (python, node, bun,
+    git) which must NEVER be registered as AI brains (spec §4/§22: a runtime
+    or version-control executable is not an AI agent).
+    """
+
+    is_ai_agent: bool = True
 
     def __init__(
         self,
@@ -282,24 +289,6 @@ class HermesConnector(_GenericCliConnector):
         )
 
 
-class GeminiCliConnector(_GenericCliConnector):
-    """Connector for Google Gemini CLI."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            tool_type="gemini-cli",
-            display_name="Gemini CLI",
-            vendor=BrainVendor.GEMINI_CLI,
-            exe_name="gemini",
-            version_args=("--version",),
-            extra_capabilities=(
-                "chat",
-                "vision",
-                "code_generation",
-            ),
-        )
-
-
 class CodexConnector(_GenericCliConnector):
     """Connector for OpenAI Codex CLI."""
 
@@ -377,7 +366,9 @@ class ContinueConnector(_GenericCliConnector):
 
 
 class PythonConnector(_GenericCliConnector):
-    """Connector for Python runtime."""
+    """Connector for Python runtime (a RUNTIME, not an AI agent)."""
+
+    is_ai_agent = False
 
     def __init__(self) -> None:
         super().__init__(
@@ -395,7 +386,9 @@ class PythonConnector(_GenericCliConnector):
 
 
 class NodeConnector(_GenericCliConnector):
-    """Connector for Node.js runtime."""
+    """Connector for Node.js runtime (a RUNTIME, not an AI agent)."""
+
+    is_ai_agent = False
 
     def __init__(self) -> None:
         super().__init__(
@@ -413,7 +406,9 @@ class NodeConnector(_GenericCliConnector):
 
 
 class BunConnector(_GenericCliConnector):
-    """Connector for Bun runtime."""
+    """Connector for Bun runtime (a RUNTIME, not an AI agent)."""
+
+    is_ai_agent = False
 
     def __init__(self) -> None:
         super().__init__(
@@ -431,7 +426,9 @@ class BunConnector(_GenericCliConnector):
 
 
 class GitConnector(_GenericCliConnector):
-    """Connector for Git version control."""
+    """Connector for Git version control (a TOOL, not an AI agent)."""
+
+    is_ai_agent = False
 
     def __init__(self) -> None:
         super().__init__(
@@ -475,7 +472,7 @@ class RuntimeBridge:
         connectors: list[BrainConnector] = [
             ClaudeCodeConnector(),
             HermesConnector(),
-            GeminiCliConnector(),
+            # GeminiCliConnector removed — retired provider (no alias).
             CodexConnector(),
             OpenCodeConnector(),
             AiderConnector(),
@@ -681,15 +678,19 @@ class RuntimeBridge:
             return None
 
     async def to_brain_records(self) -> list[BrainRecord]:
-        """Produce :class:`BrainRecord` objects for all registered brains.
+        """Produce :class:`BrainRecord` objects for all detected AI agents.
 
-        Runs detection on all connectors and converts the results.
+        Developer runtimes/tools (python/node/bun/git — connectors with
+        ``is_ai_agent=False``) are EXCLUDED: they must never enter the brain
+        registry or the AI Brain view (spec §4/§22/§37).
         """
         infos = await self.detect_all()
         records: list[BrainRecord] = []
         for info in infos:
             connector = self._connectors.get(info.tool_type)
             if connector is None:
+                continue
+            if not getattr(connector, "is_ai_agent", True):
                 continue
             try:
                 record = await connector.to_brain_record(info)

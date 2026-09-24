@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -62,6 +61,7 @@ class ProviderDef:
 
 
 # ── Platform helpers ──
+
 
 def _is_windows() -> bool:
     return sys.platform == "win32"
@@ -189,23 +189,8 @@ PROVIDER_CATALOG: tuple[ProviderDef, ...] = (
         vendor="Antigravity",
         description="Antigravity CLI — AI agent framework by Antigravity",
     ),
-    # ── Gemini CLI ──
-    ProviderDef(
-        id="gemini-cli",
-        display_name="Gemini CLI",
-        engine_type="GEMINI_CLI",
-        exe_names=("gemini", "gemini.exe", "gemini-cli", "gemini-cli.exe"),
-        install_paths=(
-            os.path.join(_home(), ".npm-global"),
-            os.path.join(_home(), ".gemini"),
-        ),
-        env_vars=("GEMINI_PATH", "GEMINI_CLI_PATH"),
-        pkg_npm=("@google/gemini-cli",),
-        version_flags=("--version",),
-        known_capabilities=("coding", "reasoning", "vision", "planning"),
-        vendor="Google",
-        description="Gemini CLI — Google's AI coding assistant",
-    ),
+    # ── Gemini CLI REMOVED — retired provider (spec §2/§36). Antigravity
+    # (agy) above is the canonical Google CLI agent. ──
     # ── Codex CLI ──
     ProviderDef(
         id="codex",
@@ -418,9 +403,7 @@ PROVIDER_CATALOG: tuple[ProviderDef, ...] = (
         display_name="WSL",
         engine_type="WSL",
         exe_names=("wsl", "wsl.exe"),
-        install_paths=(
-            os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32"),
-        ),
+        install_paths=(os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32"),),
         version_flags=("--version",),
         known_capabilities=("linux", "subsystem"),
         vendor="Microsoft",

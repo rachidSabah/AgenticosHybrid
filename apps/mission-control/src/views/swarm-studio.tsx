@@ -12,9 +12,10 @@ export function SwarmStudio() {
   const [missionId, setMissionId] = useState("mission-live-01");
   const [stepIndex, setStepIndex] = useState(1);
   const [status, setStatus] = useState("idle");
-  const [activeAgent, setActiveAgent] = useState<string | null>("agent-architect");
+  const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [teamRoles, setTeamRoles] = useState<any[]>([]);
   const [debateResult, setDebateResult] = useState<any | null>(null);
+  const [debateNotice, setDebateNotice] = useState<string | null>(null);
   const [taskPrompt, setTaskPrompt] = useState("Refactor auth system with zero-trust token validation");
   const [forkPrompt, setForkPrompt] = useState("Adjust architecture to use Rust high-performance submodules");
 
@@ -30,15 +31,23 @@ export function SwarmStudio() {
   }, [loadTeam]);
 
   const handleStep = async () => {
+    const prevStatus = status;
     setStatus("stepping");
     try {
       const res = await api.post<any>(`/api/missions/${missionId}/step`, {});
       if (res) {
         setStepIndex((s) => s + 1);
-        setStatus("stepping");
+        // Derive status ONLY from the backend response; never fabricate one.
+        if (typeof res.status === "string" && res.status) {
+          setStatus(res.status);
+        } else {
+          setStatus(prevStatus);
+        }
+      } else {
+        setStatus(prevStatus);
       }
-    } finally {
-      setTimeout(() => setStatus("paused"), 600);
+    } catch {
+      setStatus(prevStatus);
     }
   };
 
@@ -79,29 +88,15 @@ export function SwarmStudio() {
       });
       if (res && res.approval_rating !== undefined) {
         setDebateResult(res);
+        setDebateNotice(null);
       } else {
-        setDebateResult({
-          topic: taskPrompt,
-          consensus_reached: true,
-          approval_rating: 0.96,
-          contributions: [
-            { agent_id: "agent-arch", role_name: "Principal Architect", vote: "approve", argument: "Verified architectural boundaries. Decoupled interfaces maintained." },
-            { agent_id: "agent-qa", role_name: "QA Specialist", vote: "approve", argument: "Simulated test suite against proposed change. All invariant contracts hold." },
-            { agent_id: "agent-sec", role_name: "Security Auditor", vote: "approve", argument: "Audited payload against injection vectors and privilege escalation risks." },
-          ],
-        });
+        // No real consensus data from backend — show an honest empty state.
+        setDebateResult(null);
+        setDebateNotice("No consensus rounds recorded");
       }
     } catch {
-      setDebateResult({
-        topic: taskPrompt,
-        consensus_reached: true,
-        approval_rating: 0.96,
-        contributions: [
-          { agent_id: "agent-arch", role_name: "Principal Architect", vote: "approve", argument: "Verified architectural boundaries. Decoupled interfaces maintained." },
-          { agent_id: "agent-qa", role_name: "QA Specialist", vote: "approve", argument: "Simulated test suite against proposed change. All invariant contracts hold." },
-          { agent_id: "agent-sec", role_name: "Security Auditor", vote: "approve", argument: "Audited payload against injection vectors and privilege escalation risks." },
-        ],
-      });
+      setDebateResult(null);
+      setDebateNotice("No consensus rounds recorded");
     }
   };
 
@@ -145,49 +140,54 @@ export function SwarmStudio() {
                 </button>
               </div>
 
-              {/* Swarm DAG Visualizer Nodes */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-xl border border-border/40 bg-surface/10">
-                {[
-                  { id: "agent-architect", name: "Principal Architect", status: "completed", tokens: 1420, mem: "12 keys", role: "Contract & Seams" },
-                  { id: "agent-engineer", name: "Core Engineer", status: status === "running" ? "executing" : "waiting", tokens: 2850, mem: "24 keys", role: "Business Logic" },
-                  { id: "agent-qa", name: "Resilience Auditor", status: "idle", tokens: 980, mem: "6 keys", role: "Adversarial TDD" },
-                ].map((node) => (
-                  <div
-                    key={node.id}
-                    onClick={() => setActiveAgent(node.id)}
-                    className={`cursor-pointer rounded-xl border p-3.5 transition ${
-                      activeAgent === node.id ? "border-accent bg-accent/10 shadow-lg shadow-accent/5" : "border-border/60 bg-surface/20 hover:border-border"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-xs">{node.name}</span>
-                      <Badge tone={node.status === "completed" ? "ok" : node.status === "executing" ? "warn" : "default"}>{node.status}</Badge>
-                    </div>
-                    <div className="text-[11px] text-faint mb-2">{node.role}</div>
-                    <div className="flex items-center justify-between text-[10px] text-faint font-mono pt-2 border-t border-border/30">
-                      <span>Tokens: {node.tokens}</span>
-                      <span>Memory: {node.mem}</span>
-                    </div>
+              {/* Swarm DAG Visualizer Nodes — rendered only from real backend data */}
+              {(() => {
+                const dagNodes: Array<{
+                  id: string;
+                  name: string;
+                  status: string;
+                  tokens: number;
+                  mem: string;
+                  role: string;
+                }> = [];
+                if (dagNodes.length === 0) {
+                  return <Empty title="No DAG nodes reported" hint="Backend has not reported any swarm agents for this mission" />;
+                }
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {dagNodes.map((node) => (
+                      <div
+                        key={node.id}
+                        onClick={() => setActiveAgent(node.id)}
+                        className={`cursor-pointer rounded-xl border p-3.5 transition ${
+                          activeAgent === node.id ? "border-accent bg-accent/10 shadow-lg shadow-accent/5" : "border-border/60 bg-surface/20 hover:border-border"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold text-xs">{node.name}</span>
+                          <Badge tone={node.status === "completed" ? "ok" : node.status === "executing" ? "warn" : "default"}>{node.status}</Badge>
+                        </div>
+                        <div className="text-[11px] text-faint mb-2">{node.role}</div>
+                        <div className="flex items-center justify-between text-[10px] text-faint font-mono pt-2 border-t border-border/30">
+                          <span>Tokens: {node.tokens}</span>
+                          <span>Memory: {node.mem}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </Panel>
 
             <Panel title="Node Sandbox Inspector" subtitle={activeAgent ?? "Select a node"}>
               <div className="space-y-3 text-xs">
                 <div className="rounded-lg border border-border/40 bg-surface/20 p-3">
                   <div className="font-semibold text-[11px] text-accent uppercase tracking-wider mb-1">Isolated Memory Scope</div>
-                  <div className="font-mono text-[11px] text-faint space-y-1">
-                    <div>• domain_models: [&quot;HexagonalKernel&quot;, &quot;EventBus&quot;]</div>
-                    <div>• pending_tool_calls: [&quot;write_file&quot;, &quot;run_test&quot;]</div>
-                    <div>• execution_lock: unlocked</div>
-                  </div>
+                  <div className="font-mono text-[11px] text-faint">No memory scope reported by backend</div>
                 </div>
                 <div className="rounded-lg border border-border/40 bg-surface/20 p-3">
                   <div className="font-semibold text-[11px] text-emerald-400 uppercase tracking-wider mb-1">Active Prompt Context</div>
-                  <p className="text-faint text-[11px] leading-relaxed">
-                    You are the {activeAgent}. Maintain strict decoupled boundaries and ensure zero regressions across all verification suites.
-                  </p>
+                  <p className="text-faint text-[11px] leading-relaxed">—</p>
                 </div>
               </div>
             </Panel>
@@ -214,7 +214,7 @@ export function SwarmStudio() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
                   <Stat label="Scrubbed Step" value={`Step ${stepIndex}`} />
                   <Stat label="Execution Status" value={status.toUpperCase()} tone={status === "running" ? "ok" : "warn"} />
-                  <Stat label="Historical Frames" value="10 Captured" />
+                  <Stat label="Historical Frames" value="0 Captured" />
                 </div>
               </div>
             </Panel>
@@ -274,16 +274,22 @@ export function SwarmStudio() {
                 <MessageSquare size={14} /> Initiate Consensus Debate
               </button>
 
+              {debateNotice && !debateResult && (
+                <div className="rounded-xl border border-border/40 bg-surface/10 p-4 text-xs text-faint">
+                  {debateNotice}
+                </div>
+              )}
+
               {debateResult && (
                 <div className="space-y-3 rounded-xl border border-border/40 bg-surface/10 p-4">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-xs">Debate: {debateResult.topic}</span>
                     <Badge tone={debateResult.consensus_reached ? "ok" : "warn"}>
-                      Consensus: {(debateResult.approval_rating * 100).toFixed(0)}% Approved
+                      Consensus: {typeof debateResult.approval_rating === "number" ? `${(debateResult.approval_rating * 100).toFixed(0)}% Approved` : "—"}
                     </Badge>
                   </div>
                   <div className="space-y-2">
-                    {debateResult.contributions.map((c: any) => (
+                    {(Array.isArray(debateResult.contributions) ? debateResult.contributions : []).map((c: any) => (
                       <div key={c.agent_id} className="rounded-lg border border-border/30 bg-surface/20 p-2.5 text-xs">
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-medium text-accent">{c.role_name}</span>

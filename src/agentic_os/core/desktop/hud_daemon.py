@@ -1,5 +1,10 @@
 """
 Phase 4 — System Tray Daemon & Global Floating Command Bar (HUD).
+
+Spec §15/§16 remediation: the HUD previously returned canned outputs
+("162 passed in 2.00s", "targeted auto:codex with 55ms latency") and an
+invented execution_time_ms=18.5 for any query. It executes nothing, so it
+must report that honestly.
 """
 
 from __future__ import annotations
@@ -21,31 +26,22 @@ class HUDCommandResult:
 
 
 class GlobalHUDDaemon:
-    """Processes global floating HUD natural language commands from anywhere in the OS."""
+    """Records HUD command requests. Does NOT execute anything."""
 
     def __init__(self) -> None:
         self._history: list[HUDCommandResult] = []
 
     def execute_hud_query(self, query: str) -> HUDCommandResult:
         cid = f"hud-{uuid.uuid4().hex[:6]}"
-        lower = query.lower()
-
-        if "test" in lower or "pytest" in lower:
-            action = "Executed backend test runner"
-            snippet = "162 passed in 2.00s (100% Green)"
-        elif "deploy" in lower or "commit" in lower:
-            action = "Synthesized git commit & triggered workflow"
-            snippet = "Branch main synchronized cleanly"
-        else:
-            action = "Dispatched agent prompt to OmniRoute"
-            snippet = "Routing evaluated: targeted auto:codex with 55ms latency"
-
         res = HUDCommandResult(
             command_id=cid,
             raw_query=query,
-            action_taken=action,
-            execution_time_ms=18.5,
-            output_snippet=snippet,
+            action_taken="not_executed",
+            execution_time_ms=0.0,
+            output_snippet=(
+                "HUD command recorded but NOT executed: no command runner is "
+                "wired to this daemon. No test/deploy/routing was performed."
+            ),
         )
         self._history.append(res)
         return res

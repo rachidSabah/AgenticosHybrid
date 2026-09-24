@@ -440,12 +440,12 @@ export function GalaxyConstellation({ onSelectStar }: GalaxyProps) {
       {hovered && (
         <div className="absolute bottom-16 left-4 pointer-events-none glass px-4 py-3 rounded-2xl border border-accent/40 backdrop-blur-md max-w-xs space-y-1">
           <div className="flex items-center gap-2 text-xs font-bold uppercase text-text">
-            <StatusDot status={providers[hovered]?.status || "healthy"} pulse />
+            <StatusDot status={providers[hovered]?.status || "unknown"} pulse />
             <span>{hovered}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[10px] text-faint pt-1 border-t border-border/30">
-            <div>Latency: <span className="text-text font-mono">{providers[hovered]?.latency_ms?.toFixed(0) || 0}ms</span></div>
-            <div>Health: <span className="text-ok font-mono">{providers[hovered]?.status || "healthy"}</span></div>
+            <div>Latency: <span className="text-text font-mono">{providers[hovered]?.latency_ms != null ? `${providers[hovered].latency_ms.toFixed(0)}ms` : "—"}</span></div>
+            <div>Health: <span className="text-ok font-mono">{providers[hovered]?.status || "unknown"}</span></div>
           </div>
         </div>
       )}
@@ -475,21 +475,21 @@ export function GalaxyConstellation({ onSelectStar }: GalaxyProps) {
             <div className="space-y-2">
               <Stat label="Status" value={activeProviderData.status} tone={activeProviderData.status === "healthy" ? "ok" : "warn"} />
               <Stat label="Latency" value={`${activeProviderData.latency_ms.toFixed(0)} ms`} />
-              <Stat label="Capability Score" value="98.4 / 100" />
+              <Stat label="Capability Score" value="—" />
             </div>
 
             <Panel title="Live Star Telemetry" className="text-xs space-y-2">
               <div className="flex justify-between text-faint">
                 <span>Heartbeat:</span>
-                <span className="text-ok font-mono">ACTIVE (120 bpm)</span>
+                <span className="text-faint font-mono">—</span>
               </div>
               <div className="flex justify-between text-faint">
                 <span>Memory Bandwidth:</span>
-                <span className="text-text font-mono">1.4 GB/s</span>
+                <span className="text-faint font-mono">—</span>
               </div>
               <div className="flex justify-between text-faint">
                 <span>Token Flow Rate:</span>
-                <span className="text-accent font-mono">142 tok/s</span>
+                <span className="text-faint font-mono">—</span>
               </div>
             </Panel>
 

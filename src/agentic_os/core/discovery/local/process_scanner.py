@@ -20,7 +20,7 @@ _TOOL_PROCESS_NAMES: dict[str, list[str]] = {
     "hermes": ["hermes", "hermes-agent"],
     "claude-code": ["claude"],
     "codex": ["codex"],
-    "gemini-cli": ["gemini"],
+    # "gemini-cli" REMOVED — retired provider (spec §2/§36).
     "opencode": ["opencode"],
     "aider": ["aider"],
     "continue": ["continue"],

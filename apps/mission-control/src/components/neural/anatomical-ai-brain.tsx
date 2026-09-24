@@ -417,12 +417,12 @@ export function AnatomicalAIBrain({ onSelectProvider }: AnatomicalAIBrainProps) 
       {hovered && (
         <div className="absolute bottom-6 left-4 pointer-events-none glass px-4 py-3 rounded-2xl border border-accent/40 backdrop-blur-md max-w-xs space-y-1">
           <div className="flex items-center gap-2 text-xs font-bold uppercase text-text">
-            <StatusDot status={providers[hovered]?.status || "healthy"} pulse />
+            <StatusDot status={providers[hovered]?.status || "unknown"} pulse />
             <span>{hovered} Provider Node</span>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[10px] text-faint pt-1 border-t border-border/30">
-            <div>Latency: <span className="text-text font-mono">{providers[hovered]?.latency_ms?.toFixed(0) || 0}ms</span></div>
-            <div>Status: <span className="text-accent font-mono">{providers[hovered]?.status || "healthy"}</span></div>
+            <div>Latency: <span className="text-text font-mono">{providers[hovered]?.latency_ms != null ? `${providers[hovered].latency_ms.toFixed(0)}ms` : "—"}</span></div>
+            <div>Status: <span className="text-accent font-mono">{providers[hovered]?.status || "unknown"}</span></div>
           </div>
         </div>
       )}
@@ -455,12 +455,23 @@ export function AnatomicalAIBrain({ onSelectProvider }: AnatomicalAIBrainProps) 
             </div>
 
             <Panel title="Neural Capability Scores" className="text-xs space-y-2">
-              {["System Architecture", "Code Generation", "Reasoning & Logic", "Verification"].map((sk) => (
-                <div key={sk} className="flex items-center justify-between text-faint">
-                  <span>{sk}</span>
-                  <span className="text-accent font-mono font-bold">99%</span>
-                </div>
-              ))}
+              {/* Backend exposes no per-provider capability scores — never fabricate them. */}
+              <div className="flex items-center justify-between text-faint">
+                <span>System Architecture</span>
+                <span className="text-faint font-mono">—</span>
+              </div>
+              <div className="flex items-center justify-between text-faint">
+                <span>Code Generation</span>
+                <span className="text-faint font-mono">—</span>
+              </div>
+              <div className="flex items-center justify-between text-faint">
+                <span>Reasoning &amp; Logic</span>
+                <span className="text-faint font-mono">—</span>
+              </div>
+              <div className="flex items-center justify-between text-faint">
+                <span>Verification</span>
+                <span className="text-faint font-mono">—</span>
+              </div>
             </Panel>
 
             <button

@@ -323,9 +323,10 @@ class TestSingleExecution:
         # Cancel immediately
         await engine.cancel(req.request_id)
         result = await engine.execute(req)
-        # May still complete if cancellation token wasn't yet registered
+        # Honest outcomes: adapters without real SDK clients report FAILED,
+        # cancelled requests report CANCELLED (spec §15: no simulated success).
         assert result.state in (
-            ExecutionState.COMPLETED,
+            ExecutionState.FAILED,
             ExecutionState.CANCELLED,
         )
 
@@ -560,7 +561,7 @@ class TestCancel:
         await engine.cancel(req.request_id)
         result = await engine.execute(req)
         assert result.state in (
-            ExecutionState.COMPLETED,
+            ExecutionState.FAILED,
             ExecutionState.CANCELLED,
         )
 

@@ -19,7 +19,7 @@ KNOWN_TOOLS: dict[str, list[str]] = {
     "hermes": ["hermes", "hermes-agent"],
     "claude-code": ["claude"],
     "codex": ["codex"],
-    "gemini-cli": ["gemini"],
+    # "gemini-cli" REMOVED — retired provider (spec §2/§36).
     "opencode": ["opencode"],
     "aider": ["aider"],
     "openhands": ["openhands"],

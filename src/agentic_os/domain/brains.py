@@ -69,7 +69,7 @@ class BrainVendor(StrEnum):
     VLLM = "vllm"
     HERMES = "hermes"
     CLAUDE_CODE = "claude_code"
-    GEMINI_CLI = "gemini_cli"
+    # GEMINI_CLI REMOVED — retired provider (spec §2/§36).
     CODEX = "codex"
     OPENCODE = "opencode"
     AIDER = "aider"
