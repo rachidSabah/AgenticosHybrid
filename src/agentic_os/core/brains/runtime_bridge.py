@@ -158,7 +158,7 @@ class _GenericCliConnector(BrainConnector):
                         "retired",
                         "deprecated",
                     )
-                    if any(sig in combined for sig in broken_sigs) or proc.returncode != 0:
+                    if any(sig in combined for sig in broken_sigs):
                         version = ""
                         installed = False
                     else:
@@ -170,10 +170,8 @@ class _GenericCliConnector(BrainConnector):
                     except Exception:
                         pass
                     version = ""
-                    installed = False
             except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
                 version = ""
-                installed = False
 
         caps = [f"cli:{self._exe_name}"]
         if version:
@@ -477,6 +475,7 @@ class RuntimeBridge:
         connectors: list[BrainConnector] = [
             ClaudeCodeConnector(),
             HermesConnector(),
+            GeminiCliConnector(),
             CodexConnector(),
             OpenCodeConnector(),
             AiderConnector(),
