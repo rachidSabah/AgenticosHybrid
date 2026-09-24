@@ -194,7 +194,11 @@ class EnvVarDiscovery(DiscoveryProvider):
     @staticmethod
     async def _get_version(executable: str) -> str | None:
         """Try to get the version of an executable."""
-        if not executable or executable.startswith("-") or (os.path.exists(executable) and os.path.isdir(executable)):
+        if (
+            not executable
+            or executable.startswith("-")
+            or (os.path.exists(executable) and os.path.isdir(executable))
+        ):
             return None
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         try:

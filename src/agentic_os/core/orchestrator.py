@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os as _os
 import time as _time
+from datetime import UTC
 from typing import TYPE_CHECKING, Any
 
 from agentic_os.config import Settings
@@ -498,7 +499,6 @@ class Orchestrator:
                     "codex",
                     "opencode",
                     "antigravity",
-                    "gemini_cli",
                     "qwen_cli",
                     "ollama",
                     "local_cli",
@@ -703,8 +703,11 @@ class Orchestrator:
             await self._fail_task(agent, task, f"Provider '{agent.provider}' not found")
             return
 
+        from datetime import datetime
+
         task.status = TaskStatus.IN_PROGRESS
         task.assigned_agent_id = agent.id
+        task.started_at = datetime.now(UTC)
         task.touch()
 
         await self.bus.publish(
@@ -718,6 +721,8 @@ class Orchestrator:
                     "provider": agent.provider,
                     "title": task.title,
                     "mission_id": task.mission_id,
+                    "started_at": task.started_at.isoformat() if task.started_at else None,
+                    "pid": getattr(task, "pid", None),
                 },
             )
         )
@@ -756,7 +761,16 @@ class Orchestrator:
         exec_rec = self._start_execution(agent, task, provider, retry_count=0)
         wt_path = await self._create_worktree_for_agent(agent, task)
         exec_cwd = self._resolve_execution_cwd(wt_path)
+        is_mock = getattr(provider, "info", None) is not None and (
+            provider.info.name == "mock" or provider.info.kind == "mock"
+        )
         try:
+            from agentic_os.core.verification import ArtifactVerifier
+            from agentic_os.domain.workspace import get_workspace_root
+
+            target_ws = exec_cwd or get_workspace_root() or "."
+            pre_snapshot = {} if is_mock else ArtifactVerifier.snapshot_workspace(target_ws)
+
             result = await provider.execute(
                 agent,
                 task,
@@ -771,9 +785,12 @@ class Orchestrator:
             # (spec RULE 5/7: no success without real execution evidence.)
             result_is_error = _is_error_output(result) or _is_unusable_output(result)
             if result_is_error:
+                from datetime import datetime
+
                 task.status = TaskStatus.FAILED
                 task.error = (result or "agent returned an error instead of real output")[:500]
                 task.result = result
+                task.completed_at = datetime.now(UTC)
                 task.touch()
                 self._finish_execution(exec_rec, "failed", stderr=result)
                 log.warning(
@@ -787,8 +804,45 @@ class Orchestrator:
                 )
                 await self._publish_failed(agent, task, result)
                 return
+
+            if not is_mock:
+                # Persist generated output files and extract any code blocks into target workspace root
+                try:
+                    if target_ws and _os.path.isdir(target_ws) and result and len(result) > 10:
+                        saved = _extract_and_persist_files(
+                            result, task, target_ws, provider.info.kind
+                        )
+                        log.info("task.files_persisted", count=len(saved), workspace=target_ws)
+                except Exception as e:
+                    log.warning("task.persist_output_failed", error=str(e))
+
+                # Deliverable verification
+                v_res = ArtifactVerifier.verify(target_ws, pre_snapshot, task, result)
+                task.artifacts = v_res.artifacts
+                if not v_res.is_verified:
+                    from datetime import datetime
+
+                    task.status = TaskStatus.FAILED
+                    task.error = f"Deliverable verification failed: {v_res.reason}"[:500]
+                    task.result = result
+                    task.completed_at = datetime.now(UTC)
+                    task.touch()
+                    self._finish_execution(exec_rec, "failed", stderr=task.error)
+                    log.warning(
+                        "execution.verification_failed",
+                        task=task.id,
+                        agent=agent.id,
+                        reason=v_res.reason,
+                    )
+                    await self._publish_failed(agent, task, task.error)
+                    return
+
+            from datetime import datetime
+
             task.status = TaskStatus.COMPLETED
             task.result = result
+            task.error = None
+            task.completed_at = datetime.now(UTC)
             task.touch()
             self._finish_execution(exec_rec, "completed", stdout=result)
             log.info(
@@ -799,16 +853,6 @@ class Orchestrator:
                 elapsed_s=round(elapsed, 3),
                 result_len=len(result) if result else 0,
             )
-            # Persist generated output files and extract any code blocks into target workspace root
-            try:
-                from agentic_os.domain.workspace import get_workspace_root
-
-                ws_root = get_workspace_root()
-                if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                    saved = _extract_and_persist_files(result, task, ws_root, provider.info.kind)
-                    log.info("task.files_persisted", count=len(saved), workspace=ws_root)
-            except Exception as e:
-                log.warning("task.persist_output_failed", error=str(e))
 
             await self._publish_completed(agent, task, result, elapsed)
             return
@@ -838,7 +882,16 @@ class Orchestrator:
                 attempt=task.attempts,
             )
             exec_rec2 = self._start_execution(agent, task, provider, retry_count=1)
+            is_mock2 = getattr(provider, "info", None) is not None and (
+                provider.info.name == "mock" or provider.info.kind == "mock"
+            )
             try:
+                from agentic_os.core.verification import ArtifactVerifier
+                from agentic_os.domain.workspace import get_workspace_root
+
+                target_ws = exec_cwd or get_workspace_root() or "."
+                pre_snapshot = {} if is_mock2 else ArtifactVerifier.snapshot_workspace(target_ws)
+
                 result = await provider.execute(
                     agent,
                     task,
@@ -847,9 +900,49 @@ class Orchestrator:
                 )
                 elapsed = _time.monotonic() - start_time
                 agent.mark_completed()
+
+                result_is_error = _is_error_output(result) or _is_unusable_output(result)
+                if result_is_error:
+                    from datetime import datetime
+
+                    task.status = TaskStatus.FAILED
+                    task.error = (result or "agent returned an error instead of real output")[:500]
+                    task.result = result
+                    task.completed_at = datetime.now(UTC)
+                    task.touch()
+                    self._finish_execution(exec_rec2, "failed", stderr=result)
+                    await self._publish_failed(agent, task, result)
+                    return
+
+                if not is_mock2:
+                    # Persist generated output files into workspace root
+                    try:
+                        if target_ws and _os.path.isdir(target_ws) and result and len(result) > 10:
+                            _extract_and_persist_files(result, task, target_ws, provider.info.kind)
+                    except Exception:
+                        pass
+
+                    # Deliverable verification
+                    v_res = ArtifactVerifier.verify(target_ws, pre_snapshot, task, result)
+                    task.artifacts = v_res.artifacts
+                    if not v_res.is_verified:
+                        from datetime import datetime
+
+                        task.status = TaskStatus.FAILED
+                        task.error = f"Deliverable verification failed: {v_res.reason}"[:500]
+                        task.result = result
+                        task.completed_at = datetime.now(UTC)
+                        task.touch()
+                        self._finish_execution(exec_rec2, "failed", stderr=task.error)
+                        await self._publish_failed(agent, task, task.error)
+                        return
+
+                from datetime import datetime
+
                 task.status = TaskStatus.COMPLETED
                 task.result = result
                 task.error = None
+                task.completed_at = datetime.now(UTC)
                 task.touch()
                 self._finish_execution(exec_rec2, "completed", stdout=result)
                 log.info(
@@ -860,15 +953,6 @@ class Orchestrator:
                     attempt=task.attempts,
                     elapsed_s=round(elapsed, 3),
                 )
-                # Persist generated output files into workspace root
-                try:
-                    from agentic_os.domain.workspace import get_workspace_root
-
-                    ws_root = get_workspace_root()
-                    if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                        _extract_and_persist_files(result, task, ws_root, provider.info.kind)
-                except Exception:
-                    pass
 
                 await self._publish_completed(agent, task, result, elapsed, recovered=True)
                 return
@@ -910,7 +994,16 @@ class Orchestrator:
             )
             fallback_wt_path = await self._create_worktree_for_agent(fallback_agent, task)
             fallback_exec_cwd = self._resolve_execution_cwd(fallback_wt_path)
+            is_mock3 = getattr(fallback_provider, "info", None) is not None and (
+                fallback_provider.info.name == "mock" or fallback_provider.info.kind == "mock"
+            )
             try:
+                from agentic_os.core.verification import ArtifactVerifier
+                from agentic_os.domain.workspace import get_workspace_root
+
+                target_ws = fallback_exec_cwd or get_workspace_root() or "."
+                pre_snapshot = {} if is_mock3 else ArtifactVerifier.snapshot_workspace(target_ws)
+
                 result = await fallback_provider.execute(
                     fallback_agent,
                     task,
@@ -919,9 +1012,51 @@ class Orchestrator:
                 )
                 elapsed = _time.monotonic() - start_time
                 fallback_agent.mark_completed()
+
+                result_is_error = _is_error_output(result) or _is_unusable_output(result)
+                if result_is_error:
+                    from datetime import datetime
+
+                    task.status = TaskStatus.FAILED
+                    task.error = (result or "agent returned an error instead of real output")[:500]
+                    task.result = result
+                    task.completed_at = datetime.now(UTC)
+                    task.touch()
+                    self._finish_execution(exec_rec3, "failed", stderr=result)
+                    await self._publish_failed(fallback_agent, task, result)
+                    return
+
+                if not is_mock3:
+                    # Persist generated output files into workspace root
+                    try:
+                        if target_ws and _os.path.isdir(target_ws) and result and len(result) > 10:
+                            _extract_and_persist_files(
+                                result, task, target_ws, fallback_provider.info.kind
+                            )
+                    except Exception:
+                        pass
+
+                    # Deliverable verification
+                    v_res = ArtifactVerifier.verify(target_ws, pre_snapshot, task, result)
+                    task.artifacts = v_res.artifacts
+                    if not v_res.is_verified:
+                        from datetime import datetime
+
+                        task.status = TaskStatus.FAILED
+                        task.error = f"Deliverable verification failed: {v_res.reason}"[:500]
+                        task.result = result
+                        task.completed_at = datetime.now(UTC)
+                        task.touch()
+                        self._finish_execution(exec_rec3, "failed", stderr=task.error)
+                        await self._publish_failed(fallback_agent, task, task.error)
+                        return
+
+                from datetime import datetime
+
                 task.status = TaskStatus.COMPLETED
                 task.result = result
                 task.error = None
+                task.completed_at = datetime.now(UTC)
                 task.touch()
                 self._finish_execution(exec_rec3, "completed", stdout=result)
                 log.info(
@@ -932,17 +1067,6 @@ class Orchestrator:
                     attempt=task.attempts,
                     elapsed_s=round(elapsed, 3),
                 )
-                # Persist generated output files into workspace root
-                try:
-                    from agentic_os.domain.workspace import get_workspace_root
-
-                    ws_root = get_workspace_root()
-                    if ws_root and _os.path.isdir(ws_root) and result and len(result) > 10:
-                        _extract_and_persist_files(
-                            result, task, ws_root, fallback_provider.info.kind
-                        )
-                except Exception:
-                    pass
 
                 await self._publish_completed(
                     fallback_agent, task, result, elapsed, recovered=True, fallback=True
@@ -1129,6 +1253,12 @@ class Orchestrator:
                     "mission_id": task.mission_id,
                     "recovered": recovered,
                     "fallback": fallback,
+                    "artifacts": getattr(task, "artifacts", []),
+                    "pid": getattr(task, "pid", None),
+                    "exit_code": getattr(task, "exit_code", 0),
+                    "completed_at": (
+                        task.completed_at.isoformat() if task.completed_at is not None else None
+                    ),
                 },
             )
         )
@@ -1164,6 +1294,11 @@ class Orchestrator:
                     "provider": agent.provider,
                     "error": (error or "")[:500],
                     "mission_id": task.mission_id,
+                    "pid": getattr(task, "pid", None),
+                    "exit_code": getattr(task, "exit_code", None),
+                    "completed_at": (
+                        task.completed_at.isoformat() if task.completed_at is not None else None
+                    ),
                 },
             )
         )

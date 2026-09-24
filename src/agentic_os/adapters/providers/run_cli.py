@@ -68,6 +68,7 @@ def _run_sync(
     cwd: str | None,
     timeout: float,
     on_output: Callable[[str, str], None] | None,
+    on_spawn: Callable[[int], None] | None = None,
 ) -> tuple[int, bytes, bytes]:
     """Synchronous subprocess runner (called via ``asyncio.to_thread``).
 
@@ -78,7 +79,9 @@ def _run_sync(
         return -1, b"", b"invalid executable argument"
     if os.path.exists(args[0]) and os.path.isdir(args[0]):
         return -1, b"", b"cannot execute directory"
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+    creationflags = (
+        getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+    )
     stdin = subprocess.PIPE if input_data is not None else subprocess.DEVNULL
 
     if on_output is not None:
@@ -92,6 +95,11 @@ def _run_sync(
             cwd=cwd,
             creationflags=creationflags,
         )
+        if on_spawn is not None:
+            try:
+                on_spawn(proc.pid)
+            except Exception:
+                pass
 
         out_q: queue.Queue[tuple[str, str] | object] = queue.Queue()
         stdout_chunks: list[bytes] = []
@@ -202,6 +210,7 @@ async def run_cli(
     cwd: str | None = None,
     timeout: float = 120.0,
     on_output: Callable[[str, str], None] | None = None,
+    on_spawn: Callable[[int], None] | None = None,
 ) -> tuple[int, str, str]:
     """Run a CLI subprocess safely under any asyncio event loop policy.
 
@@ -212,6 +221,7 @@ async def run_cli(
         cwd: Working directory for the subprocess.
         timeout: Timeout in seconds.
         on_output: Optional streaming callback ``(line, stream_name)``.
+        on_spawn: Optional callback ``(pid)`` invoked immediately when process starts.
 
     Returns:
         ``(returncode, stdout_str, stderr_str)``.
@@ -228,6 +238,7 @@ async def run_cli(
         cwd,
         timeout,
         on_output,
+        on_spawn,
     )
 
     stdout_str = stdout_bytes.decode("utf-8", errors="replace")

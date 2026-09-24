@@ -150,8 +150,10 @@ class ProfilingEngine:
         """Run a quick probe and measure approximate response time."""
         if executable is None:
             return 50.0  # default estimate for remote engines
-        if not executable or executable.startswith("-") or (
-            os.path.exists(executable) and os.path.isdir(executable)
+        if (
+            not executable
+            or executable.startswith("-")
+            or (os.path.exists(executable) and os.path.isdir(executable))
         ):
             return 100.0
 

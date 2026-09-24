@@ -41,13 +41,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "codex",
         "vendor": BrainVendor.CODEX,
         "runtime": BrainRuntime.NATIVE,
-    },
-    {
-        "key": "gemini",
-        "name": "Gemini CLI",
-        "exe": "gemini",
-        "vendor": BrainVendor.GOOGLE,
-        "runtime": BrainRuntime.NODE,
+        "is_agent": True,
     },
     {
         "key": "qwen",
@@ -55,6 +49,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "qwen",
         "vendor": BrainVendor.QWEN,
         "runtime": BrainRuntime.PYTHON,
+        "is_agent": True,
     },
     {
         "key": "opencode",
@@ -62,6 +57,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "opencode",
         "vendor": BrainVendor.OPENCODE,
         "runtime": BrainRuntime.NATIVE,
+        "is_agent": True,
     },
     {
         "key": "aider",
@@ -69,6 +65,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "aider",
         "vendor": BrainVendor.AIDER,
         "runtime": BrainRuntime.PYTHON,
+        "is_agent": True,
     },
     {
         "key": "continue",
@@ -76,6 +73,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "continue",
         "vendor": BrainVendor.CONTINUE,
         "runtime": BrainRuntime.NODE,
+        "is_agent": True,
     },
     # ── Local model servers ───────────────────────────────────────────────
     {
@@ -84,6 +82,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "ollama",
         "vendor": BrainVendor.OLLAMA,
         "runtime": BrainRuntime.GO,
+        "is_agent": False,
     },
     {
         "key": "lm-studio",
@@ -91,6 +90,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "",
         "vendor": BrainVendor.LM_STUDIO,
         "runtime": BrainRuntime.NATIVE,
+        "is_agent": False,
     },
     # ── Docker / MCP ──────────────────────────────────────────────────────
     {
@@ -99,14 +99,16 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "docker",
         "vendor": BrainVendor.CUSTOM,
         "runtime": BrainRuntime.CONTAINER,
+        "is_agent": False,
     },
-    # ── Runtimes that have agent processes ────────────────────────────────
+    # ── Developer Tools & Language Runtimes (NOT AI agents) ──────────────
     {
         "key": "python",
         "name": "Python",
         "exe": "python",
         "vendor": BrainVendor.PYTHON,
         "runtime": BrainRuntime.PYTHON,
+        "is_agent": False,
     },
     {
         "key": "node",
@@ -114,6 +116,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "node",
         "vendor": BrainVendor.NODE,
         "runtime": BrainRuntime.NODE,
+        "is_agent": False,
     },
     {
         "key": "bun",
@@ -121,6 +124,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "bun",
         "vendor": BrainVendor.BUN,
         "runtime": BrainRuntime.BUN,
+        "is_agent": False,
     },
     {
         "key": "git",
@@ -128,6 +132,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "git",
         "vendor": BrainVendor.GIT,
         "runtime": BrainRuntime.NATIVE,
+        "is_agent": False,
     },
     {
         "key": "uv",
@@ -135,6 +140,7 @@ KNOWN_RUNTIMES: list[dict[str, Any]] = [
         "exe": "uv",
         "vendor": BrainVendor.PYTHON,
         "runtime": BrainRuntime.PYTHON,
+        "is_agent": False,
     },
 ]
 
@@ -246,7 +252,15 @@ async def _get_version(
             return ""
         output = (stdout or stderr).decode("utf-8", errors="replace").strip()
         lowered = output.lower()
-        if any(sig in lowered for sig in ("invalid configuration", "expected object, received array", "error in:", "broken configuration")):
+        if any(
+            sig in lowered
+            for sig in (
+                "invalid configuration",
+                "expected object, received array",
+                "error in:",
+                "broken configuration",
+            )
+        ):
             return ""
         # Extract semantic version (first match)
         m = re.search(r"(\d+\.\d+\.\d+[a-zA-Z0-9._-]*)", output)
@@ -438,6 +452,7 @@ async def detect_local_windows(timeout: float = 30.0) -> list[BrainRecord]:
                     info["runtime"].value,
                     *(f"v{version}" for _ in [1] if version),
                 ),
+                is_agent=info.get("is_agent", True),
             )
         )
 

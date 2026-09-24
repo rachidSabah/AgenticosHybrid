@@ -96,7 +96,7 @@ _NOISE_SUBSTRINGS = (
     "converter",  # ct2-*-converter: model file converters, not agents
     "chrome-native-host",
     "theme",
-    "gemini-delay",       # local utility wrapper, not the gemini CLI agent
+    "gemini-delay",  # local utility wrapper, not the gemini CLI agent
 )
 
 # Known non-agent tooling we deliberately surface as Runtimes (§4).
@@ -105,10 +105,10 @@ _KNOWN_TOOLING = ("git", "node", "python", "python3", "npm", "pnpm", "uv", "bun"
 # Directory path fragments that should NEVER be scanned for agent candidates.
 # These contain OS system binaries, store app stubs, and other non-agent executables.
 _EXCLUDED_DIR_FRAGMENTS = (
-    os.path.normcase("windowsapps"),     # Microsoft Store stubs (mspaint stub, etc.)
-    os.path.normcase("system32"),        # Windows system binaries
-    os.path.normcase("syswow64"),        # 32-bit system binaries
-    os.path.normcase("\\windows\\"),     # Windows root
+    os.path.normcase("windowsapps"),  # Microsoft Store stubs (mspaint stub, etc.)
+    os.path.normcase("system32"),  # Windows system binaries
+    os.path.normcase("syswow64"),  # 32-bit system binaries
+    os.path.normcase("\\windows\\"),  # Windows root
     os.path.normcase("/windows/"),
 )
 

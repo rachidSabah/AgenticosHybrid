@@ -136,6 +136,9 @@ class GenericCLIProvider:
             args = [resolved_bin] + self._extra_args + [prompt]
             stdin_data = None
 
+        def _handle_spawn(pid: int) -> None:
+            task.pid = pid
+
         rc, stdout_str, stderr_str = await run_cli(
             args,
             input_data=stdin_data,
@@ -143,7 +146,9 @@ class GenericCLIProvider:
             cwd=cwd,
             timeout=timeout,
             on_output=on_output,
+            on_spawn=_handle_spawn,
         )
+        task.exit_code = rc
         if rc == -999:
             raise RuntimeError(f"{self._bin} timed out after {timeout}s")
         if rc != 0:

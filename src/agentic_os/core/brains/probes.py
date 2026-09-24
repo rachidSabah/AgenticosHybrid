@@ -125,7 +125,9 @@ async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
     if os.path.exists(exe) and os.path.isdir(exe):
         return 127, "", "path is a directory, not executable"
     lower_exe = exe.lower()
-    if lower_exe.endswith((".png", ".jpg", ".jpeg", ".html", ".lnk", ".url", ".vbs", ".txt", ".md", ".pdf")):
+    if lower_exe.endswith(
+        (".png", ".jpg", ".jpeg", ".html", ".lnk", ".url", ".vbs", ".txt", ".md", ".pdf")
+    ):
         return 127, "", "file is not an executable candidate"
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     try:

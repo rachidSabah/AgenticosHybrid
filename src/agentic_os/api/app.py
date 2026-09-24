@@ -759,58 +759,51 @@ def create_app(platform: Platform) -> FastAPI:
             "created_at": datetime.now(UTC).isoformat(),
         }
 
-    @app.put("/api/swarm/{swarm_id}")
-    async def swarm_update(swarm_id: str, body: dict) -> dict:
-        # Managed by the SwarmCoordinator; this legacy stub stays only for
-        # route-compat so /api/swarm/{id} does not 404 for literal names.
-        raise HTTPException(501, detail="Swarm updates are not supported")
-
-    @app.delete("/api/swarm/{swarm_id}")
-    async def swarm_delete(swarm_id: str) -> dict:
-        sc = getattr(platform, "swarm_coordinator", None)
-        if sc is not None:
-            await sc.disband(swarm_id)
-        return {"deleted": swarm_id}
-
     @app.get("/api/swarm/agents")
     async def swarm_agents() -> list[dict]:
-        """Return real active agents from BrainRegistry + ProviderRegistry."""
+        """Return genuine active AI agents from the authoritative discovery engine."""
+        snap = agent_discovery_engine.snapshot
+        if not snap.agents:
+            snap = await agent_discovery_engine.scan()
+        active = snap.active_agents()
         agents: list[dict] = []
-        if platform.brain_registry:
-            try:
-                brains = await platform.brain_registry.list_all()
-                for b in brains:
-                    agents.append(
-                        {
-                            "agent_id": b.id,
-                            "name": b.display_name,
-                            "role": str(b.vendor),
-                            "status": "active" if b.health >= 50 else "idle",
-                            "health": "healthy" if b.health >= 50 else "degraded",
-                            "capabilities": (
-                                list(b.capabilities)
-                                if b.capabilities
-                                else ["code-gen", "reasoning"]
-                            ),
-                        }
-                    )
-            except Exception:
-                pass
-        if not agents:
-            for p in platform.providers.list_providers():
-                agents.append(
-                    {
-                        "agent_id": f"agent-{p.name}",
-                        "name": p.name,
-                        "role": getattr(p, "kind", "Generic Agent"),
-                        "status": "active",
-                        "health": "healthy",
-                        "capabilities": getattr(
-                            p, "capabilities", ["code-gen", "architecture", "refactor"]
-                        ),
-                    }
-                )
+        for a in active:
+            # Check if this agent currently has a running task
+            is_running = any(
+                t.status == TaskStatus.IN_PROGRESS and t.assigned_agent_id == a.id
+                for t in orch.registry.tasks()
+            )
+            agents.append(
+                {
+                    "agent_id": a.id,
+                    "name": a.name,
+                    "role": a.kind,
+                    "status": "running" if is_running else "ready",
+                    "health": "healthy"
+                    if (a.health_score is not None and a.health_score >= 80)
+                    else "ready",
+                    "capabilities": [c.capability for c in a.capabilities]
+                    if a.capabilities
+                    else ["coding", "reasoning"],
+                }
+            )
         return agents
+
+    @app.get("/api/discovery/runtimes")
+    async def discovery_runtimes() -> list[dict]:
+        """Return developer runtimes (Python, Node, Bun, Git, uv, Docker)."""
+        snap = agent_discovery_engine.snapshot
+        if not snap.agents:
+            snap = await agent_discovery_engine.scan()
+        return [r.to_dict() for r in snap.runtimes()]
+
+    @app.get("/api/discovery/tools")
+    async def discovery_tools() -> list[dict]:
+        """Return developer runtimes and system tools."""
+        snap = agent_discovery_engine.snapshot
+        if not snap.agents:
+            snap = await agent_discovery_engine.scan()
+        return [r.to_dict() for r in snap.runtimes()]
 
     @app.get("/api/swarm/tasks")
     async def swarm_tasks() -> list[dict]:
@@ -824,6 +817,9 @@ def create_app(platform: Platform) -> FastAPI:
                     "status": t.status.value if hasattr(t.status, "value") else str(t.status),
                     "pattern": "hierarchical",
                     "agent_id": t.assigned_agent_id or "Unassigned",
+                    "dependencies": getattr(t, "dependencies", []),
+                    "artifacts": getattr(t, "artifacts", []),
+                    "pid": getattr(t, "pid", None),
                 }
             )
         if not tasks:
@@ -835,6 +831,9 @@ def create_app(platform: Platform) -> FastAPI:
                         "status": m.status.value if hasattr(m.status, "value") else str(m.status),
                         "pattern": "hierarchical",
                         "agent_id": "Swarm Orchestrator",
+                        "dependencies": [],
+                        "artifacts": [],
+                        "pid": None,
                     }
                 )
         return tasks
@@ -842,15 +841,19 @@ def create_app(platform: Platform) -> FastAPI:
     @app.get("/api/swarm/plans")
     async def swarm_plans() -> list[dict]:
         """Return real execution plans."""
-        return [
-            {
-                "id": "plan-real-1",
-                "goal": "Universal AgenticOS Multi-Agent Pipeline Execution",
-                "status": "running",
-                "task_count": len(platform.providers.list_providers()) or 3,
-                "created_at": datetime.now(UTC).isoformat(),
-            }
-        ]
+        plans: list[dict] = []
+        for m in _missions.values():
+            if getattr(m, "plan", None):
+                plans.append(
+                    {
+                        "id": f"plan-{m.id}",
+                        "goal": m.title,
+                        "status": m.status.value if hasattr(m.status, "value") else str(m.status),
+                        "task_count": len(getattr(m.plan, "tasks", [])),
+                        "created_at": getattr(m, "created_at", datetime.now(UTC)).isoformat(),
+                    }
+                )
+        return plans
 
     @app.get("/api/swarm/metrics")
     async def swarm_metrics() -> dict:
@@ -867,13 +870,24 @@ def create_app(platform: Platform) -> FastAPI:
         total_tasks = len(tasks)
         completed_tasks = sum(1 for t in tasks if t.status == TaskStatus.COMPLETED)
         failed_tasks = sum(1 for t in tasks if t.status == TaskStatus.FAILED)
+
+        latencies = [
+            (t.completed_at - t.started_at).total_seconds() * 1000.0
+            for t in tasks
+            if t.completed_at is not None and t.started_at is not None
+        ]
+        avg_lat = round(sum(latencies) / len(latencies), 1) if latencies else None
+        finished = completed_tasks + failed_tasks
+        success_rate = round((completed_tasks / finished) * 100.0, 1) if finished > 0 else None
+
         return {
             "total_swarms": total_swarms,
             "active_swarms": active_swarms,
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
-            "avg_latency_ms": 35.0,
+            "avg_latency_ms": avg_lat,
+            "success_rate": success_rate,
         }
 
     @app.get("/api/swarm/consensus/history")
@@ -883,6 +897,29 @@ def create_app(platform: Platform) -> FastAPI:
         if sc is None:
             return []
         return sc.consensus_manager.get_history(limit=limit)
+
+    @app.put("/api/swarm/{swarm_id}")
+    async def swarm_update(swarm_id: str, body: dict) -> dict:
+        # Managed by the SwarmCoordinator; this legacy stub stays only for
+        # route-compat so /api/swarm/{id} does not 404 for literal names.
+        raise HTTPException(501, detail="Swarm updates are not supported")
+
+    @app.delete("/api/swarm/{swarm_id}")
+    async def swarm_delete(swarm_id: str) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is not None:
+            await sc.disband(swarm_id)
+        return {"deleted": swarm_id}
+
+    @app.get("/api/swarm/{swarm_id}")
+    async def swarm_get(swarm_id: str) -> dict:
+        """Return real state of a swarm team."""
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is not None:
+            team = sc.get_team(swarm_id)
+            if team:
+                return team
+        raise HTTPException(404, detail=f"Swarm '{swarm_id}' not found")
 
     @app.get("/omniroute/routes")
     async def omniroute_routes() -> list[dict]:

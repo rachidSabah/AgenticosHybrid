@@ -78,7 +78,9 @@ async def test_syncs_root_to_active_workspace_before_worktree(orchestrator, git_
 
     assert wt_path is not None
     assert wt_path.startswith(git_workspace)  # rooted at active workspace
-    assert not wt_path.startswith(os.path.join(os.getcwd(), ".worktrees"))  # NOT the process cwd worktrees
+    assert not wt_path.startswith(
+        os.path.join(os.getcwd(), ".worktrees")
+    )  # NOT the process cwd worktrees
 
 
 async def test_non_git_workspace_skips_worktree_and_returns_none(

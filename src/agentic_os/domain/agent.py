@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -106,6 +107,12 @@ class Task(BaseModel):
     # Restricts dispatch to a named set of providers (agent selection from the
     # Prompt Center). Empty means "route through the default selection logic".
     preferred_agents: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
+    artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    pid: int | None = None
+    exit_code: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     def touch(self) -> None:
         self.updated_at = _utcnow()

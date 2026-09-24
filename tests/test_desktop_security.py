@@ -244,4 +244,3 @@ class TestSubprocessSafety:
         assert metrics.cpu_usage_percent >= 0.0
         assert metrics.memory_usage_percent > 0.0
         assert metrics.disk_usage_percent > 0.0
-

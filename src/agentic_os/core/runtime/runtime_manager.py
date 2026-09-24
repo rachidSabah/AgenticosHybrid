@@ -192,7 +192,9 @@ class RuntimeManager:
                 return f"Cannot execute directory: {exe}"
 
             def _sync_run() -> str:
-                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
+                creationflags = (
+                    getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if os.name == "nt" else 0
+                )
                 res = subprocess.run(
                     tokens,
                     capture_output=True,

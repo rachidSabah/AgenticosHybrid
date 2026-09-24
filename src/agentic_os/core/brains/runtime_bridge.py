@@ -111,6 +111,7 @@ class _GenericCliConnector(BrainConnector):
         exe_name: str,
         version_args: tuple[str, ...] = ("--version",),
         extra_capabilities: tuple[str, ...] = (),
+        is_agent: bool = True,
     ) -> None:
         self.tool_type = tool_type
         self.display_name = display_name
@@ -118,6 +119,7 @@ class _GenericCliConnector(BrainConnector):
         self._exe_name = exe_name
         self._version_args = version_args
         self._extra_capabilities = extra_capabilities
+        self.is_agent = is_agent
 
     async def detect(self) -> RuntimeInfo:
         try:
@@ -144,8 +146,23 @@ class _GenericCliConnector(BrainConnector):
                     stderr=asyncio.subprocess.PIPE,
                 )
                 try:
-                    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-                    version = stdout.decode("utf-8", errors="replace").strip()
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+                    out_text = stdout.decode("utf-8", errors="replace").strip()
+                    err_text = stderr.decode("utf-8", errors="replace").strip() if stderr else ""
+                    combined = (out_text + "\n" + err_text).lower()
+                    broken_sigs = (
+                        "invalid configuration",
+                        "expected object, received array",
+                        "error in:",
+                        "broken configuration",
+                        "retired",
+                        "deprecated",
+                    )
+                    if any(sig in combined for sig in broken_sigs) or proc.returncode != 0:
+                        version = ""
+                        installed = False
+                    else:
+                        version = out_text
                 except TimeoutError:
                     try:
                         proc.kill()
@@ -153,8 +170,10 @@ class _GenericCliConnector(BrainConnector):
                     except Exception:
                         pass
                     version = ""
+                    installed = False
             except (TimeoutError, FileNotFoundError, OSError, NotImplementedError):
                 version = ""
+                installed = False
 
         caps = [f"cli:{self._exe_name}"]
         if version:
@@ -215,6 +234,7 @@ class _GenericCliConnector(BrainConnector):
             capabilities=info.capabilities,
             workspace=info.executable,
             tags=tuple(tags),
+            is_agent=getattr(self, "is_agent", True),
             discovered_at=datetime.now(UTC).isoformat(),
             last_seen=datetime.now(UTC).isoformat(),
         )
@@ -369,10 +389,10 @@ class PythonConnector(_GenericCliConnector):
             exe_name="python",
             version_args=("--version",),
             extra_capabilities=(
-                "code_generation",
                 "testing",
                 "script_execution",
             ),
+            is_agent=False,
         )
 
 
@@ -387,10 +407,10 @@ class NodeConnector(_GenericCliConnector):
             exe_name="node",
             version_args=("--version",),
             extra_capabilities=(
-                "code_generation",
                 "testing",
                 "javascript_execution",
             ),
+            is_agent=False,
         )
 
 
@@ -405,10 +425,10 @@ class BunConnector(_GenericCliConnector):
             exe_name="bun",
             version_args=("--version",),
             extra_capabilities=(
-                "code_generation",
                 "testing",
                 "fast_javascript_runtime",
             ),
+            is_agent=False,
         )
 
 
@@ -427,6 +447,7 @@ class GitConnector(_GenericCliConnector):
                 "diff",
                 "branching",
             ),
+            is_agent=False,
         )
 
 
@@ -456,7 +477,6 @@ class RuntimeBridge:
         connectors: list[BrainConnector] = [
             ClaudeCodeConnector(),
             HermesConnector(),
-            GeminiCliConnector(),
             CodexConnector(),
             OpenCodeConnector(),
             AiderConnector(),

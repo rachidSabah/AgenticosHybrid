@@ -140,8 +140,10 @@ class VersionDetectValidator:
                 warnings=("Remote endpoint — using registration version",),
             )
 
-        if not binary or binary.startswith("-") or (
-            os.path.exists(binary) and os.path.isdir(binary)
+        if (
+            not binary
+            or binary.startswith("-")
+            or (os.path.exists(binary) and os.path.isdir(binary))
         ):
             return ValidationResult.failed(
                 engine_id,

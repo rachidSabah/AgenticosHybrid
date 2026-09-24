@@ -526,7 +526,7 @@ export const useStore = create<StoreState>((set, get) => ({
             id,
             role: "assistant",
             capabilities: (p.capabilities as string[]) ?? [],
-            status: statusStr === "healthy" ? "running" : "idle",
+            status: p.status === "running" ? "running" : "idle",
             health: statusStr as AgentNode["health"],
             provider: name,
           };
@@ -776,8 +776,8 @@ export const useStore = create<StoreState>((set, get) => ({
           const id = String(a.id ?? a.name ?? "");
           if (!id) continue;
           const aName = a.name ? String(a.name) : id;
-          const status = a.status === "healthy" || a.status === "bound" ? "running" : "idle";
-          const health = (a.status === "healthy" || a.status === "bound" ? "healthy" : "degraded") as AgentNode["health"];
+          const status = a.status === "running" ? "running" : "idle";
+          const health = (a.status === "healthy" || a.status === "bound" || a.is_active ? "healthy" : "degraded") as AgentNode["health"];
           const caps = Array.isArray(a.capabilities)
             ? a.capabilities.map((c: unknown) =>
                 typeof c === "string" ? c : String((c as { capability?: unknown })?.capability ?? ""),
@@ -804,11 +804,11 @@ export const useStore = create<StoreState>((set, get) => ({
             const id = String(a.id ?? a.name ?? "");
             if (!id) continue;
             const rawStatus = String(a.status ?? "idle");
-            const isHealthy = a.health === "healthy" || rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "idle" || rawStatus === "running";
+            const isHealthy = a.health === "healthy" || rawStatus === "connected" || rawStatus === "idle" || rawStatus === "running";
             const status =
-              rawStatus === "discovered" || rawStatus === "connected" || rawStatus === "busy" ? "running"
+              rawStatus === "running" ? "running"
               : rawStatus === "unhealthy" || rawStatus === "error" || rawStatus === "failed" ? "failed"
-              : (rawStatus as AgentNode["status"]) || "idle";
+              : "idle";
             const aName = a.name ? String(a.name) : "";
             const aRole = a.role ? String(a.role) : "";
             const displayName = aName || aRole || id;

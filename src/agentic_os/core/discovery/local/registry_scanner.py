@@ -123,7 +123,9 @@ class RegistryScanner:
         Windows, which does not support ``asyncio`` subprocesses.
         """
         try:
-            creationflags = subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0
+            creationflags = (
+                subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0
+            )
             result = subprocess.run(
                 ["reg", "query", reg_path, "/s"],
                 capture_output=True,

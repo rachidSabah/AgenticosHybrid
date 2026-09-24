@@ -275,16 +275,17 @@ export function SwarmDashboard() {
     return [];
   }, [agents]);
 
-  // Metrics telemetry derived ONLY from real API values; honest "N/A" otherwise.
+  // Metrics telemetry derived ONLY from real API values; honest "—" otherwise.
   const throughputStr = metrics && typeof metrics.completed_tasks === "number" && metrics.total_tasks > 0
     ? `${metrics.completed_tasks} of ${metrics.total_tasks} tasks completed`
     : "no tasks yet";
   const overheadStr = metrics && typeof metrics.avg_latency_ms === "number" && metrics.avg_latency_ms > 0
     ? `${metrics.avg_latency_ms.toFixed(0)}ms avg latency`
-    : "latency N/A";
-  const successRateStr = metrics && typeof metrics.total_tasks === "number" && metrics.total_tasks > 0
-    ? `${Math.round((((metrics.total_tasks - (metrics.failed_tasks || 0)) / metrics.total_tasks) * 100))}%`
-    : "no executions yet";
+    : "—";
+  const finishedTasks = (metrics?.completed_tasks ?? 0) + (metrics?.failed_tasks ?? 0);
+  const successRateStr = metrics && finishedTasks > 0
+    ? `${Math.round(((metrics.completed_tasks ?? 0) / finishedTasks) * 100)}%`
+    : "—";
 
   return (
     <div className="flex h-full w-full max-w-full flex-col p-3 sm:p-6 pb-12 bg-[#0c0d14] text-white overflow-y-auto no-hscroll space-y-4">

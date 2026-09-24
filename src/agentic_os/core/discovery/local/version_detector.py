@@ -53,6 +53,7 @@ def _run_version_capture(
     # ShellExecute from opening .png/.jpg/.lnk etc. via file association handlers.
     if os.name == "nt":
         import pathlib
+
         ext = pathlib.Path(executable_path).suffix.lower()
         if ext and ext not in (".exe", ".cmd", ".bat", ".ps1", ".com"):
             return subprocess.CompletedProcess(

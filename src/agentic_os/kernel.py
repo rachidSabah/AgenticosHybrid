@@ -109,7 +109,7 @@ from agentic_os.core.runtime.registry import RuntimeRegistryImpl
 from agentic_os.core.scheduler import Scheduler
 from agentic_os.core.security.framework import SecurityFramework
 from agentic_os.core.workflow.engine import WorkflowEngineImpl
-from agentic_os.domain.brains import RelationshipType
+from agentic_os.domain.brains import BrainVendor, RelationshipType
 from agentic_os.domain.discovery import DiscoveryProfile, DiscoveryProviderConfig
 from agentic_os.domain.events import EventEnvelope  # EventEnvelope for event publishing
 from agentic_os.domain.execution import EngineType
@@ -608,8 +608,18 @@ class Kernel:
                         # Only register brains that are actually installed
                         if record.health < 50:
                             continue
+                        # If it is a runtime or system tool, register in brain_registry but never emit agent events
+                        is_agent = getattr(record, "is_agent", True) and record.vendor not in (
+                            BrainVendor.PYTHON,
+                            BrainVendor.NODE,
+                            BrainVendor.GIT,
+                            BrainVendor.BUN,
+                        )
                         await self.brain_registry.register(record)
                         registered += 1
+
+                        if not is_agent:
+                            continue
 
                         # Add a constellation graph edge: hub → brain
                         if self.brain_graph is not None:
@@ -636,24 +646,22 @@ class Kernel:
                                     },
                                 )
                             )
-                            if record.health >= 50:
-                                await self.bus.publish(
-                                    EventEnvelope(
-                                        type="agent.started",
-                                        source="kernel",
-                                        topic="agent.started",
-                                        payload={
-                                            "id": record.id,
-                                            "name": record.display_name,
-                                            "provider": record.display_name,
-                                            "role": "assistant",
-                                            "status": "running"
-                                            if record.status in ("connected", "busy", "executing")
-                                            else "idle",
-                                            "capabilities": list(record.capabilities),
-                                        },
-                                    )
+                            # Validated AI agent is ready, never fabricated as "running"
+                            await self.bus.publish(
+                                EventEnvelope(
+                                    type="agent.registered",
+                                    source="kernel",
+                                    topic="agent.registered",
+                                    payload={
+                                        "id": record.id,
+                                        "name": record.display_name,
+                                        "provider": record.display_name,
+                                        "role": "assistant",
+                                        "status": "ready",
+                                        "capabilities": list(record.capabilities),
+                                    },
                                 )
+                            )
                     _diag("Brains", "AUTO_DETECTED", f"{registered} runtimes found")
                 except Exception as exc:
                     _diag("Brains", "AUTO_DETECT_FAILED", str(exc))

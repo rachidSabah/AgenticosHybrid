@@ -67,7 +67,9 @@ class ProcessScanner:
         ``NotImplementedError`` there).
         """
         try:
-            creationflags = subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0
+            creationflags = (
+                subprocess.CREATE_NO_WINDOW if platform.system().lower() == "windows" else 0
+            )
             result = subprocess.run(
                 args,
                 capture_output=True,

@@ -156,6 +156,7 @@ class BrainRecord:
     tags: tuple[str, ...] = field(default_factory=tuple)
     priority: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+    is_agent: bool = True
     discovered_at: str = ""
     last_seen: str = ""
     session_count: int = 0

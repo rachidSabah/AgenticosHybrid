@@ -140,7 +140,9 @@ def _print_validation_report(report):
             cap_str = ", ".join(sorted(r.detected_capabilities)[:5])
             if len(r.detected_capabilities) > 5:
                 cap_str += "..."
-            print(f"    [OK] {r.provider_id:<20s} {r.version or '?':<20s} {r.launch_time_ms:5.0f}ms")
+            print(
+                f"    [OK] {r.provider_id:<20s} {r.version or '?':<20s} {r.launch_time_ms:5.0f}ms"
+            )
             print(f"      {r.executable_path}")
             if cap_str:
                 print(f"      [{cap_str}]")

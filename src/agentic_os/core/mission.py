@@ -37,9 +37,9 @@ DEFAULT_ROLE_MAP: dict[AgentRole, str] = {
     AgentRole.FRONTEND_ENGINEER: "opencode",
     AgentRole.SECURITY_ENGINEER: "hermes",
     AgentRole.TEST_ENGINEER: "opencode",
-    AgentRole.DOCUMENTATION_WRITER: "gemini_cli",
+    AgentRole.DOCUMENTATION_WRITER: "hermes",
     AgentRole.RELEASE_ENGINEER: "hermes",
-    AgentRole.RESEARCHER: "gemini_cli",
+    AgentRole.RESEARCHER: "claude_code",
     AgentRole.DEBUGGER: "hermes",
     AgentRole.VALIDATOR: "hermes",
 }

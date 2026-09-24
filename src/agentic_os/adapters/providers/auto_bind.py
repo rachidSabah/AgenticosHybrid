@@ -142,13 +142,6 @@ KNOWN_AGENTS: list[dict] = [
         "description": "Agentic — general-purpose AI agent CLI",
     },
     {
-        "binary": "gemini",
-        "kind": "gemini_cli",
-        "display_name": "Gemini CLI",
-        "capabilities": ["coding", "reasoning", "terminal"],
-        "description": "Google Gemini CLI — autonomous coding agent",
-    },
-    {
         "binary": "nvidia-nim",
         "kind": "nvidia_nim",
         "display_name": "NVIDIA NIM",
@@ -551,14 +544,16 @@ def auto_discover_and_bind(
         # Quick preflight probe: ensure binary is usable and not failing configuration checks
         try:
             test_proc = subprocess.run(
-                [binary, "--version"],
+                [bin_path, "--version"],
                 capture_output=True,
                 timeout=3,
                 creationflags=_SUBPROCESS_WINDOW_FLAGS,
             )
             out_text = (
-                (test_proc.stdout or b"") + (test_proc.stderr or b"")
-            ).decode("utf-8", errors="replace").lower()
+                ((test_proc.stdout or b"") + (test_proc.stderr or b""))
+                .decode("utf-8", errors="replace")
+                .lower()
+            )
             broken_sigs = (
                 "invalid configuration",
                 "expected object, received array",

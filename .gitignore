@@ -97,3 +97,13 @@ _tmp/
 .hermes/
 .acli/
 --version.txt
+.tmp_pytest/
+analyze_environment.py
+security_audit_test_suite.py
+security_audit_report.html
+security_scan_results.json
+environment_scan.html
+environment_scan_report.json
+preview.html
+cabin-crew-morocco-theme/
+

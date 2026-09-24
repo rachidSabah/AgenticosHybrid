@@ -404,6 +404,34 @@ export function ExecutionGraph() {
           tags: [task.role],
         },
       });
+
+      // Real task dependency edges: Task A -> Task B
+      const deps = (task as any).dependencies ?? [];
+      if (Array.isArray(deps)) {
+        deps.forEach((depId: string) => {
+          if (taskList.some((t) => t.id === depId)) {
+            executionEdges.push({
+              id: `edge-dep-${depId}-${task.id}`,
+              source: `task-${depId}`,
+              target: `task-${task.id}`,
+              animated: isRun,
+              style: { stroke: "#6366f1", strokeOpacity: 0.8, strokeWidth: 2 },
+            });
+          }
+        });
+      }
+
+      // Real agent assignment edges
+      const assigned = (task as any).assigned_agent_id;
+      if (assigned && agentList.some((a) => a.id === assigned)) {
+        executionEdges.push({
+          id: `edge-assign-${assigned}-${task.id}`,
+          source: `agent-${assigned}`,
+          target: `task-${task.id}`,
+          animated: isRun,
+          style: { stroke: "#22d3ee", strokeOpacity: 0.8, strokeWidth: 2 },
+        });
+      }
     });
 
     // Real agent calculation
@@ -425,7 +453,11 @@ export function ExecutionGraph() {
         },
       });
 
-      if (agent.current_task && taskList.some((t) => t.id === agent.current_task)) {
+      if (
+        agent.current_task &&
+        taskList.some((t) => t.id === agent.current_task) &&
+        !executionEdges.some((e) => e.id === `edge-assign-${agent.id}-${agent.current_task}`)
+      ) {
         executionEdges.push({
           id: `edge-${agent.id}-${agent.current_task}`,
           source: `agent-${agent.id}`,
