@@ -267,7 +267,10 @@ class CounterfactualEngine:
             ea = a[i] if i < len(a) else None
             eb = b[i] if i < len(b) else None
             if ea is None:
-                only_in_b.append(_brief(i, eb))
+                # n = max(len(a), len(b)) guarantees eb is not None here,
+                # kept explicit so the type is honest for static checks.
+                if eb is not None:
+                    only_in_b.append(_brief(i, eb))
                 continue
             if eb is None:
                 only_in_a.append(_brief(i, ea))
