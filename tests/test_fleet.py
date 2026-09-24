@@ -8,7 +8,6 @@ ranks using only persisted run history.
 from __future__ import annotations
 
 import asyncio
-import sys
 import textwrap
 from pathlib import Path
 
