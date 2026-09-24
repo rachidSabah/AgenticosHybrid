@@ -132,6 +132,10 @@ const CounterfactualLab = lazyWithRetry(() =>
   import("@/views/counterfactual-lab").then((m) => ({ default: m.CounterfactualLab }))
 );
 
+const FleetOrchestra = lazyWithRetry(() =>
+  import("@/views/fleet-orchestra").then((m) => ({ default: m.FleetOrchestra }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -243,6 +247,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Counterfactual Lab" fallback={<ViewSkeleton title="Counterfactual Lab" />}>
       <Suspense fallback={<ViewSkeleton title="Counterfactual Lab" />}>
         <CounterfactualLab />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  fleet: () => (
+    <ErrorBoundary viewName="Agent Fleet" fallback={<ViewSkeleton title="Agent Fleet" />}>
+      <Suspense fallback={<ViewSkeleton title="Agent Fleet" />}>
+        <FleetOrchestra />
       </Suspense>
     </ErrorBoundary>
   ),

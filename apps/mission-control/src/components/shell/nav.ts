@@ -28,6 +28,7 @@ import {
   Cloud,
   GitPullRequestArrow,
   Cable,
+  Bot,
 } from "lucide-react";
 
 export interface NavItem {
@@ -90,6 +91,7 @@ export const NAV: NavItem[] = [
   { id: "collab-workspace", label: "Collaborative VFS", hint: "L", icon: FolderTree, group: "build" },
   { id: "proxy-bindings", label: "Proxy Bindings", hint: "X", icon: Cable, group: "core" },
   { id: "counterfactual", label: "Counterfactual Lab", hint: "F", icon: GitBranch, group: "core" },
+  { id: "fleet", label: "Agent Fleet", hint: "A", icon: Bot, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

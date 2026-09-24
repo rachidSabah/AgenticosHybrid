@@ -9718,6 +9718,58 @@ def create_app(platform: Platform) -> FastAPI:
             status = 404 if "no recorded events" in str(exc) else 400
             raise HTTPException(status, detail=str(exc)) from exc
 
+    # ── Cross-CLI Agent Fleet (drive discovered CLIs, bid, dispatch) ──────
+    from agentic_os.core.fleet.driver import FleetError, get_fleet_manager
+
+    def _fleet():
+        return get_fleet_manager()
+
+    @app.get("/api/fleet")
+    async def fleet_list() -> dict:
+        return {"agents": _fleet().fleet()}
+
+    @app.post("/api/fleet/capabilities")
+    async def fleet_set_capabilities(body: dict) -> dict:
+        agent_id = str(body.get("agent_id", ""))
+        caps = body.get("capabilities")
+        if not agent_id or not isinstance(caps, list):
+            raise HTTPException(400, detail="agent_id and capabilities[] are required")
+        return _fleet().set_capabilities(agent_id, [str(c) for c in caps])
+
+    @app.post("/api/fleet/args")
+    async def fleet_set_args(body: dict) -> dict:
+        agent_id = str(body.get("agent_id", ""))
+        args = body.get("args_prefix")
+        if not agent_id or not isinstance(args, list):
+            raise HTTPException(400, detail="agent_id and args_prefix[] are required")
+        return _fleet().set_args_prefix(agent_id, [str(a) for a in args])
+
+    @app.post("/api/fleet/bid")
+    async def fleet_bid(body: dict) -> dict:
+        top = int(body.get("top", 5))
+        return _fleet().bid(
+            task_description=str(body.get("task_description", "")),
+            required_capabilities=[str(c) for c in body.get("required_capabilities", [])],
+            top=top,
+        )
+
+    @app.post("/api/fleet/dispatch")
+    async def fleet_dispatch(body: dict) -> dict:
+        agent_id = str(body.get("agent_id", ""))
+        prompt = str(body.get("prompt", ""))
+        if not agent_id or not prompt:
+            raise HTTPException(400, detail="agent_id and prompt are required")
+        timeout_s = max(1, min(int(body.get("timeout_s", 120)), 600))
+        try:
+            return await _fleet().dispatch(agent_id, prompt, timeout_s=timeout_s)
+        except FleetError as exc:
+            status = 404 if "not in the current discovery snapshot" in str(exc) else 400
+            raise HTTPException(status, detail=str(exc)) from exc
+
+    @app.get("/api/fleet/runs")
+    async def fleet_runs(agent_id: str | None = None, limit: int = 100) -> dict:
+        return {"runs": _fleet().runs(agent_id=agent_id, limit=limit)}
+
     @app.post("/api/swarm/team/compose")
     async def swarm_compose_team(body: dict) -> dict:
         task_desc = str(body.get("task_description", "General execution"))

@@ -243,6 +243,61 @@ export interface CounterfactualDiff {
   };
 }
 
+// ── Cross-CLI Agent Fleet types ─────────────────────────────────────
+
+export interface FleetStats {
+  runs: number;
+  succeeded: number;
+  failed: number;
+  success_rate: number | null;
+  avg_duration_ms: number | null;
+}
+
+export interface FleetAgent {
+  agent_id: string;
+  name: string;
+  kind: string;
+  executable_path: string;
+  command: string;
+  status: string;
+  is_active: boolean;
+  adapter: string;
+  adapter_note: string;
+  declared_capabilities: string[];
+  args_prefix: string[];
+  stats: FleetStats;
+}
+
+export interface FleetBidRow {
+  agent_id: string;
+  name: string;
+  adapter: string;
+  declared_capabilities: string[];
+  stats: FleetStats;
+}
+
+export interface FleetBidResult {
+  task_description: string;
+  required_capabilities: string[];
+  eligible_count: number;
+  ranking: FleetBidRow[];
+}
+
+export interface FleetRunRecord {
+  run_id: string;
+  agent_id: string;
+  agent_name: string;
+  adapter: string;
+  prompt_preview: string;
+  started_at: string;
+  duration_ms: number;
+  exit_code: number | null;
+  status: string;
+  stdout_preview: string;
+  stderr_preview: string;
+  error: string;
+}
+
 export const api = {
   /** Generic request wrappers */
   get: <T>(path: string) => get<T>(path),
@@ -273,6 +328,33 @@ export const api = {
     requestExact<{ forks: CounterfactualForkRecord[] }>("/api/counterfactual/forks"),
   counterfactualDiff: (a: string, b: string) =>
     requestExact<CounterfactualDiff>(`/api/counterfactual/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
+
+  /** Agent Fleet — drive discovered CLIs: capabilities, bidding, dispatch */
+  fleet: () => requestExact<{ agents: FleetAgent[] }>("/api/fleet"),
+  fleetSetCapabilities: (agentId: string, capabilities: string[]) =>
+    requestExact<{ agent_id: string; capabilities: string[] }>("/api/fleet/capabilities", {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId, capabilities }),
+    }),
+  fleetSetArgsPrefix: (agentId: string, argsPrefix: string[]) =>
+    requestExact<{ agent_id: string; args_prefix: string[] }>("/api/fleet/args", {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId, args_prefix: argsPrefix }),
+    }),
+  fleetBid: (body: { task_description: string; required_capabilities: string[]; top?: number }) =>
+    requestExact<FleetBidResult>("/api/fleet/bid", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  fleetDispatch: (body: { agent_id: string; prompt: string; timeout_s?: number }) =>
+    requestExact<FleetRunRecord>("/api/fleet/dispatch", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  fleetRuns: (agentId?: string, limit = 50) =>
+    requestExact<{ runs: FleetRunRecord[] }>(
+      `/api/fleet/runs?limit=${limit}${agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ""}`
+    ),
 
   health: () => get<{ status: string; bus: string }>("/healthz"),
   eventsRecent: (limit = 100) => get<Array<Record<string, unknown>>>(`/api/events/recent?limit=${limit}`),
