@@ -306,10 +306,7 @@ def test_fleet_event_loop_safe_concurrent_dispatch(tmp_path: Path):
         )
         return results
 
-    if sys.platform == "win32":  # pragma: no cover
-        asyncio.run(scenario())
-    else:
-        results = asyncio.run(scenario())
+    results = asyncio.run(scenario())
     assert all(r["status"] == "completed" for r in results)
 
 
