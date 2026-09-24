@@ -1,6 +1,18 @@
 # Normalize line endings to LF across the repository.
 * text=auto eol=lf
 
+# Windows-native scripts MUST keep CRLF. The cmd.exe batch parser is
+# unreliable with LF-only files (goto/label lookups can fail at 512-byte
+# buffer boundaries -> "cannot find the batch label" and instant window
+# close), and GitHub source ZIPs serve the committed bytes verbatim.
+# `-text` = no conversion in either direction: whatever bytes are committed
+# (CRLF) are what every checkout and every ZIP download receives.
+*.bat -text
+*.cmd -text
+*.vbs -text
+# PowerShell tolerates both endings; still give it CRLF on checkout/archive.
+*.ps1 text eol=crlf
+
 # Explicit language/format hints.
 *.py text diff=python
 *.md text diff=markdown
