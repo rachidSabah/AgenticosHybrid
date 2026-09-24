@@ -71,14 +71,20 @@ def _make_engine(
         ec = cap_map.get(c)
         if ec:
             exec_caps.append(ExecutionCapability(type=ec))
+    try:
+        et = EngineType(engine_type)  # value-based lookup ("claude_code" → EngineType.CLAUDE_CODE)
+    except ValueError:
+        et = EngineType.GENERIC
+    try:
+        es = EngineStatus(status)
+    except ValueError:
+        es = EngineStatus.IDLE
     return ExecutionEngine(
         id=engine_id,
         name=name or engine_id,
-        engine_type=EngineType(engine_type)
-        if hasattr(EngineType, engine_type)
-        else EngineType.GENERIC,
+        engine_type=et,
         capabilities=exec_caps,
-        status=EngineStatus(status) if hasattr(EngineStatus, status) else EngineStatus.IDLE,
+        status=es,
         version="1.0",
     )
 
@@ -90,10 +96,12 @@ class TestOrchestrationAgentRegistry:
 
     @pytest.fixture
     def populated_runtime(self):
+        # Use claude_code engine type — sync_from_runtime filters out "generic"
+        # (which is treated as infrastructure, not an AI agent)
         engines = [
-            _make_engine("e1", "Engine-1", "generic", ["code", "research"], "idle"),
-            _make_engine("e2", "Engine-2", "generic", ["code"], "running"),
-            _make_engine("e3", "Engine-3", "generic", ["research"], "idle"),
+            _make_engine("e1", "Engine-1", "claude_code", ["code", "research"], "idle"),
+            _make_engine("e2", "Engine-2", "claude_code", ["code"], "running"),
+            _make_engine("e3", "Engine-3", "claude_code", ["research"], "idle"),
         ]
         return _MockRuntime(engines)
 

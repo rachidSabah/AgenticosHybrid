@@ -789,6 +789,18 @@ class SwarmCoordinator:
             "shared_memory": self._shared_memories.get(swarm_id, SharedMissionMemory()).to_dict(),
         }
 
+    def get_team(self, swarm_id: str) -> dict[str, Any] | None:
+        """Return team information for a swarm."""
+        if swarm_id not in self._swarm_phases:
+            return None
+        return {
+            "swarm_id": swarm_id,
+            "phase": self._swarm_phases[swarm_id].value,
+            "members": self._swarm_members.get(swarm_id, []),
+            "roles": {k: v.value for k, v in self._swarm_roles.get(swarm_id, {}).items()},
+            "shared_memory": self._shared_memories.get(swarm_id, SharedMissionMemory()).to_dict(),
+        }
+
     def list_swarms(self) -> list[dict[str, Any]]:
         """List all swarms.
 

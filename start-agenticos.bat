@@ -1,124 +1,146 @@
 @echo off
 setlocal EnableDelayedExpansion
 title AgenticOS Hybrid Engine - Mission Control
-cd /d "%~dp0"
+
+cd /d "%~dp0."
+set "ROOT=%cd%"
 
 rem ── Ensure logs directory exists ─────────────────────────────────────────
-if not exist "logs" mkdir logs
+if not exist "%ROOT%\logs" mkdir "%ROOT%\logs"
 
-rem ── Write generated files directly into the workspace root ───────────────
+rem ── Fast startup environment flags ────────────────────────────────────────
 set AGENTICOS_DIRECT_WORKSPACE=1
-
-rem ── Speed up startup: skip slow brain auto-detection on Windows ──────────
 set AGENTICOS_SKIP_BRAIN_AUTODETECT=1
-
-rem ── Disable desktop update-check (crashes asyncio on Windows startup) ────
 set AGENTICOS_DESKTOP_CHECK_UPDATES_ON_START=0
 
-rem ── Kill any stale processes on port 8000 and 3000 ──────────────────────
-echo [AgenticOS] Clearing ports 8000 and 3000...
+rem ── Kill any stale processes on ports 8000 and 3000 ─────────────────────
+echo [AgenticOS] Clearing stale processes on ports 8000 and 3000...
 for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%p >nul 2>&1
 )
 for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":3000 " ^| findstr "LISTENING"') do (
     taskkill /F /PID %%p >nul 2>&1
 )
-rem Give OS a moment to release ports
-timeout /t 2 /nobreak >nul
+timeout /t 1 /nobreak >nul
 
-rem ── Detect Python / Backend Command ────────────────────────────────────
-set "BACKEND_CMD="
-if exist "%~dp0.venv\Scripts\python.exe" (
-    echo [AgenticOS] Using local virtual environment Python
-    set "BACKEND_CMD=\"%~dp0.venv\Scripts\python.exe\" -m agentic_os serve --host 127.0.0.1 --port 8000"
+rem ── Detect Python executable ─────────────────────────────────────────────
+set "PYTHON_EXE="
+if exist "%ROOT%\.venv\Scripts\python.exe" (
+    set "PYTHON_EXE=%ROOT%\.venv\Scripts\python.exe"
+    echo [AgenticOS] Python: Virtual Environment
 ) else (
-    where uv.exe >nul 2>&1
+    where python.exe >nul 2>&1
     if !errorlevel! == 0 (
-        echo [AgenticOS] Using uv runner
-        set "BACKEND_CMD=uv run python -m agentic_os serve --host 127.0.0.1 --port 8000"
-    ) else if exist "%LOCALAPPDATA%\hermes\bin\uv.exe" (
-        echo [AgenticOS] Using hermes uv runner
-        set "BACKEND_CMD=\"%LOCALAPPDATA%\hermes\bin\uv.exe\" run python -m agentic_os serve --host 127.0.0.1 --port 8000"
+        set "PYTHON_EXE=python"
+        echo [AgenticOS] Python: System
     ) else (
-        echo [AgenticOS] Using system python
-        set "BACKEND_CMD=python -m agentic_os serve --host 127.0.0.1 --port 8000"
+        echo [AgenticOS] ERROR: Python not found. Please install Python or setup .venv.
+        pause
+        exit /b 1
     )
 )
 
-rem ── Start Backend in a minimized window ──────────────────────────────────
-echo [AgenticOS] Starting Backend on http://127.0.0.1:8000 ...
-start "AgenticOS Backend" /min cmd /c "%BACKEND_CMD% > "%~dp0logs\backend.log" 2>&1"
+rem ── Create clean launcher scripts (avoids Windows cmd quote escaping bugs) ──
+(
+echo @echo off
+echo set AGENTICOS_DIRECT_WORKSPACE=1
+echo set AGENTICOS_SKIP_BRAIN_AUTODETECT=1
+echo set AGENTICOS_DESKTOP_CHECK_UPDATES_ON_START=0
+echo cd /d "%ROOT%"
+echo "%PYTHON_EXE%" -m agentic_os serve --host 127.0.0.1 --port 8000 ^> "%ROOT%\logs\backend.log" 2^>^&1
+) > "%ROOT%\logs\_start_backend.bat"
 
-rem ── Wait for backend to be ready (up to 120 seconds) ─────────────────────
-echo [AgenticOS] Waiting for backend (up to 120s — first run does brain discovery)...
+(
+echo @echo off
+echo cd /d "%ROOT%\apps\mission-control"
+if exist "%ROOT%\apps\mission-control\out\index.html" (
+    echo npx.cmd serve -s out -l 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
+) else (
+    echo npm.cmd run dev -- -H 127.0.0.1 -p 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
+)
+) > "%ROOT%\logs\_start_frontend.bat"
+
+rem ── Start Backend ────────────────────────────────────────────────────────
+echo [AgenticOS] Starting Backend on http://127.0.0.1:8000 ...
+start "AgenticOS Backend" /min cmd /c "%ROOT%\logs\_start_backend.bat"
+
+rem ── Wait for backend ready ───────────────────────────────────────────────
+echo [AgenticOS] Waiting for backend...
 set /a WAITED=0
 :wait_backend
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 curl.exe -s -f --max-time 2 http://127.0.0.1:8000/healthz >nul 2>&1
 if !errorlevel! == 0 goto backend_ready
-set /a WAITED+=3
-if !WAITED! GEQ 120 (
+set /a WAITED+=2
+if !WAITED! GEQ 60 (
     echo.
-    echo [AgenticOS] WARNING: Backend did not respond after 120s.
-    echo [AgenticOS] Last log lines:
-    powershell -NoProfile -Command "Get-Content '%~dp0logs\backend.log' -Tail 10 -ErrorAction SilentlyContinue"
+    echo [AgenticOS] WARNING: Backend taking longer than usual.
+    powershell -NoProfile -Command "Get-Content '%ROOT%\logs\backend.log' -Tail 8 -ErrorAction SilentlyContinue"
     echo.
-    echo [AgenticOS] Continuing to frontend anyway...
     goto start_frontend
 )
-if !WAITED! GEQ 10 (
-    echo [AgenticOS]   ... backend starting, please wait (!WAITED!s elapsed)...
+if !WAITED! GEQ 6 (
+    echo [AgenticOS]   ... backend initializing ^(!WAITED!s^)...
 )
 goto wait_backend
 
 :backend_ready
-echo [AgenticOS] Backend is READY on http://127.0.0.1:8000
+echo [AgenticOS] Backend READY (http://127.0.0.1:8000)
 
 :start_frontend
-rem ── Start Frontend ────────────────────────────────────────────────────────
-if exist "%~dp0apps\mission-control\out\index.html" (
-    echo [AgenticOS] Starting Mission Control (Production Build) on http://127.0.0.1:3000 ...
-    start "AgenticOS Mission Control" /min cmd /c "cd /d "%~dp0apps\mission-control" && npx.cmd serve -s out -l 3000 > "%~dp0logs\frontend.log" 2>&1"
+rem ── Start Frontend ───────────────────────────────────────────────────────
+if exist "%ROOT%\apps\mission-control\out\index.html" (
+    echo [AgenticOS] Starting Mission Control (Production Build) on http://localhost:3000 ...
 ) else (
-    echo [AgenticOS] Starting Mission Control (Dev Server) on http://127.0.0.1:3000 ...
-    echo [AgenticOS] NOTE: First compile takes 20-40 seconds. Please wait for the browser to open.
-    start "AgenticOS Mission Control" /min cmd /c "cd /d "%~dp0apps\mission-control" && npm.cmd run dev -- -H 127.0.0.1 -p 3000 > "%~dp0logs\frontend.log" 2>&1"
+    echo [AgenticOS] Starting Mission Control (Dev Mode) on http://localhost:3000 ...
 )
+start "AgenticOS Frontend" /min cmd /c "%ROOT%\logs\_start_frontend.bat"
 
-rem ── Wait for frontend to be ready (up to 90 seconds) ─────────────────────
-echo [AgenticOS] Waiting for Mission Control UI (up to 90s on first compile)...
+rem ── Wait for frontend ready ──────────────────────────────────────────────
+echo [AgenticOS] Waiting for Mission Control UI...
 set /a WAITED=0
 :wait_frontend
-timeout /t 3 /nobreak >nul
+timeout /t 2 /nobreak >nul
 curl.exe -s -f --max-time 2 http://127.0.0.1:3000/ >nul 2>&1
 if !errorlevel! == 0 goto frontend_ready
-set /a WAITED+=3
-if !WAITED! GEQ 90 (
-    echo [AgenticOS] WARNING: Frontend did not respond after 90s.
-    echo [AgenticOS] Check logs\frontend.log for details.
+set /a WAITED+=2
+if !WAITED! GEQ 60 (
+    echo [AgenticOS] WARNING: Frontend still initializing. Opening browser anyway...
     goto open_browser
 )
-if !WAITED! GEQ 9 (
-    echo [AgenticOS]   ... compiling UI modules (!WAITED!s elapsed)...
+if !WAITED! GEQ 6 (
+    echo [AgenticOS]   ... UI compiling/loading ^(!WAITED!s^)...
 )
 goto wait_frontend
 
 :frontend_ready
-echo [AgenticOS] Mission Control is READY on http://127.0.0.1:3000
+echo [AgenticOS] Mission Control READY (http://localhost:3000)
 
 :open_browser
-rem ── Open Browser ─────────────────────────────────────────────────────────
-echo [AgenticOS] Opening Mission Control in browser...
-start http://127.0.0.1:3000
+echo [AgenticOS] Launching browser...
+start "" "http://localhost:3000"
 
 echo.
 echo ===========================================================
-echo  AgenticOS is running!
-echo  Backend:         http://127.0.0.1:8000
-echo  Mission Control: http://127.0.0.1:3000
-echo  Backend log:     %~dp0logs\backend.log
-echo  Frontend log:    %~dp0logs\frontend.log
-echo ===========================================================
-echo  Keep this window open. Press Ctrl+C to stop.
+echo   AgenticOS Mission Control is running!
 echo.
-pause
+echo   UI:          http://localhost:3000
+echo   Backend:     http://127.0.0.1:8000
+echo   Logs:        %ROOT%\logs\
+echo ===========================================================
+echo   Keep this window open while using AgenticOS.
+echo   Press any key or Ctrl+C to stop both servers.
+echo ===========================================================
+echo.
+pause >nul
+
+echo.
+echo [AgenticOS] Shutting down servers...
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%p >nul 2>&1
+)
+for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":3000 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%p >nul 2>&1
+)
+echo [AgenticOS] Servers stopped cleanly.
+timeout /t 2 /nobreak >nul
