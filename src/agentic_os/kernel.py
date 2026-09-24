@@ -618,7 +618,6 @@ class Kernel:
                                 BrainVendor.NODE,
                                 BrainVendor.GIT,
                                 BrainVendor.BUN,
-                                BrainVendor.GEMINI_CLI,
                             )
                             or any(
                                 x in name_lower

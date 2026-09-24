@@ -160,12 +160,8 @@ class ArtifactVerifier:
                 "cwd": directory,
                 "exit_code": 124,
                 "duration_ms": round(duration_ms, 2),
-                "stdout": (te.stdout or "").decode("utf-8", errors="replace")
-                if isinstance(te.stdout, bytes)
-                else (te.stdout or ""),
-                "stderr": (te.stderr or "").decode("utf-8", errors="replace")
-                if isinstance(te.stderr, bytes)
-                else (te.stderr or ""),
+                "stdout": (te.stdout or b"").decode("utf-8", errors="replace"),
+                "stderr": (te.stderr or b"").decode("utf-8", errors="replace"),
                 "passed": False,
             }
         except Exception as exc:

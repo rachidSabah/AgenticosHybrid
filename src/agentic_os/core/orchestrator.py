@@ -1009,6 +1009,8 @@ class Orchestrator:
         # A non-empty return does NOT mean success. Bound agent CLIs return
         # auth errors / crash traces as their "result". If the output is an
         # error signature or unusable, the attempt FAILED — never COMPLETED.
+        # Normalise result to str for type-safe helpers below.
+        result = result or ""
         if _is_error_output(result) or _is_unusable_output(result):
             self._finish_execution(exec_rec, "failed", stderr=result)
             task.error = (
