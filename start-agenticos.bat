@@ -23,6 +23,16 @@ for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":3000 " ^| findstr "L
 )
 timeout /t 1 /nobreak >nul
 
+rem ── Start Nexus Gateway if installed and not running ─────────────────────
+curl.exe -s -f --max-time 1 http://127.0.0.1:8787/healthz >nul 2>&1
+if !errorlevel! neq 0 (
+    if exist "%USERPROFILE%\.agent-nexus\repo" (
+        echo [AgenticOS] Starting local Model Gateway on http://127.0.0.1:8787 ...
+        start "Nexus Gateway" /min cmd /c "cd /d "%USERPROFILE%\.agent-nexus\repo" && pnpm.cmd --filter @anx/gateway dev"
+        timeout /t 3 /nobreak >nul
+    )
+)
+
 rem ── Detect Python executable ─────────────────────────────────────────────
 set "PYTHON_EXE="
 if exist "%ROOT%\.venv\Scripts\python.exe" (

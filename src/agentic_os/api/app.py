@@ -898,29 +898,6 @@ def create_app(platform: Platform) -> FastAPI:
             return []
         return sc.consensus_manager.get_history(limit=limit)
 
-    @app.put("/api/swarm/{swarm_id}")
-    async def swarm_update(swarm_id: str, body: dict) -> dict:
-        # Managed by the SwarmCoordinator; this legacy stub stays only for
-        # route-compat so /api/swarm/{id} does not 404 for literal names.
-        raise HTTPException(501, detail="Swarm updates are not supported")
-
-    @app.delete("/api/swarm/{swarm_id}")
-    async def swarm_delete(swarm_id: str) -> dict:
-        sc = getattr(platform, "swarm_coordinator", None)
-        if sc is not None:
-            await sc.disband(swarm_id)
-        return {"deleted": swarm_id}
-
-    @app.get("/api/swarm/{swarm_id}")
-    async def swarm_get(swarm_id: str) -> dict:
-        """Return real state of a swarm team."""
-        sc = getattr(platform, "swarm_coordinator", None)
-        if sc is not None:
-            team = sc.get_team(swarm_id)
-            if team:
-                return team
-        raise HTTPException(404, detail=f"Swarm '{swarm_id}' not found")
-
     @app.get("/omniroute/routes")
     async def omniroute_routes() -> list[dict]:
         routes: list[dict] = []
@@ -3820,19 +3797,6 @@ def create_app(platform: Platform) -> FastAPI:
             "health_score": 1.0 if sc is not None else 0.0,
         }
 
-    # NOTE: /api/swarm/{swarm_id} must be registered AFTER all static
-    # /api/swarm/<literal> routes (list, members, history, create, etc.)
-    # otherwise FastAPI matches the literal path segment as a swarm_id.
-    @app.get("/api/swarm/{swarm_id}")
-    async def swarm_phase14_get(swarm_id: str) -> dict:
-        sc = getattr(platform, "swarm_coordinator", None)
-        if sc is None:
-            raise HTTPException(503, detail="SwarmCoordinator not available")
-        status = sc.get_swarm_status(swarm_id)
-        if "error" in status:
-            raise HTTPException(404, detail=status["error"])
-        return status
-
     @app.post("/api/swarm/create")
     async def swarm_phase14_create(body: dict) -> dict:
         sc = getattr(platform, "swarm_coordinator", None)
@@ -5586,6 +5550,36 @@ def create_app(platform: Platform) -> FastAPI:
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
         return task.to_dict()
+
+    # ── Catch-all /api/swarm/{swarm_id} ──────────────────────────────────────
+    # Registered AFTER all static /api/swarm/* routes to avoid route shadowing.
+    @app.get("/api/swarm/{swarm_id}")
+    async def swarm_phase14_get(swarm_id: str) -> dict:
+        """Return live status of a swarm team or swarm model."""
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is not None:
+            team = getattr(sc, "get_team", sc.get_swarm_status)(swarm_id)
+            if team and "error" not in team:
+                return team
+        s = await swarm.get_swarm(swarm_id)
+        if s is not None:
+            return s.to_dict()
+        raise HTTPException(404, detail=f"Swarm '{swarm_id}' not found")
+
+    @app.delete("/api/swarm/{swarm_id}")
+    async def swarm_delete(swarm_id: str) -> dict:
+        sc = getattr(platform, "swarm_coordinator", None)
+        if sc is not None:
+            await sc.disband(swarm_id)
+        try:
+            await swarm.delete_swarm(swarm_id)
+        except Exception:
+            pass
+        return {"deleted": swarm_id}
+
+    @app.put("/api/swarm/{swarm_id}")
+    async def swarm_update(swarm_id: str, body: dict) -> dict:
+        raise HTTPException(501, detail="Swarm updates are not supported")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Learning & Optimization Engine API (Phase 4, M5)
