@@ -336,7 +336,9 @@ def test_windows_non_script_passthrough(monkeypatch, tmp_path):
     assert argv == [str(exe), "x"]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX kernel behavior; win32 transforms by design")
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX kernel behavior; win32 transforms by design"
+)
 def test_posix_shebang_untouched(tmp_path):
     """On POSIX the kernel honors shebangs; argv passes through untouched."""
     import agentic_os.core.fleet.driver as driver
