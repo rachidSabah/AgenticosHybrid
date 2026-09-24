@@ -61,7 +61,7 @@ markers = [
     "slow: long-running tests (full PATH discovery scans); run with -m slow",
 ]
 # Skip `slow` by default; `pytest -m slow` runs them explicitly.
-addopts = "-m 'not slow' --basetemp=.tmp/pytest"
+addopts = "-m 'not slow'"
 testpaths = ["tests"]
 pythonpath = ["src", "services"]
 filterwarnings = [

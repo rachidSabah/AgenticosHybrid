@@ -107,7 +107,13 @@ def test_runtime_cannot_be_selected_as_ai_agent():
     for bad in ("python", "node", "git", "uv", "bun"):
         kind = classify(bad, f"Help for {bad}")
         assert kind != KIND_AI_AGENT_CLI, f"Runtime {bad} was incorrectly classified as AI agent"
-        assert kind in (KIND_DEV_RUNTIME, KIND_VCS, KIND_PACKAGE_MANAGER, KIND_SYSTEM_UTILITY, KIND_UNKNOWN)
+        assert kind in (
+            KIND_DEV_RUNTIME,
+            KIND_VCS,
+            KIND_PACKAGE_MANAGER,
+            KIND_SYSTEM_UTILITY,
+            KIND_UNKNOWN,
+        )
 
 
 # ── Test 4: Retired Gemini Cannot Be Selected ────────────────────────────────
@@ -128,7 +134,7 @@ async def test_retired_gemini_cannot_be_selected():
 
     fake_runtime = AsyncMock()
     fake_runtime.list_engines.return_value = [
-        ExecutionEngine(id="gemini-1", name="gemini", engine_type=EngineType.GEMINI_CLI),
+        ExecutionEngine(id="gemini-1", name="gemini", engine_type=EngineType.GENERIC),
         ExecutionEngine(id="claude-1", name="claude", engine_type=EngineType.CLAUDE_CODE),
     ]
     reg = OrchestrationAgentRegistry(runtime=fake_runtime)
@@ -299,7 +305,11 @@ def test_failed_build_causes_failure():
         )
         result = ArtifactVerifier.verify_build(
             directory=tmpdir,
-            command=[sys.executable, "-c", "import sys; sys.stderr.write('syntax error'); sys.exit(1)"],
+            command=[
+                sys.executable,
+                "-c",
+                "import sys; sys.stderr.write('syntax error'); sys.exit(1)",
+            ],
             task=task,
         )
         assert result.is_verified is False
