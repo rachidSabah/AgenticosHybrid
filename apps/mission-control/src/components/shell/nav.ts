@@ -89,6 +89,7 @@ export const NAV: NavItem[] = [
   { id: "gpu-acceleration", label: "Local AI / GPU", hint: "8", icon: Monitor, group: "desktop" },
   { id: "collab-workspace", label: "Collaborative VFS", hint: "L", icon: FolderTree, group: "build" },
   { id: "proxy-bindings", label: "Proxy Bindings", hint: "X", icon: Cable, group: "core" },
+  { id: "counterfactual", label: "Counterfactual Lab", hint: "F", icon: GitBranch, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

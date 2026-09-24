@@ -9664,6 +9664,60 @@ def create_app(platform: Platform) -> FastAPI:
         adjusted_prompt = str(body.get("adjusted_prompt", ""))
         return await debugger_manager.fork(mission_id, target_step, adjusted_prompt)
 
+    # ── Counterfactual Fork Lab (journal-level fork + real replay + diff) ──
+    from agentic_os.core.persistent.snapshot_engine import PersistenceLayer
+    from agentic_os.core.swarm.counterfactual import (
+        CounterfactualEngine,
+        CounterfactualError,
+    )
+
+    _cf_engines: list[CounterfactualEngine] = []
+
+    def _counterfactual() -> CounterfactualEngine:
+        if not _cf_engines:
+            pc = getattr(platform, "persistent_controller", None)
+            persistence = getattr(pc, "_persistence", None) or PersistenceLayer()
+            _cf_engines.append(CounterfactualEngine(persistence=persistence, bus=platform.bus))
+        return _cf_engines[0]
+
+    @app.get("/api/counterfactual/runs")
+    async def counterfactual_runs(limit: int = 25) -> dict:
+        try:
+            runs = await _counterfactual().list_runs(limit=limit)
+        except Exception as exc:  # journal unreadable — honest 503
+            raise HTTPException(503, detail=f"event journal unavailable: {exc}") from exc
+        return {"runs": runs}
+
+    @app.post("/api/counterfactual/fork")
+    async def counterfactual_fork(body: dict) -> dict:
+        source = str(body.get("source_correlation_id") or "")
+        if not source:
+            raise HTTPException(400, detail="source_correlation_id required")
+        try:
+            return await _counterfactual().fork(
+                source_correlation_id=source,
+                fork_at=int(body.get("fork_at", 0)),
+                mutations=list(body.get("mutations") or []),
+                replay=bool(body.get("replay", False)),
+            )
+        except CounterfactualError as exc:
+            status = 404 if "no recorded events" in str(exc) else 400
+            raise HTTPException(status, detail=str(exc)) from exc
+
+    @app.get("/api/counterfactual/forks")
+    async def counterfactual_forks() -> dict:
+        return {"forks": _counterfactual().list_forks()}
+
+    @app.get("/api/counterfactual/diff")
+    async def counterfactual_diff(a: str = "", b: str = "") -> dict:
+        if not a or not b:
+            raise HTTPException(400, detail="query parameters a and b are required")
+        try:
+            return await _counterfactual().diff(a, b)
+        except CounterfactualError as exc:
+            status = 404 if "no recorded events" in str(exc) else 400
+            raise HTTPException(status, detail=str(exc)) from exc
+
     @app.post("/api/swarm/team/compose")
     async def swarm_compose_team(body: dict) -> dict:
         task_desc = str(body.get("task_description", "General execution"))

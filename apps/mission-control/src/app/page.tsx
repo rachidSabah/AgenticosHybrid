@@ -128,6 +128,10 @@ const ProxyBindings = lazyWithRetry(() =>
   import("@/views/proxy-bindings").then((m) => ({ default: m.ProxyBindings }))
 );
 
+const CounterfactualLab = lazyWithRetry(() =>
+  import("@/views/counterfactual-lab").then((m) => ({ default: m.CounterfactualLab }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -232,6 +236,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Proxy Bindings" fallback={<ViewSkeleton title="Proxy Bindings" />}>
       <Suspense fallback={<ViewSkeleton title="Proxy Bindings" />}>
         <ProxyBindings />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  counterfactual: () => (
+    <ErrorBoundary viewName="Counterfactual Lab" fallback={<ViewSkeleton title="Counterfactual Lab" />}>
+      <Suspense fallback={<ViewSkeleton title="Counterfactual Lab" />}>
+        <CounterfactualLab />
       </Suspense>
     </ErrorBoundary>
   ),

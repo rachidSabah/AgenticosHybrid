@@ -161,10 +161,93 @@ async function del<T>(path: string, fallback?: T): Promise<T> {
   }
 }
 
+/**
+ * Precise request wrapper for management surfaces (e.g. proxy bindings,
+ * counterfactual lab): THROWS with the exact backend error (FastAPI
+ * `detail`) instead of returning offline sentinels. Used where the operator
+ * must see the real 400/404/409 reason, never a swallowed failure.
+ */
+async function requestExact<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+    ...init,
+  });
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body: unknown = await res.json();
+      if (body && typeof body === "object" && "detail" in body) {
+        detail = String((body as { detail: unknown }).detail);
+      }
+    } catch {
+      // non-JSON error body — keep the status text
+    }
+    throw new Error(detail);
+  }
+  return (await res.json()) as T;
+}
+
+// ── Counterfactual Fork Lab types ────────────────────────────────────────────
+
+export interface CounterfactualRun {
+  correlation_id: string;
+  event_count: number;
+  event_types: string[];
+  first_ts: string;
+  last_ts: string;
+  span_ms: number;
+  forked: boolean;
+}
+
+export interface CounterfactualMutation {
+  op: "replace_field" | "drop_event" | "replace_payload";
+  index: number;
+  field_path?: string;
+  value?: unknown;
+  payload?: Record<string, unknown>;
+}
+
+export interface CounterfactualForkRecord {
+  fork_id: string;
+  lineage: {
+    source: string;
+    fork_at: number;
+    source_event_count: number;
+    retained_prefix: number;
+    mutations: Array<Record<string, unknown>>;
+  };
+  replayed: number;
+  status: string;
+  created_at: number;
+}
+
+export interface CounterfactualDiff {
+  a: { correlation_id: string; event_count: number; span_ms: number | null };
+  b: { correlation_id: string; event_count: number; span_ms: number | null };
+  matched: Array<{ index: number; event_type: string }>;
+  changed: Array<{
+    index: number;
+    event_type: string;
+    differing_fields: string[];
+    payload_a: Record<string, unknown>;
+    payload_b: Record<string, unknown>;
+  }>;
+  only_in_a: Array<{ index: number; event_type: string; event_id: string; timestamp: string }>;
+  only_in_b: Array<{ index: number; event_type: string; event_id: string; timestamp: string }>;
+  summary: {
+    matched: number;
+    changed: number;
+    only_in_a: number;
+    only_in_b: number;
+    span_delta_ms: number | null;
+  };
+}
+
 export const api = {
   /** Generic request wrappers */
   get: <T>(path: string) => get<T>(path),
   post: <T>(path: string, body?: unknown) => post<T>(path, body),
+  requestExact: <T>(path: string, init?: RequestInit) => requestExact<T>(path, init),
 
   /**
    * Precise request wrapper for management surfaces (e.g. proxy bindings):
@@ -172,25 +255,24 @@ export const api = {
    * returning offline sentinels. Used where the operator must see the real
    * 400/404/409 reason, never a swallowed failure.
    */
-  requestExact: async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const res = await fetch(`${BASE}${path}`, {
-      headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-      ...init,
-    });
-    if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
-      try {
-        const body: unknown = await res.json();
-        if (body && typeof body === "object" && "detail" in body) {
-          detail = String((body as { detail: unknown }).detail);
-        }
-      } catch {
-        // non-JSON error body — keep the status text
-      }
-      throw new Error(detail);
-    }
-    return (await res.json()) as T;
-  },
+
+  /** Counterfactual Fork Lab — journal-level forks, real replay, real diff */
+  counterfactualRuns: (limit = 25) =>
+    requestExact<{ runs: CounterfactualRun[] }>(`/api/counterfactual/runs?limit=${limit}`),
+  counterfactualFork: (body: {
+    source_correlation_id: string;
+    fork_at: number;
+    mutations: CounterfactualMutation[];
+    replay: boolean;
+  }) =>
+    requestExact<CounterfactualForkRecord>("/api/counterfactual/fork", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  counterfactualForks: () =>
+    requestExact<{ forks: CounterfactualForkRecord[] }>("/api/counterfactual/forks"),
+  counterfactualDiff: (a: string, b: string) =>
+    requestExact<CounterfactualDiff>(`/api/counterfactual/diff?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
 
   health: () => get<{ status: string; bus: string }>("/healthz"),
   eventsRecent: (limit = 100) => get<Array<Record<string, unknown>>>(`/api/events/recent?limit=${limit}`),
