@@ -124,6 +124,10 @@ const AgentBindingCenter = lazyWithRetry(() =>
   import("@/views/agent-binding-center").then((m) => ({ default: m.AgentBindingCenter }))
 );
 
+const ProxyBindings = lazyWithRetry(() =>
+  import("@/views/proxy-bindings").then((m) => ({ default: m.ProxyBindings }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -221,6 +225,13 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="AI Agent Binding Center" fallback={<ViewSkeleton title="AI Agent Binding Center" />}>
       <Suspense fallback={<ViewSkeleton title="AI Agent Binding Center" />}>
         <AgentBindingCenter />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "proxy-bindings": () => (
+    <ErrorBoundary viewName="Proxy Bindings" fallback={<ViewSkeleton title="Proxy Bindings" />}>
+      <Suspense fallback={<ViewSkeleton title="Proxy Bindings" />}>
+        <ProxyBindings />
       </Suspense>
     </ErrorBoundary>
   ),

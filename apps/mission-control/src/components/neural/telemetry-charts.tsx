@@ -260,7 +260,7 @@ export function TelemetryPanel({ className = "" }: { className?: string }) {
     >
       <div className="flex items-center space-x-2 border-b border-white/10 pb-3">
         <Cpu className="w-4 h-4 text-[#818cf8]" />
-        <h2 className="text-[12px] font-mono text-gray-200 uppercase tracking-widest font-bold">Nexus Telemetry</h2>
+        <h2 className="text-[12px] font-mono text-gray-200 uppercase tracking-widest font-bold">System Telemetry</h2>
       </div>
 
       <div className="grid grid-cols-3 gap-2">

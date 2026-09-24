@@ -1,12 +1,16 @@
 """Active proxy profile — one switchable source of truth for model routing.
 
-AgenticOS must work with *any* OpenAI-compatible proxy (Nexus, LiteLLM,
-OpenRouter, Ollama, vLLM, LM Studio, direct OpenAI), not one hardcoded host.
+AgenticOS is fully proxy-agnostic and ships with ZERO preconfigured proxies.
+Model-routing endpoints (LiteLLM, OpenRouter, Ollama, vLLM, LM Studio, direct
+OpenAI, or any external agent gateway such as Nexus) are bound MANUALLY by the
+operator via the ``/api/proxy/*`` endpoints. Nothing is assumed, nothing is
+auto-created, and removing one product must never affect the others.
 
 Design rules
 ------------
-* No proxy host is hardcoded into application logic. The default below is a
-  convenience only and is always overridden by the persisted profile.
+* No proxy host is hardcoded into application logic and no default profile
+  exists: with no persisted profile the chain is EMPTY and model routing is
+  honestly unavailable until the operator binds an endpoint.
 * A profile is inert data. It never guesses health — see
   ``adapters.providers.proxy_failover`` for live probing.
 * Failures are explicit: callers get ``None`` / empty rather than a stale URL
@@ -22,15 +26,6 @@ from pathlib import Path
 
 DEFAULT_PROXY_FILE = "~/.agentic_os/data/proxy.json"
 
-# Convenience default only. Overridden by the persisted profile.
-_NEXUS_DEFAULT = {
-    "name": "nexus",
-    "base_url": "http://127.0.0.1:8787/v1",
-    "api_key_env": "",
-    "model": "",
-    "wire": "chat",
-}
-
 
 @dataclass
 class ProxyProfile:
@@ -45,12 +40,14 @@ class ProxyProfile:
     def api_key(self) -> str:
         """Resolve the API key.
 
-        If ``api_key_env`` names an environment variable, read it. Otherwise
-        fall back to the profile name (Nexus accepts any non-empty bearer).
+        Returns the value of the environment variable named by
+        ``api_key_env``, or an empty string when none is declared or the
+        variable is unset. No fabricated bearer: endpoints that require a
+        key must have ``api_key_env`` configured by the operator.
         """
         if self.api_key_env:
             return os.environ.get(self.api_key_env, "")
-        return self.name
+        return ""
 
     def models_url(self) -> str:
         return f"{self.base_url.rstrip('/')}/models"
@@ -74,13 +71,15 @@ def _proxy_file() -> Path:
 
 
 def _default_profiles() -> list[ProxyProfile]:
-    return [ProxyProfile(**_NEXUS_DEFAULT)]
+    """No proxy ships preconfigured — isolation is the default state."""
+    return []
 
 
 def get_proxy_chain() -> ProxyChain:
-    """Load the persisted proxy chain; fall back to the single default.
+    """Load the persisted proxy chain; an empty chain when nothing is bound.
 
-    A malformed or missing file is not an error — it yields the default chain.
+    A malformed or missing file is not an error — it yields an empty chain
+    ("no proxy configured"), never an assumed endpoint.
     """
     f = _proxy_file()
     try:
@@ -121,5 +120,15 @@ def set_proxy_chain(chain: ProxyChain) -> ProxyChain:
 
 
 def get_active_profile() -> ProxyProfile:
-    """First profile in the chain (callers should prefer health-checked selection)."""
-    return get_proxy_chain().profiles[0]
+    """First profile in the chain (callers should prefer health-checked selection).
+
+    Raises ``RuntimeError`` when no proxy is bound — fail fast with the exact
+    remediation instead of dereferencing an empty chain.
+    """
+    profiles = get_proxy_chain().profiles
+    if not profiles:
+        raise RuntimeError(
+            "no proxy profiles configured — bind one manually via "
+            "POST /api/proxy/profile (or /api/proxy/profile/add)"
+        )
+    return profiles[0]

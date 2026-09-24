@@ -22,16 +22,17 @@ def isolated_proxy_file(tmp_path, monkeypatch):
     yield tmp_path / "proxy.json"
 
 
-def test_default_chain_is_non_empty(isolated_proxy_file):
+def test_default_chain_is_empty_full_isolation(isolated_proxy_file):
+    """No proxy ships preconfigured — the default chain is EMPTY (isolation)."""
     chain = get_proxy_chain()
-    assert not chain.is_empty()
-    assert chain.profiles[0].base_url.endswith("/v1")
+    assert chain.is_empty()
+    assert chain.profiles == []
 
 
 def test_roundtrip_persists_order(isolated_proxy_file):
     chain = ProxyChain(
         profiles=[
-            ProxyProfile(name="nexus", base_url="http://127.0.0.1:8787/v1"),
+            ProxyProfile(name="local-proxy", base_url="http://127.0.0.1:4000/v1"),
             ProxyProfile(
                 name="openrouter",
                 base_url="https://openrouter.ai/api/v1",
@@ -41,7 +42,7 @@ def test_roundtrip_persists_order(isolated_proxy_file):
     )
     set_proxy_chain(chain)
     loaded = get_proxy_chain()
-    assert [p.name for p in loaded.profiles] == ["nexus", "openrouter"]
+    assert [p.name for p in loaded.profiles] == ["local-proxy", "openrouter"]
     assert loaded.profiles[1].api_key_env == "OPENROUTER_API_KEY"
 
 
@@ -51,9 +52,10 @@ def test_api_key_reads_env_when_declared(monkeypatch):
     assert p.api_key() == "abc123"
 
 
-def test_api_key_falls_back_to_name_when_no_env():
-    p = ProxyProfile(name="nexus", base_url="http://127.0.0.1:8787/v1")
-    assert p.api_key() == "nexus"
+def test_api_key_without_env_is_empty_no_fabricated_bearer():
+    """No env var declared → empty key. Never invent a bearer from the name."""
+    p = ProxyProfile(name="any-endpoint", base_url="http://127.0.0.1:4000/v1")
+    assert p.api_key() == ""
 
 
 def test_api_key_missing_env_returns_empty(monkeypatch):
@@ -62,10 +64,11 @@ def test_api_key_missing_env_returns_empty(monkeypatch):
     assert p.api_key() == ""
 
 
-def test_corrupt_file_falls_back_to_default(isolated_proxy_file):
+def test_corrupt_file_yields_empty_chain(isolated_proxy_file):
+    """A malformed file must not resurrect an assumed endpoint — chain stays empty."""
     isolated_proxy_file.write_text("{not json", encoding="utf-8")
     chain = get_proxy_chain()
-    assert not chain.is_empty()
+    assert chain.is_empty()
 
 
 def test_entries_without_base_url_are_dropped(isolated_proxy_file):

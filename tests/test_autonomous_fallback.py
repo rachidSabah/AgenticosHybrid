@@ -33,9 +33,9 @@ def test_failure_report_does_not_claim_success():
 
 def test_failure_report_states_the_real_reason():
     report = _build_failure_report(
-        title="T", role="coding", ws_root="W", reason="nexus unreachable", attempts=2
+        title="T", role="coding", ws_root="W", reason="local-proxy unreachable", attempts=2
     )
-    assert "nexus unreachable" in report
+    assert "local-proxy unreachable" in report
     assert "2" in report
 
 

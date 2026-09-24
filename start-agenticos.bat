@@ -9,6 +9,10 @@ set "ROOT=%cd%"
 rem -- Ensure logs directory exists ------------------------------------------
 if not exist "%ROOT%\logs" mkdir "%ROOT%\logs"
 
+echo [AgenticOS] Root: %ROOT%
+echo [AgenticOS] If this is not your AgenticosHybrid checkout, close this window
+echo [AgenticOS] and run start-agenticos.bat from the repo root instead.
+echo.
 rem -- Fast startup environment flags ----------------------------------------
 set AGENTICOS_DIRECT_WORKSPACE=1
 set AGENTICOS_SKIP_BRAIN_AUTODETECT=1
@@ -54,13 +58,18 @@ rem -- Write backend launcher script -----------------------------------------
 
 rem -- Write frontend launcher script ----------------------------------------
 (
-    echo @echo off
-    echo cd /d "%ROOT%\apps\mission-control"
-    if exist "%ROOT%\apps\mission-control\out\index.html" (
+echo @echo off
+echo cd /d "%ROOT%\apps\mission-control"
+rem Production mode requires BOTH the static export and the serve package.
+if exist "%ROOT%\apps\mission-control\out\index.html" (
+    if exist "%ROOT%\apps\mission-control\node_modules\serve\build\main.js" (
         echo node node_modules\serve\build\main.js -s out -l 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
     ) else (
         echo npm.cmd run dev -- -H 127.0.0.1 -p 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
     )
+) else (
+    echo npm.cmd run dev -- -H 127.0.0.1 -p 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
+)
 ) > "%ROOT%\logs\_start_frontend.bat"
 
 rem -- Start Backend ---------------------------------------------------------
@@ -90,8 +99,17 @@ echo [AgenticOS] Backend READY - http://127.0.0.1:8000
 
 :start_frontend
 rem -- Start Frontend --------------------------------------------------------
+if not exist "%ROOT%\apps\mission-control\node_modules" (
+    echo [AgenticOS] WARNING: apps\mission-control\node_modules is missing.
+    echo [AgenticOS]          Dev Mode will fail - run "npm install" in apps\mission-control first.
+)
 if exist "%ROOT%\apps\mission-control\out\index.html" (
-    echo [AgenticOS] Starting Mission Control (Production) on http://localhost:3000 ...
+    if exist "%ROOT%\apps\mission-control\node_modules\serve\build\main.js" (
+        echo [AgenticOS] Starting Mission Control (Production Build) on http://localhost:3000 ...
+    ) else (
+        echo [AgenticOS] Static export found but serve package missing - using Dev Mode.
+        echo [AgenticOS] Starting Mission Control (Dev Mode) on http://localhost:3000 ...
+    )
 ) else (
     echo [AgenticOS] Starting Mission Control (Dev Mode) on http://localhost:3000 ...
 )
@@ -120,15 +138,22 @@ echo [AgenticOS] Mission Control READY - http://localhost:3000
 
 :open_browser
 echo [AgenticOS] Launching browser...
-start "" "http://localhost:3000"
+start "" "http://localhost:3000" 2>nul
+if errorlevel 1 rundll32 url.dll,FileProtocolHandler http://localhost:3000
+if errorlevel 1 echo [AgenticOS] WARNING: could not auto-launch a browser. Open http://localhost:3000 manually.
 
 echo.
 echo ===========================================================
 echo   AgenticOS Mission Control is running!
 echo.
-echo   UI:       http://localhost:3000
-echo   Backend:  http://127.0.0.1:8000
-echo   Logs:     %ROOT%\logs\
+echo   UI:          http://localhost:3000
+echo   Backend:     http://127.0.0.1:8000
+echo   Logs:        %ROOT%\logs\
+echo.
+echo   Note: external proxy gateways (bound via Mission Control, Proxy
+echo   Bindings view) are SEPARATE products on their own ports - they do
+echo   not open a browser and are never required to run AgenticOS.
+echo   Verify listeners:  netstat -ano ^| findstr ":3000 :8000"
 echo ===========================================================
 echo   Keep this window open while using AgenticOS.
 echo   Press any key or Ctrl+C to stop both servers.

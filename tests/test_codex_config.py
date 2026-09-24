@@ -11,13 +11,13 @@ from agentic_os.adapters.providers.codex_config import (
 from agentic_os.domain.proxy_profile import ProxyProfile
 
 
-def test_renders_nexus_profile():
+def test_renders_local_proxy_profile():
     out = render_codex_config(
-        ProxyProfile(name="nexus", base_url="http://127.0.0.1:8787/v1", model="gpt-5.6-terra")
+        ProxyProfile(name="local-proxy", base_url="http://127.0.0.1:4000/v1", model="gpt-5.6-terra")
     )
-    assert 'base_url = "http://127.0.0.1:8787/v1"' in out
+    assert 'base_url = "http://127.0.0.1:4000/v1"' in out
     assert 'model = "gpt-5.6-terra"' in out
-    assert 'model_provider = "nexus"' in out
+    assert 'model_provider = "local-proxy"' in out
 
 
 def test_renders_env_key_when_declared():
@@ -33,7 +33,7 @@ def test_renders_env_key_when_declared():
 
 
 def test_omits_env_key_for_keyless_proxy():
-    out = render_codex_config(ProxyProfile(name="nexus", base_url="http://x/v1", model="m"))
+    out = render_codex_config(ProxyProfile(name="local-proxy", base_url="http://x/v1", model="m"))
     assert 'env_key = "USERPROFILE"' in out
 
 
@@ -44,7 +44,7 @@ def test_preserves_existing_trust_blocks(tmp_path):
         encoding="utf-8",
     )
     write_codex_config(
-        ProxyProfile(name="nexus", base_url="http://x/v1", model="m"), path=str(target)
+        ProxyProfile(name="local-proxy", base_url="http://x/v1", model="m"), path=str(target)
     )
     out = target.read_text(encoding="utf-8")
     assert "aioverdesktop" in out
@@ -55,17 +55,17 @@ def test_preserves_existing_trust_blocks(tmp_path):
 def test_result_is_parseable_toml(tmp_path):
     tomllib = pytest.importorskip("tomllib")
     out = render_codex_config(
-        ProxyProfile(name="nexus", base_url="http://127.0.0.1:8787/v1", model="gpt-5.6-terra")
+        ProxyProfile(name="local-proxy", base_url="http://127.0.0.1:4000/v1", model="gpt-5.6-terra")
     )
     parsed = tomllib.loads(out)
     assert parsed["model"] == "gpt-5.6-terra"
-    assert parsed["model_providers"]["nexus"]["base_url"] == "http://127.0.0.1:8787/v1"
+    assert parsed["model_providers"]["local-proxy"]["base_url"] == "http://127.0.0.1:4000/v1"
 
 
 def test_write_returns_path(tmp_path):
     target = tmp_path / "config.toml"
     result = write_codex_config(
-        ProxyProfile(name="nexus", base_url="http://x/v1", model="m"), path=str(target)
+        ProxyProfile(name="local-proxy", base_url="http://x/v1", model="m"), path=str(target)
     )
     assert result == target
     assert target.exists()

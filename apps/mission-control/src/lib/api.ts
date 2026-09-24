@@ -166,6 +166,32 @@ export const api = {
   get: <T>(path: string) => get<T>(path),
   post: <T>(path: string, body?: unknown) => post<T>(path, body),
 
+  /**
+   * Precise request wrapper for management surfaces (e.g. proxy bindings):
+   * THROWS with the exact backend error (FastAPI `detail`) instead of
+   * returning offline sentinels. Used where the operator must see the real
+   * 400/404/409 reason, never a swallowed failure.
+   */
+  requestExact: async <T>(path: string, init?: RequestInit): Promise<T> => {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+      ...init,
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try {
+        const body: unknown = await res.json();
+        if (body && typeof body === "object" && "detail" in body) {
+          detail = String((body as { detail: unknown }).detail);
+        }
+      } catch {
+        // non-JSON error body — keep the status text
+      }
+      throw new Error(detail);
+    }
+    return (await res.json()) as T;
+  },
+
   health: () => get<{ status: string; bus: string }>("/healthz"),
   eventsRecent: (limit = 100) => get<Array<Record<string, unknown>>>(`/api/events/recent?limit=${limit}`),
 

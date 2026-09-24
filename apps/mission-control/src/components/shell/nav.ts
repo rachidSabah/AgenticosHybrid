@@ -27,6 +27,7 @@ import {
   Sparkles,
   Cloud,
   GitPullRequestArrow,
+  Cable,
 } from "lucide-react";
 
 export interface NavItem {
@@ -87,6 +88,7 @@ export const NAV: NavItem[] = [
   { id: "chaos-cockpit", label: "Chaos Studio", hint: "K", icon: Shield, group: "observe" },
   { id: "gpu-acceleration", label: "Local AI / GPU", hint: "8", icon: Monitor, group: "desktop" },
   { id: "collab-workspace", label: "Collaborative VFS", hint: "L", icon: FolderTree, group: "build" },
+  { id: "proxy-bindings", label: "Proxy Bindings", hint: "X", icon: Cable, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

@@ -26,7 +26,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from agentic_os.adapters.providers.codex_config import write_codex_config
-from agentic_os.adapters.providers.proxy_failover import probe, select_healthy_proxy
+from agentic_os.adapters.providers.proxy_failover import (
+    fetch_models,
+    probe_detailed,
+    select_healthy_proxy,
+)
 from agentic_os.api.runtime_diagnostics import (
     bindings as rt_bindings,
 )
@@ -8242,13 +8246,125 @@ def create_app(platform: Platform) -> FastAPI:
         chain = get_proxy_chain()
         results = []
         for p in chain.profiles:
-            ok = await probe(p)
-            results.append({"name": p.name, "base_url": p.base_url, "reachable": ok})
+            report = await probe_detailed(p)
+            results.append(
+                {
+                    "name": p.name,
+                    "base_url": p.base_url,
+                    "reachable": report["reachable"],
+                    "latency_ms": report["latency_ms"],
+                    "error": report["error"],
+                }
+            )
         healthy = next((r for r in results if r["reachable"]), None)
         return {
             "reachable": healthy is not None,
             "active": healthy,
             "proxies": results,
+        }
+
+    # ── Manual Proxy Binding (operator-bound, provider-agnostic) ──────────
+
+    _ALLOWED_WIRES = {"chat"}
+
+    def _validate_binding_payload(p: dict) -> tuple[str, str, str, str]:
+        """Validate a manual binding payload. Returns (name, base_url, api_key_env, model)
+        or raises HTTPException with the exact reason."""
+        name = str(p.get("name", "")).strip()
+        base_url = str(p.get("base_url", "")).strip()
+        api_key_env = str(p.get("api_key_env", "")).strip()
+        model = str(p.get("model", "")).strip()
+        wire = str(p.get("wire", "chat")).strip()
+        if not name:
+            raise HTTPException(400, "binding name is required")
+        if not base_url.startswith(("http://", "https://")):
+            raise HTTPException(400, "base_url must start with http:// or https://")
+        if wire not in _ALLOWED_WIRES:
+            raise HTTPException(
+                400,
+                f"unsupported wire {wire!r} — only {sorted(_ALLOWED_WIRES)} is implemented",
+            )
+        return name, base_url, api_key_env, model
+
+    @app.post("/api/proxy/test")
+    async def test_proxy_binding(body: dict) -> dict:
+        """Live-test a CANDIDATE binding without persisting anything.
+
+        Performs a real /models lookup and returns measured results —
+        reachable, HTTP status, wall-clock latency, and the real model
+        catalog when the endpoint answers. Never fabricates a field.
+        """
+        name, base_url, api_key_env, model = _validate_binding_payload(body)
+        candidate = ProxyProfile(
+            name=name,
+            base_url=base_url,
+            api_key_env=api_key_env,
+            model=model,
+            wire=str(body.get("wire", "chat")),
+        )
+        report = await probe_detailed(candidate)
+        catalog = await fetch_models(candidate)
+        return {
+            "name": name,
+            "base_url": base_url,
+            "reachable": report["reachable"],
+            "status_code": report["status_code"],
+            "latency_ms": report["latency_ms"],
+            "error": report["error"],
+            "models_count": len(catalog["models"]) if not catalog["error"] else None,
+            "models_sample": catalog["models"][:20],
+            "models_error": catalog["error"],
+            "persisted": False,
+        }
+
+    @app.post("/api/proxy/profile/add")
+    async def add_proxy_binding(body: dict) -> dict:
+        """Bind one proxy endpoint manually and persist it to the chain."""
+        name, base_url, api_key_env, model = _validate_binding_payload(body)
+        chain = get_proxy_chain()
+        if any(p.name == name for p in chain.profiles):
+            raise HTTPException(409, f"binding {name!r} already exists — remove it first")
+        chain.profiles.append(
+            ProxyProfile(
+                name=name,
+                base_url=base_url,
+                api_key_env=api_key_env,
+                model=model,
+                wire=str(body.get("wire", "chat")),
+            )
+        )
+        chain = set_proxy_chain(chain)
+        return {
+            "profiles": [dataclasses.asdict(p) for p in chain.profiles],
+            "added": name,
+        }
+
+    @app.delete("/api/proxy/profile/{name}")
+    async def delete_proxy_binding(name: str) -> dict:
+        """Remove a binding by name. 404 when it does not exist."""
+        chain = get_proxy_chain()
+        remaining = [p for p in chain.profiles if p.name != name]
+        if len(remaining) == len(chain.profiles):
+            raise HTTPException(404, f"no binding named {name!r}")
+        chain = set_proxy_chain(ProxyChain(profiles=remaining))
+        return {
+            "profiles": [dataclasses.asdict(p) for p in chain.profiles],
+            "removed": name,
+        }
+
+    @app.get("/api/proxy/models")
+    async def list_proxy_models(name: str) -> dict:
+        """Real model catalog exposed by a bound proxy — live fetch, no cache."""
+        chain = get_proxy_chain()
+        profile = next((p for p in chain.profiles if p.name == name), None)
+        if profile is None:
+            raise HTTPException(404, f"no binding named {name!r}")
+        catalog = await fetch_models(profile)
+        return {
+            "name": profile.name,
+            "base_url": profile.base_url,
+            "models": catalog["models"],
+            "error": catalog["error"],
         }
 
     # ── OmniRoute AI Subsystem REST API ────────────────────────────────────

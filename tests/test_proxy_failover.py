@@ -16,7 +16,7 @@ from agentic_os.adapters.providers.proxy_failover import (
 from agentic_os.domain.proxy_profile import ProxyChain, ProxyProfile
 
 PROXIES = [
-    ProxyProfile(name="nexus", base_url="http://127.0.0.1:8787/v1"),
+    ProxyProfile(name="local-proxy", base_url="http://127.0.0.1:4000/v1"),
     ProxyProfile(
         name="openrouter",
         base_url="https://openrouter.ai/api/v1",
@@ -32,7 +32,7 @@ def _patch_probe(monkeypatch, fn):
 @pytest.mark.asyncio
 async def test_skips_unreachable_and_returns_first_healthy(monkeypatch):
     async def fake(p: ProxyProfile, timeout: float = 5.0) -> bool:
-        return p.name == "openrouter"  # nexus is down
+        return p.name == "openrouter"  # local-proxy is down
 
     _patch_probe(monkeypatch, fake)
     chosen = await select_healthy_proxy(PROXIES)
@@ -56,7 +56,7 @@ async def test_prefers_earlier_proxy_when_both_healthy(monkeypatch):
 
     _patch_probe(monkeypatch, fake)
     chosen = await select_healthy_proxy(PROXIES)
-    assert chosen.name == "nexus"
+    assert chosen.name == "local-proxy"
 
 
 @pytest.mark.asyncio
@@ -85,4 +85,4 @@ async def test_probe_returns_false_on_network_error(monkeypatch):
 
 def test_describe_unreachable_names_all_proxies():
     msg = describe_unreachable(PROXIES)
-    assert "nexus" in msg and "openrouter" in msg
+    assert "local-proxy" in msg and "openrouter" in msg
