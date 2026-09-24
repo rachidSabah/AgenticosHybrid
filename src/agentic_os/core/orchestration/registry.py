@@ -81,9 +81,31 @@ class OrchestrationAgentRegistry:
         return [self._engine_to_descriptor(e) for e in engines]
 
     async def sync_from_runtime(self) -> list[AgentDescriptor]:
-        """Refresh the full agent cache from the runtime."""
+        """Refresh the full agent cache from the runtime (AI agents only, spec §4)."""
         engines = await self._runtime.list_engines()
-        agents = [self._engine_to_descriptor(e) for e in engines]
+        _excluded = frozenset(
+            {
+                "python",
+                "node",
+                "git",
+                "wsl",
+                "bun",
+                "uv",
+                "docker",
+                "generic",
+                "gemini",
+                "gemini_cli",
+                "gemini-local",
+                "git-winget",
+            }
+        )
+        agents = [
+            self._engine_to_descriptor(e)
+            for e in engines
+            if e.name.lower() not in _excluded
+            and not any(x in e.name.lower() for x in ("python", "node", "git", "gemini"))
+            and getattr(e, "engine_type", None) not in ("custom", "wsl", "generic")
+        ]
         self._cache = {a.agent_id: a for a in agents}
         log.info("Agent cache synced from runtime", count=len(agents))
         return agents

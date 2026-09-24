@@ -608,18 +608,26 @@ class Kernel:
                         # Only register brains that are actually installed
                         if record.health < 50:
                             continue
-                        # If it is a runtime or system tool, register in brain_registry but never emit agent events
-                        is_agent = getattr(record, "is_agent", True) and record.vendor not in (
-                            BrainVendor.PYTHON,
-                            BrainVendor.NODE,
-                            BrainVendor.GIT,
-                            BrainVendor.BUN,
-                        )
+                        name_lower = record.display_name.lower()
+                        # Strict AI agent check (spec §2, §4)
+                        if (
+                            not getattr(record, "is_agent", True)
+                            or record.vendor in (
+                                BrainVendor.PYTHON,
+                                BrainVendor.NODE,
+                                BrainVendor.GIT,
+                                BrainVendor.BUN,
+                                BrainVendor.GEMINI_CLI,
+                            )
+                            or any(
+                                x in name_lower
+                                for x in ("python", "node", "git", "bun", "uv", "gemini")
+                            )
+                        ):
+                            continue
+
                         await self.brain_registry.register(record)
                         registered += 1
-
-                        if not is_agent:
-                            continue
 
                         # Add a constellation graph edge: hub → brain
                         if self.brain_graph is not None:

@@ -163,11 +163,19 @@ async def _run(cmd: list[str], timeout: float) -> tuple[int, str, str]:
 
 async def probe_version(path: str) -> ProbeResult:
     """Real version probe (§6). Unknown => ok=False, never fabricated."""
+    path_lower = path.lower()
+    if "gemini" in path_lower:
+        return ProbeResult("version", False, "retired provider", "")
     for args in (["--version"], ["-v"], ["version"]):
         rc, out, err = await _run([path, *args], PROBE_TIMEOUT)
+        combined = f"{out}\n{err}"
+        if _looks_broken(combined):
+            return ProbeResult("version", False, "broken configuration", args[0])
         text = (out or err).strip()
         if rc == 0 and text:
-            return ProbeResult("version", True, text.splitlines()[0].strip(), args[0])
+            first_line = text.splitlines()[0].strip()
+            if not _looks_broken(first_line):
+                return ProbeResult("version", True, first_line, args[0])
     return ProbeResult("version", False, "no version output", "")
 
 

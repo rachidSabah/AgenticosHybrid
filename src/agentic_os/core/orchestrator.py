@@ -292,9 +292,14 @@ def _extract_and_persist_files(
 
         target_filename = None
         # Check if file_meta contains a clean filename/path
-        if file_meta and not any(ch in file_meta for ch in ('"', "'", "<", ">", "|", "*", "?")):
+        if file_meta and not any(ch in file_meta for ch in ('"', "'", "<", ">", "|", "*", "?", "[", "]", "{", "}", "(", ")")):
             clean_meta = file_meta.strip().split()[-1].lstrip(":").strip()
-            if "." in clean_meta and len(clean_meta) < 120 and not clean_meta.endswith(".md"):
+            if (
+                "." in clean_meta
+                and len(clean_meta) < 120
+                and not clean_meta.endswith(".md")
+                and not any(bad in clean_meta.lower() for bad in ("deliverable", "verified", "status", "complete"))
+            ):
                 target_filename = clean_meta
 
         # If not in header, check first lines of code for // filename: or # filepath: or similar
@@ -308,7 +313,7 @@ def _extract_and_persist_files(
                 )
                 if fn_match:
                     found_fn = fn_match.group(1).strip()
-                    if not found_fn.endswith(".md"):
+                    if not found_fn.endswith(".md") and not any(bad in found_fn.lower() for bad in ("deliverable", "verified")):
                         target_filename = found_fn
                         break
 
@@ -329,7 +334,13 @@ def _extract_and_persist_files(
             target_filename = (
                 target_filename.replace("/", os.sep).replace("\\", os.sep).lstrip(os.sep)
             )
-            code_file_path = os.path.join(ws_root, target_filename)
+            norm_target = os.path.normpath(target_filename)
+            if ".." in norm_target.split(os.sep):
+                continue
+            code_file_path = os.path.abspath(os.path.join(ws_root, norm_target))
+            ws_root_abs = os.path.abspath(ws_root)
+            if not code_file_path.startswith(ws_root_abs):
+                continue
             try:
                 os.makedirs(os.path.dirname(code_file_path), exist_ok=True)
                 with open(code_file_path, "w", encoding="utf-8") as f:

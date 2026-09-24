@@ -122,6 +122,18 @@ class _GenericCliConnector(BrainConnector):
         self.is_agent = is_agent
 
     async def detect(self) -> RuntimeInfo:
+        # Gemini CLI is retired and permanently inactive (spec §2)
+        if self.tool_type in ("gemini-cli", "gemini") or self._exe_name == "gemini":
+            return RuntimeInfo(
+                tool_type=self.tool_type,
+                display_name=self.display_name,
+                vendor=self.vendor,
+                executable="",
+                version="",
+                installed=False,
+                status=BrainStatus.REMOVED,
+                capabilities=(),
+            )
         try:
             exe_path = str(
                 await asyncio.wait_for(
@@ -220,6 +232,13 @@ class _GenericCliConnector(BrainConnector):
             if cap in ("code_generation", "testing", "vcs", "chat", "terminal_access"):
                 tags.append(cap)
 
+        is_agent = getattr(self, "is_agent", True)
+        if (
+            self._exe_name in ("python", "python3", "node", "npx", "bun", "git", "gemini")
+            or self.tool_type in ("gemini-cli", "python", "node", "bun", "git")
+        ):
+            is_agent = False
+
         return BrainRecord(
             id=uuid4().hex[:12],
             display_name=info.display_name,
@@ -232,7 +251,7 @@ class _GenericCliConnector(BrainConnector):
             capabilities=info.capabilities,
             workspace=info.executable,
             tags=tuple(tags),
-            is_agent=getattr(self, "is_agent", True),
+            is_agent=is_agent,
             discovered_at=datetime.now(UTC).isoformat(),
             last_seen=datetime.now(UTC).isoformat(),
         )

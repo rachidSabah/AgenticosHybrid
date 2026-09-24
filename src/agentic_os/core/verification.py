@@ -81,6 +81,11 @@ class ArtifactVerificationResult:
     status: str  # "VERIFIED" | "FAILED_VERIFICATION" | "NO_ARTIFACTS_REQUIRED"
     reason: str
     artifacts: list[dict[str, Any]] = field(default_factory=list)
+    created_files: list[str] = field(default_factory=list)
+    modified_files: list[str] = field(default_factory=list)
+    deleted_files: list[str] = field(default_factory=list)
+    tests_run: list[str] = field(default_factory=list)
+    test_results: dict[str, Any] = field(default_factory=dict)
 
 
 class ArtifactVerifier:
@@ -110,6 +115,104 @@ class ArtifactVerifier:
         return snapshot
 
     @classmethod
+    def execute_build_or_test(
+        cls,
+        directory: str,
+        command: list[str] | str,
+        task: Task | None = None,
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        """Execute a build or test command in the workspace and record telemetry."""
+        import subprocess
+        import time
+
+        if isinstance(command, str):
+            cmd_list = command.split()
+        else:
+            cmd_list = list(command)
+
+        cmd_str = " ".join(cmd_list)
+        start_t = time.perf_counter()
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            proc = subprocess.run(
+                cmd_list,
+                cwd=directory,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                creationflags=creationflags,
+            )
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            test_info = {
+                "command": cmd_str,
+                "cwd": directory,
+                "exit_code": proc.returncode,
+                "duration_ms": round(duration_ms, 2),
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+                "passed": proc.returncode == 0,
+            }
+        except subprocess.TimeoutExpired as te:
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            test_info = {
+                "command": cmd_str,
+                "cwd": directory,
+                "exit_code": 124,
+                "duration_ms": round(duration_ms, 2),
+                "stdout": (te.stdout or "").decode("utf-8", errors="replace") if isinstance(te.stdout, bytes) else (te.stdout or ""),
+                "stderr": (te.stderr or "").decode("utf-8", errors="replace") if isinstance(te.stderr, bytes) else (te.stderr or ""),
+                "passed": False,
+            }
+        except Exception as exc:
+            duration_ms = (time.perf_counter() - start_t) * 1000.0
+            test_info = {
+                "command": cmd_str,
+                "cwd": directory,
+                "exit_code": 1,
+                "duration_ms": round(duration_ms, 2),
+                "stdout": "",
+                "stderr": str(exc),
+                "passed": False,
+            }
+
+        if task is not None:
+            task.tests_run.append(cmd_str)
+            task.test_results[cmd_str] = test_info
+            if not test_info["passed"]:
+                task.verification_status = "FAILED_VERIFICATION"
+                task.failure_reason = f"Build/test command '{cmd_str}' failed with exit code {test_info['exit_code']}"
+            else:
+                task.verification_status = "VERIFIED"
+
+        return test_info
+
+    @classmethod
+    def verify_build(
+        cls,
+        directory: str,
+        command: list[str] | str,
+        task: Task | None = None,
+        timeout: float = 30.0,
+    ) -> ArtifactVerificationResult:
+        test_info = cls.execute_build_or_test(directory, command, task=task, timeout=timeout)
+        if not test_info["passed"]:
+            return ArtifactVerificationResult(
+                is_verified=False,
+                status="FAILED_VERIFICATION",
+                reason=f"Build/test command '{test_info['command']}' failed with exit code {test_info['exit_code']}",
+                tests_run=[test_info["command"]],
+                test_results={test_info["command"]: test_info},
+            )
+        return ArtifactVerificationResult(
+            is_verified=True,
+            status="VERIFIED",
+            reason=f"Build/test command '{test_info['command']}' completed successfully (exit code 0).",
+            tests_run=[test_info["command"]],
+            test_results={test_info["command"]: test_info},
+        )
+
+    @classmethod
     def verify(
         cls,
         directory: str,
@@ -119,34 +222,79 @@ class ArtifactVerifier:
     ) -> ArtifactVerificationResult:
         """Independently inspect directory and verify created artifacts."""
         if not directory or not os.path.isdir(directory):
-            return ArtifactVerificationResult(
+            res = ArtifactVerificationResult(
                 is_verified=False,
                 status="FAILED_VERIFICATION",
                 reason=f"Workspace directory '{directory}' does not exist or is not a directory.",
             )
+            task.verification_status = res.status
+            task.verification_reason = res.reason
+            return res
 
         dir_path = Path(directory)
         current_snapshot = cls.snapshot_workspace(directory)
 
-        # Detect files that are new or whose mtime has changed and have size > 0
+        # Detect files that are new, modified, or deleted
         created_or_modified: list[dict[str, Any]] = []
+        created_files: list[str] = []
+        modified_files: list[str] = []
+        deleted_files: list[str] = [
+            rel for rel in initial_snapshot if rel not in current_snapshot
+        ]
+
         for rel_path, mtime in current_snapshot.items():
             prev_mtime = initial_snapshot.get(rel_path)
             full_path = dir_path / rel_path
             try:
-                if (prev_mtime is None or mtime > prev_mtime) and full_path.is_file():
+                if full_path.is_file():
                     size = full_path.stat().st_size
-                    if size > 0:
+                    if prev_mtime is None and size > 0:
+                        created_files.append(rel_path)
                         created_or_modified.append(
                             {
                                 "path": rel_path,
                                 "type": "file",
                                 "exists": True,
                                 "size": size,
+                                "change": "created",
+                            }
+                        )
+                    elif prev_mtime is not None and mtime > prev_mtime:
+                        modified_files.append(rel_path)
+                        created_or_modified.append(
+                            {
+                                "path": rel_path,
+                                "type": "file",
+                                "exists": True,
+                                "size": size,
+                                "change": "modified",
                             }
                         )
             except OSError:
                 continue
+
+        # Sync detected changes to task model
+        task.created_files = list(created_files)
+        task.modified_files = list(modified_files)
+        task.deleted_files = list(deleted_files)
+        task.changed_files = list(created_files + modified_files + deleted_files)
+
+        text_to_check = (
+            f"{task.title or ''} {task.description or ''} {task.user_prompt or ''}".lower()
+        )
+        is_deletion_task = any(kw in text_to_check for kw in ("delete", "remove", "clean", "drop", "unlink"))
+        if is_deletion_task and deleted_files:
+            task.verification_status = "VERIFIED"
+            task.verification_reason = f"Successfully verified deletion of {len(deleted_files)} file(s)."
+            return ArtifactVerificationResult(
+                is_verified=True,
+                status="VERIFIED",
+                reason=task.verification_reason,
+                artifacts=[{"path": p, "type": "file", "exists": False, "change": "deleted"} for p in deleted_files],
+                created_files=created_files,
+                modified_files=modified_files,
+                deleted_files=deleted_files,
+            )
 
         # Check if the task expected file deliverables
         requires_deliverables = cls._task_requires_deliverables(task)
@@ -172,28 +320,41 @@ class ArtifactVerifier:
                         task_id=task.id,
                         title=task.title,
                     )
-                    return ArtifactVerificationResult(
+                    res = ArtifactVerificationResult(
                         is_verified=False,
                         status="FAILED_VERIFICATION",
                         reason=(
                             "Agent claimed 'Verified Complete' or completion, but no files "
                             "were created or modified on disk in the workspace."
                         ),
+                        created_files=created_files,
+                        modified_files=modified_files,
+                        deleted_files=deleted_files,
                     )
+                    task.verification_status = res.status
+                    task.verification_reason = res.reason
+                    return res
+
                 # Pure markdown plan generated when files were expected
                 log.warning(
                     "verification.empty_artifacts_rejected",
                     task_id=task.id,
                     title=task.title,
                 )
-                return ArtifactVerificationResult(
+                res = ArtifactVerificationResult(
                     is_verified=False,
                     status="FAILED_VERIFICATION",
                     reason=(
                         "Task required workspace deliverables, but only a Markdown summary or "
                         "plan was generated without actual files created on disk."
                     ),
+                    created_files=created_files,
+                    modified_files=modified_files,
+                    deleted_files=deleted_files,
                 )
+                task.verification_status = res.status
+                task.verification_reason = res.reason
+                return res
 
             # Files exist: verify each artifact independently
             valid_artifacts = []
@@ -203,27 +364,40 @@ class ArtifactVerifier:
                     valid_artifacts.append(art)
 
             if not valid_artifacts:
-                return ArtifactVerificationResult(
+                res = ArtifactVerificationResult(
                     is_verified=False,
                     status="FAILED_VERIFICATION",
                     reason="Created workspace files are empty (0 bytes).",
+                    created_files=created_files,
+                    modified_files=modified_files,
+                    deleted_files=deleted_files,
                 )
+                task.verification_status = res.status
+                task.verification_reason = res.reason
+                return res
 
             log.info(
                 "verification.artifacts_verified",
                 task_id=task.id,
                 count=len(valid_artifacts),
             )
-            return ArtifactVerificationResult(
+            res = ArtifactVerificationResult(
                 is_verified=True,
                 status="VERIFIED",
                 reason=f"Successfully verified {len(valid_artifacts)} deliverable artifact(s).",
                 artifacts=valid_artifacts,
+                created_files=created_files,
+                modified_files=modified_files,
+                deleted_files=deleted_files,
             )
+            task.verification_status = res.status
+            task.verification_reason = res.reason
+            task.artifacts = valid_artifacts
+            return res
 
         # For non-deliverable tasks (pure research/advisory):
         # If files happened to be created, record them, otherwise mark as no artifacts required.
-        return ArtifactVerificationResult(
+        res = ArtifactVerificationResult(
             is_verified=True,
             status="VERIFIED" if created_or_modified else "NO_ARTIFACTS_REQUIRED",
             reason=(
@@ -232,7 +406,14 @@ class ArtifactVerifier:
                 else "Task is advisory/research; no workspace file deliverables required."
             ),
             artifacts=created_or_modified,
+            created_files=created_files,
+            modified_files=modified_files,
+            deleted_files=deleted_files,
         )
+        task.verification_status = res.status
+        task.verification_reason = res.reason
+        task.artifacts = created_or_modified
+        return res
 
     @classmethod
     def _task_requires_deliverables(cls, task: Task) -> bool:

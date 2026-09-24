@@ -37,18 +37,6 @@ class WingetDiscovery(DiscoveryProvider):
                 "caps": [EngineCapability.CODING, EngineCapability.REASONING],
             },
             {
-                "name": "ollama",
-                "pid": "Ollama.Ollama",
-                "engine": EngineType.CUSTOM,
-                "caps": [EngineCapability.REASONING, EngineCapability.OFFLINE],
-            },
-            {
-                "name": "git",
-                "pid": "Git.Git",
-                "engine": EngineType.CUSTOM,
-                "caps": [EngineCapability.GIT],
-            },
-            {
                 "name": "openinterpreter",
                 "pid": "OpenInterpreter.OpenInterpreter",
                 "engine": EngineType.OPEN_INTERPRETER,

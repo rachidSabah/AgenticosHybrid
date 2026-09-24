@@ -47,12 +47,6 @@ class ScoopDiscovery(DiscoveryProvider):
                     EngineCapability.TERMINAL,
                 ],
             },
-            {
-                "name": "git",
-                "app": "git",
-                "engine": EngineType.CUSTOM,
-                "caps": [EngineCapability.GIT],
-            },
         )
     )
 

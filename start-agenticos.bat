@@ -24,23 +24,46 @@ if not exist "node_modules\@whiskeysockets\baileys" (
     call npm.cmd install --no-audit --no-fund
 )
 
+rem ── Detect Python / Backend Command ────────────────────────────────────
+set "BACKEND_CMD="
+if exist "%~dp0.venv\Scripts\python.exe" (
+    echo [AgenticOS] Using local virtual environment Python: %~dp0.venv\Scripts\python.exe
+    set "BACKEND_CMD=""%~dp0.venv\Scripts\python.exe"" -m agentic_os serve --host 127.0.0.1 --port 8000"
+) else (
+    where uv.exe >nul 2>&1
+    if !errorlevel! == 0 (
+        echo [AgenticOS] Using uv runner: uv.exe
+        set "BACKEND_CMD=uv run python -m agentic_os serve --host 127.0.0.1 --port 8000"
+    ) else if exist "%LOCALAPPDATA%\hermes\bin\uv.exe" (
+        echo [AgenticOS] Using uv runner: %LOCALAPPDATA%\hermes\bin\uv.exe
+        set "BACKEND_CMD=""%LOCALAPPDATA%\hermes\bin\uv.exe"" run python -m agentic_os serve --host 127.0.0.1 --port 8000"
+    ) else (
+        echo [AgenticOS] Using system python
+        set "BACKEND_CMD=python -m agentic_os serve --host 127.0.0.1 --port 8000"
+    )
+)
+
 rem ── Start Backend ─────────────────────────────────────────────────────────
 echo [AgenticOS] Starting Backend on http://127.0.0.1:8000 ...
-start "AgenticOS Backend" /min cmd /c "uv run python -m agentic_os serve --host 127.0.0.1 --port 8000 > logs\backend.log 2>&1"
+start "AgenticOS Backend" /min cmd /c "%BACKEND_CMD% > ""%~dp0logs\backend.log"" 2>&1"
 
-rem ── Wait for backend to be ready (up to 60 seconds) ──────────────────────
+rem ── Wait for backend to be ready (up to 45 seconds) ──────────────────────
 echo [AgenticOS] Waiting for backend to be ready...
 set /a WAITED=0
 :wait_backend
 timeout /t 2 /nobreak >nul
-curl.exe -s -o nul -w "%%{http_code}" http://127.0.0.1:8000/healthz 2>nul | findstr /C:"200" >nul
+curl.exe -s -f http://127.0.0.1:8000/healthz >nul 2>&1
 if !errorlevel! == 0 goto backend_ready
 set /a WAITED+=2
-if !WAITED! GEQ 60 (
-    echo [AgenticOS] WARNING: Backend did not respond after 60s. Check logs\backend.log
+if !WAITED! GEQ 45 (
+    echo [AgenticOS] WARNING: Backend did not respond after 45s. Check logs\backend.log
+    if exist "%~dp0logs\backend.log" (
+        echo [AgenticOS] Recent backend log lines:
+        powershell -NoProfile -Command "Get-Content '%~dp0logs\backend.log' -Tail 6 -ErrorAction SilentlyContinue"
+    )
     goto start_frontend
 )
-echo [AgenticOS]   ... backend starting (%WAITED%s elapsed)
+echo [AgenticOS]   ... backend starting (!WAITED!s elapsed)
 goto wait_backend
 
 :backend_ready
@@ -56,19 +79,19 @@ if exist "%~dp0apps\mission-control\out\index.html" (
     start "AgenticOS Mission Control" /min cmd /c "cd /d ""%~dp0apps\mission-control"" && npm.cmd run dev -- -H 127.0.0.1 -p 3000 > ""%~dp0logs\frontend.log"" 2>&1"
 )
 
-rem ── Wait for frontend to be ready (up to 90 seconds) ────────────────────
+rem ── Wait for frontend to be ready (up to 60 seconds) ────────────────────
 echo [AgenticOS] Waiting for Mission Control UI to be ready...
 set /a WAITED=0
 :wait_frontend
 timeout /t 2 /nobreak >nul
-curl.exe -s -o nul -w "%%{http_code}" http://127.0.0.1:3000/ 2>nul | findstr /C:"200" >nul
+curl.exe -s -f http://127.0.0.1:3000/ >nul 2>&1
 if !errorlevel! == 0 goto frontend_ready
 set /a WAITED+=2
-if !WAITED! GEQ 90 (
-    echo [AgenticOS] WARNING: Frontend did not respond after 90s. Check logs\frontend.log
+if !WAITED! GEQ 60 (
+    echo [AgenticOS] WARNING: Frontend did not respond after 60s. Check logs\frontend.log
     goto open_browser
 )
-echo [AgenticOS]   ... initializing UI (%WAITED%s elapsed)
+echo [AgenticOS]   ... initializing UI (!WAITED!s elapsed)
 goto wait_frontend
 
 :frontend_ready

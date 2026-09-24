@@ -380,6 +380,26 @@ export function ExecutionGraph() {
     let failedCount = 0;
     let totalProgressSum = 0;
 
+    // If there are no real tasks or executions, graph is genuinely empty (spec §12, §19)
+    if (taskList.length === 0 && executionList.length === 0) {
+      return {
+        nodes: [],
+        edges: [],
+        hasActivity: false,
+        overallMetrics: {
+          totalTasks: 0,
+          completedTasks: 0,
+          runningTasks: 0,
+          failedTasks: 0,
+          progressPct: 0,
+          efficiencyScore: 100,
+        },
+      };
+    }
+
+    // Keep track of which agents are actually participating in real tasks
+    const activeParticipatingAgentIds = new Set<string>();
+
     taskList.forEach((task, i) => {
       const isDone = task.status === "completed";
       const isRun = task.status === "running" || task.status === "in_progress";
@@ -424,6 +444,7 @@ export function ExecutionGraph() {
       // Real agent assignment edges
       const assigned = (task as any).assigned_agent_id;
       if (assigned && agentList.some((a) => a.id === assigned)) {
+        activeParticipatingAgentIds.add(assigned);
         executionEdges.push({
           id: `edge-assign-${assigned}-${task.id}`,
           source: `agent-${assigned}`,
@@ -434,13 +455,12 @@ export function ExecutionGraph() {
       }
     });
 
-    // Real agent calculation
-    agentList.forEach((agent, i) => {
-      const isAgentRunning = agent.status === "running";
-      if (isAgentRunning && taskList.length === 0) {
-        runningCount++;
-      }
+    // Only render agents that are actively assigned to a task or running
+    const participatingAgents = agentList.filter(
+      (a) => activeParticipatingAgentIds.has(a.id) || a.status === "running" || (a.current_task && taskList.some((t) => t.id === a.current_task))
+    );
 
+    participatingAgents.forEach((agent, i) => {
       executionNodes.push({
         id: `agent-${agent.id}`,
         type: "agent",
@@ -468,41 +488,6 @@ export function ExecutionGraph() {
       }
     });
 
-    // System nodes based on live telemetry
-    const anyRunning =
-      runningCount > 0 ||
-      taskList.some(
-        (t) => t.status === "running" || t.status === "in_progress" || t.status === "assigned" || t.status === "dispatched"
-      ) ||
-      agentList.some((a) => a.status === "running") ||
-      executionList.some((e) => e.status === "running");
-
-    executionNodes.push({
-      id: `system-health`,
-      type: "system",
-      position: { x: 320, y: 20 },
-      data: {
-        label: "System Health",
-        status: telemetry.errors > 0 ? "failed" : anyRunning ? "running" : "idle",
-        type: "system",
-        tags: ["health"],
-      },
-    });
-
-    if (telemetry.errors > 0) {
-      executionNodes.push({
-        id: `system-error`,
-        type: "system",
-        position: { x: 320, y: 500 },
-        data: {
-          label: `System Error (${telemetry.errors})`,
-          status: "failed",
-          type: "system",
-          tags: ["error"],
-        },
-      });
-    }
-
     // ── Truthful Real Progress Calculation ──
     let overallProgressPct = 0;
     let totalWorkUnits = taskList.length;
@@ -518,7 +503,14 @@ export function ExecutionGraph() {
       completedCount = execCompleted;
       overallProgressPct = Math.round(((execCompleted * 100) + (execRunning * 50)) / totalWorkUnits);
     } else if (activeMission) {
-      overallProgressPct = activeMission.status === "completed" ? 100 : activeMission.status === "failed" ? 0 : anyRunning ? 5 : 0;
+      overallProgressPct =
+        activeMission.status === "completed"
+          ? 100
+          : activeMission.status === "failed"
+          ? 0
+          : activeMission.status === "in_progress" || activeMission.status === "running"
+          ? 5
+          : 0;
     } else if (agentList.length > 0) {
       const activeAgents = agentList.filter((a) => a.status === "running").length;
       const completedAgents = agentList.filter((a) => a.status === "completed").length;
@@ -602,7 +594,7 @@ export function ExecutionGraph() {
       <div className="relative rounded-2xl border border-white/10 bg-[#121524]/80 p-4 sm:p-5 backdrop-blur-md shadow-2xl flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {/* Aircraft Gauge indicator */}
-          <AircraftGauge percentage={overallMetrics.overallProgressPct} size={80} strokeWidth={6} color="#10b981" />
+          <AircraftGauge percentage={overallMetrics.overallProgressPct ?? 0} size={80} strokeWidth={6} color="#10b981" />
           <div>
             <h1 className="text-lg font-bold text-white/95 tracking-wide flex items-center gap-2">
               <Gauge className="text-emerald-400" size={18} /> Execution Graph HUD

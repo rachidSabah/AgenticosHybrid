@@ -88,17 +88,6 @@ class PathDiscovery(DiscoveryProvider):
                 ],
             },
             {
-                "name": "gemini",
-                "binary": "gemini",
-                "type": EngineType.GEMINI_CLI,
-                "vendor": "Google",
-                "capabilities": [
-                    EngineCapability.CODING,
-                    EngineCapability.REASONING,
-                    EngineCapability.RESEARCH,
-                ],
-            },
-            {
                 "name": "aider",
                 "binary": "aider",
                 "type": EngineType.AIDER,
@@ -194,45 +183,6 @@ class PathDiscovery(DiscoveryProvider):
                 "type": EngineType.DOCKER,
                 "vendor": "Docker Inc.",
                 "capabilities": [EngineCapability.DOCKER],
-            },
-            {
-                "name": "wsl",
-                "binary": "wsl.exe",
-                "type": EngineType.WSL,
-                "vendor": "Microsoft",
-                "capabilities": [EngineCapability.TERMINAL],
-                "platform": "Windows",
-            },
-            # ── Language Runtimes ──
-            {
-                "name": "node",
-                "binary": "node",
-                "type": EngineType.CUSTOM,
-                "vendor": "OpenJS Foundation",
-                "capabilities": [EngineCapability.CODING],
-            },
-            {
-                "name": "python",
-                "binary": "python3",
-                "type": EngineType.CUSTOM,
-                "vendor": "Python Foundation",
-                "capabilities": [EngineCapability.CODING, EngineCapability.FILESYSTEM],
-            },
-            {
-                "name": "python",
-                "binary": "python",
-                "type": EngineType.CUSTOM,
-                "vendor": "Python Foundation",
-                "capabilities": [EngineCapability.CODING, EngineCapability.FILESYSTEM],
-            },
-            # ── Editors ──
-            {
-                "name": "code",
-                "binary": "code",
-                "type": EngineType.CUSTOM,
-                "vendor": "Microsoft",
-                "capabilities": [EngineCapability.CODING, EngineCapability.FILESYSTEM],
-                "version_flag": "--version",
             },
         )
     )

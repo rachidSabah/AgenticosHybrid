@@ -26,7 +26,6 @@ _WIN_EXTS = (".exe", ".cmd", ".bat", ".ps1", ".com")
 _AGENT_HINTS = (
     "claude",
     "codex",
-    "gemini",
     "agy",
     "antigravity",
     "opencode",
@@ -96,7 +95,7 @@ _NOISE_SUBSTRINGS = (
     "converter",  # ct2-*-converter: model file converters, not agents
     "chrome-native-host",
     "theme",
-    "gemini-delay",  # local utility wrapper, not the gemini CLI agent
+    "gemini",  # retired provider — must not be scanned or resurrected (§2)
 )
 
 # Known non-agent tooling we deliberately surface as Runtimes (§4).

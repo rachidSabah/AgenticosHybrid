@@ -48,12 +48,6 @@ class ShellProfileDiscovery(DiscoveryProvider):
                 "caps": [EngineCapability.CODING, EngineCapability.REASONING],
             },
             {
-                "name": "gemini",
-                "pattern": r"gemini",
-                "engine": EngineType.GEMINI_CLI,
-                "caps": [EngineCapability.CODING, EngineCapability.REASONING],
-            },
-            {
                 "name": "aider",
                 "pattern": r"aider",
                 "engine": EngineType.AIDER,

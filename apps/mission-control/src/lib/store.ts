@@ -496,6 +496,17 @@ export const useStore = create<StoreState>((set, get) => ({
         case "provider.registered":
         case "provider.failover": {
           const name = String(p.name ?? p.provider ?? "provider");
+          const nameLower = name.toLowerCase();
+          if (
+            nameLower.includes("gemini") ||
+            nameLower === "python" ||
+            nameLower === "node" ||
+            nameLower === "git" ||
+            nameLower === "bun" ||
+            nameLower === "uv"
+          ) {
+            break;
+          }
           providers = { ...s.providers };
           providers[name] = {
             provider: name,
@@ -512,6 +523,23 @@ export const useStore = create<StoreState>((set, get) => ({
         case "brain.updated":
         case "brain.health_changed": {
           const name = String(p.display_name ?? p.name ?? p.id ?? "brain");
+          const nameLower = name.toLowerCase();
+          // Filter out developer runtimes, VCS tools, and retired providers (spec §2, §4)
+          const isNonAgent =
+            p.is_agent === false ||
+            p.kind === "developer-runtime" ||
+            p.kind === "vcs" ||
+            p.kind === "package-manager" ||
+            p.kind === "system-utility" ||
+            nameLower === "python" ||
+            nameLower === "node" ||
+            nameLower === "git" ||
+            nameLower === "bun" ||
+            nameLower === "uv" ||
+            nameLower.includes("gemini");
+          if (isNonAgent) {
+            break;
+          }
           providers = { ...s.providers };
           const healthNum = Number(p.health ?? 100);
           const statusStr = healthNum >= 80 ? "healthy" : healthNum >= 50 ? "degraded" : "unknown";

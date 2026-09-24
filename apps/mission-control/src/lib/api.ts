@@ -669,6 +669,7 @@ export const api = {
   startMission: (id: string) => post<MissionType>(`/api/missions/${id}/start`),
   pauseMission: (id: string) => post<MissionType>(`/api/missions/${id}/pause`),
   cancelMission: (id: string) => post<MissionType>(`/api/missions/${id}/cancel`),
+  listTasks: () => get<any[]>("/api/tasks"),
 
   // ── Exports for mission types ──
   createBackup: (body?: import("./desktop-types").BackupConfig) =>

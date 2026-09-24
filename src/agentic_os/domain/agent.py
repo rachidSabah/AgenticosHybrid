@@ -113,6 +113,31 @@ class Task(BaseModel):
     exit_code: int | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    workspace: str = ""
+    requested_deliverables: list[str] = Field(default_factory=list)
+    selected_agent: str | None = None
+    agent_capabilities: list[str] = Field(default_factory=list)
+    process_start_time: datetime | None = None
+    process_end_time: datetime | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    changed_files: list[str] = Field(default_factory=list)
+    created_files: list[str] = Field(default_factory=list)
+    modified_files: list[str] = Field(default_factory=list)
+    deleted_files: list[str] = Field(default_factory=list)
+    tests_run: list[str] = Field(default_factory=list)
+    test_results: dict[str, Any] = Field(default_factory=dict)
+    verification_status: str | None = None
+    verification_reason: str | None = None
+    failure_reason: str | None = None
+
+    @property
+    def task_id(self) -> str:
+        return self.id
+
+    @property
+    def prompt(self) -> str:
+        return self.user_prompt or self.description
 
     def touch(self) -> None:
         self.updated_at = _utcnow()
