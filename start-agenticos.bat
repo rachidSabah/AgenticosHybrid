@@ -54,7 +54,7 @@ echo "%PYTHON_EXE%" -m agentic_os serve --host 127.0.0.1 --port 8000 ^> "%ROOT%\
 echo @echo off
 echo cd /d "%ROOT%\apps\mission-control"
 if exist "%ROOT%\apps\mission-control\out\index.html" (
-    echo npx.cmd serve -s out -l 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
+    echo node node_modules\serve\build\main.js -s out -l 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
 ) else (
     echo npm.cmd run dev -- -H 127.0.0.1 -p 3000 ^> "%ROOT%\logs\frontend.log" 2^>^&1
 )
