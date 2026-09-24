@@ -9770,6 +9770,179 @@ def create_app(platform: Platform) -> FastAPI:
     async def fleet_runs(agent_id: str | None = None, limit: int = 100) -> dict:
         return {"runs": _fleet().runs(agent_id=agent_id, limit=limit)}
 
+    # ── Agent cgroups (per-agent resource quotas enforced on the bus) ─────
+    from agentic_os.core.cgroups.agent_cgroups import (
+        AgentQuota,
+        CgroupError,
+        get_agent_cgroup_manager,
+    )
+
+    async def _cgroups():
+        return await get_agent_cgroup_manager(bus=platform.bus)
+
+    @app.get("/api/cgroups")
+    async def cgroups_list() -> dict:
+        mgr = await _cgroups()
+        return {"groups": mgr.status_all()}
+
+    @app.post("/api/cgroups/quota")
+    async def cgroups_set_quota(body: dict) -> dict:
+        agent_id = str(body.get("agent_id", ""))
+        if not agent_id:
+            raise HTTPException(400, detail="agent_id is required")
+
+        def _opt_int(key: str) -> int | None:
+            v = body.get(key)
+            return int(v) if v is not None else None
+
+        def _opt_float(key: str) -> float | None:
+            v = body.get(key)
+            return float(v) if v is not None else None
+
+        try:
+            quota = AgentQuota(
+                token_budget=_opt_int("token_budget"),
+                wall_clock_s=_opt_float("wall_clock_s"),
+                tool_call_cap=_opt_int("tool_call_cap"),
+                max_concurrent_llm=_opt_int("max_concurrent_llm"),
+            )
+            return await (await _cgroups()).set_quota(agent_id, quota)
+        except CgroupError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/cgroups/clear")
+    async def cgroups_clear_quota(body: dict) -> dict:
+        agent_id = str(body.get("agent_id", ""))
+        try:
+            return await (await _cgroups()).clear_quota(agent_id)
+        except CgroupError as exc:
+            raise HTTPException(404, detail=str(exc)) from exc
+
+    @app.post("/api/cgroups/freeze")
+    async def cgroups_freeze(body: dict) -> dict:
+        try:
+            return await (await _cgroups()).freeze(str(body.get("agent_id", "")))
+        except CgroupError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/cgroups/resume")
+    async def cgroups_resume(body: dict) -> dict:
+        try:
+            return await (await _cgroups()).resume(str(body.get("agent_id", "")))
+        except CgroupError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/cgroups/kill")
+    async def cgroups_kill(body: dict) -> dict:
+        try:
+            return await (await _cgroups()).kill(
+                str(body.get("agent_id", "")), reason=str(body.get("reason", ""))
+            )
+        except CgroupError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/cgroups/consume")
+    async def cgroups_consume(body: dict) -> dict:
+        """Explicit accounting channel for integrations that push usage directly."""
+        agent_id = str(body.get("agent_id", ""))
+        try:
+            mgr = await _cgroups()
+            tokens = int(body.get("tokens") or 0)
+            if tokens:
+                mgr.record_tokens(agent_id, tokens)
+            for _ in range(max(0, int(body.get("tool_calls") or 0))):
+                mgr.record_tool_call(agent_id)
+            return mgr.status(agent_id)
+        except CgroupError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.get("/api/cgroups/ledger")
+    async def cgroups_ledger(agent_id: str = "", limit: int = 100) -> dict:
+        mgr = await _cgroups()
+        return {"agent_id": agent_id, "ledger": mgr.ledger(agent_id, limit=limit)}
+
+    # ── Agent package manager (signed .agent packages) ────────────────────
+    from agentic_os.core.packages.agent_packages import (
+        PackageError,
+        get_package_manager,
+    )
+
+    def _packages():
+        return get_package_manager()
+
+    @app.get("/api/packages")
+    async def packages_list() -> dict:
+        pm = _packages()
+        return {
+            "installed": pm.list_installed(),
+            "journal": pm.journal(limit=50),
+            "key_id": pm.key_id(),
+            "signing_note": (
+                "packages are signed with the LOCAL signing key (HMAC-SHA256): "
+                "integrity + authenticity for locally managed packages, not a public PKI"
+            ),
+        }
+
+    @app.post("/api/packages/pack")
+    async def packages_pack(body: dict) -> dict:
+        source_dir = str(body.get("source_dir", ""))
+        name = str(body.get("name", ""))
+        version = str(body.get("version", ""))
+        if not source_dir or not name or not version:
+            raise HTTPException(400, detail="source_dir, name and version are required")
+        try:
+            return _packages().pack(
+                source_dir,
+                name,
+                version,
+                entrypoint=str(body.get("entrypoint", "")),
+                description=str(body.get("description", "")),
+                capabilities=[str(c) for c in body.get("capabilities", [])],
+                out_path=str(body.get("out_path", "") or ""),
+            )
+        except PackageError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/packages/verify")
+    async def packages_verify(body: dict) -> dict:
+        path = str(body.get("path", ""))
+        if not path:
+            raise HTTPException(400, detail="path is required")
+        try:
+            return _packages().verify(path)
+        except PackageError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/packages/install")
+    async def packages_install(body: dict) -> dict:
+        path = str(body.get("path", ""))
+        if not path:
+            raise HTTPException(400, detail="path is required")
+        try:
+            return _packages().install(path)
+        except PackageError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/packages/upgrade")
+    async def packages_upgrade(body: dict) -> dict:
+        path = str(body.get("path", ""))
+        if not path:
+            raise HTTPException(400, detail="path is required")
+        try:
+            return _packages().upgrade(path)
+        except PackageError as exc:
+            raise HTTPException(400, detail=str(exc)) from exc
+
+    @app.post("/api/packages/rollback")
+    async def packages_rollback(body: dict) -> dict:
+        name = str(body.get("name", ""))
+        if not name:
+            raise HTTPException(400, detail="name is required")
+        try:
+            return _packages().rollback(name)
+        except PackageError as exc:
+            raise HTTPException(404, detail=str(exc)) from exc
+
     @app.post("/api/swarm/team/compose")
     async def swarm_compose_team(body: dict) -> dict:
         task_desc = str(body.get("task_description", "General execution"))

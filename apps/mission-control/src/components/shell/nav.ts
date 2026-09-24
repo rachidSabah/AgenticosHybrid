@@ -92,6 +92,7 @@ export const NAV: NavItem[] = [
   { id: "proxy-bindings", label: "Proxy Bindings", hint: "X", icon: Cable, group: "core" },
   { id: "counterfactual", label: "Counterfactual Lab", hint: "F", icon: GitBranch, group: "core" },
   { id: "fleet", label: "Agent Fleet", hint: "A", icon: Bot, group: "core" },
+  { id: "agent-control", label: "Agent Cgroups & Packages", hint: "G", icon: Boxes, group: "core" },
 ];
 
 export const NAV_GROUPS: { id: NavItem["group"]; label: string }[] = [

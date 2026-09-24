@@ -298,6 +298,68 @@ export interface FleetRunRecord {
   error: string;
 }
 
+// ── Agent cgroups + package manager types ──────────────────────────
+
+export interface CgroupQuota {
+  token_budget: number | null;
+  wall_clock_s: number | null;
+  tool_call_cap: number | null;
+  max_concurrent_llm: number | null;
+}
+
+export interface CgroupGroup {
+  agent_id: string;
+  state: string;
+  quota: CgroupQuota;
+  tokens_used: number;
+  tool_calls: number;
+  llm_slots_active: number;
+  wall_clock_s: number;
+  frozen_total_s: number;
+  killed_reason: string;
+  exceeded_dimension: string;
+}
+
+export interface PackageInfo {
+  name: string;
+  versions: string[];
+  current: string;
+  entrypoint: string;
+  capabilities: string[];
+  files: number;
+}
+
+export interface PackageJournalEntry {
+  id: string;
+  ts: number;
+  action: string;
+  name?: string;
+  version?: string;
+  files?: number;
+  [key: string]: unknown;
+}
+
+export interface PackResult {
+  package: string;
+  version: string;
+  path: string;
+  files: number;
+  bytes: number;
+  signature: string;
+  algorithm: string;
+  key_id: string;
+}
+
+export interface VerifyResult {
+  path: string;
+  name: string;
+  version: string;
+  signature_ok: boolean;
+  files_checked: number;
+  ok: boolean;
+  problems: string[];
+}
+
 export const api = {
   /** Generic request wrappers */
   get: <T>(path: string) => get<T>(path),
@@ -355,6 +417,70 @@ export const api = {
     requestExact<{ runs: FleetRunRecord[] }>(
       `/api/fleet/runs?limit=${limit}${agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ""}`
     ),
+
+  /** Agent cgroups — per-agent resource quotas enforced on the bus */
+  cgroups: () => requestExact<{ groups: CgroupGroup[] }>("/api/cgroups"),
+  cgroupsSetQuota: (body: {
+    agent_id: string;
+    token_budget: number | null;
+    wall_clock_s: number | null;
+    tool_call_cap: number | null;
+    max_concurrent_llm: number | null;
+  }) =>
+    requestExact<CgroupGroup>("/api/cgroups/quota", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  cgroupsControl: (
+    verb: "freeze" | "resume" | "kill" | "clear",
+    body: { agent_id: string; reason?: string }
+  ) =>
+    requestExact<CgroupGroup>(`/api/cgroups/${verb}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** Agent packages — signed .agent packages, install/upgrade/rollback */
+  packages: () =>
+    requestExact<{
+      installed: PackageInfo[];
+      journal: PackageJournalEntry[];
+      key_id: string;
+      signing_note: string;
+    }>("/api/packages"),
+  packPack: (body: {
+    source_dir: string;
+    name: string;
+    version: string;
+    entrypoint?: string;
+    description?: string;
+    capabilities?: string[];
+    out_path?: string;
+  }) =>
+    requestExact<PackResult>("/api/packages/pack", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  packVerify: (body: { path: string }) =>
+    requestExact<VerifyResult>("/api/packages/verify", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  packInstall: (body: { path: string }) =>
+    requestExact<Record<string, unknown>>("/api/packages/install", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  packUpgrade: (body: { path: string }) =>
+    requestExact<Record<string, unknown>>("/api/packages/upgrade", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  packRollback: (body: { name: string }) =>
+    requestExact<Record<string, unknown>>("/api/packages/rollback", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   health: () => get<{ status: string; bus: string }>("/healthz"),
   eventsRecent: (limit = 100) => get<Array<Record<string, unknown>>>(`/api/events/recent?limit=${limit}`),

@@ -136,6 +136,10 @@ const FleetOrchestra = lazyWithRetry(() =>
   import("@/views/fleet-orchestra").then((m) => ({ default: m.FleetOrchestra }))
 );
 
+const AgentControl = lazyWithRetry(() =>
+  import("@/views/agent-control").then((m) => ({ default: m.AgentControl }))
+);
+
 const GovernanceCenter = lazyWithRetry(() =>
   import("@/views/governance-center").then((m) => ({ default: m.GovernanceCenter }))
 );
@@ -254,6 +258,16 @@ const VIEWS: Record<string, () => ReactNode> = {
     <ErrorBoundary viewName="Agent Fleet" fallback={<ViewSkeleton title="Agent Fleet" />}>
       <Suspense fallback={<ViewSkeleton title="Agent Fleet" />}>
         <FleetOrchestra />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  "agent-control": () => (
+    <ErrorBoundary
+      viewName="Agent Cgroups & Packages"
+      fallback={<ViewSkeleton title="Agent Cgroups & Packages" />}
+    >
+      <Suspense fallback={<ViewSkeleton title="Agent Cgroups & Packages" />}>
+        <AgentControl />
       </Suspense>
     </ErrorBoundary>
   ),
