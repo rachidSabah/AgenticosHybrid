@@ -7,7 +7,12 @@ Every agent is a lightweight read-only wrapper around an ExecutionEngine.
 from typing import Any
 
 from agentic_os.core.runtime.manager import RuntimeManager
-from agentic_os.domain.execution import EngineCapability, ExecutionCapability, ExecutionEngine
+from agentic_os.domain.execution import (
+    EngineCapability,
+    EngineType,
+    ExecutionCapability,
+    ExecutionEngine,
+)
 from agentic_os.domain.orchestration import AgentDescriptor
 from agentic_os.infrastructure.logging import get_logger
 
@@ -81,31 +86,29 @@ class OrchestrationAgentRegistry:
         return [self._engine_to_descriptor(e) for e in engines]
 
     async def sync_from_runtime(self) -> list[AgentDescriptor]:
-        """Refresh the full agent cache from the runtime (AI agents only, spec §4)."""
+        """Refresh the full agent cache from the runtime (AI agents only, spec §4).
+
+        Classification is decided by declared metadata, never by engine name:
+
+        1. ``metadata["is_agent"]`` — explicit vouching from the authoritative
+           discovery pipeline. ``False`` excludes, ``True`` includes. This is
+           the only way an unclassified (``GENERIC``) engine can enter.
+        2. Otherwise the declared ``EngineType`` decides: infrastructure and
+           unclassified backends (``GENERIC``, ``CUSTOM``, ``WSL``) never
+           become orchestration agents; declared agent runtimes and protocol
+           backends (``MCP``, ``DOCKER``, ``OLLAMA``, agent CLIs) do.
+        """
         engines = await self._runtime.list_engines()
-        _excluded = frozenset(
-            {
-                "python",
-                "node",
-                "git",
-                "wsl",
-                "bun",
-                "uv",
-                "docker",
-                "generic",
-                "gemini",
-                "gemini_cli",
-                "gemini-local",
-                "git-winget",
-            }
-        )
-        agents = [
-            self._engine_to_descriptor(e)
-            for e in engines
-            if e.name.lower() not in _excluded
-            and not any(x in e.name.lower() for x in ("python", "node", "git", "gemini"))
-            and getattr(e, "engine_type", None) not in ("custom", "wsl", "generic")
-        ]
+        _non_agent_types = frozenset({EngineType.GENERIC, EngineType.CUSTOM, EngineType.WSL})
+        agents = []
+        for e in engines:
+            declared = e.metadata.get("is_agent") if e.metadata else None
+            if declared is not None:
+                if not declared:
+                    continue
+            elif e.engine_type in _non_agent_types:
+                continue
+            agents.append(self._engine_to_descriptor(e))
         self._cache = {a.agent_id: a for a in agents}
         log.info("Agent cache synced from runtime", count=len(agents))
         return agents

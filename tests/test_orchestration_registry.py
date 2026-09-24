@@ -53,9 +53,10 @@ class _MockRuntime:
 def _make_engine(
     engine_id: str,
     name: str = "",
-    engine_type: str = "generic",
+    engine_type: str = "claude_code",
     capabilities: list[str] | None = None,
     status: str = "idle",
+    metadata: dict | None = None,
 ) -> ExecutionEngine:
     cap_map: dict[str, EngineCapability] = {
         "code": EngineCapability.CODING,
@@ -86,6 +87,7 @@ def _make_engine(
         capabilities=exec_caps,
         status=es,
         version="1.0",
+        metadata=metadata if metadata is not None else {},
     )
 
 
@@ -100,8 +102,8 @@ class TestOrchestrationAgentRegistry:
         # (which is treated as infrastructure, not an AI agent)
         engines = [
             _make_engine("e1", "Engine-1", "claude_code", ["code", "research"], "idle"),
-            _make_engine("e2", "Engine-2", "claude_code", ["code"], "running"),
-            _make_engine("e3", "Engine-3", "claude_code", ["research"], "idle"),
+            _make_engine("e2", "Engine-2", "codex", ["code"], "running"),
+            _make_engine("e3", "Engine-3", "aider", ["research"], "idle"),
         ]
         return _MockRuntime(engines)
 
@@ -164,6 +166,43 @@ class TestOrchestrationAgentRegistry:
     async def test_sync_from_runtime(self, populated_registry) -> None:
         agents = await populated_registry.sync_from_runtime()
         assert len(agents) == 3
+
+    async def test_sync_from_runtime_excludes_unclassified_types(self) -> None:
+        """GENERIC/CUSTOM/WSL engines are not AI agents and never sync (spec §4)."""
+        engines = [
+            _make_engine("g1", "Unspecified", "generic", ["code"], "idle"),
+            _make_engine("c1", "Runtime", "custom", ["code"], "idle"),
+            _make_engine("w1", "Subsystem", "wsl", ["terminal"], "idle"),
+            _make_engine("a1", "Agent", "claude_code", ["code"], "idle"),
+        ]
+        reg = OrchestrationAgentRegistry(runtime=_MockRuntime(engines))
+        agents = await reg.sync_from_runtime()
+        assert [a.agent_id for a in agents] == ["a1"]
+
+    async def test_sync_from_runtime_metadata_is_agent_overrides(self) -> None:
+        """metadata['is_agent'] is the authoritative vouching signal."""
+        engines = [
+            # Unengineered GENERIC runtime explicitly vouched for by the
+            # authoritative discovery pipeline — must sync.
+            _make_engine("v1", "Vouched", "generic", ["code"], "idle", metadata={"is_agent": True}),
+            # Declared agent runtime explicitly marked non-agent — must not sync.
+            _make_engine(
+                "n1", "Unvouched", "claude_code", ["code"], "idle", metadata={"is_agent": False}
+            ),
+        ]
+        reg = OrchestrationAgentRegistry(runtime=_MockRuntime(engines))
+        agents = await reg.sync_from_runtime()
+        assert [a.agent_id for a in agents] == ["v1"]
+
+    async def test_sync_from_runtime_never_judges_by_name(self) -> None:
+        """Engine names must not decide classification (spec: no filename judgment)."""
+        engines = [
+            # An agent whose name merely contains an excluded substring.
+            _make_engine("a1", "NodeJS Research Agent", "claude_code", ["code"], "idle"),
+        ]
+        reg = OrchestrationAgentRegistry(runtime=_MockRuntime(engines))
+        agents = await reg.sync_from_runtime()
+        assert len(agents) == 1
 
     async def test_invalidate_cache_single(self, populated_registry) -> None:
         await populated_registry.list_agents()
