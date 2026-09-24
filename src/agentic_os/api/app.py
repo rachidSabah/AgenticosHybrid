@@ -72,7 +72,6 @@ from agentic_os.core.mcp.manager import MCPManager
 from agentic_os.core.omniroute.engine import omniroute_engine
 from agentic_os.discovery.service import discovery_service
 from agentic_os.domain.agent import Role, Task, TaskStatus
-from agentic_os.domain.brains import BrainStatus
 from agentic_os.domain.events import EventEnvelope, Topic
 from agentic_os.domain.execution import EngineCapability, EngineType
 from agentic_os.domain.mcp import MCPServerStatus
