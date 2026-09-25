@@ -293,7 +293,7 @@ class OpenCodeExecutionStrategy(ProviderExecutionStrategy):
 
 
 class CodexExecutionStrategy(ProviderExecutionStrategy):
-    """Codex CLI: `codex exec -` (prompt via stdin)."""
+    """Codex CLI: `codex exec "{prompt}"`"""
 
     @property
     def kind(self) -> str:
@@ -311,17 +311,13 @@ class CodexExecutionStrategy(ProviderExecutionStrategy):
         # --skip-git-repo-check: codex refuses to run outside a "trusted"
         # directory (e.g. the AgenticOS worktree), otherwise it exits 1 with
         # "Not inside a trusted directory".
-        # Prompt is sent via stdin using "-" argument.
         return [
             bin_path,
             "exec",
             "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
-            "-",
+            self.build_prompt(task),
         ]
-
-    def build_stdin(self, task: Task) -> bytes | None:
-        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
