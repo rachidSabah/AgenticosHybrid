@@ -45,7 +45,11 @@ def render_qr_svg(data: str, box_size: int = _BOX_SIZE, border: int = _BORDER) -
     image = qr.make_image(image_factory=SvgPathImage)
     buffer = io.BytesIO()
     image.save(buffer)
-    return buffer.getvalue().decode("utf-8")
+    svg_str = buffer.getvalue().decode("utf-8")
+    import re
+
+    # Strip XML declaration so the SVG embeds cleanly into HTML5 DOM
+    return re.sub(r"<\?xml[^>]*\?>", "", svg_str).strip()
 
 
 __all__ = ["render_qr_svg"]

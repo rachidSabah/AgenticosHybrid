@@ -390,6 +390,7 @@ class Orchestrator:
         await self.bus.subscribe(Topic.TASK_DISPATCHED.value, self._on_task_dispatched)
         await self.bus.subscribe(Topic.AGENT_COMPLETED.value, self._on_agent_completed)
         await self.bus.subscribe(Topic.AGENT_FAILED.value, self._on_agent_failed)
+        await self.bus.subscribe(Topic.PROVIDER_HEALTH.value, self._on_provider_health)
         log.info("orchestrator.started", roles=len(self.registry.roles()))
 
     async def stop(self) -> None:
@@ -1410,6 +1411,14 @@ class Orchestrator:
 
     async def _on_agent_failed(self, event: EventEnvelope) -> None:
         log.warning("supervisor.failed", task=event.payload.get("task_id"))
+
+    async def _on_provider_health(self, event: EventEnvelope) -> None:
+        p = event.payload.get("provider")
+        status = event.payload.get("status")
+        if p and status == "down":
+            self._failed_providers[p] = _time.monotonic()
+        elif p and status == "healthy" and p in self._failed_providers:
+            self._failed_providers.pop(p, None)
 
 
 def _default_roles() -> list[Role]:

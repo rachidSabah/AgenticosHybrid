@@ -15,6 +15,10 @@ rem ============================================================================
 rem -- Set ROOT to the folder that contains this bat file --------------------
 cd /d "%~dp0"
 set "ROOT=%cd%"
+if not "%~1"=="" if exist "%~1\apps\mission-control" (
+    cd /d "%~1"
+    set "ROOT=%cd%"
+)
 
 rem -- Ensure logs directory exists ------------------------------------------
 if not exist "%ROOT%\logs" mkdir "%ROOT%\logs"

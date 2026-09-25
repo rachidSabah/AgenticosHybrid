@@ -202,8 +202,8 @@ export function BrainCard({
         {/* Tags */}
         {brain.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            {brain.tags.slice(0, 3).map((tag) => (
-              <Badge key={tag} tone="default">{tag}</Badge>
+            {brain.tags.slice(0, 3).map((tag, idx) => (
+              <Badge key={`${tag}-${idx}`} tone="default">{tag}</Badge>
             ))}
             {brain.tags.length > 3 && (
               <Badge tone="default">+{brain.tags.length - 3}</Badge>

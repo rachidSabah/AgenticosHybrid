@@ -209,6 +209,21 @@ function WhatsAppPanel() {
     return () => clearInterval(t);
   }, [loadStatus]);
 
+  // Reactive listener: when gateway emits new QR or connection events, update immediately
+  useEffect(() => {
+    const latest = events[0];
+    if (!latest?.topic?.startsWith("gateway.whatsapp")) return;
+    if (latest.topic === "gateway.whatsapp.qr") {
+      setQrNonce((n) => n + 1);
+      void loadStatus();
+    } else if (
+      latest.topic === "gateway.whatsapp.connected" ||
+      latest.topic === "gateway.whatsapp.disconnected"
+    ) {
+      void loadStatus();
+    }
+  }, [events, loadStatus]);
+
   useEffect(() => {
     if (!status?.has_qr) {
       setSvgData(null);
@@ -221,18 +236,27 @@ function WhatsAppPanel() {
         if (res.ok) {
           const text = await res.text();
           if (!cancelled && text.includes("<svg")) {
-            setSvgData(text);
+            // Strip XML declaration for seamless HTML5 SVG embedding
+            const cleanSvg = text.replace(/<\?xml[^>]*\?>/i, "").trim();
+            setSvgData(cleanSvg);
             setQrError(null);
           }
+        } else if (res.status === 409) {
+          // Bridge is generating fresh QR, keep waiting
+          if (!cancelled && !svgData) {
+            setQrError(null);
+          }
+        } else {
+          if (!cancelled && !svgData) setQrError("Could not render QR code.");
         }
       } catch {
-        if (!cancelled) setQrError("Could not render QR code.");
+        if (!cancelled && !svgData) setQrError("Could not render QR code.");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [status?.has_qr, qrNonce]);
+  }, [status?.has_qr, qrNonce, svgData]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -313,6 +337,7 @@ function WhatsAppPanel() {
                 dangerouslySetInnerHTML={{ __html: svgData }}
               />
             ) : (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={api.whatsappQrUrl()}
                 alt="WhatsApp QR Code"

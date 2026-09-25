@@ -934,7 +934,7 @@ def create_app(platform: Platform) -> FastAPI:
 
         This is prepended to each task's user_prompt so the CLI agent
         can see the user's project structure and key files.
-        Caps at ~8000 chars to leave room for the actual prompt.
+        Caps at ~3000 chars to leave ample room for the actual prompt.
         """
         ctx = _build_workspace_context_dict()
         if not ctx["file_tree"] and not ctx["files"]:
@@ -945,13 +945,21 @@ def create_app(platform: Platform) -> FastAPI:
             f"Root: {ctx['root']}",
             "",
             "File Tree:",
-            ctx["file_tree"],
+            ctx["file_tree"][:1200],
             "",
         ]
+        total_len = sum(len(p) for p in parts)
         for fname, content in ctx["files"].items():
+            if total_len + len(content) > 3000:
+                remaining = max(100, 3000 - total_len)
+                parts.append(f"--- {fname} ---")
+                parts.append(content[:remaining] + "\n[... truncated]")
+                parts.append("")
+                break
             parts.append(f"--- {fname} ---")
             parts.append(content)
             parts.append("")
+            total_len += len(content) + len(fname) + 20
         parts.append("=" * 50)
         return "\n".join(parts)
 

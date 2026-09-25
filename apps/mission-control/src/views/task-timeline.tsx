@@ -120,8 +120,8 @@ function TimelineRow({ index, style, filteredEvents, expanded, onToggle }: {
               {Icon}
               <span>{event.status}</span>
             </div>
-            {event.tags?.map((tag) => (
-              <div key={tag} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint shrink-0">
+            {event.tags?.map((tag, tagIdx) => (
+              <div key={`${tag}-${tagIdx}`} className="rounded-full bg-surface/20 px-2 py-0.5 text-[9px] text-faint shrink-0">
                 {tag}
               </div>
             ))}
@@ -228,7 +228,7 @@ export function TaskTimeline() {
         title,
         detail,
         at: new Date(e.timestamp).getTime() || Date.now(),
-        tags: [p.provider, p.role, e.topic].filter(Boolean) as string[],
+        tags: Array.from(new Set([p.provider, p.role, e.topic].filter(Boolean))) as string[],
       });
     });
 
@@ -244,7 +244,7 @@ export function TaskTimeline() {
         detail: `Runtime: ${exec.runtime || exec.provider} · Strategy: ${exec.strategy}`,
         at: exec.started_at ? new Date(exec.started_at).getTime() : Date.now(),
         duration: exec.duration_ms,
-        tags: [exec.provider, exec.runtime, exec.strategy].filter(Boolean) as string[],
+        tags: Array.from(new Set([exec.provider, exec.runtime, exec.strategy].filter(Boolean))) as string[],
       });
     });
 
@@ -274,12 +274,24 @@ export function TaskTimeline() {
         title: `Agent: ${agent.role}`,
         detail: `Provider: ${agent.provider || "System Agent"}`,
         at: Date.now(),
-        tags: [agent.provider, agent.role].filter(Boolean) as string[],
+        tags: Array.from(new Set([agent.provider, agent.role].filter(Boolean))) as string[],
       });
     });
 
+    // Ensure unique IDs across all event sources
+    const seenIds = new Set<string>();
+    const uniqueList: TimelineEvent[] = [];
+    for (const item of list) {
+      let finalId = item.id;
+      if (seenIds.has(finalId)) {
+        finalId = `${finalId}-${uniqueList.length}`;
+      }
+      seenIds.add(finalId);
+      uniqueList.push({ ...item, id: finalId });
+    }
+
     // Sort
-    return list.sort((a, b) => {
+    return uniqueList.sort((a, b) => {
       if (filters.sort === "newest") return b.at - a.at;
       if (filters.sort === "oldest") return a.at - b.at;
       return (b.duration || 0) - (a.duration || 0);
@@ -331,6 +343,12 @@ export function TaskTimeline() {
   };
 
   const listRef = useRef<any>(null);
+
+  const getRowKey = useCallback(
+    (index: number, data: { filteredEvents: TimelineEvent[] }) =>
+      data.filteredEvents[index]?.id ?? index,
+    []
+  );
 
   // Reset expanded when filter changes change visible items
   useEffect(() => {
@@ -469,6 +487,7 @@ export function TaskTimeline() {
                     style={{ height: height ?? 0, width: width ?? 0 }}
                     rowCount={filteredEvents.length}
                     rowHeight={72}
+                    rowKey={getRowKey}
                     rowProps={{ filteredEvents, expanded, onToggle: toggleExpand }}
                     rowComponent={TimelineRow}
                     className="divide-y divide-border/30"

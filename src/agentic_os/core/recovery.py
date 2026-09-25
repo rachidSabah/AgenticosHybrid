@@ -46,6 +46,21 @@ class RecoveryManagerImpl:
             task.error = reason
             task.touch()
             agent.mark_failed()
+            await self._bus.publish(
+                EventEnvelope(
+                    type="task.failed",
+                    source="recovery",
+                    topic="task.failed",
+                    payload={
+                        "task_id": task.id,
+                        "agent_id": agent.id,
+                        "provider": getattr(agent, "provider", ""),
+                        "error": reason,
+                        "mission_id": getattr(task, "mission_id", ""),
+                        "attempts": task.attempts,
+                    },
+                )
+            )
             return False
         log.info("recovery.retry", agent=agent.id, attempt=task.attempts)
         agent.mark_recovering()

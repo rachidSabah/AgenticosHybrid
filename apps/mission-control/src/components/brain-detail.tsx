@@ -221,8 +221,8 @@ function OverviewTab({ brain, uptimeStr }: { brain: BrainRecord; uptimeStr: stri
         <div>
           <h3 className="text-sm font-semibold mb-2">Tags</h3>
           <div className="flex flex-wrap gap-1.5">
-            {brain.tags.map((tag) => (
-              <Badge key={tag}>{tag}</Badge>
+            {brain.tags.map((tag, idx) => (
+              <Badge key={`${tag}-${idx}`}>{tag}</Badge>
             ))}
           </div>
         </div>
@@ -257,9 +257,9 @@ function CapabilitiesTab({ brain }: { brain: BrainRecord }) {
           <p className="text-xs text-faint">No capabilities registered.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {brain.capabilities.map((cap) => (
+            {brain.capabilities.map((cap, idx) => (
               <div
-                key={cap}
+                key={`${cap}-${idx}`}
                 className="rounded-lg border border-border/30 bg-surface/10 px-3 py-2 text-xs"
               >
                 {cap}
@@ -278,8 +278,8 @@ function CapabilitiesTab({ brain }: { brain: BrainRecord }) {
           <p className="text-xs text-faint">No tools registered.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
-            {brain.supported_tools.map((tool) => (
-              <Badge key={tool} tone="info">{tool}</Badge>
+            {brain.supported_tools.map((tool, idx) => (
+              <Badge key={`${tool}-${idx}`} tone="info">{tool}</Badge>
             ))}
           </div>
         )}

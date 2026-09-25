@@ -780,7 +780,7 @@ export const useStore = create<StoreState>((set, get) => ({
   hydrate: async () => {
     try {
       // Fetch all snapshot sources in parallel — discovery engine is single source of truth.
-      const [rawDiscovery, rawAgents, rawProviders, rawBrains, rawLocalAgents] = await Promise.allSettled([
+      const [rawDiscovery, rawAgents, rawProviders, rawBrains, rawLocalAgents, rawTasks, rawMissions] = await Promise.allSettled([
         api.get<{ active_agents?: Array<Record<string, unknown>>; agents?: Array<Record<string, unknown>> }>(
           "/api/discovery/agents",
         ),
@@ -788,6 +788,8 @@ export const useStore = create<StoreState>((set, get) => ({
         api.providerHealth(),
         api.get<Array<Record<string, unknown>>>("/api/brains"),
         api.get<Array<Record<string, unknown>>>("/api/local-agents"),
+        api.listTasks(),
+        api.missions(),
       ]);
 
       const agentsMap: Record<string, AgentNode> = {};
@@ -884,18 +886,51 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       providersMap = providersBySlug;
 
+      const tasksMap: Record<string, TaskNode> = {};
+      if (rawTasks.status === "fulfilled" && Array.isArray(rawTasks.value)) {
+        for (const t of rawTasks.value as Array<Record<string, unknown>>) {
+          const id = String(t.id ?? "");
+          if (!id) continue;
+          const statusRaw = String(t.status ?? "pending");
+          const status = (
+            statusRaw === "in_progress" ? "running" :
+            statusRaw === "completed" ? "completed" :
+            statusRaw === "failed" ? "failed" :
+            statusRaw
+          ) as TaskNode["status"];
+          tasksMap[id] = {
+            id,
+            title: String(t.title ?? id),
+            role: String(t.role ?? ""),
+            status,
+            assigned_agent_id: t.assigned_agent_id ? String(t.assigned_agent_id) : undefined,
+          };
+        }
+      }
+
+      const missionsMap: Record<string, MissionType> = {};
+      if (rawMissions.status === "fulfilled" && Array.isArray(rawMissions.value)) {
+        for (const m of rawMissions.value as MissionType[]) {
+          if (!m.id) continue;
+          missionsMap[m.id] = m;
+        }
+      }
+
       // Replace (not merge) agents/providers so that runtimes which disappeared
       // from the backend are also removed from the store. The previous merge
       // logic (`{ ...s.agents, ...agentsMap }`) kept stale entries forever.
-      // Preserve the rest of telemetry (tasks/tokens/cost/pulses) which is
+      // Preserve the rest of telemetry (tokens/cost/pulses) which is
       // accumulated from WebSocket events and must not be reset on every hydrate.
       set((s) => ({
         agents: agentsMap,
         providers: providersMap,
+        tasks: Object.keys(tasksMap).length > 0 ? tasksMap : s.tasks,
+        missions: Object.keys(missionsMap).length > 0 ? missionsMap : s.missions,
         telemetry: {
           ...s.telemetry,
           agents: Object.keys(agentsMap).length,
           providers: Object.keys(providersMap).length,
+          tasks: Object.keys(tasksMap).length > 0 ? Object.keys(tasksMap).length : s.telemetry.tasks,
         },
       }));
     } catch (e) {

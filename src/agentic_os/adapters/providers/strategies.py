@@ -197,6 +197,25 @@ class HermesExecutionStrategy(ProviderExecutionStrategy):
     def build_command(self, task: Task, bin_path: str) -> list[str]:
         return [bin_path, "-z", self.build_prompt(task), "--yolo"]
 
+    def build_prompt(self, task: Task) -> str:
+        prompt = super().build_prompt(task)
+        if len(prompt) > 16000:
+            user_prompt = (task.user_prompt or "").strip()
+            description = (task.description or "").strip()
+            title = (task.title or "").strip()
+            parts = user_prompt.split("\n\n", 1)
+            if len(parts) == 2 and "Workspace Context" in parts[0]:
+                user_prompt = parts[1].strip()
+            capped_task = Task(
+                id=task.id,
+                title=title,
+                role=getattr(task, "role", "coding"),
+                description=description,
+                user_prompt=user_prompt[:12000],
+            )
+            prompt = super().build_prompt(capped_task)
+        return prompt
+
     def build_stdin(self, task: Task) -> bytes | None:
         # Prompt goes via the -z argument value, not stdin.
         return None
@@ -274,11 +293,15 @@ class OpenCodeExecutionStrategy(ProviderExecutionStrategy):
 
 
 class CodexExecutionStrategy(ProviderExecutionStrategy):
-    """Codex CLI: `codex exec "{prompt}"`"""
+    """Codex CLI: `codex exec -` (prompt via stdin)."""
 
     @property
     def kind(self) -> str:
         return "codex"
+
+    @property
+    def timeout_s(self) -> float:
+        return 300.0
 
     def _api_key_env_name(self) -> str:
         return "OPENAI_API_KEY"
@@ -288,13 +311,17 @@ class CodexExecutionStrategy(ProviderExecutionStrategy):
         # --skip-git-repo-check: codex refuses to run outside a "trusted"
         # directory (e.g. the AgenticOS worktree), otherwise it exits 1 with
         # "Not inside a trusted directory".
+        # Prompt is sent via stdin using "-" argument.
         return [
             bin_path,
             "exec",
             "--dangerously-bypass-approvals-and-sandbox",
             "--skip-git-repo-check",
-            self.build_prompt(task),
+            "-",
         ]
+
+    def build_stdin(self, task: Task) -> bytes | None:
+        return self.build_prompt(task).encode("utf-8")
 
     def health_command(self, bin_path: str) -> list[str] | None:
         return [bin_path, "--version"]
@@ -332,6 +359,10 @@ class AGYExecutionStrategy(ProviderExecutionStrategy):
     @property
     def kind(self) -> str:
         return "antigravity"
+
+    @property
+    def timeout_s(self) -> float:
+        return 600.0
 
     def _api_key_env_name(self) -> str:
         return "GOOGLE_API_KEY"

@@ -70,4 +70,25 @@ class ClaudeCodeProvider:
         return stdout_str.strip() or f"[claude_code] completed '{task.title}'"
 
     async def healthcheck(self) -> bool:
-        return shutil.which(self._bin) is not None
+        if not shutil.which(self._bin):
+            return False
+        # If user configured a custom proxy in ~/.claude/settings.json, verify it is reachable
+        try:
+            import json
+            import pathlib
+            import socket
+            import urllib.parse
+
+            settings_file = pathlib.Path.home() / ".claude" / "settings.json"
+            if settings_file.is_file():
+                data = json.loads(settings_file.read_text(encoding="utf-8"))
+                base_url = data.get("apiBaseUrl") or (data.get("env", {}).get("ANTHROPIC_BASE_URL"))
+                if base_url:
+                    parsed = urllib.parse.urlparse(base_url)
+                    host = parsed.hostname or "127.0.0.1"
+                    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+                    with socket.create_connection((host, port), timeout=0.5):
+                        pass
+        except Exception:
+            return False
+        return True

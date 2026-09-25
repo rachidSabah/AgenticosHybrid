@@ -147,6 +147,7 @@ export interface TaskNode {
   title: string;
   role: string;
   status: "pending" | "planned" | "dispatched" | "assigned" | "in_progress" | "running" | "completed" | "failed" | "recovered";
+  assigned_agent_id?: string;
 }
 
 // ── Discovery types (Phase 4, M2) ──

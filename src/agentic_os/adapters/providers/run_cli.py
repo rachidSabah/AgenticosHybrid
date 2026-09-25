@@ -26,12 +26,64 @@ from __future__ import annotations
 import asyncio
 import os
 import queue
+import shlex
+import shutil
 import subprocess
 import sys
 import threading
 from collections.abc import Callable
 
 _DONE = object()
+
+
+def _resolve_windows_cmd_shim(args: list[str]) -> list[str]:
+    """On Windows, unwrap batch script shims (.cmd / .bat) to their target executable.
+
+    Running .cmd or .bat scripts through subprocess invokes cmd.exe /c which
+    enforces an 8,191-character command line buffer limit. Unwrapping to
+    the target executable (e.g. hermes.exe, claude.exe, opencode.exe) runs via
+    CreateProcessW directly, extending the limit to 32,767 characters and
+    preventing "The command line is too long." crashes on large prompts.
+    """
+    if sys.platform != "win32" or not args or not args[0]:
+        return args
+    bin_name = args[0]
+    resolved = shutil.which(bin_name) or bin_name
+    if not os.path.isfile(resolved):
+        return args
+    ext = os.path.splitext(resolved)[1].lower()
+    if ext not in (".cmd", ".bat"):
+        return args
+    try:
+        with open(resolved, encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+        dp0 = os.path.dirname(os.path.abspath(resolved))
+        for line in lines:
+            line = line.strip()
+            if not line.endswith("%*"):
+                continue
+            cmd_part = line[:-2].strip()
+            # Replace dp0 markers case-insensitively
+            cmd_part = cmd_part.replace("%dp0%", dp0 + "\\").replace("%DP0%", dp0 + "\\")
+            cmd_part = cmd_part.replace("%~dp0", dp0 + "\\").replace("%~DP0", dp0 + "\\")
+            if cmd_part.startswith('"'):
+                end_quote = cmd_part.find('"', 1)
+                if end_quote != -1:
+                    target_exe = os.path.normpath(cmd_part[1:end_quote])
+                    rest = cmd_part[end_quote + 1 :].strip()
+                    if os.path.isfile(target_exe):
+                        tokens = [target_exe]
+                        if rest:
+                            tokens.extend(shlex.split(rest))
+                        return tokens + args[1:]
+            else:
+                parts = shlex.split(cmd_part)
+                if parts and os.path.isfile(os.path.normpath(parts[0])):
+                    parts[0] = os.path.normpath(parts[0])
+                    return parts + args[1:]
+    except Exception:
+        pass
+    return args
 
 
 def _kill_tree(pid: int) -> None:
@@ -79,6 +131,8 @@ def _run_sync(
         return -1, b"", b"invalid executable argument"
     if os.path.exists(args[0]) and os.path.isdir(args[0]):
         return -1, b"", b"cannot execute directory"
+    if sys.platform == "win32":
+        args = _resolve_windows_cmd_shim(args)
     creationflags = (
         getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
     )

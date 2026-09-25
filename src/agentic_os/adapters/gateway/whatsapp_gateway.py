@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import threading
 from dataclasses import dataclass, field
@@ -198,9 +199,10 @@ class WhatsAppGateway:
         # works under WindowsSelectorEventLoopPolicy which doesn't support
         # asyncio subprocesses on Windows.
         creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        node_bin = shutil.which("node") or "node"
         try:
             self._process = subprocess.Popen(
-                ["node", str(bridge_path)],
+                [node_bin, str(bridge_path)],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -308,6 +310,7 @@ class WhatsAppGateway:
 
         if etype == "qr":
             self._qr_code = event.get("qr", "")
+            self._connection_status = "scan_qr"
             log.info("whatsapp.qr_received")
             # The QR string itself is a pairing secret — never put it on the
             # bus/WS feed. Clients poll /api/gateway/whatsapp/qr for the live
@@ -317,7 +320,7 @@ class WhatsAppGateway:
                     type="gateway.whatsapp.qr",
                     source="whatsapp_gateway",
                     topic="gateway.whatsapp.qr",
-                    payload={"has_qr": True},
+                    payload={"has_qr": True, "timestamp": datetime.now(UTC).isoformat()},
                 )
             )
 
