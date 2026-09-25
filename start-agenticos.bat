@@ -141,7 +141,7 @@ echo echo %%errorlevel%% ^> "%ROOT%\logs\backend_exit.txt">> "%CHILD%"
 if not exist "%CHILD%" goto launcher_failed
 
 rem -- Write frontend launcher script (mode decided here, logic-free child) --
-set "FE_CMD=npm.cmd run dev -- -H 127.0.0.1 -p 3000"
+set "FE_CMD=call npm.cmd run dev -- -H 127.0.0.1 -p 3000"
 if not exist "%ROOT%\apps\mission-control\out\index.html" goto fe_write
 if not exist "%ROOT%\apps\mission-control\node_modules\serve\build\main.js" goto fe_write
 set "FE_CMD=node node_modules\serve\build\main.js -s out -l 3000"
@@ -150,6 +150,7 @@ set "FCHILD=%ROOT%\logs\_start_frontend.bat"
 echo @echo off> "%FCHILD%"
 echo cd /d "%ROOT%\apps\mission-control" >> "%FCHILD%"
 echo %FE_CMD% ^> "%ROOT%\logs\frontend.log" 2^>^&1 >> "%FCHILD%"
+echo echo %%errorlevel%% ^> "%ROOT%\logs\frontend_exit.txt">> "%FCHILD%"
 if not exist "%FCHILD%" goto launcher_failed
 
 rem -- Health-check tool availability ----------------------------------------
@@ -235,9 +236,61 @@ exit /b 1
 :start_frontend
 rem -- Start Frontend --------------------------------------------------------
 if exist "%ROOT%\apps\mission-control\node_modules" goto fe_modules_ok
-echo [AgenticOS] WARNING: apps\mission-control\node_modules is missing.
-echo [AgenticOS]          Dev Mode will fail - run "npm install" in
-echo [AgenticOS]          apps\mission-control first.
+echo.
+echo [AgenticOS] ============================================================
+echo [AgenticOS]  apps\mission-control\node_modules is missing.
+echo [AgenticOS]  This is normal right after downloading the source ZIP:
+echo [AgenticOS]  the archive ships no installed JavaScript packages, and
+echo [AgenticOS]  Mission Control cannot start without them.
+echo [AgenticOS] ------------------------------------------------------------
+echo [AgenticOS]  MANUAL FIX - open a terminal at the repo root and run:
+echo [AgenticOS]    cd apps\mission-control
+echo [AgenticOS]    npm install
+echo [AgenticOS]  Then run start-agenticos.bat again.
+echo [AgenticOS] ============================================================
+choice /C YN /M "[AgenticOS] Install frontend dependencies now"
+if errorlevel 2 goto fe_deps_refused
+echo [AgenticOS] Locating npm...
+where npm.cmd >nul 2>&1
+if errorlevel 1 goto npm_missing
+echo [AgenticOS] Installing - this needs internet and can take minutes...
+cd /d "%ROOT%\apps\mission-control"
+call npm.cmd install
+if errorlevel 1 goto fe_install_failed
+if not exist "%ROOT%\apps\mission-control\node_modules" goto fe_install_failed
+echo [AgenticOS] Frontend dependencies installed and verified.
+cd /d "%ROOT%"
+goto fe_modules_ok
+
+:fe_deps_refused
+echo [AgenticOS] Mission Control cannot start without its dependencies.
+echo [AgenticOS] Nothing was changed on this machine. You can rerun
+echo [AgenticOS] start-agenticos.bat and answer Y any time.
+echo.
+pause
+exit /b 1
+
+:npm_missing
+echo.
+echo [AgenticOS] ERROR: npm was not found on this system.
+echo [AgenticOS] Install Node.js 20 LTS from https://nodejs.org/en/download
+echo [AgenticOS] (npm ships with Node.js), open a NEW terminal, then run
+echo [AgenticOS] start-agenticos.bat again.
+echo.
+pause
+exit /b 1
+
+:fe_install_failed
+echo.
+echo [AgenticOS] ERROR: npm install failed. The real error is printed above.
+echo [AgenticOS] Common causes:
+echo [AgenticOS]   - no internet access
+echo [AgenticOS]   - Node.js older than 18 (check: node --version)
+echo [AgenticOS] Fix the cause, then rerun start-agenticos.bat.
+echo.
+pause
+exit /b 1
+
 :fe_modules_ok
 if not exist "%ROOT%\apps\mission-control\out\index.html" goto fe_dev
 if not exist "%ROOT%\apps\mission-control\node_modules\serve\build\main.js" goto fe_static_noserve
@@ -247,8 +300,13 @@ goto fe_start
 :fe_static_noserve
 echo [AgenticOS] Static export found but serve package missing - using Dev Mode.
 :fe_dev
+where npm.cmd >nul 2>&1
+if errorlevel 1 goto npm_missing
 echo [AgenticOS] Starting Mission Control (Dev Mode) on http://localhost:3000 ...
 :fe_start
+rem -- Fresh sentinel + rotated log for this run -----------------------
+if exist "%ROOT%\logs\frontend_exit.txt" del "%ROOT%\logs\frontend_exit.txt" >nul 2>&1
+if exist "%ROOT%\logs\frontend.log" move /y "%ROOT%\logs\frontend.log" "%ROOT%\logs\frontend.prev.log" >nul 2>&1
 start "AgenticOS Frontend" /min cmd /c "%ROOT%\logs\_start_frontend.bat"
 
 rem -- Wait for frontend ready -----------------------------------------------
@@ -261,6 +319,10 @@ if "%HAVE_CURL%"=="0" goto fe_probe_done
 curl.exe -s -f --max-time 2 http://127.0.0.1:3000/ >nul 2>&1
 if !errorlevel! == 0 goto frontend_ready
 :fe_probe_done
+rem -- The launcher writes logs\frontend_exit.txt the moment the UI
+rem -- process exits for ANY reason: report it honestly instead of
+rem -- hanging on "UI loading" messages.
+if exist "%ROOT%\logs\frontend_exit.txt" goto frontend_died
 set /a WAITED+=2
 if "!HAVE_CURL!"=="0" if !WAITED! GEQ 30 goto frontend_uncertain
 if !WAITED! GEQ 60 goto frontend_timeout
@@ -270,6 +332,25 @@ goto wait_frontend
 :frontend_ready
 echo [AgenticOS] Mission Control READY - http://localhost:3000
 goto open_browser
+
+:frontend_died
+echo.
+echo [AgenticOS] ============================================================
+echo [AgenticOS]  ERROR: the Mission Control process exited before it
+echo [AgenticOS]  could serve anything. Last lines of logs\frontend.log:
+echo [AgenticOS]  ------------------------------------------------------------
+powershell -NoProfile -Command "Get-Content -LiteralPath '%ROOT%\logs\frontend.log' -Tail 40 -ErrorAction SilentlyContinue"
+echo [AgenticOS]  ------------------------------------------------------------
+echo [AgenticOS]  Full log: %ROOT%\logs\frontend.log
+echo [AgenticOS]  Common causes:
+echo [AgenticOS]    - Node.js missing or older than 18 (check: node --version)
+echo [AgenticOS]    - port 3000 already in use by another program
+echo [AgenticOS]    - a broken install - delete apps\mission-control\node_modules,
+echo [AgenticOS]      run start-agenticos.bat again and accept the reinstall
+echo [AgenticOS] ============================================================
+echo.
+pause
+exit /b 1
 
 :frontend_timeout
 echo [AgenticOS] WARNING: Mission Control did not answer within 60s.
